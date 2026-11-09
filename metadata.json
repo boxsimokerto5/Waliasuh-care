@@ -1,0 +1,6 @@
+{
+  "name": "Waliasuh Care",
+  "description": "Aplikasi pendataan kesehatan, rencana rujukan, dan rekam medis pengobatan anak asuh Sekolah Rakyat SRT 1 Kabupaten Kediri ke Puskesmas Wates dan Puskesmas Plosoklaten.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
