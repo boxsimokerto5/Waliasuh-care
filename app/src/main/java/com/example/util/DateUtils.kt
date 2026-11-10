@@ -22,6 +22,10 @@ object DateUtils {
         return timeFormat.format(Date(timestamp))
     }
 
+    fun formatDateTime(timestamp: Long): String {
+        return "${formatShortDate(timestamp)} ${formatTime(timestamp)} WIB"
+    }
+
     fun isToday(timestamp: Long): Boolean {
         val cal1 = Calendar.getInstance().apply { timeInMillis = timestamp }
         val cal2 = Calendar.getInstance()

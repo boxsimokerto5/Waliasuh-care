@@ -22,12 +22,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import com.example.ui.dialogs.SupabaseConfigDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -74,6 +76,7 @@ fun ProfileScreen(
     var showEditAccountDialog by remember { mutableStateOf(false) }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
+    var showSupabaseDialog by remember { mutableStateOf(false) }
     var showReportDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
@@ -116,6 +119,18 @@ fun ProfileScreen(
             // GROUP 1: Pengaturan App
             item {
                 SectionHeader(title = "Pengaturan App")
+            }
+
+            item {
+                MenuSettingCard(
+                    title = "Database Supabase Cloud",
+                    subtitle = "Sinkronisasi data online & backup PostgreSQL",
+                    icon = Icons.Default.CloudSync,
+                    iconBg = Color(0xFFDCFCE7),
+                    iconColor = Color(0xFF059669),
+                    onClick = { showSupabaseDialog = true },
+                    testTag = "menu_supabase"
+                )
             }
 
             item {
@@ -377,26 +392,49 @@ fun ProfileScreen(
                         .padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Pengaturan Notifikasi", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text("Pengaturan Notifikasi Resmi", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Text("✅ Notifikasi Resmi Google Android: Aktif", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = WaliPrimary)
+                            Text("🔔 Saluran: Laporan Kesehatan Anak Asuh", fontSize = 12.sp)
+                            Text("📌 Notifikasi otomatis muncul di bar atas ponsel saat ada anak asuh sakit baru diinput.", fontSize = 12.sp)
                             Text("✅ Pengingat Berangkat: Aktif (08:00 WIB)", fontSize = 12.sp)
                             Text("✅ Notifikasi Jadwal Kontrol: Aktif (H-1 & Hari H)", fontSize = 12.sp)
-                            Text("✅ Laporan Rekam Medis WhatsApp: Aktif", fontSize = 12.sp)
+                            Text("✅ Laporan Rekam Medis WhatsApp: Siap", fontSize = 12.sp)
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.sendTestNotification()
+                            },
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("🔔 Coba Tes Notifikasi", fontSize = 12.sp)
+                        }
                         Button(onClick = { showNotifDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("OK")
+                            Text("Tutup", fontSize = 12.sp)
                         }
                     }
                 }
             }
         }
+    }
+
+    // Modal Bottom Sheet: Konfigurasi & Sinkronisasi Supabase
+    if (showSupabaseDialog) {
+        SupabaseConfigDialog(
+            viewModel = viewModel,
+            onDismiss = { showSupabaseDialog = false }
+        )
     }
 
     // Modal Bottom Sheet: Laporan Riwayat

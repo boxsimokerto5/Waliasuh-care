@@ -42,4 +42,10 @@ class HealthRepository(
 
     suspend fun updateControlCompleted(id: Long, isCompleted: Boolean) =
         recordDao.updateControlCompleted(id, isCompleted)
+
+    suspend fun insertAllRecords(records: List<MedicalRecord>) =
+        recordDao.insertAll(records)
+
+    suspend fun insertAllStudents(students: List<ChildStudent>) =
+        studentDao.insertAll(students)
 }

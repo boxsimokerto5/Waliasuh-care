@@ -6,7 +6,10 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.remote.supabase.SupabaseConfig
+import com.example.data.remote.supabase.SupabaseSyncManager
 import com.example.data.repository.HealthRepository
+import com.example.util.NotificationHelper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -113,7 +116,20 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 escortName = if (escortName.isBlank()) _waliName.value else escortName,
                 notes = notes
             )
-            repository.insertRecord(record)
+            val newId = repository.insertRecord(record)
+            val recordWithId = record.copy(id = newId)
+            // Kirim notifikasi resmi sistem Android
+            NotificationHelper.showSickStudentNotification(
+                context = getApplication(),
+                studentName = student.name,
+                className = student.classGrade,
+                roomNumber = student.roomNumber.ifBlank { student.dormitory },
+                complaint = complaint,
+                faskes = faskes,
+                notificationId = (newId % 100000).toInt()
+            )
+            // Sinkronisasi latar belakang ke Supabase Cloud jika terkonfigurasi
+            SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId)
         }
     }
 
@@ -154,6 +170,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 notes = if (additionalNotes.isNotBlank()) "${record.notes}\n$additionalNotes".trim() else record.notes
             )
             repository.updateRecord(updated)
+            // Sinkronisasi latar belakang ke Supabase Cloud
+            SupabaseSyncManager.uploadSingleRecord(getApplication(), updated)
         }
     }
 
@@ -192,8 +210,26 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 escortName = if (escortName.isBlank()) _waliName.value else escortName,
                 notes = notes
             )
-            repository.insertRecord(record)
+            val newId = repository.insertRecord(record)
+            val recordWithId = record.copy(id = newId)
+            // Kirim notifikasi resmi sistem Android
+            NotificationHelper.showSickStudentNotification(
+                context = getApplication(),
+                studentName = student.name,
+                className = student.classGrade,
+                roomNumber = student.roomNumber.ifBlank { student.dormitory },
+                complaint = complaint.ifBlank { diagnosis },
+                faskes = faskes,
+                notificationId = (newId % 100000).toInt()
+            )
+            // Sinkronisasi latar belakang ke Supabase Cloud
+            SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId)
         }
+    }
+
+    // Kirim notifikasi tes untuk memverifikasi fitur di perangkat pengguna
+    fun sendTestNotification() {
+        NotificationHelper.showTestNotification(getApplication())
     }
 
     // Mark Control Visit as completed
@@ -207,6 +243,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteRecord(record: MedicalRecord) {
         viewModelScope.launch {
             repository.deleteRecord(record)
+            // Hapus dari Supabase jika terhubung
+            SupabaseSyncManager.deleteRemoteRecord(getApplication(), record.id)
         }
     }
 
@@ -243,6 +281,86 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteStudent(student: ChildStudent) {
         viewModelScope.launch {
             repository.deleteStudent(student)
+        }
+    }
+
+    // ==========================================
+    // SUPABASE CLOUD DATABASE SYNC & MANAGEMENT
+    // ==========================================
+    private val _isSupabaseConfigured = MutableStateFlow(SupabaseConfig.isConfigured(application))
+    val isSupabaseConfigured: StateFlow<Boolean> = _isSupabaseConfigured.asStateFlow()
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private val _supabaseSyncMessage = MutableStateFlow<String?>(null)
+    val supabaseSyncMessage: StateFlow<String?> = _supabaseSyncMessage.asStateFlow()
+
+    fun refreshSupabaseConfig() {
+        _isSupabaseConfigured.value = SupabaseConfig.isConfigured(getApplication())
+    }
+
+    fun testSupabaseConnection(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val result = SupabaseSyncManager.testConnection(getApplication())
+            _isSyncing.value = false
+            refreshSupabaseConfig()
+            if (result.isSuccess) {
+                val msg = result.getOrNull() ?: "Koneksi Supabase Berhasil!"
+                _supabaseSyncMessage.value = msg
+                onResult(true, msg)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Gagal terhubung ke Supabase."
+                _supabaseSyncMessage.value = err
+                onResult(false, err)
+            }
+        }
+    }
+
+    fun syncWithSupabase(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val currentRecords = allRecords.value
+            val result = SupabaseSyncManager.syncMedicalRecords(
+                context = getApplication(),
+                localRecords = currentRecords,
+                onRemoteRecordsFetched = { remoteRecords ->
+                    if (remoteRecords.isNotEmpty()) {
+                        repository.insertAllRecords(remoteRecords)
+                    }
+                }
+            )
+            _isSyncing.value = false
+            refreshSupabaseConfig()
+            if (result.isSuccess) {
+                val msg = result.getOrNull() ?: "Sinkronisasi Berhasil!"
+                _supabaseSyncMessage.value = msg
+                onResult(true, msg)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Gagal sinkronisasi dengan Supabase."
+                _supabaseSyncMessage.value = err
+                onResult(false, err)
+            }
+        }
+    }
+
+    fun uploadAllStudentsToSupabase(onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val studentList = students.value
+            val result = SupabaseSyncManager.uploadStudents(getApplication(), studentList)
+            _isSyncing.value = false
+            if (result.isSuccess) {
+                val count = result.getOrNull() ?: 0
+                val msg = "Berhasil mengunggah $count data siswa ke Supabase!"
+                _supabaseSyncMessage.value = msg
+                onResult(true, msg)
+            } else {
+                val err = result.exceptionOrNull()?.message ?: "Gagal upload data siswa ke Supabase."
+                _supabaseSyncMessage.value = err
+                onResult(false, err)
+            }
         }
     }
 }

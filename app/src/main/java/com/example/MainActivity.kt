@@ -1,10 +1,19 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
+import com.example.util.NotificationHelper
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -77,13 +86,17 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        NotificationHelper.createNotificationChannel(applicationContext)
+        val targetScreen = intent?.getStringExtra("EXTRA_NAV_SCREEN")
+
         setContent {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
                 WaliAsuhCareApp(
                     isDarkTheme = isDarkTheme,
-                    onToggleTheme = { isDarkTheme = !isDarkTheme }
+                    onToggleTheme = { isDarkTheme = !isDarkTheme },
+                    initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD
                 )
             }
         }
@@ -95,10 +108,29 @@ class MainActivity : ComponentActivity() {
 fun WaliAsuhCareApp(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
+    initialScreen: WaliNavScreen = WaliNavScreen.DASHBOARD,
     viewModel: HealthViewModel = viewModel()
 ) {
-    var currentScreen by rememberSaveable { mutableStateOf(WaliNavScreen.DASHBOARD) }
+    var currentScreen by rememberSaveable { mutableStateOf(initialScreen) }
     var showNotifModal by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    // Request POST_NOTIFICATIONS permission on Android 13+ (API 33+)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission()
+        ) { _ -> }
+
+        LaunchedEffect(Unit) {
+            val permissionStatus = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            )
+            if (permissionStatus != PackageManager.PERMISSION_GRANTED) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     // Collect Reactive StateFlows
     val students by viewModel.students.collectAsStateWithLifecycle()
