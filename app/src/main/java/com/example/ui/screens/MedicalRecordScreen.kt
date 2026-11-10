@@ -1,3 +1,8 @@
+@file:OptIn(
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class
+)
+
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
@@ -6,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,6 +52,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -124,7 +132,6 @@ fun MedicalRecordScreen(
     // Tab mode: 0 = Riwayat Tindakan (Slim Cards), 1 = Buku Screening Anak (Anak sebagai Primary)
     var selectedTabMode by remember { mutableIntStateOf(0) }
 
-    var expandedDateDropdown by remember { mutableStateOf(false) }
     var selectedDateFilter by remember { mutableStateOf("Semua Tanggal") }
 
     val todayStr = remember { DateUtils.formatShortDate(Calendar.getInstance().timeInMillis) }
@@ -159,6 +166,7 @@ fun MedicalRecordScreen(
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showDirectTreatmentDialog = true },
@@ -251,107 +259,79 @@ fun MedicalRecordScreen(
                     )
                 }
 
-                // Filter Bar: Dropdown Tanggal & Search Bar
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (selectedTabMode == 0) {
-                        // Date Dropdown for Tab 0
-                        Box {
-                            OutlinedButton(
-                                onClick = { expandedDateDropdown = true },
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                modifier = Modifier.height(44.dp)
-                            ) {
-                                Text(
-                                    text = selectedDateFilter,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Icon(
-                                    imageVector = Icons.Default.ArrowDropDown,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                            }
-
-                            DropdownMenu(
-                                expanded = expandedDateDropdown,
-                                onDismissRequest = { expandedDateDropdown = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("Semua Tanggal", fontSize = 12.sp) },
-                                    onClick = {
-                                        selectedDateFilter = "Semua Tanggal"
-                                        expandedDateDropdown = false
-                                    }
-                                )
-                                DropdownMenuItem(
-                                    text = { Text("Hari Ini ($todayStr)", fontSize = 12.sp) },
-                                    onClick = {
-                                        selectedDateFilter = "Hari Ini"
-                                        expandedDateDropdown = false
-                                    }
-                                )
+                // Search Field (Full Width, Menyesuaikan Layar)
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { viewModel.setHistorySearchQuery(it) },
+                    placeholder = {
+                        Text(
+                            text = if (selectedTabMode == 0) "Cari tindakan, siswa, diagnosa, faskes..." else "Cari nama anak asuh, NIS, asrama...",
+                            fontSize = 12.sp
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.setHistorySearchQuery("") }) {
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
                             }
                         }
-                    }
-
-                    // Search Field
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { viewModel.setHistorySearchQuery(it) },
-                        placeholder = {
-                            Text(
-                                text = if (selectedTabMode == 0) "Cari Hasil Tindakan Medis..." else "Cari Nama Anak Asuh / Asrama...",
-                                fontSize = 11.5.sp
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(15.dp))
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { viewModel.setHistorySearchQuery("") }) {
-                                    Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(13.dp))
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(44.dp)
-                            .testTag("input_medical_search")
-                    )
-                }
-
-                // Subtitle Info
-                Row(
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .testTag("input_medical_search")
+                )
+
+                // Filter Chips & Info Bar (FlowRow Menyesuaikan Berbagai Lebar Perangkat)
+                FlowRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = if (selectedTabMode == 0) "Daftar Hasil Tindakan (Kartu Slim)" else "Data Anak Asuh Sebagai Primary (Screening Terikat)",
-                        fontSize = 12.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = if (selectedTabMode == 0) "${filteredList.size} Data" else "${filteredStudents.size} Anak Asuh",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = WaliPrimary
-                    )
+                    if (selectedTabMode == 0) {
+                        FilterChip(
+                            selected = selectedDateFilter == "Semua Tanggal",
+                            onClick = { selectedDateFilter = "Semua Tanggal" },
+                            label = { Text("Semua Tanggal", fontSize = 11.5.sp) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
+                                selectedLabelColor = WaliPrimary
+                            )
+                        )
+                        FilterChip(
+                            selected = selectedDateFilter == "Hari Ini",
+                            onClick = { selectedDateFilter = "Hari Ini" },
+                            label = { Text("Hari Ini ($todayStr)", fontSize = 11.5.sp) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
+                                selectedLabelColor = WaliPrimary
+                            )
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.CenterVertically)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (selectedTabMode == 0) "${filteredList.size} Riwayat Tindakan" else "${filteredStudents.size} Anak Asuh",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = WaliPrimary
+                        )
+                    }
                 }
 
                 if (selectedTabMode == 0) {
@@ -576,129 +556,136 @@ fun SlimMedicalRecordCardItem(
         ),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            // Student Portrait Avatar
-            StudentAvatar(
-                name = record.studentName,
-                gender = gender,
-                size = 42.dp
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Info Tengah: Anak Asuh sebagai Primary
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(2.dp)
+            // Baris 1: Avatar + Nama Anak Asuh (Primary) & Aksi Cepat (WA Share + Arrow)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Baris 1: Nama Anak Asuh (Primary) & Pill Tag Asrama/Kelas
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                StudentAvatar(
+                    name = record.studentName,
+                    gender = gender,
+                    size = 40.dp
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = "$number. ${record.studentName}",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 13.5.sp,
+                        fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(WaliPrimary.copy(alpha = 0.09f))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "$gradeText • $dormText",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = WaliPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
-
-                // Baris 2: Diagnosa Singkat + Indikator Frekuensi Sakit Bulan Ini
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Medication,
-                        contentDescription = null,
-                        tint = Color(0xFF0284C7),
-                        modifier = Modifier.size(12.dp)
-                    )
                     Text(
-                        text = "Diagnosa: ${record.diagnosis.ifBlank { record.complaint.ifBlank { "Pemeriksaan medis" } }}",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium,
+                        text = "$gradeText • Asrama: $dormText",
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Baris 3: Tanggal Kunjungan, Faskes, dan Frekuensi Sakit Terikat
+                Spacer(modifier = Modifier.width(6.dp))
+
+                // Tombol Bagikan WhatsApp & Indikator Detail
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    IconButton(
+                        onClick = onShare,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("btn_share_wa_${record.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Laporan WhatsApp",
+                            tint = Color(0xFF25D366),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = "Lihat Detail Lengkap",
+                        tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            }
+
+            // Baris 2: Diagnosa Medis (Sleek tinted container, nyaman dibaca di layar apapun)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFF0284C7).copy(alpha = 0.08f))
+                    .padding(horizontal = 9.dp, vertical = 5.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Medication,
+                    contentDescription = null,
+                    tint = Color(0xFF0284C7),
+                    modifier = Modifier.size(14.dp)
+                )
+                Text(
+                    text = "Diagnosa: ${record.diagnosis.ifBlank { record.complaint.ifBlank { "Pemeriksaan medis" } }}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Baris 3: Tanggal, Faskes, Kontrol, dan Indikator 2x Sakit (FlowRow responsif tanpa terjepit)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Tanggal & Jam
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .padding(horizontal = 6.dp, vertical = 2.5.dp)
                 ) {
                     Text(
                         text = "📅 $dateStr, $timeStr",
                         fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.outline
+                        color = MaterialTheme.colorScheme.outline,
+                        fontWeight = FontWeight.Medium
                     )
-                    Text(
-                        text = "•",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                    FaskesBadge(faskes = record.faskes)
-
-                    // Jika anak asuh sebulan sakit 2 kali atau lebih, tampilkan badge peringatan lembut
-                    if (thisMonthCount >= 2) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFFEE2E2))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = "⚠️ ${thisMonthCount}x Bulan Ini",
-                                color = Color(0xFFDC2626),
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
                 }
-            }
 
-            Spacer(modifier = Modifier.width(6.dp))
+                // Faskes
+                FaskesBadge(faskes = record.faskes)
 
-            // Sisi Kanan: Status Kontrol, Tombol Share WA & Indikator Klik
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
+                // Status Kontrol jika ada
                 if (record.needsControl) {
                     Box(
                         modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
+                            .clip(RoundedCornerShape(5.dp))
                             .background(Color(0xFFFEF3C7))
-                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "Kontrol",
+                            text = "Kontrol: ${record.controlDate?.let { DateUtils.formatShortDate(it) } ?: "Terjadwal"}",
                             color = Color(0xFFD97706),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
@@ -706,26 +693,22 @@ fun SlimMedicalRecordCardItem(
                     }
                 }
 
-                IconButton(
-                    onClick = onShare,
-                    modifier = Modifier
-                        .size(32.dp)
-                        .testTag("btn_share_wa_${record.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = "Laporan WhatsApp",
-                        tint = Color(0xFF25D366),
-                        modifier = Modifier.size(16.dp)
-                    )
+                // Indikator Frekuensi Sakit Bulan Ini jika >= 2
+                if (thisMonthCount >= 2) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFFEE2E2))
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ ${thisMonthCount}x Sakit Bulan Ini",
+                            color = Color(0xFFDC2626),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
-
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Lihat Detail Lengkap",
-                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                    modifier = Modifier.size(18.dp)
-                )
             }
         }
     }
@@ -753,133 +736,133 @@ fun ChildHealthPrimaryCardItem(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 3.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 14.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp)
         ) {
-            StudentAvatar(
-                name = student.name,
-                gender = student.gender,
-                size = 46.dp
-            )
-
-            Spacer(modifier = Modifier.width(10.dp))
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(3.dp)
+            // Baris Atas: Avatar + Nama Siswa + Arrow
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                StudentAvatar(
+                    name = student.name,
+                    gender = student.gender,
+                    size = 44.dp
+                )
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         text = student.name,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurface
+                        fontSize = 14.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(5.dp))
-                            .background(WaliPrimary.copy(alpha = 0.09f))
-                            .padding(horizontal = 5.dp, vertical = 1.dp)
-                    ) {
-                        Text(
-                            text = "${student.classGrade} • NIS: ${student.nis}",
-                            fontSize = 9.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = WaliPrimary
-                        )
-                    }
-                }
-
-                Text(
-                    text = "🏠 Asrama: ${student.dormitory}",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                // Indikator Frekuensi Sakit Bulan Ini & Riwayat Screening Terikat
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    if (thisMonthCount >= 2) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFFEE2E2))
-                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                        ) {
-                            Text(
-                                text = "⚠️ $thisMonthCount Kali Sakit Bulan Ini",
-                                color = Color(0xFFDC2626),
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    } else if (thisMonthCount == 1) {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFE0F2FE))
-                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                        ) {
-                            Text(
-                                text = "🩺 1 Kali Sakit Bulan Ini",
-                                color = Color(0xFF0369A1),
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color(0xFFDCFCE7))
-                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                        ) {
-                            Text(
-                                text = "✅ Sehat Bulan Ini",
-                                color = Color(0xFF15803D),
-                                fontSize = 9.5.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
                     Text(
-                        text = "• $totalRecordsCount Riwayat Screening",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-
-                // Info Screening Terakhir jika ada
-                if (latestRecord != null) {
-                    val lastDateStr = latestRecord.treatmentDate?.let { DateUtils.formatShortDate(it) }
-                        ?: DateUtils.formatShortDate(latestRecord.planDate)
-                    Text(
-                        text = "Terakhir: ${latestRecord.diagnosis.ifBlank { latestRecord.complaint }} ($lastDateStr)",
-                        fontSize = 10.5.sp,
+                        text = "${student.classGrade} • NIS: ${student.nis} • Asrama: ${student.dormitory}",
+                        fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = "Buka Buku Kesehatan",
+                    tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
+                    modifier = Modifier.size(20.dp)
+                )
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
+            // Baris Tengah: Status Kesehatan & Riwayat Screening (FlowRow Responsif)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (thisMonthCount >= 2) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFFEE2E2))
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                    ) {
+                        Text(
+                            text = "⚠️ $thisMonthCount Kali Sakit Bulan Ini",
+                            color = Color(0xFFDC2626),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else if (thisMonthCount == 1) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFE0F2FE))
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                    ) {
+                        Text(
+                            text = "🩺 1 Kali Sakit Bulan Ini",
+                            color = Color(0xFF0369A1),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFDCFCE7))
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                    ) {
+                        Text(
+                            text = "✅ Sehat Bulan Ini",
+                            color = Color(0xFF15803D),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
 
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = "Buka Buku Kesehatan",
-                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                modifier = Modifier.size(20.dp)
-            )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                        .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                ) {
+                    Text(
+                        text = "📋 $totalRecordsCount Riwayat Screening",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            // Info Screening Terakhir jika ada
+            if (latestRecord != null) {
+                val lastDateStr = latestRecord.treatmentDate?.let { DateUtils.formatShortDate(it) }
+                    ?: DateUtils.formatShortDate(latestRecord.planDate)
+                Text(
+                    text = "Terakhir: ${latestRecord.diagnosis.ifBlank { latestRecord.complaint }} ($lastDateStr • ${latestRecord.faskes.replace("Puskesmas ", "")})",
+                    fontSize = 10.5.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -969,11 +952,11 @@ fun MedicalRecordDetailSheet(
                     }
                 }
 
-                // Ringkasan Frekuensi Sakit Bulan Ini yang Mengikat pada Anak Asuh
-                Row(
+                // Ringkasan Frekuensi Sakit Bulan Ini yang Mengikat pada Anak Asuh (FlowRow responsif)
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (thisMonthCount >= 2) {
                         Box(

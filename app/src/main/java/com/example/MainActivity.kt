@@ -119,9 +119,8 @@ fun WaliAsuhCareApp(
     }
 
     Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing),
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             WaliTopBar(
                 notificationCount = pendingControls.size + activePlans.size,
@@ -141,7 +140,6 @@ fun WaliAsuhCareApp(
                     modifier = Modifier
                         .fillMaxWidth()
                         .widthIn(max = 640.dp)
-                        .windowInsetsPadding(WindowInsets.navigationBars)
                         .testTag("bottom_nav_bar"),
                     containerColor = MaterialTheme.colorScheme.surface,
                     tonalElevation = 6.dp
