@@ -16,7 +16,7 @@ import java.util.Calendar
 
 @Database(
     entities = [ChildStudent::class, MedicalRecord::class],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -32,7 +32,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "srt1_kediri_health.db"
+                    "waliasuh_care.db"
                 )
                     .addCallback(DatabaseCallback())
                     .fallbackToDestructiveMigration()
@@ -59,76 +59,88 @@ abstract class AppDatabase : RoomDatabase() {
         ) {
             val students = listOf(
                 ChildStudent(
-                    name = "Ahmad Fauzi",
-                    nis = "SRT1-2023-01",
+                    id = 1,
+                    name = "Rama Aditia",
+                    nis = "SRT1-2024-01",
                     gender = "L",
-                    age = 13,
-                    dormitory = "Asrama Putra Al-Fatih (Wates)",
-                    classGrade = "Kelas 7 SMP",
-                    allergies = "Alergi Dingin (Asma kambuhan)",
-                    bloodType = "O",
-                    emergencyContact = "0812-3456-7801 (Ust. Ilham)",
-                    specialNotes = "Perlu perhatian bila cuaca dingin"
-                ),
-                ChildStudent(
-                    name = "Muhammad Rizky",
-                    nis = "SRT1-2022-14",
-                    gender = "L",
-                    age = 11,
-                    dormitory = "Asrama Putra Diponegoro (Wates)",
-                    classGrade = "Kelas 5 SD",
+                    age = 9,
+                    dormitory = "Asrama Putra 1 (Wates)",
+                    classGrade = "Kelas 3 SD",
                     allergies = "Tidak ada",
-                    bloodType = "B",
-                    emergencyContact = "0813-9876-5432 (Ust. Wahid)",
-                    specialNotes = "Aktif di tim sepak bola asrama"
+                    bloodType = "O",
+                    emergencyContact = "0812-3456-7801 (Sari Devi)"
                 ),
                 ChildStudent(
-                    name = "Siti Nurhaliza",
-                    nis = "SRT1-2023-28",
+                    id = 2,
+                    name = "Siti Halimah",
+                    nis = "SRT1-2023-14",
                     gender = "P",
-                    age = 14,
-                    dormitory = "Asrama Putri Khadijah (Plosoklaten)",
-                    classGrade = "Kelas 8 SMP",
-                    allergies = "Alergi Seafood & Amoxicillin",
-                    bloodType = "A",
-                    emergencyContact = "0821-4455-6677 (Usth. Maryam)",
-                    specialNotes = "Perlu hati-hati pemilihan antibiotik"
+                    age = 8,
+                    dormitory = "Asrama Putri 2 (Wates)",
+                    classGrade = "Kelas 2 SD",
+                    allergies = "Alergi Dingin",
+                    bloodType = "B",
+                    emergencyContact = "0813-9876-5432 (Sari Devi)"
                 ),
                 ChildStudent(
-                    name = "Bayu Pratama",
-                    nis = "SRT1-2024-05",
+                    id = 3,
+                    name = "Anton Wiryo",
+                    nis = "SRT1-2022-22",
                     gender = "L",
                     age = 10,
-                    dormitory = "Asrama Putra Al-Fatih (Wates)",
+                    dormitory = "Asrama Putra 2 (Plosoklaten)",
                     classGrade = "Kelas 4 SD",
                     allergies = "Tidak ada",
-                    bloodType = "AB",
-                    emergencyContact = "0812-3456-7801 (Ust. Ilham)",
-                    specialNotes = "Sering telat makan, riwayat maag"
+                    bloodType = "A",
+                    emergencyContact = "0821-4455-6677 (Sari Devi)"
                 ),
                 ChildStudent(
-                    name = "Aisyah Putri",
+                    id = 4,
+                    name = "Bella Astari",
                     nis = "SRT1-2023-33",
                     gender = "P",
-                    age = 12,
-                    dormitory = "Asrama Putri Aisyah (Plosoklaten)",
-                    classGrade = "Kelas 6 SD",
-                    allergies = "Alergi Debu (Bersin/Rhinitis)",
-                    bloodType = "O",
-                    emergencyContact = "0822-1122-3344 (Usth. Anisa)",
-                    specialNotes = "Rajin membersihkan kamar"
+                    age = 7,
+                    dormitory = "Asrama Putri 1 (Plosoklaten)",
+                    classGrade = "Kelas 1 SD",
+                    allergies = "Alergi Seafood",
+                    bloodType = "AB",
+                    emergencyContact = "0822-1122-3344 (Sari Devi)"
                 ),
                 ChildStudent(
-                    name = "Dimas Wahyu Saputra",
-                    nis = "SRT1-2021-09",
+                    id = 5,
+                    name = "Rian Pratama",
+                    nis = "SRT1-2021-05",
                     gender = "L",
-                    age = 16,
-                    dormitory = "Asrama Putra Sudirman (Wates)",
-                    classGrade = "Kelas 10 SMK",
+                    age = 11,
+                    dormitory = "Asrama Behir 10",
+                    classGrade = "Kelas 5A",
+                    allergies = "Tidak ada",
+                    bloodType = "O",
+                    emergencyContact = "0812-3456-7801 (Sari Devi)"
+                ),
+                ChildStudent(
+                    id = 6,
+                    name = "Susi Astuti",
+                    nis = "SRT1-2023-18",
+                    gender = "P",
+                    age = 9,
+                    dormitory = "Asrama Putri Khadijah",
+                    classGrade = "Kelas 3B",
+                    allergies = "Alergi Amoxicillin",
+                    bloodType = "A",
+                    emergencyContact = "0813-8888-9999 (Sari Devi)"
+                ),
+                ChildStudent(
+                    id = 7,
+                    name = "Agus Wiryo",
+                    nis = "SRT1-2022-09",
+                    gender = "L",
+                    age = 10,
+                    dormitory = "Asrama Putra Diponegoro",
+                    classGrade = "Kelas 4A",
                     allergies = "Tidak ada",
                     bloodType = "B",
-                    emergencyContact = "0812-3456-7802 (Ust. Syakir)",
-                    specialNotes = "Jurusan Teknik Mesin"
+                    emergencyContact = "0812-7777-6666 (Sari Devi)"
                 )
             )
 
@@ -138,74 +150,122 @@ abstract class AppDatabase : RoomDatabase() {
             val todayMillis = now.timeInMillis
 
             now.add(Calendar.DAY_OF_YEAR, 3)
-            val controlIn3Days = now.timeInMillis
+            val in3Days = now.timeInMillis
 
             now.add(Calendar.DAY_OF_YEAR, -5)
             val fiveDaysAgo = now.timeInMillis
 
-            // Initial records demonstrating all flows
             val initialRecords = listOf(
+                // 1. Rencana Hari Ini (Sesuai Mockup Gambar 3)
                 MedicalRecord(
                     studentId = 1,
-                    studentName = "Ahmad Fauzi",
-                    studentDormitory = "Asrama Putra Al-Fatih (Wates)",
+                    studentName = "Rama Aditia",
+                    studentDormitory = "Asrama Putra 1 (Wates)",
                     faskes = "Puskesmas Wates",
-                    complaint = "Demam panas tinggi sejak semalam, batuk kering dan pusing",
+                    complaint = "Demam/Flu tinggi sejak semalam",
                     isDirectTreatment = false,
                     planDate = todayMillis,
+                    departureTime = "08:30",
                     status = "PLANNED",
-                    escortName = "Ust. Ilham (Pengasuh)",
-                    notes = "Sudah diberi paracetamol UKS namun panas naik turun"
+                    escortName = "Sari Devi (Wali Asuh)",
+                    notes = "Sudah dikompres air hangat"
                 ),
                 MedicalRecord(
                     studentId = 2,
-                    studentName = "Muhammad Rizky",
-                    studentDormitory = "Asrama Putra Diponegoro (Wates)",
+                    studentName = "Siti Halimah",
+                    studentDormitory = "Asrama Putri 2 (Wates)",
                     faskes = "Puskesmas Wates",
-                    complaint = "Sakit gigi geraham kanan bawah bengkak dan susah makan",
+                    complaint = "Sakit Perut melilit dan mual",
                     isDirectTreatment = false,
                     planDate = todayMillis,
-                    status = "DEPARTED",
-                    escortName = "Ust. Wahid",
-                    notes = "Diberangkatkan jam 08:30 WIB menggunakan motor operasional asrama"
+                    departureTime = "09:00",
+                    status = "DEPARTED", // Dianter
+                    escortName = "Sari Devi",
+                    notes = "Sedang diantar menggunakan kendaraan asrama"
                 ),
                 MedicalRecord(
                     studentId = 3,
-                    studentName = "Siti Nurhaliza",
-                    studentDormitory = "Asrama Putri Khadijah (Plosoklaten)",
+                    studentName = "Anton Wiryo",
+                    studentDormitory = "Asrama Putra 2 (Plosoklaten)",
                     faskes = "Puskesmas Plosoklaten",
-                    complaint = "Luka robek lecet di lutut kiri dan memar setelah terjatuh di tangga",
-                    isDirectTreatment = true,
-                    planDate = fiveDaysAgo,
-                    status = "COMPLETED",
-                    treatmentDate = fiveDaysAgo,
-                    diagnosis = "Vulnus Laceratum regio genu sinistra + memar superficial",
-                    actionsTaken = "Pembersihan luka dengan NaCl & Betadine, penjahitan 2 simpul, perban steril",
-                    prescription = "Cefadroxil 500mg 2x1, Asam Mefenamat 500mg 3x1 (sesudah makan), Salep gentamisin",
-                    needsControl = true,
-                    controlDate = controlIn3Days,
-                    isControlCompleted = false,
-                    escortName = "Usth. Maryam",
-                    notes = "Kontrol ulang untuk angkat jahitan dan cek infeksi luka"
+                    complaint = "Batuk Pilek berdahak",
+                    isDirectTreatment = false,
+                    planDate = todayMillis,
+                    departureTime = "09:30",
+                    status = "PLANNED",
+                    escortName = "Sari Devi",
+                    notes = "Menunggu giliran berangkat kloter kedua"
                 ),
                 MedicalRecord(
                     studentId = 4,
-                    studentName = "Bayu Pratama",
-                    studentDormitory = "Asrama Putra Al-Fatih (Wates)",
+                    studentName = "Bella Astari",
+                    studentDormitory = "Asrama Putri 1 (Plosoklaten)",
+                    faskes = "Puskesmas Plosoklaten",
+                    complaint = "Pusing/Mual lemas",
+                    isDirectTreatment = false,
+                    planDate = todayMillis,
+                    departureTime = "10:00",
+                    status = "DEPARTED", // Siap Jalan
+                    escortName = "Sari Devi",
+                    notes = "Siap berangkat ke puskesmas"
+                ),
+
+                // 2. Rekam Medis Selesai Pasca Puskesmas (Sesuai Mockup Gambar 2)
+                MedicalRecord(
+                    studentId = 5,
+                    studentName = "Rian Pratama",
+                    studentDormitory = "Asrama Behir 10",
                     faskes = "Puskesmas Wates",
-                    complaint = "Nyeri ulu hati mual dan muntah 2 kali",
-                    isDirectTreatment = true,
-                    planDate = fiveDaysAgo,
+                    complaint = "Demam tinggi & lemas",
+                    isDirectTreatment = false,
+                    planDate = todayMillis,
+                    treatmentDate = todayMillis,
+                    departureTime = "09:30",
                     status = "COMPLETED",
-                    treatmentDate = fiveDaysAgo,
-                    diagnosis = "Gastritis Akut / Dispepsia",
-                    actionsTaken = "Pemeriksaan fisik perut, edukasi pola makan teratur",
-                    prescription = "Antasida syrup 3x1 cth (sebelum makan), Omeprazole 20mg 1x1 pagi",
+                    diagnosis = "Observasi Febris hari ke-2",
+                    actionsTaken = "Istirahat, Cairan infus, Pemantauan Lab darah",
+                    prescription = "Paracetamol 500mg 3x1, Vitamin C 1x1, Banyak minum air putih",
+                    needsControl = true,
+                    controlDate = in3Days,
+                    isControlCompleted = false,
+                    escortName = "Sari Devi"
+                ),
+                MedicalRecord(
+                    studentId = 6,
+                    studentName = "Susi Astuti",
+                    studentDormitory = "Asrama Putri Khadijah",
+                    faskes = "Puskesmas Plosoklaten",
+                    complaint = "Batuk kering, sesak nafas ringan & demam",
+                    isDirectTreatment = true,
+                    planDate = todayMillis,
+                    treatmentDate = todayMillis,
+                    departureTime = "09:30",
+                    status = "COMPLETED",
+                    diagnosis = "Infeksi Saluran Pernapasan Akut (ISPA)",
+                    actionsTaken = "Pemeriksaan dada, Nebulisasi, Pemantauan saturasi O2",
+                    prescription = "Ambroxol syrup 3x1 cth, Paracetamol syrup 3x1 cth",
                     needsControl = false,
-                    controlDate = null,
                     isControlCompleted = true,
-                    escortName = "Ust. Ilham",
-                    notes = "Kondisi sudah membaik, dianjurkan tidak makan pedas & asam di asrama"
+                    escortName = "Sari Devi"
+                ),
+                MedicalRecord(
+                    studentId = 7,
+                    studentName = "Agus Wiryo",
+                    studentDormitory = "Asrama Putra Diponegoro",
+                    faskes = "Puskesmas Wates",
+                    complaint = "Diare cair 4x dan lemas",
+                    isDirectTreatment = true,
+                    planDate = todayMillis,
+                    treatmentDate = todayMillis,
+                    departureTime = "11:00",
+                    status = "COMPLETED",
+                    diagnosis = "Gastroenteritis Akut (GEA) Dehidrasi Ringan",
+                    actionsTaken = "Rehidrasi oral, Pemberian tablet zinc, Edukasi kebersihan makanan",
+                    prescription = "Oralit 4 bungkus, Zinc 20mg 1x1 selama 10 hari",
+                    needsControl = true,
+                    controlDate = in3Days,
+                    isControlCompleted = false,
+                    escortName = "Sari Devi"
                 )
             )
 

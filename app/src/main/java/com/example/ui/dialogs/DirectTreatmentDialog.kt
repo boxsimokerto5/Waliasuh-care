@@ -1,6 +1,7 @@
 package com.example.ui.dialogs
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -17,7 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -28,10 +29,12 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -92,33 +95,45 @@ fun DirectTreatmentDialog(
     }
 
     var selectedControlDateMillis by remember { mutableLongStateOf(calIn3Days) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.widthIn(max = 500.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.FlashOn,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.tertiary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Input Tindakan Langsung",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 600.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Header
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.FlashOn,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Input Tindakan Langsung",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 Text(
                     text = "Catat tindakan puskesmas tanpa jadwal rencana sebelumnya.",
                     fontSize = 11.sp,
@@ -141,6 +156,7 @@ fun DirectTreatmentDialog(
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .menuAnchor()
                             .fillMaxWidth()
@@ -230,6 +246,7 @@ fun DirectTreatmentDialog(
                         label = { Text("Nama Faskes / RS", fontSize = 12.sp) },
                         placeholder = { Text("misal: RSUD Gambiran", fontSize = 12.sp) },
                         singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -241,6 +258,7 @@ fun DirectTreatmentDialog(
                     label = { Text("Keluhan Awal *", fontSize = 12.sp) },
                     placeholder = { Text("misal: Muntah-muntah, diare, luka", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -251,6 +269,7 @@ fun DirectTreatmentDialog(
                     label = { Text("Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
                     placeholder = { Text("misal: Gastroenteritis Akut", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("direct_diagnosis_input")
@@ -263,6 +282,7 @@ fun DirectTreatmentDialog(
                     label = { Text("Tindakan yang Dilakukan", fontSize = 12.sp) },
                     placeholder = { Text("misal: Nebulisasi, pembersihan luka", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -273,6 +293,7 @@ fun DirectTreatmentDialog(
                     label = { Text("Resep Obat & Dosis *", fontSize = 12.sp) },
                     placeholder = { Text("misal: Oralit 3 sachet, Zinc 20mg 1x1", fontSize = 12.sp) },
                     minLines = 2,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("direct_prescription_input")
@@ -287,7 +308,7 @@ fun DirectTreatmentDialog(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                         }
                     ),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Row(
@@ -374,6 +395,7 @@ fun DirectTreatmentDialog(
                     label = { Text("Petugas / Pengasuh Pengantar", fontSize = 12.sp) },
                     placeholder = { Text("misal: Ust. Ilham", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -384,45 +406,59 @@ fun DirectTreatmentDialog(
                     label = { Text("Catatan Tambahan", fontSize = 12.sp) },
                     placeholder = { Text("misal: Rawat jalan di kamar asrama", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val targetFaskes = if (selectedFaskes == "Lainnya") {
-                        if (customFaskes.isNotBlank()) customFaskes.trim() else "Faskes Rujukan"
-                    } else {
-                        selectedFaskes
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Batal", fontSize = 12.sp)
                     }
-                    selectedStudent?.let { student ->
-                        if (complaint.isNotBlank() && diagnosis.isNotBlank() && prescription.isNotBlank()) {
-                            onConfirm(
-                                student,
-                                targetFaskes,
-                                complaint.trim(),
-                                diagnosis.trim(),
-                                actionsTaken.trim(),
-                                prescription.trim(),
-                                needsControl,
-                                if (needsControl) selectedControlDateMillis else null,
-                                escortName.trim(),
-                                notes.trim()
-                            )
-                        }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = {
+                            val targetFaskes = if (selectedFaskes == "Lainnya") {
+                                if (customFaskes.isNotBlank()) customFaskes.trim() else "Faskes Rujukan"
+                            } else {
+                                selectedFaskes
+                            }
+                            selectedStudent?.let { student ->
+                                if (complaint.isNotBlank() && diagnosis.isNotBlank() && prescription.isNotBlank()) {
+                                    onConfirm(
+                                        student,
+                                        targetFaskes,
+                                        complaint.trim(),
+                                        diagnosis.trim(),
+                                        actionsTaken.trim(),
+                                        prescription.trim(),
+                                        needsControl,
+                                        if (needsControl) selectedControlDateMillis else null,
+                                        escortName.trim(),
+                                        notes.trim()
+                                    )
+                                }
+                            }
+                        },
+                        enabled = selectedStudent != null && complaint.isNotBlank() && diagnosis.isNotBlank() && prescription.isNotBlank(),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("confirm_direct_treatment_button")
+                    ) {
+                        Text("Simpan Pengobatan", fontSize = 12.sp)
                     }
-                },
-                enabled = selectedStudent != null && complaint.isNotBlank() && diagnosis.isNotBlank() && prescription.isNotBlank(),
-                modifier = Modifier.testTag("confirm_direct_treatment_button")
-            ) {
-                Text("Simpan Pengobatan", fontSize = 12.sp)
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Batal", fontSize = 12.sp)
+                }
             }
         }
-    )
+    }
 }

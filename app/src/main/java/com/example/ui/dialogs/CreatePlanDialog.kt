@@ -1,6 +1,7 @@
 package com.example.ui.dialogs
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,11 +12,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,9 +26,11 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -48,13 +52,23 @@ import java.util.Calendar
 fun CreatePlanDialog(
     students: List<ChildStudent>,
     onDismiss: () -> Unit,
-    onConfirm: (student: ChildStudent, faskes: String, complaint: String, planDate: Long, escort: String, notes: String) -> Unit
+    onConfirm: (
+        student: ChildStudent,
+        faskes: String,
+        complaint: String,
+        planDate: Long,
+        departureTime: String,
+        escort: String,
+        notes: String
+    ) -> Unit
 ) {
     var selectedStudent by remember { mutableStateOf(students.firstOrNull()) }
     var expandedStudentDropdown by remember { mutableStateOf(false) }
 
     var selectedFaskes by remember { mutableStateOf("Puskesmas Wates") }
     var customFaskes by remember { mutableStateOf("") }
+
+    var selectedTime by remember { mutableStateOf("08:30") }
 
     var complaint by remember { mutableStateOf("") }
     var escortName by remember { mutableStateOf("") }
@@ -69,33 +83,45 @@ fun CreatePlanDialog(
     }
 
     var selectedDateMillis by remember { mutableLongStateOf(calToday) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.widthIn(max = 500.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.LocalHospital,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Buat Rencana Berobat",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp), // Google Maps rounded top style
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 600.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Header Title
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocalHospital,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Buat Rencana Berobat",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 // Pilih Siswa Dropdown
                 Text(
                     text = "Pilih Anak Asuh:",
@@ -112,6 +138,7 @@ fun CreatePlanDialog(
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedStudentDropdown) },
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .menuAnchor()
                             .fillMaxWidth()
@@ -143,7 +170,7 @@ fun CreatePlanDialog(
                     }
                 }
 
-                // Info Alergi
+                // Info Alergi jika ada
                 selectedStudent?.let { student ->
                     if (student.allergies.isNotBlank() && !student.allergies.equals("Tidak ada", ignoreCase = true)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -166,7 +193,7 @@ fun CreatePlanDialog(
 
                 // Pilih Faskes
                 Text(
-                    text = "Puskesmas Tujuan Rujukan:",
+                    text = "Puskesmas Tujuan:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -202,11 +229,32 @@ fun CreatePlanDialog(
                     OutlinedTextField(
                         value = customFaskes,
                         onValueChange = { customFaskes = it },
-                        label = { Text("Nama Faskes / Rumah Sakit", fontSize = 12.sp) },
+                        label = { Text("Nama Faskes / RS", fontSize = 12.sp) },
                         placeholder = { Text("misal: RSUD Gambiran", fontSize = 12.sp) },
                         singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     )
+                }
+
+                // Estimasi Jam Berangkat
+                Text(
+                    text = "Estimasi Jam Berangkat:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("08:30", "09:00", "09:30", "10:00").forEach { time ->
+                        FilterChip(
+                            selected = selectedTime == time,
+                            onClick = { selectedTime = time },
+                            label = { Text(time, fontSize = 11.sp) },
+                            modifier = Modifier.height(28.dp)
+                        )
+                    }
                 }
 
                 // Keluhan
@@ -216,6 +264,7 @@ fun CreatePlanDialog(
                     label = { Text("Keluhan / Gejala Sakit *", fontSize = 12.sp) },
                     placeholder = { Text("misal: Demam 38°C sejak pagi", fontSize = 12.sp) },
                     minLines = 2,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_complaint")
@@ -223,7 +272,7 @@ fun CreatePlanDialog(
 
                 // Pilihan Tanggal Rencana
                 Text(
-                    text = "Tanggal Rencana Berangkat:",
+                    text = "Tanggal Rencana:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -251,7 +300,7 @@ fun CreatePlanDialog(
                     )
                 }
                 Text(
-                    text = "Jadwal: ${DateUtils.formatFullDate(selectedDateMillis)}",
+                    text = "Jadwal: ${DateUtils.formatFullDate(selectedDateMillis)} ($selectedTime WIB)",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.SemiBold
@@ -261,9 +310,10 @@ fun CreatePlanDialog(
                 OutlinedTextField(
                     value = escortName,
                     onValueChange = { escortName = it },
-                    label = { Text("Petugas / Pengasuh Pengantar", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Ust. Ilham", fontSize = 12.sp) },
+                    label = { Text("Petugas Pengantar", fontSize = 12.sp) },
+                    placeholder = { Text("misal: Sari Devi", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -271,37 +321,51 @@ fun CreatePlanDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Catatan / Instruksi Asrama", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Sudah diberi paracetamol UKS", fontSize = 12.sp) },
+                    label = { Text("Catatan Asrama", fontSize = 12.sp) },
+                    placeholder = { Text("misal: Sudah dikompres UKS", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    val targetFaskes = if (selectedFaskes == "Lainnya") {
-                        if (customFaskes.isNotBlank()) customFaskes.trim() else "Faskes Rujukan"
-                    } else {
-                        selectedFaskes
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Bottom Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Batal", fontSize = 12.sp)
                     }
-                    selectedStudent?.let { student ->
-                        if (complaint.isNotBlank()) {
-                            onConfirm(student, targetFaskes, complaint.trim(), selectedDateMillis, escortName.trim(), notes.trim())
-                        }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = {
+                            val targetFaskes = if (selectedFaskes == "Lainnya") {
+                                if (customFaskes.isNotBlank()) customFaskes.trim() else "Faskes Rujukan"
+                            } else {
+                                selectedFaskes
+                            }
+                            selectedStudent?.let { student ->
+                                if (complaint.isNotBlank()) {
+                                    onConfirm(student, targetFaskes, complaint.trim(), selectedDateMillis, selectedTime, escortName.trim(), notes.trim())
+                                }
+                            }
+                        },
+                        enabled = selectedStudent != null && complaint.isNotBlank(),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("confirm_create_plan_button")
+                    ) {
+                        Text("Simpan Rencana", fontSize = 12.sp)
                     }
-                },
-                enabled = selectedStudent != null && complaint.isNotBlank(),
-                modifier = Modifier.testTag("confirm_create_plan_button")
-            ) {
-                Text("Simpan Rencana", fontSize = 12.sp)
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Batal", fontSize = 12.sp)
+                }
             }
         }
-    )
+    }
 }

@@ -26,7 +26,8 @@ data class MedicalRecord(
     val complaint: String, // Keluhan atau gejala awal
     val isDirectTreatment: Boolean = false, // True jika pengobatan langsung tanpa lewat rencana
     val planDate: Long, // Tanggal rencana berobat (timestamp millis)
-    val status: String = "PLANNED", // "PLANNED", "DEPARTED", "COMPLETED", "CANCELLED"
+    val status: String = "PLANNED", // "PLANNED" (Menunggu), "DEPARTED" (Dianter/Siap Jalan), "COMPLETED" (Selesai), "CANCELLED"
+    val departureTime: String = "08:30", // Estimasi jam keberangkatan seperti di mockup (08:30, 09:00, dsb)
     val treatmentDate: Long? = null, // Tanggal saat tindakan/pengobatan dilakukan
     val diagnosis: String = "", // Diagnosa dokter
     val actionsTaken: String = "", // Tindakan medis di puskesmas

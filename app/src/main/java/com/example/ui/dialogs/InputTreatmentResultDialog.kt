@@ -1,6 +1,7 @@
 package com.example.ui.dialogs
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,17 +17,20 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.MedicalServices
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -44,6 +48,7 @@ import com.example.ui.components.FaskesBadge
 import com.example.util.DateUtils
 import java.util.Calendar
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun InputTreatmentResultDialog(
     record: MedicalRecord,
@@ -75,33 +80,45 @@ fun InputTreatmentResultDialog(
     }
 
     var selectedControlDateMillis by remember { mutableLongStateOf(calIn3Days) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    AlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        modifier = Modifier.widthIn(max = 500.dp),
-        title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.MedicalServices,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Input Diagnosa & Hasil Berobat",
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        },
-        text = {
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 600.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Header Title
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.MedicalServices,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Input Diagnosa & Hasil Berobat",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 // Info Banner (Compact)
                 Card(
                     colors = CardDefaults.cardColors(
@@ -109,7 +126,7 @@ fun InputTreatmentResultDialog(
                     ),
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Column(modifier = Modifier.padding(8.dp)) {
+                    Column(modifier = Modifier.padding(10.dp)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -138,6 +155,7 @@ fun InputTreatmentResultDialog(
                     label = { Text("Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
                     placeholder = { Text("misal: ISPA / Faringitis Akut", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_diagnosis")
@@ -150,6 +168,7 @@ fun InputTreatmentResultDialog(
                     label = { Text("Tindakan Medis di Puskesmas", fontSize = 12.sp) },
                     placeholder = { Text("misal: Pemeriksaan fisik, pembersihan luka", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -160,6 +179,7 @@ fun InputTreatmentResultDialog(
                     label = { Text("Resep Obat & Aturan Minum *", fontSize = 12.sp) },
                     placeholder = { Text("misal: Paracetamol 3x1, Amoxicillin 3x1", fontSize = 12.sp) },
                     minLines = 2,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_prescription")
@@ -174,7 +194,7 @@ fun InputTreatmentResultDialog(
                             MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                         }
                     ),
-                    shape = RoundedCornerShape(8.dp)
+                    shape = RoundedCornerShape(10.dp)
                 ) {
                     Column(modifier = Modifier.padding(10.dp)) {
                         Row(
@@ -261,34 +281,48 @@ fun InputTreatmentResultDialog(
                     label = { Text("Catatan Dokter / Pantauan Asrama", fontSize = 12.sp) },
                     placeholder = { Text("misal: Istirahat di kamar UKS", fontSize = 12.sp) },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
-            }
-        },
-        confirmButton = {
-            Button(
-                onClick = {
-                    if (diagnosis.isNotBlank() && prescription.isNotBlank()) {
-                        onConfirm(
-                            diagnosis.trim(),
-                            actionsTaken.trim(),
-                            prescription.trim(),
-                            needsControl,
-                            if (needsControl) selectedControlDateMillis else null,
-                            additionalNotes.trim()
-                        )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                // Bottom Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Text("Batal", fontSize = 12.sp)
                     }
-                },
-                enabled = diagnosis.isNotBlank() && prescription.isNotBlank(),
-                modifier = Modifier.testTag("confirm_submit_treatment_button")
-            ) {
-                Text("Simpan & Selesaikan", fontSize = 12.sp)
-            }
-        },
-        dismissButton = {
-            OutlinedButton(onClick = onDismiss) {
-                Text("Batal", fontSize = 12.sp)
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    Button(
+                        onClick = {
+                            if (diagnosis.isNotBlank() && prescription.isNotBlank()) {
+                                onConfirm(
+                                    diagnosis.trim(),
+                                    actionsTaken.trim(),
+                                    prescription.trim(),
+                                    needsControl,
+                                    if (needsControl) selectedControlDateMillis else null,
+                                    additionalNotes.trim()
+                                )
+                            }
+                        },
+                        enabled = diagnosis.isNotBlank() && prescription.isNotBlank(),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("confirm_submit_treatment_button")
+                    ) {
+                        Text("Simpan & Selesaikan", fontSize = 12.sp)
+                    }
+                }
             }
         }
-    )
+    }
 }

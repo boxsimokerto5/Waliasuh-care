@@ -183,8 +183,8 @@ fun PlanScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -224,23 +224,23 @@ fun PlanScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(24.dp),
+                            .padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.LocalHospital,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(44.dp)
                             )
                             Text(
                                 text = if (selectedTab == 0) "Tidak ada jadwal berobat/kontrol hari ini." else "Belum ada rencana berobat aktif.",
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
@@ -254,8 +254,8 @@ fun PlanScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 80.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 80.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // Section: Jadwal Kontrol Kembali
                         if (displayControls.isNotEmpty()) {
@@ -332,8 +332,8 @@ fun PlanScreen(
         CreatePlanDialog(
             students = students,
             onDismiss = { showCreatePlanDialog = false },
-            onConfirm = { student, faskes, complaint, planDate, escort, notes ->
-                viewModel.createTreatmentPlan(student, faskes, complaint, planDate, escort, notes)
+            onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
+                viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
                 showCreatePlanDialog = false
             }
         )
@@ -388,8 +388,8 @@ fun CompactPlanCardItem(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 11.dp, vertical = 9.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 // Header: Nama Siswa & Status
                 Row(
@@ -401,11 +401,11 @@ fun CompactPlanCardItem(
                         Text(
                             text = record.studentName,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 13.5.sp
                         )
                         Text(
                             text = record.studentDormitory,
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -421,7 +421,7 @@ fun CompactPlanCardItem(
                     FaskesBadge(faskes = record.faskes)
                     Text(
                         text = DateUtils.getRelativeDateLabel(record.planDate),
-                        fontSize = 11.sp,
+                        fontSize = 10.5.sp,
                         color = MaterialTheme.colorScheme.primary,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -433,11 +433,11 @@ fun CompactPlanCardItem(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(6.dp))
                         .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                        .padding(horizontal = 7.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = "Keluhan: ${record.complaint}",
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -526,8 +526,8 @@ fun CompactControlCardItem(
         colors = CardDefaults.cardColors(containerColor = StatusNeedControl.copy(alpha = 0.08f))
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -538,11 +538,11 @@ fun CompactControlCardItem(
                     Text(
                         text = record.studentName,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = 13.5.sp
                     )
                     Text(
                         text = record.studentDormitory,
-                        fontSize = 11.sp,
+                        fontSize = 10.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

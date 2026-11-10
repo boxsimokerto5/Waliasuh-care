@@ -14,7 +14,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import java.util.Calendar
 
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: HealthRepository
@@ -27,6 +26,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     val students: StateFlow<List<ChildStudent>> = repository.allStudents
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allRecords: StateFlow<List<MedicalRecord>> = repository.allRecords
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val activePlans: StateFlow<List<MedicalRecord>> = repository.activePlans
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -35,6 +37,16 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     val pendingControlRecords: StateFlow<List<MedicalRecord>> = repository.pendingControlRecords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Active Wali Name (Default "Sari Devi" from mockup)
+    private val _waliName = MutableStateFlow("Sari Devi")
+    val waliName: StateFlow<String> = _waliName.asStateFlow()
+
+    fun setWaliName(name: String) {
+        if (name.isNotBlank()) {
+            _waliName.value = name.trim()
+        }
+    }
 
     // UI state filters
     private val _selectedFaskesFilter = MutableStateFlow("Semua")
@@ -58,7 +70,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         _studentSearchQuery.value = query
     }
 
-    // Filtered Completed Records
+    // Filtered Completed Records (Pasca Puskesmas / Rekam Medis)
     val filteredCompletedRecords: StateFlow<List<MedicalRecord>> = combine(
         completedRecords,
         _selectedFaskesFilter,
@@ -70,7 +82,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 record.studentName.contains(query, ignoreCase = true) ||
                         record.diagnosis.contains(query, ignoreCase = true) ||
                         record.prescription.contains(query, ignoreCase = true) ||
-                        record.complaint.contains(query, ignoreCase = true)
+                        record.complaint.contains(query, ignoreCase = true) ||
+                        record.actionsTaken.contains(query, ignoreCase = true)
             }
             matchFaskes && matchQuery
         }
@@ -82,8 +95,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         faskes: String,
         complaint: String,
         planDate: Long,
-        escortName: String,
-        notes: String
+        departureTime: String = "08:30",
+        escortName: String = _waliName.value,
+        notes: String = ""
     ) {
         viewModelScope.launch {
             val record = MedicalRecord(
@@ -94,22 +108,30 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 complaint = complaint,
                 isDirectTreatment = false,
                 planDate = planDate,
+                departureTime = departureTime,
                 status = "PLANNED",
-                escortName = escortName,
+                escortName = if (escortName.isBlank()) _waliName.value else escortName,
                 notes = notes
             )
             repository.insertRecord(record)
         }
     }
 
-    // Mark as departed (diberangkatkan ke puskesmas)
+    // Mark departed (Dianter / Siap Jalan)
     fun markDeparted(recordId: Long) {
         viewModelScope.launch {
             repository.updateStatus(recordId, "DEPARTED")
         }
     }
 
-    // Submit Treatment Result (setelah diperiksa dokter/nakes)
+    // Update custom status
+    fun updateStatus(recordId: Long, status: String) {
+        viewModelScope.launch {
+            repository.updateStatus(recordId, status)
+        }
+    }
+
+    // Submit Treatment Result (Rekam medis nakes/puskesmas)
     fun submitTreatmentResult(
         record: MedicalRecord,
         diagnosis: String,
@@ -135,7 +157,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Direct Treatment (langsung tindakan di puskesmas tanpa rencana sebelumnya)
+    // Direct Treatment
     fun recordDirectTreatment(
         student: ChildStudent,
         faskes: String,
@@ -145,8 +167,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         prescription: String,
         needsControl: Boolean,
         controlDate: Long?,
-        escortName: String,
-        notes: String
+        escortName: String = _waliName.value,
+        notes: String = ""
     ) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -158,6 +180,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 complaint = complaint,
                 isDirectTreatment = true,
                 planDate = now,
+                departureTime = "09:00",
                 status = "COMPLETED",
                 treatmentDate = now,
                 diagnosis = diagnosis,
@@ -166,7 +189,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 needsControl = needsControl,
                 controlDate = if (needsControl) controlDate else null,
                 isControlCompleted = false,
-                escortName = escortName,
+                escortName = if (escortName.isBlank()) _waliName.value else escortName,
                 notes = notes
             )
             repository.insertRecord(record)
@@ -180,14 +203,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Cancel or delete record
+    // Delete record
     fun deleteRecord(record: MedicalRecord) {
         viewModelScope.launch {
             repository.deleteRecord(record)
         }
     }
 
-    // Add new student
+    // Add student
     fun addStudent(
         name: String,
         nis: String,

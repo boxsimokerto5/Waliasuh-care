@@ -108,21 +108,23 @@ fun StudentsScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setStudentSearchQuery(it) },
-                    placeholder = { Text("Cari nama siswa, asrama, NIS...", fontSize = 12.sp) },
+                    placeholder = { Text("Cari nama siswa, asrama, NIS...", fontSize = 11.5.sp) },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(16.dp))
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setStudentSearchQuery("") }) {
-                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
                             }
                         }
                     },
                     singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .height(44.dp)
+                        .padding(horizontal = 10.dp, vertical = 2.dp)
                         .testTag("input_student_search")
                 )
 
@@ -130,7 +132,7 @@ fun StudentsScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
+                        .padding(horizontal = 10.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -152,23 +154,23 @@ fun StudentsScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(24.dp),
+                            .padding(20.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.People,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
-                                modifier = Modifier.size(48.dp)
+                                modifier = Modifier.size(44.dp)
                             )
                             Text(
                                 text = if (searchQuery.isNotBlank()) "Tidak ada anak asuh dengan nama tersebut." else "Belum ada data anak asuh.",
                                 fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
+                                fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -176,8 +178,8 @@ fun StudentsScreen(
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 80.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 2.dp, bottom = 80.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         items(filteredStudents, key = { it.id }) { student ->
                             val studentRecordsCount = records.count { it.studentId == student.id }
@@ -231,27 +233,15 @@ fun CompactStudentCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(horizontal = 9.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Mini Avatar
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(
-                        if (student.gender == "L") MaterialTheme.colorScheme.primaryContainer
-                        else MaterialTheme.colorScheme.secondaryContainer
-                    )
-                    .padding(7.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Face,
-                    contentDescription = null,
-                    tint = if (student.gender == "L") MaterialTheme.colorScheme.onPrimaryContainer
-                    else MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
+            // Student Portrait Avatar matching mockups
+            com.example.ui.components.StudentAvatar(
+                name = student.name,
+                gender = student.gender,
+                size = 40.dp
+            )
 
             Spacer(modifier = Modifier.width(10.dp))
 
