@@ -616,35 +616,44 @@ fun MonthlyReportDialog(
                 HorizontalDivider()
 
                 // Action Buttons Bottom
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(
-                        onClick = {
-                            val pdfFile = PdfReportGenerator.generateMonthlyAggregatePdf(
-                                context = context,
-                                records = monthRecords,
-                                totalStudentsCount = totalStudents,
-                                monthYearLabel = periodLabel,
-                                waliName = waliName
-                            )
-                            if (pdfFile != null) {
-                                PdfReportGenerator.openPdfFile(context, pdfFile)
-                            } else {
-                                Toast.makeText(context, "Gagal membuat dokumen PDF", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("btn_export_monthly_pdf")
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Cetak PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
-                    }
+                        OutlinedButton(
+                            onClick = {
+                                val pdfFile = PdfReportGenerator.generateMonthlyAggregatePdf(
+                                    context = context,
+                                    records = monthRecords,
+                                    totalStudentsCount = totalStudents,
+                                    monthYearLabel = periodLabel,
+                                    waliName = waliName
+                                )
+                                if (pdfFile != null) {
+                                    PdfReportGenerator.openPdfFile(context, pdfFile)
+                                } else {
+                                    Toast.makeText(context, "Gagal membuat dokumen PDF", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("btn_export_monthly_pdf")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Cetak PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
                             onClick = {
                                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -655,20 +664,29 @@ fun MonthlyReportDialog(
                             },
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
-                            modifier = Modifier.testTag("btn_share_monthly_wa")
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("btn_share_monthly_wa")
                         ) {
-                            Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color.White)
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                                tint = Color.White
+                            )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Bagikan WA", fontSize = 11.5.sp, color = Color.White)
+                            Text("Bagikan WA", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
+                    }
 
-                        Button(
-                            onClick = onDismiss,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("btn_close_monthly_report_bottom")
-                        ) {
-                            Text("Tutup", fontSize = 11.5.sp)
-                        }
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_close_monthly_report_bottom")
+                    ) {
+                        Text("Tutup", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
