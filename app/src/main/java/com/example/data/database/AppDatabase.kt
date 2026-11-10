@@ -16,7 +16,7 @@ import java.util.Calendar
 
 @Database(
     entities = [ChildStudent::class, MedicalRecord::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -216,6 +216,25 @@ abstract class AppDatabase : RoomDatabase() {
                     studentName = "Rian Pratama",
                     studentDormitory = "Asrama Behir 10",
                     faskes = "Puskesmas Wates",
+                    complaint = "Radang tenggorokan & batuk awal",
+                    isDirectTreatment = true,
+                    planDate = fiveDaysAgo,
+                    treatmentDate = fiveDaysAgo,
+                    departureTime = "08:30",
+                    status = "COMPLETED",
+                    diagnosis = "Faringitis Akut (Radang Tenggorokan)",
+                    actionsTaken = "Pemeriksaan orofaring, pemberian antibiotik & vitamin",
+                    prescription = "Amoxicillin 500mg 3x1 (habiskan), Paracetamol 500mg 3x1",
+                    needsControl = false,
+                    isControlCompleted = true,
+                    escortName = "Sari Devi",
+                    notes = "Screening pertama bulan ini"
+                ),
+                MedicalRecord(
+                    studentId = 5,
+                    studentName = "Rian Pratama",
+                    studentDormitory = "Asrama Behir 10",
+                    faskes = "Puskesmas Wates",
                     complaint = "Demam tinggi & lemas",
                     isDirectTreatment = false,
                     planDate = todayMillis,
@@ -228,7 +247,8 @@ abstract class AppDatabase : RoomDatabase() {
                     needsControl = true,
                     controlDate = in3Days,
                     isControlCompleted = false,
-                    escortName = "Sari Devi"
+                    escortName = "Sari Devi",
+                    notes = "Kunjungan ke-2 bulan ini (kambuh demam tinggi)"
                 ),
                 MedicalRecord(
                     studentId = 6,

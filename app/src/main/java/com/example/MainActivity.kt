@@ -311,6 +311,7 @@ fun WaliAsuhCareApp(
                         viewModel = viewModel,
                         waliName = waliName,
                         completedRecords = completedRecords,
+                        allRecords = allRecords,
                         students = students,
                         searchQuery = historySearchQuery,
                         onNavigateToProfile = { currentScreen = WaliNavScreen.PROFIL }

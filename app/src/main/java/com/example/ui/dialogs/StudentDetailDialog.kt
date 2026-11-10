@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -18,6 +19,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.HistoryEdu
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
@@ -32,9 +34,14 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -44,6 +51,7 @@ import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -53,6 +61,17 @@ fun StudentDetailDialog(
     onDismiss: () -> Unit
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showPrintPdfDialog by remember { mutableStateOf(false) }
+
+    val calNow = Calendar.getInstance()
+    val curMonth = calNow.get(Calendar.MONTH)
+    val curYear = calNow.get(Calendar.YEAR)
+    val calItem = Calendar.getInstance()
+    val thisMonthCount = studentRecords.count { record ->
+        val time = record.treatmentDate ?: record.planDate
+        calItem.timeInMillis = time
+        calItem.get(Calendar.MONTH) == curMonth && calItem.get(Calendar.YEAR) == curYear
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -127,6 +146,38 @@ fun StudentDetailDialog(
                         Text(text = "🎂 Usia/Gender: ${student.age} Th • ${if (student.gender == "L") "Putra" else "Putri"} • Gol: ${student.bloodType}", fontSize = 11.sp)
                         Text(text = "📞 Kontak: ${student.emergencyContact}", fontSize = 11.sp)
 
+                        if (thisMonthCount >= 2) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFFEE2E2))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "⚠️ Perhatian: Anak ini $thisMonthCount kali sakit bulan ini",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFDC2626),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else if (thisMonthCount == 1) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFE0F2FE))
+                                    .padding(horizontal = 7.dp, vertical = 3.dp)
+                            ) {
+                                Text(
+                                    text = "🩺 1 kali berobat bulan ini",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF0369A1),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+
                         if (student.allergies.isNotBlank() && !student.allergies.equals("Tidak ada", ignoreCase = true)) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -157,19 +208,36 @@ fun StudentDetailDialog(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
 
                 // Riwayat Kunjungan Pengobatan
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.HistoryEdu,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "Riwayat Berobat (${studentRecords.size} Kali):",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp
-                    )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.HistoryEdu,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Riwayat Berobat (${studentRecords.size} Kali):",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp
+                        )
+                    }
+
+                    OutlinedButton(
+                        onClick = { showPrintPdfDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier.height(28.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("Cetak PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
                 if (studentRecords.isEmpty()) {
@@ -261,5 +329,13 @@ fun StudentDetailDialog(
                 }
             }
         }
+    }
+
+    if (showPrintPdfDialog) {
+        PrintPdfDialog(
+            student = student,
+            allRecords = studentRecords,
+            onDismiss = { showPrintPdfDialog = false }
+        )
     }
 }
