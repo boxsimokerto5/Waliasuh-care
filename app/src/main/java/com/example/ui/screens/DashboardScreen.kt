@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +29,8 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.ViewList
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -65,6 +68,7 @@ import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import java.util.Calendar
@@ -370,8 +374,7 @@ fun DashboardScreen(
                         DashboardSickChildItem(
                             number = index + 1,
                             record = record,
-                            students = students,
-                            onUpdateStatus = { newStatus -> viewModel.updateStatus(record.id, newStatus) },
+                            onDepart = { viewModel.markDeparted(record.id) },
                             onDiagnose = { recordToDiagnose = record },
                             onDelete = { viewModel.deleteRecord(record) }
                         )
@@ -521,72 +524,56 @@ fun DashboardScreen(
 fun DashboardSickChildItem(
     number: Int,
     record: MedicalRecord,
-    students: List<ChildStudent>,
-    onUpdateStatus: (String) -> Unit,
+    onDepart: () -> Unit,
     onDiagnose: () -> Unit,
     onDelete: () -> Unit
 ) {
-    var menuExpanded by remember { mutableStateOf(false) }
-
-    // Find student details for age and gender
-    val student = students.find { it.id == record.studentId }
-    val ageText = student?.let { " (${it.age}th)" } ?: ""
-    val gender = student?.gender ?: "L"
-
+    val accentColor = if (record.faskes.contains("Wates", ignoreCase = true)) Color(0xFF00695C) else Color(0xFF2E7D32)
     val isToday = DateUtils.isToday(record.planDate)
-    val isTomorrow = DateUtils.isTomorrow(record.planDate)
-    val planDateFormatted = DateUtils.formatFullDate(record.planDate)
-    val relativeDateLabel = DateUtils.getRelativeDateLabel(record.planDate)
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("sick_child_item_${record.id}"),
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(10.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.Top
-        ) {
-            // Student Portrait Avatar (from Image 3)
-            StudentAvatar(
-                name = record.studentName,
-                gender = gender,
-                size = 42.dp
+        Row(modifier = Modifier.fillMaxWidth()) {
+            // Left Accent Color Stripe
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(accentColor)
             )
 
-            Spacer(modifier = Modifier.width(10.dp))
-
-            // Student Info with prominent Tanggal ke Faskes
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 9.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Header: Nama Siswa & Status
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "$number. ${record.studentName}$ageText",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.5.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "$number. ${record.studentName}",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.5.sp
+                        )
+                        Text(
+                            text = record.studentDormitory,
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     StatusBadge(status = record.status)
                 }
-
-                if (record.studentDormitory.isNotBlank()) {
-                    Text(
-                        text = record.studentDormitory,
-                        fontSize = 10.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(3.dp))
 
                 // VIEW TANGGAL KE FASILITAS KESEHATAN
                 Box(
@@ -595,9 +582,9 @@ fun DashboardSickChildItem(
                         .clip(RoundedCornerShape(8.dp))
                         .background(
                             if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                            else Color(0xFFFEF3C7).copy(alpha = 0.6f)
+                            else accentColor.copy(alpha = 0.08f)
                         )
-                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                         Row(
@@ -609,37 +596,34 @@ fun DashboardSickChildItem(
                                 Icon(
                                     imageVector = Icons.Default.CalendarToday,
                                     contentDescription = "Tanggal ke Faskes",
-                                    tint = if (isToday) WaliPrimary else Color(0xFFB45309),
+                                    tint = accentColor,
                                     modifier = Modifier.size(13.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Tanggal ke Faskes:",
+                                    text = "Tanggal ke Fasilitas Kesehatan:",
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isToday) WaliPrimary else Color(0xFFB45309)
+                                    color = accentColor
                                 )
                             }
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(4.dp))
-                                    .background(
-                                        if (isToday) WaliPrimary.copy(alpha = 0.15f)
-                                        else Color(0xFFF59E0B).copy(alpha = 0.25f)
-                                    )
+                                    .background(accentColor.copy(alpha = 0.15f))
                                     .padding(horizontal = 5.dp, vertical = 1.5.dp)
                             ) {
                                 Text(
-                                    text = relativeDateLabel,
+                                    text = DateUtils.getRelativeDateLabel(record.planDate),
                                     fontSize = 9.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isToday) WaliPrimary else Color(0xFFB45309)
+                                    color = accentColor
                                 )
                             }
                         }
 
                         Text(
-                            text = "$planDateFormatted • Pukul ${record.departureTime} WIB",
+                            text = "${DateUtils.formatFullDate(record.planDate)} • Pukul ${record.departureTime} WIB",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -650,7 +634,7 @@ fun DashboardSickChildItem(
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "Tujuan:",
+                                text = "Tujuan Faskes:",
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -659,93 +643,86 @@ fun DashboardSickChildItem(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(3.dp))
-
-                Text(
-                    text = "• Keluhan: ${record.complaint}",
-                    fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                if (record.escortName.isNotBlank()) {
+                // Compact Keluhan
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(horizontal = 7.dp, vertical = 4.dp)
+                ) {
                     Text(
-                        text = "• Pengantar: ${record.escortName}",
-                        fontSize = 10.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            // 3-dots action menu (from Image 3)
-            Box {
-                IconButton(
-                    onClick = { menuExpanded = true },
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Opsi Aksi",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        text = "Keluhan: ${record.complaint}",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Medium
                     )
                 }
 
-                DropdownMenu(
-                    expanded = menuExpanded,
-                    onDismissRequest = { menuExpanded = false }
+                // Escort & Action Row (Tight layout)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.DirectionsRun, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Tandai Siap Jalan", fontSize = 12.sp)
-                            }
-                        },
-                        onClick = {
-                            onUpdateStatus("Siap Jalan")
-                            menuExpanded = false
-                        }
+                    Text(
+                        text = if (record.escortName.isNotBlank()) "👤 ${record.escortName}" else "",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
                     )
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Tandai Dianter", fontSize = 12.sp)
-                            }
-                        },
-                        onClick = {
-                            onUpdateStatus("Dianter")
-                            menuExpanded = false
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier.size(30.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = "Hapus",
+                                tint = MaterialTheme.colorScheme.outline,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.MedicalServices, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Input Diagnosa Selesai", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+
+                        if (record.status == "PLANNED" || record.status == "MENUNGGU" || record.status == "SIAP JALAN") {
+                            Button(
+                                onClick = onDepart,
+                                colors = ButtonDefaults.buttonColors(containerColor = StatusDeparted),
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("btn_depart_${record.id}"),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsRun,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Berangkatkan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onDiagnose()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Hapus Rencana", color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                        } else if (record.status == "DEPARTED" || record.status == "DIANTER") {
+                            Button(
+                                onClick = onDiagnose,
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("btn_input_result_${record.id}"),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.MedicalServices,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
-                        },
-                        onClick = {
-                            menuExpanded = false
-                            onDelete()
                         }
-                    )
+                    }
                 }
             }
         }
