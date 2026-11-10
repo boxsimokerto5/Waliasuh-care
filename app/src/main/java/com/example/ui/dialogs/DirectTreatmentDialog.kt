@@ -18,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -72,7 +73,7 @@ fun DirectTreatmentDialog(
     ) -> Unit
 ) {
     var selectedStudent by remember { mutableStateOf(students.firstOrNull()) }
-    var expandedDropdown by remember { mutableStateOf(false) }
+    var showStudentSearchDialog by remember { mutableStateOf(false) }
 
     var selectedFaskes by remember { mutableStateOf("Puskesmas Wates") }
     var customFaskes by remember { mutableStateOf("") }
@@ -143,51 +144,84 @@ fun DirectTreatmentDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Pilih Siswa
-                Text(
-                    text = "Pilih Anak Asuh:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                ExposedDropdownMenuBox(
-                    expanded = expandedDropdown,
-                    onExpandedChange = { expandedDropdown = !expandedDropdown }
+                // Pilih Siswa (dengan fitur Pencarian Cepat)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    OutlinedTextField(
-                        value = selectedStudent?.let { "${it.name} (${it.dormitory})" } ?: "Pilih Siswa...",
-                        onValueChange = {},
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
-                            .fillMaxWidth()
-                            .testTag("select_student_direct_dropdown")
+                    Text(
+                        text = "Pilih Anak Asuh:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
-
-                    ExposedDropdownMenu(
-                        expanded = expandedDropdown,
-                        onDismissRequest = { expandedDropdown = false }
+                    OutlinedButton(
+                        onClick = { showStudentSearchDialog = true },
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .height(26.dp)
+                            .testTag("btn_search_student_direct")
                     ) {
-                        students.forEach { student ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(text = student.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                        Text(
-                                            text = "${student.dormitory} • ${student.classGrade}",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    selectedStudent = student
-                                    expandedDropdown = false
-                                }
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = null,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Cari Nama...", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                Card(
+                    onClick = { showStudentSearchDialog = true },
+                    shape = RoundedCornerShape(10.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                    ),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("select_student_search_direct_card")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
                             )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = selectedStudent?.name ?: "Ketuk untuk memilih anak asuh...",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 13.5.sp,
+                                    color = if (selectedStudent != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    text = selectedStudent?.let { "${it.dormitory} • ${it.classGrade}" } ?: "Cari nama, asrama, atau kelas",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Cari",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
 
@@ -549,5 +583,14 @@ fun DirectTreatmentDialog(
                 }
             }
         }
+    }
+
+    if (showStudentSearchDialog) {
+        SearchStudentDialog(
+            students = students,
+            selectedStudent = selectedStudent,
+            onSelect = { selectedStudent = it },
+            onDismiss = { showStudentSearchDialog = false }
+        )
     }
 }
