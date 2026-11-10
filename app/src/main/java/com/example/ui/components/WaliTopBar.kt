@@ -4,11 +4,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -46,17 +49,21 @@ fun WaliTopBar(
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 1.dp
+        tonalElevation = 2.dp,
+        shadowElevation = 1.dp
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .displayCutoutPadding(),
             contentAlignment = Alignment.Center
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .padding(horizontal = 12.dp, vertical = 6.dp), // Tighter padding
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -67,7 +74,7 @@ fun WaliTopBar(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
                             .background(WaliPrimary.copy(alpha = 0.12f)),
                         contentAlignment = Alignment.Center
@@ -76,43 +83,51 @@ fun WaliTopBar(
                             imageVector = Icons.Default.VolunteerActivism,
                             contentDescription = "Logo Wali Asuh Care",
                             tint = WaliPrimary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Wali Asuh Care",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = WaliPrimary,
-                        letterSpacing = 0.1.sp
-                    )
+                    Spacer(modifier = Modifier.width(9.dp))
+                    Column {
+                        Text(
+                            text = "Wali Asuh Care",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = WaliPrimary,
+                            letterSpacing = 0.1.sp
+                        )
+                        Text(
+                            text = "SRT 1 Kabupaten Kediri",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
 
                 // Right Action: Notification Bell OR Doctor Avatar
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     if (isDoctorIcon) {
                         IconButton(
                             onClick = onNotificationClick,
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(38.dp)
                                 .testTag("btn_doctor_icon")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MedicalServices,
                                 contentDescription = "Rekam Medis Dokter",
                                 tint = WaliPrimary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     } else {
                         IconButton(
                             onClick = onNotificationClick,
                             modifier = Modifier
-                                .size(34.dp)
+                                .size(38.dp)
                                 .testTag("btn_notification_bell")
                         ) {
                             BadgedBox(
@@ -122,7 +137,11 @@ fun WaliTopBar(
                                             containerColor = Color(0xFFEF4444),
                                             contentColor = Color.White
                                         ) {
-                                            Text("$notificationCount", fontSize = 9.sp)
+                                            Text(
+                                                text = if (notificationCount > 99) "99+" else "$notificationCount",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                     }
                                 }
@@ -130,8 +149,8 @@ fun WaliTopBar(
                                 Icon(
                                     imageVector = Icons.Default.Notifications,
                                     contentDescription = "Notifikasi Pengingat",
-                                    tint = WaliPrimary,
-                                    modifier = Modifier.size(20.dp)
+                                    tint = if (notificationCount > 0) WaliPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
                                 )
                             }
                         }
@@ -140,7 +159,7 @@ fun WaliTopBar(
                     // Avatar Thumbnail
                     Box(
                         modifier = Modifier
-                            .size(30.dp)
+                            .size(34.dp)
                             .clip(CircleShape)
                             .background(WaliPrimary.copy(alpha = 0.14f))
                             .clickable(onClick = onProfileClick)
@@ -151,7 +170,7 @@ fun WaliTopBar(
                             imageVector = Icons.Default.Person,
                             contentDescription = "Profil Wali",
                             tint = WaliPrimary,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }

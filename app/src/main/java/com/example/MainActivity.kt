@@ -159,7 +159,9 @@ fun WaliAsuhCareApp(
                             Text(
                                 text = "Dashboard",
                                 fontWeight = if (currentScreen == WaliNavScreen.DASHBOARD) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -185,7 +187,9 @@ fun WaliAsuhCareApp(
                             Text(
                                 text = "Rencana",
                                 fontWeight = if (currentScreen == WaliNavScreen.RENCANA) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -211,7 +215,9 @@ fun WaliAsuhCareApp(
                             Text(
                                 text = "Tindakan",
                                 fontWeight = if (currentScreen == WaliNavScreen.TINDAKAN) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -237,7 +243,9 @@ fun WaliAsuhCareApp(
                             Text(
                                 text = "Anak Asuh",
                                 fontWeight = if (currentScreen == WaliNavScreen.ANAK_ASUH) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -263,7 +271,9 @@ fun WaliAsuhCareApp(
                             Text(
                                 text = "Profil",
                                 fontWeight = if (currentScreen == WaliNavScreen.PROFIL) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 11.sp
+                                fontSize = 10.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
