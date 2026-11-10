@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DirectionsRun
@@ -32,6 +33,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,6 +58,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
+import com.example.ui.components.FaskesBadge
 import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
@@ -94,10 +98,18 @@ fun DashboardScreen(
         DateUtils.formatFullDate(Calendar.getInstance().timeInMillis)
     }
 
+    val todayPlans = remember(activePlans) {
+        activePlans.filter { DateUtils.isToday(it.planDate) }
+    }
+    val upcomingPlans = remember(activePlans) {
+        activePlans.filter { !DateUtils.isToday(it.planDate) }
+    }
+    var selectedPlanFilter by remember { mutableStateOf("Semua") }
+
     // Counts for today
-    val watesCount = activePlans.count { it.faskes.contains("Wates", ignoreCase = true) }
-    val klatenCount = activePlans.count { it.faskes.contains("Klaten", ignoreCase = true) || it.faskes.contains("Plosoklaten", ignoreCase = true) }
-    val totalToday = activePlans.size
+    val watesTodayCount = todayPlans.count { it.faskes.contains("Wates", ignoreCase = true) }
+    val klatenTodayCount = todayPlans.count { it.faskes.contains("Klaten", ignoreCase = true) || it.faskes.contains("Plosoklaten", ignoreCase = true) }
+    val totalToday = todayPlans.size
     val totalSchoolStudents = if (students.isNotEmpty()) students.size else 342
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
 
@@ -174,13 +186,13 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.height(1.dp))
 
                             Text(
-                                text = "Puskesmas Wates: $watesCount Anak",
+                                text = "Puskesmas Wates: $watesTodayCount Anak",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Puskesmas Klaten: $klatenCount Anak",
+                                text = "Puskesmas Klaten: $klatenTodayCount Anak",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -198,12 +210,26 @@ fun DashboardScreen(
                                 trackColor = MaterialTheme.colorScheme.surfaceVariant
                             )
 
-                            Text(
-                                text = "$totalToday/$totalSchoolStudents Anak Total",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "$totalToday Anak Dijadwalkan Hari Ini ($totalToday/$totalSchoolStudents Siswa)",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (upcomingPlans.isNotEmpty()) {
+                                    Text(
+                                        text = "📅 +${upcomingPlans.size} mendatang",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WaliPrimary
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -247,18 +273,74 @@ fun DashboardScreen(
                     }
                 }
 
-                // Section Header from Image 3: "Daftar Anak Sakit Pagi Ini (Selasa, 11 Nov)"
+                // Section Header: Daftar Rencana Berobat ke Faskes
                 item {
-                    Text(
-                        text = "Daftar Anak Sakit Pagi Ini ($todayDateFormatted)",
-                        fontSize = 13.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(top = 4.dp)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Daftar Rencana Berobat ke Faskes",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Hari ini: $todayDateFormatted",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        // Filter Chips: Semua, Hari Ini, Mendatang
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            FilterChip(
+                                selected = selectedPlanFilter == "Semua",
+                                onClick = { selectedPlanFilter = "Semua" },
+                                label = { Text("Semua (${activePlans.size})", fontSize = 11.sp) },
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("chip_filter_all_plans")
+                            )
+                            FilterChip(
+                                selected = selectedPlanFilter == "Hari Ini",
+                                onClick = { selectedPlanFilter = "Hari Ini" },
+                                label = { Text("Hari Ini (${todayPlans.size})", fontSize = 11.sp) },
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("chip_filter_today_plans")
+                            )
+                            FilterChip(
+                                selected = selectedPlanFilter == "Mendatang",
+                                onClick = { selectedPlanFilter = "Mendatang" },
+                                label = { Text("Mendatang (${upcomingPlans.size})", fontSize = 11.sp) },
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("chip_filter_upcoming_plans")
+                            )
+                        }
+                    }
                 }
 
-                if (activePlans.isEmpty()) {
+                val displayedPlans = when (selectedPlanFilter) {
+                    "Hari Ini" -> todayPlans
+                    "Mendatang" -> upcomingPlans
+                    else -> activePlans
+                }
+
+                if (displayedPlans.isEmpty()) {
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -268,19 +350,23 @@ fun DashboardScreen(
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(24.dp),
+                                    .padding(20.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Alhamdulillah, belum ada anak yang sakit pagi ini.",
-                                    fontSize = 13.sp,
+                                    text = when (selectedPlanFilter) {
+                                        "Hari Ini" -> "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini."
+                                        "Mendatang" -> "Belum ada rencana berobat untuk tanggal mendatang."
+                                        else -> "Alhamdulillah, belum ada rencana berobat aktif."
+                                    },
+                                    fontSize = 12.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
                 } else {
-                    itemsIndexed(activePlans, key = { _, record -> record.id }) { index, record ->
+                    itemsIndexed(displayedPlans, key = { _, record -> record.id }) { index, record ->
                         DashboardSickChildItem(
                             number = index + 1,
                             record = record,
@@ -447,6 +533,11 @@ fun DashboardSickChildItem(
     val ageText = student?.let { " (${it.age}th)" } ?: ""
     val gender = student?.gender ?: "L"
 
+    val isToday = DateUtils.isToday(record.planDate)
+    val isTomorrow = DateUtils.isTomorrow(record.planDate)
+    val planDateFormatted = DateUtils.formatFullDate(record.planDate)
+    val relativeDateLabel = DateUtils.getRelativeDateLabel(record.planDate)
+
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -458,8 +549,8 @@ fun DashboardSickChildItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 10.dp, vertical = 9.dp),
+            verticalAlignment = Alignment.Top
         ) {
             // Student Portrait Avatar (from Image 3)
             StudentAvatar(
@@ -470,34 +561,118 @@ fun DashboardSickChildItem(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Student Info matching Image 3
+            // Student Info with prominent Tanggal ke Faskes
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "$number. ${record.studentName}$ageText",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "• ${record.complaint}",
-                    fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = "• ${record.faskes} (${record.departureTime})",
-                    fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(top = 1.dp)
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "• Status: ",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "$number. ${record.studentName}$ageText",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
                     )
                     StatusBadge(status = record.status)
+                }
+
+                if (record.studentDormitory.isNotBlank()) {
+                    Text(
+                        text = record.studentDormitory,
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // VIEW TANGGAL KE FASILITAS KESEHATAN
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                            else Color(0xFFFEF3C7).copy(alpha = 0.6f)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 5.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarToday,
+                                    contentDescription = "Tanggal ke Faskes",
+                                    tint = if (isToday) WaliPrimary else Color(0xFFB45309),
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Tanggal ke Faskes:",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isToday) WaliPrimary else Color(0xFFB45309)
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(
+                                        if (isToday) WaliPrimary.copy(alpha = 0.15f)
+                                        else Color(0xFFF59E0B).copy(alpha = 0.25f)
+                                    )
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text(
+                                    text = relativeDateLabel,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isToday) WaliPrimary else Color(0xFFB45309)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "$planDateFormatted • Pukul ${record.departureTime} WIB",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Tujuan:",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FaskesBadge(faskes = record.faskes)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                Text(
+                    text = "• Keluhan: ${record.complaint}",
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                if (record.escortName.isNotBlank()) {
+                    Text(
+                        text = "• Pengantar: ${record.escortName}",
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
 

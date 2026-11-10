@@ -413,19 +413,73 @@ fun CompactPlanCardItem(
                     StatusBadge(status = record.status)
                 }
 
-                // Faskes & Date Row
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // VIEW TANGGAL KE FASILITAS KESEHATAN
+                val isToday = DateUtils.isToday(record.planDate)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                            else accentColor.copy(alpha = 0.08f)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
                 ) {
-                    FaskesBadge(faskes = record.faskes)
-                    Text(
-                        text = DateUtils.getRelativeDateLabel(record.planDate),
-                        fontSize = 10.5.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarToday,
+                                    contentDescription = "Tanggal ke Faskes",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Tanggal ke Fasilitas Kesehatan:",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accentColor
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(accentColor.copy(alpha = 0.15f))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text(
+                                    text = DateUtils.getRelativeDateLabel(record.planDate),
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accentColor
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = "${DateUtils.formatFullDate(record.planDate)} • Pukul ${record.departureTime} WIB",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "Tujuan Faskes:",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            FaskesBadge(faskes = record.faskes)
+                        }
+                    }
                 }
 
                 // Compact Keluhan
@@ -558,10 +612,12 @@ fun CompactControlCardItem(
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                val dateLabel = record.controlDate?.let { DateUtils.getRelativeDateLabel(it) } ?: "Jadwal kontrol"
+                val dateLabel = record.controlDate?.let {
+                    "${DateUtils.formatFullDate(it)} (${DateUtils.getRelativeDateLabel(it)})"
+                } ?: "Jadwal kontrol"
                 Text(
                     text = "Kontrol: $dateLabel",
-                    fontSize = 12.sp,
+                    fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = StatusNeedControl
                 )
