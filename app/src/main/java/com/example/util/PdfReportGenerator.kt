@@ -395,6 +395,158 @@ object PdfReportGenerator {
     }
 
     /**
+     * Membuat dokumen PDF resmi Rekapitulasi Kesehatan Bulanan Seluruh Siswa (Laporan Agregat).
+     */
+    fun generateMonthlyAggregatePdf(
+        context: Context,
+        records: List<MedicalRecord>,
+        totalStudentsCount: Int,
+        monthYearLabel: String,
+        waliName: String = "Sari Devi"
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595 // Standard A4 width
+            val pageHeight = 842 // Standard A4 height
+
+            var pageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
+
+            val paint = Paint().apply { isAntiAlias = true }
+            var currentY = 35f
+
+            // 1. Header / Kop Surat
+            currentY = drawHeader(canvas, paint, pageWidth, currentY)
+
+            // 2. Judul Dokumen
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 12f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("LAPORAN REKAPITULASI KESEHATAN ANAK ASUH BULANAN", pageWidth / 2f, currentY, paint)
+
+            currentY += 13f
+            paint.textSize = 10f
+            paint.color = Color.rgb(2, 132, 199)
+            canvas.drawText("PERIODE BULAN: ${monthYearLabel.uppercase(Locale("id", "ID"))}", pageWidth / 2f, currentY, paint)
+            paint.textAlign = Paint.Align.LEFT
+            currentY += 16f
+
+            // 3. Ringkasan Eksekutif (Card Box)
+            val boxLeft = 35f
+            val boxRight = pageWidth - 35f
+            val boxHeight = 75f
+            val boxRect = RectF(boxLeft, currentY, boxRight, currentY + boxHeight)
+
+            paint.color = Color.rgb(240, 253, 250)
+            paint.style = Paint.Style.FILL
+            canvas.drawRoundRect(boxRect, 6f, 6f, paint)
+
+            paint.color = Color.rgb(15, 118, 110)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(boxRect, 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            val uniqueSick = records.map { it.studentId }.distinct().size
+            val maleCount = records.count { it.studentDormitory.contains("Putra", ignoreCase = true) }
+            val femaleCount = records.count { it.studentDormitory.contains("Putri", ignoreCase = true) }
+            val tuntasCount = records.count { !it.needsControl }
+            val kontrolCount = records.count { it.needsControl }
+            val watesCount = records.count { it.faskes.contains("Wates", ignoreCase = true) }
+            val klatenCount = records.count { it.faskes.contains("Plosoklaten", ignoreCase = true) || it.faskes.contains("Klaten", ignoreCase = true) }
+            val morbiditasPct = if (totalStudentsCount > 0) (uniqueSick.toFloat() / totalStudentsCount * 100).toInt() else 0
+
+            var statY = currentY + 14f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("RINGKASAN EKSEKUTIF BULANAN:", boxLeft + 10f, statY, paint)
+
+            statY += 13f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(51, 65, 85)
+            canvas.drawText("• Total Populasi Anak: $totalStudentsCount Anak", boxLeft + 10f, statY, paint)
+            canvas.drawText("• Total Kunjungan Berobat: ${records.size} Kali", boxLeft + 175f, statY, paint)
+            canvas.drawText("• Jumlah Anak Sakit: $uniqueSick Anak ($morbiditasPct%)", boxLeft + 350f, statY, paint)
+
+            statY += 12f
+            canvas.drawText("• Distribusi Asrama: $maleCount Putra | $femaleCount Putri", boxLeft + 10f, statY, paint)
+            canvas.drawText("• Status: $tuntasCount Tuntas | $kontrolCount Perlu Kontrol", boxLeft + 175f, statY, paint)
+            canvas.drawText("• Rujukan Faskes: $watesCount Wates | $klatenCount Plosoklaten", boxLeft + 350f, statY, paint)
+
+            currentY += boxHeight + 14f
+
+            // 4. Daftar Kasus Sakit
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 10.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("DAFTAR REKAM MEDIS & KUNJUNGAN BEROBAT (${records.size} Kasus):", 35f, currentY, paint)
+            currentY += 14f
+
+            if (records.isEmpty()) {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText("Tidak ada riwayat sakit / berobat pada periode bulan ini (Kondisi Nihil/Sehat).", 40f, currentY + 12f, paint)
+                currentY += 30f
+            } else {
+                for ((index, record) in records.withIndex()) {
+                    if (currentY > pageHeight - 120f) {
+                        document.finishPage(page)
+                        pageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        page = document.startPage(pageInfo)
+                        canvas = page.canvas
+                        currentY = 40f
+
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        paint.textSize = 9f
+                        paint.color = Color.rgb(100, 116, 139)
+                        canvas.drawText("Lanjutan Laporan Bulanan Kesehatan - $monthYearLabel (Halaman $pageNumber)", 35f, currentY, paint)
+                        currentY += 16f
+                    }
+
+                    currentY = drawRecordItem(canvas, paint, pageWidth, currentY, index + 1, record)
+                    currentY += 8f
+                }
+            }
+
+            // 5. Tanda Tangan
+            if (currentY > pageHeight - 110f) {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                currentY = 40f
+            }
+
+            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName)
+            document.finishPage(page)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanPeriod = monthYearLabel.replace(Regex("[^a-zA-Z0-9]"), "_")
+            val fileName = "Laporan_Bulanan_Kesehatan_${cleanPeriod}.pdf"
+            val file = File(outputDir, fileName)
+
+            val outputStream = FileOutputStream(file)
+            document.writeTo(outputStream)
+            outputStream.flush()
+            outputStream.close()
+            document.close()
+
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    /**
      * Membuka dokumen PDF hasil cetak menggunakan PDF viewer bawaan Android atau dialog print.
      */
     fun openPdfFile(context: Context, pdfFile: File) {

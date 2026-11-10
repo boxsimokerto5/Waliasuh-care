@@ -29,6 +29,8 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.SupabaseConfigDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -73,11 +75,12 @@ fun ProfileScreen(
     records: List<MedicalRecord>,
     modifier: Modifier = Modifier
 ) {
+    val students by viewModel.students.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
     var showSupabaseDialog by remember { mutableStateOf(false) }
-    var showReportDialog by remember { mutableStateOf(false) }
+    var showMonthlyReportDialog by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
 
@@ -230,13 +233,13 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Laporan Riwayat",
-                    subtitle = "Ringkasan kesehatan bulanan\nAnalisis keluhan anak",
+                    title = "Laporan Bulanan",
+                    subtitle = "Rekapitulasi lengkap, statistik sakit & ekspor PDF/WA",
                     icon = Icons.Default.Assessment,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
-                    onClick = { showReportDialog = true },
-                    testTag = "menu_laporan_riwayat"
+                    onClick = { showMonthlyReportDialog = true },
+                    testTag = "menu_laporan_bulanan"
                 )
             }
 
@@ -437,50 +440,14 @@ fun ProfileScreen(
         )
     }
 
-    // Modal Bottom Sheet: Laporan Riwayat
-    if (showReportDialog) {
-        val total = records.size
-        val watesCount = records.count { it.faskes.contains("Wates", ignoreCase = true) }
-        val klatenCount = records.count { it.faskes.contains("Klaten", ignoreCase = true) || it.faskes.contains("Plosoklaten", ignoreCase = true) }
-
-        ModalBottomSheet(
-            onDismissRequest = { showReportDialog = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 600.dp)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Ringkasan Kesehatan Bulanan", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text("📊 Total Kunjungan Selesai: $total Kasus", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            Text("• Rujukan Puskesmas Wates: $watesCount anak", fontSize = 12.sp)
-                            Text("• Rujukan Puskesmas Plosoklaten: $klatenCount anak", fontSize = 12.sp)
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-                            Text("Keluhan Paling Sering: ISPA / Flu, Demam, dan Gangguan Pencernaan.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = { showReportDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("Tutup")
-                        }
-                    }
-                }
-            }
-        }
+    // Modal Bottom Sheet: Laporan Bulanan
+    if (showMonthlyReportDialog) {
+        MonthlyReportDialog(
+            records = records,
+            students = students,
+            waliName = waliName,
+            onDismiss = { showMonthlyReportDialog = false }
+        )
     }
 
     // Modal Bottom Sheet: Panduan
