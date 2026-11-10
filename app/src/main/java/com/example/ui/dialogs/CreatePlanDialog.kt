@@ -15,21 +15,30 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -72,6 +81,7 @@ fun CreatePlanDialog(
 
     var complaint by remember { mutableStateOf("") }
     var escortName by remember { mutableStateOf("") }
+    var expandedEscortDropdown by remember { mutableStateOf(false) }
     var notes by remember { mutableStateOf("") }
 
     val calToday = remember { Calendar.getInstance().timeInMillis }
@@ -83,6 +93,7 @@ fun CreatePlanDialog(
     }
 
     var selectedDateMillis by remember { mutableLongStateOf(calToday) }
+    var showDatePicker by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -140,7 +151,7 @@ fun CreatePlanDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedStudentDropdown) },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                             .fillMaxWidth()
                             .testTag("select_student_dropdown")
                     )
@@ -271,51 +282,218 @@ fun CreatePlanDialog(
                 )
 
                 // Pilihan Tanggal Rencana
-                Text(
-                    text = "Tanggal Rencana:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = "Tanggal Rencana:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        IconButton(
+                            onClick = { showDatePicker = true },
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("btn_icon_open_date_picker")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = "Pilih Tanggal Rencana",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+
+                val isCustomDate = !DateUtils.isToday(selectedDateMillis) &&
+                        !DateUtils.isTomorrow(selectedDateMillis) &&
+                        selectedDateMillis != calIn2Days
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     FilterChip(
-                        selected = selectedDateMillis == calToday,
+                        selected = !isCustomDate && DateUtils.isToday(selectedDateMillis),
                         onClick = { selectedDateMillis = calToday },
                         label = { Text("Hari Ini", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
-                        selected = selectedDateMillis == calTomorrow,
+                        selected = !isCustomDate && DateUtils.isTomorrow(selectedDateMillis),
                         onClick = { selectedDateMillis = calTomorrow },
                         label = { Text("Besok", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
-                        selected = selectedDateMillis == calIn2Days,
+                        selected = !isCustomDate && selectedDateMillis == calIn2Days,
                         onClick = { selectedDateMillis = calIn2Days },
                         label = { Text("Lusa", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
+                    FilterChip(
+                        selected = isCustomDate,
+                        onClick = { showDatePicker = true },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp)
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = if (isCustomDate) DateUtils.formatShortDate(selectedDateMillis) else "Pilih Tanggal",
+                                fontSize = 11.sp
+                            )
+                        },
+                        modifier = Modifier
+                            .height(28.dp)
+                            .testTag("chip_pick_custom_date")
+                    )
                 }
+
+                Card(
+                    onClick = { showDatePicker = true },
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_jadwal_date_picker")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = "Pilih Hari",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Column {
+                            Text(
+                                text = "Jadwal: ${DateUtils.formatFullDate(selectedDateMillis)} ($selectedTime WIB)",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Klik untuk memilih hari melalui kalender pop-up",
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Petugas Pengantar dengan Dropdown Shift
                 Text(
-                    text = "Jadwal: ${DateUtils.formatFullDate(selectedDateMillis)} ($selectedTime WIB)",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.primary,
+                    text = "Petugas Pengantar:",
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
 
-                // Pendamping
-                OutlinedTextField(
-                    value = escortName,
-                    onValueChange = { escortName = it },
-                    label = { Text("Petugas Pengantar", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Sari Devi", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                ExposedDropdownMenuBox(
+                    expanded = expandedEscortDropdown,
+                    onExpandedChange = { expandedEscortDropdown = !expandedEscortDropdown }
+                ) {
+                    OutlinedTextField(
+                        value = escortName,
+                        onValueChange = { escortName = it },
+                        label = { Text("Pilih Shift / Petugas Pengantar", fontSize = 12.sp) },
+                        placeholder = { Text("Pilih shift atau ketik nama...", fontSize = 12.sp) },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedEscortDropdown)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryEditable, true)
+                            .fillMaxWidth()
+                            .testTag("input_escort_shift_dropdown")
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expandedEscortDropdown,
+                        onDismissRequest = { expandedEscortDropdown = false }
+                    ) {
+                        val shifts = listOf(
+                            Triple("Shift Pagi", "07:00 - 14:00 WIB", "🌅"),
+                            Triple("Shift Sore", "14:00 - 21:00 WIB", "🌇"),
+                            Triple("Shift Malam", "21:00 - 07:00 WIB", "🌙")
+                        )
+                        shifts.forEach { (shift, hours, icon) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(text = icon, fontSize = 14.sp)
+                                            Text(
+                                                text = shift,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                        }
+                                        Text(
+                                            text = hours,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    escortName = shift
+                                    expandedEscortDropdown = false
+                                },
+                                modifier = Modifier.testTag("menu_item_${shift.lowercase().replace(" ", "_")}")
+                            )
+                        }
+                    }
+                }
+
+                // Quick selection chips for Shift Pagi, Shift Sore, Shift Malam
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("Shift Pagi", "Shift Sore", "Shift Malam").forEach { shift ->
+                        FilterChip(
+                            selected = escortName == shift || escortName.startsWith(shift),
+                            onClick = { escortName = shift },
+                            label = { Text(shift, fontSize = 11.sp) },
+                            modifier = Modifier
+                                .height(28.dp)
+                                .testTag("chip_shift_${shift.lowercase().replace(" ", "_")}")
+                        )
+                    }
+                }
 
                 // Catatan
                 OutlinedTextField(
@@ -368,4 +546,69 @@ fun CreatePlanDialog(
             }
         }
     }
+
+    if (showDatePicker) {
+        val initialUtcMillis = remember(selectedDateMillis) {
+            val cal = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
+            val utcCal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+                clear()
+                set(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            }
+            utcCal.timeInMillis
+        }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialUtcMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { utcMillis ->
+                            val utcCal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+                                timeInMillis = utcMillis
+                            }
+                            val localCal = Calendar.getInstance().apply {
+                                set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+                                set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+                                set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+                                set(Calendar.HOUR_OF_DAY, 8)
+                                set(Calendar.MINUTE, 30)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            selectedDateMillis = localCal.timeInMillis
+                        }
+                        showDatePicker = false
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("btn_confirm_date_picker")
+                ) {
+                    Text("Pilih Hari")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showDatePicker = false },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("Batal")
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = {
+                    Text(
+                        text = "Pilih Tanggal Rencana Berobat",
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            )
+        }
+    }
 }
+

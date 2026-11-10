@@ -17,6 +17,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -29,6 +30,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -80,6 +82,7 @@ fun DirectTreatmentDialog(
     var actionsTaken by remember { mutableStateOf("") }
     var prescription by remember { mutableStateOf("") }
     var escortName by remember { mutableStateOf("") }
+    var expandedEscortDropdown by remember { mutableStateOf(false) }
     var notes by remember { mutableStateOf("") }
 
     var needsControl by remember { mutableStateOf(false) }
@@ -158,7 +161,7 @@ fun DirectTreatmentDialog(
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
-                            .menuAnchor()
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, true)
                             .fillMaxWidth()
                             .testTag("select_student_direct_dropdown")
                     )
@@ -388,16 +391,102 @@ fun DirectTreatmentDialog(
                     }
                 }
 
-                // Pendamping
-                OutlinedTextField(
-                    value = escortName,
-                    onValueChange = { escortName = it },
-                    label = { Text("Petugas / Pengasuh Pengantar", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Ust. Ilham", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
+                // Petugas / Pengasuh Pengantar with Shift Dropdown
+                Text(
+                    text = "Petugas / Pengasuh Pengantar:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
+
+                ExposedDropdownMenuBox(
+                    expanded = expandedEscortDropdown,
+                    onExpandedChange = { expandedEscortDropdown = !expandedEscortDropdown }
+                ) {
+                    OutlinedTextField(
+                        value = escortName,
+                        onValueChange = { escortName = it },
+                        label = { Text("Pilih Shift / Petugas Pengantar", fontSize = 12.sp) },
+                        placeholder = { Text("Pilih shift atau ketik nama...", fontSize = 12.sp) },
+                        trailingIcon = {
+                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedEscortDropdown)
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryEditable, true)
+                            .fillMaxWidth()
+                            .testTag("input_direct_escort_dropdown")
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = expandedEscortDropdown,
+                        onDismissRequest = { expandedEscortDropdown = false }
+                    ) {
+                        val shifts = listOf(
+                            Triple("Shift Pagi", "07:00 - 14:00 WIB", "🌅"),
+                            Triple("Shift Sore", "14:00 - 21:00 WIB", "🌇"),
+                            Triple("Shift Malam", "21:00 - 07:00 WIB", "🌙")
+                        )
+                        shifts.forEach { (shift, hours, icon) ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(text = icon, fontSize = 14.sp)
+                                            Text(
+                                                text = shift,
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp
+                                            )
+                                        }
+                                        Text(
+                                            text = hours,
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    escortName = shift
+                                    expandedEscortDropdown = false
+                                },
+                                modifier = Modifier.testTag("direct_menu_item_${shift.lowercase().replace(" ", "_")}")
+                            )
+                        }
+                    }
+                }
+
+                // Quick selection chips for Shift Pagi, Shift Sore, Shift Malam
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("Shift Pagi", "Shift Sore", "Shift Malam").forEach { shift ->
+                        FilterChip(
+                            selected = escortName == shift || escortName.startsWith(shift),
+                            onClick = { escortName = shift },
+                            label = { Text(shift, fontSize = 11.sp) },
+                            modifier = Modifier
+                                .height(28.dp)
+                                .testTag("direct_chip_shift_${shift.lowercase().replace(" ", "_")}")
+                        )
+                    }
+                }
 
                 // Catatan
                 OutlinedTextField(
