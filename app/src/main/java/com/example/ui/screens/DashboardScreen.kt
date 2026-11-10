@@ -98,7 +98,7 @@ fun DashboardScreen(
     val watesCount = activePlans.count { it.faskes.contains("Wates", ignoreCase = true) }
     val klatenCount = activePlans.count { it.faskes.contains("Klaten", ignoreCase = true) || it.faskes.contains("Plosoklaten", ignoreCase = true) }
     val totalToday = activePlans.size
-    val totalSchoolStudents = 320 // Reference text: "13/320 Anak Total"
+    val totalSchoolStudents = if (students.isNotEmpty()) students.size else 342
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
 
     Scaffold(

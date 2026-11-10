@@ -68,8 +68,11 @@ fun StudentsScreen(
         if (searchQuery.isBlank()) true
         else {
             student.name.contains(searchQuery, ignoreCase = true) ||
+                    student.classGrade.contains(searchQuery, ignoreCase = true) ||
                     student.dormitory.contains(searchQuery, ignoreCase = true) ||
-                    student.nis.contains(searchQuery, ignoreCase = true)
+                    student.nis.contains(searchQuery, ignoreCase = true) ||
+                    student.address.contains(searchQuery, ignoreCase = true) ||
+                    student.nik.contains(searchQuery, ignoreCase = true)
         }
     }
 

@@ -144,6 +144,18 @@ fun StudentDetailDialog(
                         )
                         Text(text = "🏠 Asrama: ${student.dormitory}", fontSize = 11.sp)
                         Text(text = "🎂 Usia/Gender: ${student.age} Th • ${if (student.gender == "L") "Putra" else "Putri"} • Gol: ${student.bloodType}", fontSize = 11.sp)
+                        if (student.birthDate.isNotBlank()) {
+                            Text(text = "📍 TTL: ${student.birthPlace}, ${student.birthDate}", fontSize = 11.sp)
+                        }
+                        if (student.nik.isNotBlank()) {
+                            Text(text = "🆔 NIK: ${student.nik} • KK: ${student.noKk}", fontSize = 11.sp)
+                        }
+                        if (student.motherName.isNotBlank()) {
+                            Text(text = "👩 Nama Ibu: ${student.motherName}", fontSize = 11.sp)
+                        }
+                        if (student.address.isNotBlank()) {
+                            Text(text = "🏡 Alamat Asal: ${student.address}", fontSize = 11.sp)
+                        }
                         Text(text = "📞 Kontak: ${student.emergencyContact}", fontSize = 11.sp)
 
                         if (thisMonthCount >= 2) {

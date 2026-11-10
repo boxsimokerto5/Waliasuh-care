@@ -31,4 +31,7 @@ interface ChildStudentDao {
 
     @Query("SELECT COUNT(*) FROM child_students")
     suspend fun count(): Int
+
+    @Query("DELETE FROM child_students")
+    suspend fun deleteAll()
 }

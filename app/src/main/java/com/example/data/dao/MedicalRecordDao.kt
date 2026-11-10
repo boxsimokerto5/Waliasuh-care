@@ -49,4 +49,7 @@ interface MedicalRecordDao {
 
     @Query("SELECT COUNT(*) FROM medical_records")
     suspend fun count(): Int
+
+    @Query("DELETE FROM medical_records")
+    suspend fun deleteAll()
 }

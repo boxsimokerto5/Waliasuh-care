@@ -12,11 +12,11 @@ import com.example.data.model.MedicalRecord
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import java.util.Calendar
+import org.json.JSONArray
 
 @Database(
     entities = [ChildStudent::class, MedicalRecord::class],
-    version = 3,
+    version = 4,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -29,267 +29,90 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                val appContext = context.applicationContext
                 val instance = Room.databaseBuilder(
-                    context.applicationContext,
+                    appContext,
                     AppDatabase::class.java,
                     "waliasuh_care.db"
                 )
-                    .addCallback(DatabaseCallback())
+                    .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
                     .build()
                 INSTANCE = instance
                 instance
             }
         }
+
+        fun loadStudentsFromAssets(context: Context): List<ChildStudent> {
+            return try {
+                val jsonString = context.assets.open("students_data.json").bufferedReader().use { it.readText() }
+                val jsonArray = JSONArray(jsonString)
+                val list = ArrayList<ChildStudent>(jsonArray.length())
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    list.add(
+                        ChildStudent(
+                            id = obj.optLong("id", (i + 1).toLong()),
+                            name = obj.optString("name", ""),
+                            nis = obj.optString("nis", ""),
+                            gender = obj.optString("gender", "L"),
+                            age = obj.optInt("age", 12),
+                            dormitory = obj.optString("dormitory", "Asrama"),
+                            classGrade = obj.optString("classGrade", "-"),
+                            allergies = obj.optString("allergies", "Tidak ada"),
+                            bloodType = obj.optString("bloodType", "-"),
+                            emergencyContact = obj.optString("emergencyContact", "Pengasuh Asrama"),
+                            specialNotes = obj.optString("specialNotes", ""),
+                            nik = obj.optString("nik", ""),
+                            noKk = obj.optString("noKk", ""),
+                            birthPlace = obj.optString("birthPlace", ""),
+                            birthDate = obj.optString("birthDate", ""),
+                            motherName = obj.optString("motherName", ""),
+                            address = obj.optString("address", ""),
+                            roomNumber = obj.optString("roomNumber", ""),
+                            jenjang = obj.optString("jenjang", "")
+                        )
+                    )
+                }
+                list
+            } catch (e: Exception) {
+                e.printStackTrace()
+                emptyList()
+            }
+        }
     }
 
-    private class DatabaseCallback : Callback() {
+    private class DatabaseCallback(private val context: Context) : Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
             INSTANCE?.let { database ->
                 CoroutineScope(Dispatchers.IO).launch {
-                    populateInitialData(database.childStudentDao(), database.medicalRecordDao())
+                    val students = loadStudentsFromAssets(context)
+                    if (students.isNotEmpty()) {
+                        database.childStudentDao().deleteAll()
+                        database.medicalRecordDao().deleteAll()
+                        database.childStudentDao().insertAll(students)
+                    }
                 }
             }
         }
 
-        private suspend fun populateInitialData(
-            studentDao: ChildStudentDao,
-            recordDao: MedicalRecordDao
-        ) {
-            val students = listOf(
-                ChildStudent(
-                    id = 1,
-                    name = "Rama Aditia",
-                    nis = "SRT1-2024-01",
-                    gender = "L",
-                    age = 9,
-                    dormitory = "Asrama Putra 1 (Wates)",
-                    classGrade = "Kelas 3 SD",
-                    allergies = "Tidak ada",
-                    bloodType = "O",
-                    emergencyContact = "0812-3456-7801 (Sari Devi)"
-                ),
-                ChildStudent(
-                    id = 2,
-                    name = "Siti Halimah",
-                    nis = "SRT1-2023-14",
-                    gender = "P",
-                    age = 8,
-                    dormitory = "Asrama Putri 2 (Wates)",
-                    classGrade = "Kelas 2 SD",
-                    allergies = "Alergi Dingin",
-                    bloodType = "B",
-                    emergencyContact = "0813-9876-5432 (Sari Devi)"
-                ),
-                ChildStudent(
-                    id = 3,
-                    name = "Anton Wiryo",
-                    nis = "SRT1-2022-22",
-                    gender = "L",
-                    age = 10,
-                    dormitory = "Asrama Putra 2 (Plosoklaten)",
-                    classGrade = "Kelas 4 SD",
-                    allergies = "Tidak ada",
-                    bloodType = "A",
-                    emergencyContact = "0821-4455-6677 (Sari Devi)"
-                ),
-                ChildStudent(
-                    id = 4,
-                    name = "Bella Astari",
-                    nis = "SRT1-2023-33",
-                    gender = "P",
-                    age = 7,
-                    dormitory = "Asrama Putri 1 (Plosoklaten)",
-                    classGrade = "Kelas 1 SD",
-                    allergies = "Alergi Seafood",
-                    bloodType = "AB",
-                    emergencyContact = "0822-1122-3344 (Sari Devi)"
-                ),
-                ChildStudent(
-                    id = 5,
-                    name = "Rian Pratama",
-                    nis = "SRT1-2021-05",
-                    gender = "L",
-                    age = 11,
-                    dormitory = "Asrama Behir 10",
-                    classGrade = "Kelas 5A",
-                    allergies = "Tidak ada",
-                    bloodType = "O",
-                    emergencyContact = "0812-3456-7801 (Sari Devi)"
-                ),
-                ChildStudent(
-                    id = 6,
-                    name = "Susi Astuti",
-                    nis = "SRT1-2023-18",
-                    gender = "P",
-                    age = 9,
-                    dormitory = "Asrama Putri Khadijah",
-                    classGrade = "Kelas 3B",
-                    allergies = "Alergi Amoxicillin",
-                    bloodType = "A",
-                    emergencyContact = "0813-8888-9999 (Sari Devi)"
-                ),
-                ChildStudent(
-                    id = 7,
-                    name = "Agus Wiryo",
-                    nis = "SRT1-2022-09",
-                    gender = "L",
-                    age = 10,
-                    dormitory = "Asrama Putra Diponegoro",
-                    classGrade = "Kelas 4A",
-                    allergies = "Tidak ada",
-                    bloodType = "B",
-                    emergencyContact = "0812-7777-6666 (Sari Devi)"
-                )
-            )
-
-            studentDao.insertAll(students)
-
-            val now = Calendar.getInstance()
-            val todayMillis = now.timeInMillis
-
-            now.add(Calendar.DAY_OF_YEAR, 3)
-            val in3Days = now.timeInMillis
-
-            now.add(Calendar.DAY_OF_YEAR, -5)
-            val fiveDaysAgo = now.timeInMillis
-
-            val initialRecords = listOf(
-                // 1. Rencana Hari Ini (Sesuai Mockup Gambar 3)
-                MedicalRecord(
-                    studentId = 1,
-                    studentName = "Rama Aditia",
-                    studentDormitory = "Asrama Putra 1 (Wates)",
-                    faskes = "Puskesmas Wates",
-                    complaint = "Demam/Flu tinggi sejak semalam",
-                    isDirectTreatment = false,
-                    planDate = todayMillis,
-                    departureTime = "08:30",
-                    status = "PLANNED",
-                    escortName = "Sari Devi (Wali Asuh)",
-                    notes = "Sudah dikompres air hangat"
-                ),
-                MedicalRecord(
-                    studentId = 2,
-                    studentName = "Siti Halimah",
-                    studentDormitory = "Asrama Putri 2 (Wates)",
-                    faskes = "Puskesmas Wates",
-                    complaint = "Sakit Perut melilit dan mual",
-                    isDirectTreatment = false,
-                    planDate = todayMillis,
-                    departureTime = "09:00",
-                    status = "DEPARTED", // Dianter
-                    escortName = "Sari Devi",
-                    notes = "Sedang diantar menggunakan kendaraan asrama"
-                ),
-                MedicalRecord(
-                    studentId = 3,
-                    studentName = "Anton Wiryo",
-                    studentDormitory = "Asrama Putra 2 (Plosoklaten)",
-                    faskes = "Puskesmas Plosoklaten",
-                    complaint = "Batuk Pilek berdahak",
-                    isDirectTreatment = false,
-                    planDate = todayMillis,
-                    departureTime = "09:30",
-                    status = "PLANNED",
-                    escortName = "Sari Devi",
-                    notes = "Menunggu giliran berangkat kloter kedua"
-                ),
-                MedicalRecord(
-                    studentId = 4,
-                    studentName = "Bella Astari",
-                    studentDormitory = "Asrama Putri 1 (Plosoklaten)",
-                    faskes = "Puskesmas Plosoklaten",
-                    complaint = "Pusing/Mual lemas",
-                    isDirectTreatment = false,
-                    planDate = todayMillis,
-                    departureTime = "10:00",
-                    status = "DEPARTED", // Siap Jalan
-                    escortName = "Sari Devi",
-                    notes = "Siap berangkat ke puskesmas"
-                ),
-
-                // 2. Rekam Medis Selesai Pasca Puskesmas (Sesuai Mockup Gambar 2)
-                MedicalRecord(
-                    studentId = 5,
-                    studentName = "Rian Pratama",
-                    studentDormitory = "Asrama Behir 10",
-                    faskes = "Puskesmas Wates",
-                    complaint = "Radang tenggorokan & batuk awal",
-                    isDirectTreatment = true,
-                    planDate = fiveDaysAgo,
-                    treatmentDate = fiveDaysAgo,
-                    departureTime = "08:30",
-                    status = "COMPLETED",
-                    diagnosis = "Faringitis Akut (Radang Tenggorokan)",
-                    actionsTaken = "Pemeriksaan orofaring, pemberian antibiotik & vitamin",
-                    prescription = "Amoxicillin 500mg 3x1 (habiskan), Paracetamol 500mg 3x1",
-                    needsControl = false,
-                    isControlCompleted = true,
-                    escortName = "Sari Devi",
-                    notes = "Screening pertama bulan ini"
-                ),
-                MedicalRecord(
-                    studentId = 5,
-                    studentName = "Rian Pratama",
-                    studentDormitory = "Asrama Behir 10",
-                    faskes = "Puskesmas Wates",
-                    complaint = "Demam tinggi & lemas",
-                    isDirectTreatment = false,
-                    planDate = todayMillis,
-                    treatmentDate = todayMillis,
-                    departureTime = "09:30",
-                    status = "COMPLETED",
-                    diagnosis = "Observasi Febris hari ke-2",
-                    actionsTaken = "Istirahat, Cairan infus, Pemantauan Lab darah",
-                    prescription = "Paracetamol 500mg 3x1, Vitamin C 1x1, Banyak minum air putih",
-                    needsControl = true,
-                    controlDate = in3Days,
-                    isControlCompleted = false,
-                    escortName = "Sari Devi",
-                    notes = "Kunjungan ke-2 bulan ini (kambuh demam tinggi)"
-                ),
-                MedicalRecord(
-                    studentId = 6,
-                    studentName = "Susi Astuti",
-                    studentDormitory = "Asrama Putri Khadijah",
-                    faskes = "Puskesmas Plosoklaten",
-                    complaint = "Batuk kering, sesak nafas ringan & demam",
-                    isDirectTreatment = true,
-                    planDate = todayMillis,
-                    treatmentDate = todayMillis,
-                    departureTime = "09:30",
-                    status = "COMPLETED",
-                    diagnosis = "Infeksi Saluran Pernapasan Akut (ISPA)",
-                    actionsTaken = "Pemeriksaan dada, Nebulisasi, Pemantauan saturasi O2",
-                    prescription = "Ambroxol syrup 3x1 cth, Paracetamol syrup 3x1 cth",
-                    needsControl = false,
-                    isControlCompleted = true,
-                    escortName = "Sari Devi"
-                ),
-                MedicalRecord(
-                    studentId = 7,
-                    studentName = "Agus Wiryo",
-                    studentDormitory = "Asrama Putra Diponegoro",
-                    faskes = "Puskesmas Wates",
-                    complaint = "Diare cair 4x dan lemas",
-                    isDirectTreatment = true,
-                    planDate = todayMillis,
-                    treatmentDate = todayMillis,
-                    departureTime = "11:00",
-                    status = "COMPLETED",
-                    diagnosis = "Gastroenteritis Akut (GEA) Dehidrasi Ringan",
-                    actionsTaken = "Rehidrasi oral, Pemberian tablet zinc, Edukasi kebersihan makanan",
-                    prescription = "Oralit 4 bungkus, Zinc 20mg 1x1 selama 10 hari",
-                    needsControl = true,
-                    controlDate = in3Days,
-                    isControlCompleted = false,
-                    escortName = "Sari Devi"
-                )
-            )
-
-            recordDao.insertAll(initialRecords)
+        override fun onOpen(db: SupportSQLiteDatabase) {
+            super.onOpen(db)
+            INSTANCE?.let { database ->
+                CoroutineScope(Dispatchers.IO).launch {
+                    val count = database.childStudentDao().count()
+                    // Jika data masih data dummy lama (< 300 siswa), bersihkan dan ganti dengan 342 siswa baru
+                    if (count < 300) {
+                        database.childStudentDao().deleteAll()
+                        database.medicalRecordDao().deleteAll()
+                        val students = loadStudentsFromAssets(context)
+                        if (students.isNotEmpty()) {
+                            database.childStudentDao().insertAll(students)
+                        }
+                    }
+                }
+            }
         }
     }
 }
