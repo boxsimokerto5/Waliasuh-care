@@ -351,13 +351,16 @@ fun LoginScreen(
 
                             // Chip Wali Asuh yang ada
                             waliAccounts.take(4).forEach { acc ->
+                                val effectiveUser = acc.username.ifBlank {
+                                    acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+                                }
                                 SuggestionChip(
                                     onClick = {
-                                        username = acc.username
+                                        username = effectiveUser
                                         password = acc.password
                                         errorMessage = null
                                     },
-                                    label = { Text("👤 ${acc.name}", fontSize = 11.sp) }
+                                    label = { Text("👤 ${acc.name} ($effectiveUser)", fontSize = 11.sp) }
                                 )
                             }
                         }

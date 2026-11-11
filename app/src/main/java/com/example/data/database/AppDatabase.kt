@@ -124,12 +124,21 @@ abstract class AppDatabase : RoomDatabase() {
             val count = database.waliAccountDao().count()
             if (count == 0) {
                 val defaultAccounts = listOf(
-                    WaliAccount(name = "Sari Devi", username = "Sari Devi", password = "Sari#7294", dormitory = "Asrama Putri", phone = "081234567891"),
-                    WaliAccount(name = "Budi Santoso", username = "Budi Santoso", password = "Budi#3815", dormitory = "Asrama Putra", phone = "081234567892"),
-                    WaliAccount(name = "Ahmad Fauzi", username = "Ahmad Fauzi", password = "Fauzi#9162", dormitory = "Asrama Putra", phone = "081234567893"),
-                    WaliAccount(name = "Dewi Lestari", username = "Dewi Lestari", password = "Dewi#4921", dormitory = "Asrama Putri", phone = "081234567894")
+                    WaliAccount(name = "Sari Devi", username = "saridevi", password = "Sari#7294", dormitory = "Asrama Putri", phone = "081234567891"),
+                    WaliAccount(name = "Budi Santoso", username = "budisantoso", password = "Budi#3815", dormitory = "Asrama Putra", phone = "081234567892"),
+                    WaliAccount(name = "Ahmad Fauzi", username = "ahmadfauzi", password = "Fauzi#9162", dormitory = "Asrama Putra", phone = "081234567893"),
+                    WaliAccount(name = "Dewi Lestari", username = "dewilestari", password = "Dewi#4921", dormitory = "Asrama Putri", phone = "081234567894")
                 )
                 database.waliAccountDao().insertAll(defaultAccounts)
+            } else {
+                // Periksa jika ada akun lama dengan username kosong, otomatis perbaiki
+                val existingAccounts = database.waliAccountDao().getAllAccountsList()
+                for (acc in existingAccounts) {
+                    if (acc.username.isBlank()) {
+                        val fixedUsername = acc.name.lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali${acc.id}" }
+                        database.waliAccountDao().update(acc.copy(username = fixedUsername))
+                    }
+                }
             }
         }
     }

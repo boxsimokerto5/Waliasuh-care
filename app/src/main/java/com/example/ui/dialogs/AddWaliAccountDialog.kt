@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Lock
@@ -54,9 +55,11 @@ import com.example.util.PasswordGenerator
 @Composable
 fun AddWaliAccountDialog(
     onDismiss: () -> Unit,
-    onConfirm: (name: String, dormitory: String, phone: String, password: String) -> Unit
+    onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var userEditedUsername by remember { mutableStateOf(false) }
     var selectedDormitory by remember { mutableStateOf("Asrama Putra") }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf(PasswordGenerator.generateRandomPassword()) }
@@ -103,7 +106,7 @@ fun AddWaliAccountDialog(
                 }
 
                 Text(
-                    text = "Daftarkan nama wali asuh untuk Sekolah Rakyat SRT 1 Kediri. Password dibuat acak otomatis dan langsung tampil dalam bentuk Kartu Akun.",
+                    text = "Daftarkan akun login wali asuh untuk Sekolah Rakyat SRT 1 Kediri. Username & password akan ditampilkan di Kartu Akses untuk login ke aplikasi.",
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -122,6 +125,9 @@ fun AddWaliAccountDialog(
                     value = name,
                     onValueChange = {
                         name = it
+                        if (!userEditedUsername) {
+                            username = it.lowercase().replace(" ", "").filter { ch -> ch.isLetterOrDigit() }
+                        }
                         errorMessage = null
                     },
                     label = { Text("Nama Lengkap Wali Asuh *") },
@@ -132,6 +138,26 @@ fun AddWaliAccountDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_wali_name"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                // Username Login
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = {
+                        username = it
+                        userEditedUsername = true
+                        errorMessage = null
+                    },
+                    label = { Text("Username Login Aplikasi *") },
+                    placeholder = { Text("Contoh: saridevi") },
+                    leadingIcon = {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null, tint = WaliPrimary)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_wali_username"),
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
@@ -244,10 +270,12 @@ fun AddWaliAccountDialog(
                         onClick = {
                             if (name.isBlank()) {
                                 errorMessage = "Nama wali asuh tidak boleh kosong."
+                            } else if (username.isBlank()) {
+                                errorMessage = "Username tidak boleh kosong."
                             } else if (password.isBlank()) {
                                 errorMessage = "Password tidak boleh kosong."
                             } else {
-                                onConfirm(name.trim(), selectedDormitory, phone.trim(), password.trim())
+                                onConfirm(name.trim(), username.trim().lowercase(), selectedDormitory, phone.trim(), password.trim())
                             }
                         },
                         shape = RoundedCornerShape(10.dp),

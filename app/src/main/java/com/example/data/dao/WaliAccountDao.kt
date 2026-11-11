@@ -14,7 +14,17 @@ interface WaliAccountDao {
     @Query("SELECT * FROM wali_accounts ORDER BY name ASC")
     fun getAllAccounts(): Flow<List<WaliAccount>>
 
-    @Query("SELECT * FROM wali_accounts WHERE LOWER(username) = LOWER(:username) LIMIT 1")
+    @Query("SELECT * FROM wali_accounts ORDER BY name ASC")
+    suspend fun getAllAccountsList(): List<WaliAccount>
+
+    @Query("""
+        SELECT * FROM wali_accounts 
+        WHERE LOWER(username) = LOWER(:username) 
+           OR LOWER(REPLACE(username, ' ', '')) = LOWER(REPLACE(:username, ' ', '')) 
+           OR LOWER(name) = LOWER(:username) 
+           OR LOWER(REPLACE(name, ' ', '')) = LOWER(REPLACE(:username, ' ', '')) 
+        LIMIT 1
+    """)
     suspend fun getByUsername(username: String): WaliAccount?
 
     @Query("SELECT * FROM wali_accounts WHERE id = :id LIMIT 1")

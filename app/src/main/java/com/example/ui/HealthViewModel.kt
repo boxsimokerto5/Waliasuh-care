@@ -461,6 +461,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun addWaliAccount(
         name: String,
+        username: String = "",
         dormitory: String,
         phone: String,
         customPassword: String? = null,
@@ -473,9 +474,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 PasswordGenerator.generateRandomPassword()
             }
 
+            val finalUsername = username.trim().ifBlank {
+                name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali${System.currentTimeMillis() % 1000}" }
+            }
+
             val newAccount = WaliAccount(
                 name = name.trim(),
-                username = name.trim(),
+                username = finalUsername,
                 password = password,
                 dormitory = dormitory.ifBlank { "Asrama Putra" },
                 phone = phone.trim()

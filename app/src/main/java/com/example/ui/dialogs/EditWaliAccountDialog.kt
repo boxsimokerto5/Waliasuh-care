@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
@@ -59,6 +60,13 @@ fun EditWaliAccountDialog(
     onConfirm: (updatedAccount: WaliAccount) -> Unit
 ) {
     var name by remember { mutableStateOf(account.name) }
+    var username by remember { 
+        mutableStateOf(
+            account.username.ifBlank { 
+                account.name.lowercase().replace(" ", "").filter { it.isLetterOrDigit() } 
+            }
+        ) 
+    }
     var selectedDormitory by remember { mutableStateOf(account.dormitory) }
     var phone by remember { mutableStateOf(account.phone) }
     var password by remember { mutableStateOf(account.password) }
@@ -105,7 +113,7 @@ fun EditWaliAccountDialog(
                 }
 
                 Text(
-                    text = "Edit data akun untuk ${account.name}. Perubahan username dan password akan langsung diperbarui.",
+                    text = "Edit data akun untuk ${account.name}. Pastikan username dan password tepat agar wali asuh dapat login.",
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -133,6 +141,25 @@ fun EditWaliAccountDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("edit_wali_name"),
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp)
+                )
+
+                // Username Login
+                OutlinedTextField(
+                    value = username,
+                    onValueChange = {
+                        username = it
+                        errorMessage = null
+                    },
+                    label = { Text("Username Login Aplikasi *") },
+                    placeholder = { Text("Contoh: saridevi") },
+                    leadingIcon = {
+                        Icon(Icons.Default.AccountCircle, contentDescription = null, tint = WaliPrimary)
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("edit_wali_username"),
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
@@ -245,13 +272,15 @@ fun EditWaliAccountDialog(
                         onClick = {
                             if (name.isBlank()) {
                                 errorMessage = "Nama wali asuh tidak boleh kosong."
+                            } else if (username.isBlank()) {
+                                errorMessage = "Username tidak boleh kosong."
                             } else if (password.isBlank()) {
                                 errorMessage = "Password tidak boleh kosong."
                             } else {
                                 onConfirm(
                                     account.copy(
                                         name = name.trim(),
-                                        username = name.trim(),
+                                        username = username.trim().lowercase(),
                                         dormitory = selectedDormitory,
                                         phone = phone.trim(),
                                         password = password.trim()

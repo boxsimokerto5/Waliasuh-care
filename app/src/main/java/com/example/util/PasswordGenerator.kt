@@ -22,6 +22,9 @@ object PasswordGenerator {
      * Format pesan WhatsApp resmi untuk membagikan akun login kepada Wali Asuh.
      */
     fun formatWhatsAppMessage(account: WaliAccount): String {
+        val effectiveUser = account.username.ifBlank {
+            account.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+        }
         return """
             *KARTU AKSES LOGIN APLIKASI WALI ASUH CARE*
             _Sekolah Rakyat SRT 1 Kabupaten Kediri_
@@ -29,7 +32,7 @@ object PasswordGenerator {
             Yth. Bapak/Ibu *${account.name}*,
             Berikut adalah akun akses resmi untuk login ke aplikasi Wali Asuh Care:
             
-            👤 *Username:* ${account.username}
+            👤 *Username:* $effectiveUser
             🔑 *Password:* ${account.password}
             🏢 *Tugas Asrama:* ${account.dormitory}
             

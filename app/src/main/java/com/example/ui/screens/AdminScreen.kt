@@ -110,9 +110,12 @@ fun AdminScreen(
     }
 
     val filteredAccounts = waliAccounts.filter { account ->
+        val effUser = account.username.ifBlank {
+            account.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+        }
         val matchSearch = searchQuery.isBlank() ||
                 account.name.contains(searchQuery, ignoreCase = true) ||
-                account.username.contains(searchQuery, ignoreCase = true) ||
+                effUser.contains(searchQuery, ignoreCase = true) ||
                 account.phone.contains(searchQuery, ignoreCase = true)
         val matchDorm = if (selectedFilterDormitory == "Semua") true else account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
         matchSearch && matchDorm
@@ -133,8 +136,11 @@ fun AdminScreen(
         sb.appendLine("Total: ${waliAccounts.size} Akun Terdaftar")
         sb.appendLine("----------------------------------------")
         waliAccounts.forEachIndexed { index, acc ->
+            val effectiveUser = acc.username.ifBlank {
+                acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+            }
             sb.appendLine("${index + 1}. *${acc.name}* (${acc.dormitory})")
-            sb.appendLine("   • Username: ${acc.username}")
+            sb.appendLine("   • Username: $effectiveUser")
             sb.appendLine("   • Password: ${acc.password}")
             if (acc.phone.isNotBlank()) {
                 sb.appendLine("   • WA: ${acc.phone}")
@@ -439,8 +445,8 @@ fun AdminScreen(
     if (showAddDialog) {
         AddWaliAccountDialog(
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, dormitory, phone, password ->
-                viewModel.addWaliAccount(name, dormitory, phone, password) {
+            onConfirm = { name, username, dormitory, phone, password ->
+                viewModel.addWaliAccount(name, username, dormitory, phone, password) {
                     Toast.makeText(context, "Kartu akun untuk $name berhasil dibuat!", Toast.LENGTH_SHORT).show()
                 }
                 showAddDialog = false
@@ -537,6 +543,10 @@ fun WaliAccountCardItem(
     val isPutri = account.dormitory.contains("Putri", ignoreCase = true)
     val dormAccentColor = if (isPutri) Color(0xFFBE185D) else Color(0xFF0369A1)
     val dormBgColor = if (isPutri) Color(0xFFFDF2F8) else Color(0xFFF0F9FF)
+
+    val effectiveUsername = account.username.ifBlank {
+        account.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+    }
 
     ElevatedCard(
         modifier = modifier
@@ -673,7 +683,7 @@ fun WaliAccountCardItem(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = account.username,
+                                    text = effectiveUsername,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = dormAccentColor
@@ -681,7 +691,7 @@ fun WaliAccountCardItem(
                             }
 
                             IconButton(
-                                onClick = { onCopy(account.username, "Username") },
+                                onClick = { onCopy(effectiveUsername, "Username") },
                                 modifier = Modifier.size(28.dp)
                             ) {
                                 Icon(
