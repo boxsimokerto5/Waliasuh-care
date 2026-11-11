@@ -50,16 +50,6 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.waliAccountDao(),
             db.schoolRegistrationDao()
         )
-        // Bersihkan data awal siswa, akun wali asuh, dan rekam medis lama sekali saja sesuai instruksi user
-        val cleanupPrefs = application.getSharedPreferences("waliasuh_cleanup_v3", Context.MODE_PRIVATE)
-        if (!cleanupPrefs.getBoolean("cleaned_initial_data_v3", false)) {
-            viewModelScope.launch {
-                repository.deleteAllStudents()
-                repository.deleteAllWaliAccounts()
-                repository.deleteAllRecords()
-                cleanupPrefs.edit().putBoolean("cleaned_initial_data_v3", true).apply()
-            }
-        }
     }
 
     // Active User Role & Session
@@ -678,8 +668,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
 
         // 3. Cek Akun Wali Asuh
-        val account = repository.getWaliAccountByUsername(cleanUser)
-        if (account != null && account.password == cleanPass) {
+        var account = repository.getWaliAccountByUsername(cleanUser)
+        if (account == null) {
+            val allWalis = repository.getAllWaliAccountsList()
+            account = allWalis.firstOrNull {
+                it.username.trim().equals(cleanUser, ignoreCase = true) ||
+                it.username.trim().replace(" ", "").equals(cleanUser.replace(" ", ""), ignoreCase = true) ||
+                it.name.trim().equals(cleanUser, ignoreCase = true) ||
+                it.name.trim().replace(" ", "").equals(cleanUser.replace(" ", ""), ignoreCase = true) ||
+                (it.phone.isNotBlank() && it.phone.trim().equals(cleanUser, ignoreCase = true))
+            }
+        }
+
+        if (account != null) {
+            if (account.password.trim() != cleanPass) {
+                return LoginResult.Error("Password untuk akun '${account.name}' salah. Silakan periksa kembali huruf besar/kecil.")
+            }
+
             // Cek apakah sekolah akun wali asuh ini sedang disuspend
             val matchedSchoolWali = repository.getSchoolByCode(account.schoolId)
                 ?: schoolRegistrations.value.firstOrNull {
@@ -718,7 +723,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return LoginResult.SuccessWali(account)
         }
 
-        return LoginResult.Error("Username atau password salah. Silakan periksa kembali.")
+        return LoginResult.Error("Username '$cleanUser' tidak ditemukan. Pastikan akun telah didaftarkan oleh Administrator.")
     }
 
     fun login(user: String, pass: String, rememberMe: Boolean = false, onResult: (LoginResult) -> Unit) {

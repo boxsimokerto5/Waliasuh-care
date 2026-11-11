@@ -140,19 +140,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         override fun onOpen(db: SupportSQLiteDatabase) {
             super.onOpen(db)
-            INSTANCE?.let { database ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        // Bersihkan seluruh data siswa, akun wali asuh, dan rekam medis lama sesuai instruksi user
-                        db.execSQL("DELETE FROM child_students")
-                        db.execSQL("DELETE FROM wali_accounts")
-                        db.execSQL("DELETE FROM medical_records")
-                        db.execSQL("DELETE FROM school_registrations WHERE schoolName LIKE '%Al-Hikmah%' OR schoolName LIKE '%Kasih Mandiri%'")
-                    } catch (e: Exception) {
-                        // ignore if already clean
-                    }
-                }
-            }
+            // Data persisten terjaga aman dan tidak dihapus otomatis
         }
     }
 }

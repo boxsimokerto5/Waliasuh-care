@@ -39,6 +39,9 @@ class HealthRepository(
     suspend fun getWaliAccountByUsername(username: String): WaliAccount? =
         waliAccountDao.getByUsername(username)
 
+    suspend fun getAllWaliAccountsList(): List<WaliAccount> =
+        waliAccountDao.getAllAccountsList()
+
     fun getRecordsForStudent(studentId: Long): Flow<List<MedicalRecord>> =
         recordDao.getRecordsForStudent(studentId)
 
