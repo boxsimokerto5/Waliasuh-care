@@ -104,12 +104,23 @@ object NotificationHelper {
                 append("Status: Terdaftar di sistem pemantauan Wali Asuh")
             }
 
+            val largeIconBitmap = try {
+                android.graphics.BitmapFactory.decodeResource(context.resources, R.drawable.logo_sr_care)
+            } catch (_: Exception) {
+                null
+            }
+
             val builder = NotificationCompat.Builder(context, CHANNEL_ID_HEALTH_ALERT)
-                .setSmallIcon(R.mipmap.ic_launcher)
+                .setSmallIcon(R.drawable.ic_notification)
+                .apply {
+                    if (largeIconBitmap != null) {
+                        setLargeIcon(largeIconBitmap)
+                    }
+                }
                 .setContentTitle(title)
                 .setContentText(shortContent)
                 .setStyle(NotificationCompat.BigTextStyle().bigText(expandedContent))
-                .setColor(ContextCompat.getColor(context, android.R.color.holo_blue_dark))
+                .setColor(0xFF0A5081.toInt())
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
                 .setCategory(NotificationCompat.CATEGORY_EVENT)
                 .setAutoCancel(true)

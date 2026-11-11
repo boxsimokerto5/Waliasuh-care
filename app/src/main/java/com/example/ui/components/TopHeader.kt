@@ -1,6 +1,9 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,19 +65,13 @@ fun TopHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_sr_care),
+                        contentDescription = "Logo Waliasuh Care",
                         modifier = Modifier
+                            .size(34.dp)
                             .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.18f))
-                            .padding(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.HealthAndSafety,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    )
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(

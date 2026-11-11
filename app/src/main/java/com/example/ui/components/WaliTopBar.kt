@@ -1,7 +1,10 @@
 package com.example.ui.components
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,20 +75,13 @@ fun WaliTopBar(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.testTag("brand_logo_title")
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_sr_care),
+                        contentDescription = "Logo Wali Asuh Care",
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(36.dp)
                             .clip(CircleShape)
-                            .background(WaliPrimary.copy(alpha = 0.12f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.VolunteerActivism,
-                            contentDescription = "Logo Wali Asuh Care",
-                            tint = WaliPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                    )
                     Spacer(modifier = Modifier.width(9.dp))
                     Column {
                         Text(

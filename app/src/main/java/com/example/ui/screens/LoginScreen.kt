@@ -1,8 +1,12 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,22 +113,18 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Hero Logo & Title
-                Box(
-                    modifier = Modifier
-                        .size(76.dp)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(WaliPrimary, Color(0xFF0288D1))
-                            )
-                        ),
-                    contentAlignment = Alignment.Center
+                ElevatedCard(
+                    shape = CircleShape,
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 6.dp),
+                    modifier = Modifier.size(86.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.HealthAndSafety,
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_sr_care),
                         contentDescription = "Logo Wali Asuh Care",
-                        tint = Color.White,
-                        modifier = Modifier.size(44.dp)
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CircleShape)
                     )
                 }
 

@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -314,6 +318,35 @@ fun ProfileScreen(
                     onClick = { showExitDialog = true },
                     testTag = "menu_keluar"
                 )
+            }
+
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.logo_sr_care),
+                        contentDescription = "Logo Wali Asuh Care",
+                        modifier = Modifier
+                            .size(54.dp)
+                            .clip(CircleShape)
+                    )
+                    Text(
+                        text = "Wali Asuh Care v1.0",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = "Sekolah Rakyat SRT 1 Kabupaten Kediri",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
