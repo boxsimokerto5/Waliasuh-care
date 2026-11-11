@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import com.example.data.model.WaliAccount
 import com.example.data.remote.supabase.SupabaseConfig
 import com.example.data.remote.supabase.SupabaseSyncManager
@@ -59,6 +60,66 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     val waliAccounts: StateFlow<List<WaliAccount>> = repository.allWaliAccounts
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // School Profile & Tenant Customization
+    private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
+    private val _schoolProfile = MutableStateFlow(
+        SchoolProfile(
+            schoolName = schoolPrefs.getString("school_name", "Sekolah Rakyat SRT 1 Kabupaten Kediri") ?: "Sekolah Rakyat SRT 1 Kabupaten Kediri",
+            shortName = schoolPrefs.getString("short_name", "SRT 1 Kediri") ?: "SRT 1 Kediri",
+            adminName = schoolPrefs.getString("admin_name", "Admin Utama") ?: "Admin Utama",
+            city = schoolPrefs.getString("city", "Kabupaten Kediri") ?: "Kabupaten Kediri",
+            tenantCode = schoolPrefs.getString("tenant_code", "SRT1-KDR") ?: "SRT1-KDR",
+            primaryFaskesName = schoolPrefs.getString("primary_faskes", "Puskesmas Wates") ?: "Puskesmas Wates",
+            secondaryFaskesName = schoolPrefs.getString("secondary_faskes", "Puskesmas Plosoklaten") ?: "Puskesmas Plosoklaten"
+        )
+    )
+    val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
+
+    fun updateSchoolProfile(profile: SchoolProfile, onComplete: () -> Unit = {}) {
+        _schoolProfile.value = profile
+        schoolPrefs.edit()
+            .putString("school_name", profile.schoolName)
+            .putString("short_name", profile.shortName)
+            .putString("admin_name", profile.adminName)
+            .putString("city", profile.city)
+            .putString("tenant_code", profile.tenantCode)
+            .putString("primary_faskes", profile.primaryFaskesName)
+            .putString("secondary_faskes", profile.secondaryFaskesName)
+            .apply()
+        onComplete()
+    }
+
+    fun saveImportedStudents(studentList: List<ChildStudent>, replace: Boolean, onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            if (replace) {
+                repository.deleteAllStudents()
+            }
+            repository.insertAllStudents(studentList)
+            onComplete(studentList.size)
+        }
+    }
+
+    fun loadDefaultKediriStudents(onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            val defaultStudents = AppDatabase.loadStudentsFromAssets(getApplication())
+            if (defaultStudents.isNotEmpty()) {
+                repository.deleteAllStudents()
+                repository.insertAllStudents(defaultStudents)
+            }
+            onComplete(defaultStudents.size)
+        }
+    }
+
+    fun saveImportedWaliAccounts(accountList: List<WaliAccount>, replace: Boolean, onComplete: (Int) -> Unit) {
+        viewModelScope.launch {
+            if (replace) {
+                repository.deleteAllWaliAccounts()
+            }
+            repository.insertAllWaliAccounts(accountList)
+            onComplete(accountList.size)
+        }
+    }
 
     // Active User Role & Session
     private val _currentUserRole = MutableStateFlow(

@@ -45,6 +45,9 @@ interface WaliAccountDao {
     @Query("DELETE FROM wali_accounts WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM wali_accounts")
+    suspend fun deleteAll()
+
     @Query("SELECT COUNT(*) FROM wali_accounts")
     suspend fun count(): Int
 }

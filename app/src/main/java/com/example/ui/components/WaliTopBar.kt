@@ -47,6 +47,7 @@ fun WaliTopBar(
     onNotificationClick: () -> Unit,
     onProfileClick: () -> Unit,
     isDoctorIcon: Boolean = false,
+    schoolName: String = "SRT 1 Kabupaten Kediri",
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -92,7 +93,7 @@ fun WaliTopBar(
                             letterSpacing = 0.1.sp
                         )
                         Text(
-                            text = "SRT 1 Kabupaten Kediri",
+                            text = schoolName.ifBlank { "SRT 1 Kabupaten Kediri" },
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
