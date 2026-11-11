@@ -40,6 +40,27 @@ object DateUtils {
                 cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
     }
 
+    fun isThisWeek(timestamp: Long): Boolean {
+        val calNow = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }
+        val cal7DaysAgo = Calendar.getInstance().apply {
+            add(Calendar.DAY_OF_YEAR, -6)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val calItem = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val isSameCalendarWeek = calItem.get(Calendar.WEEK_OF_YEAR) == calNow.get(Calendar.WEEK_OF_YEAR) &&
+                calItem.get(Calendar.YEAR) == calNow.get(Calendar.YEAR)
+        val isWithin7Days = timestamp in cal7DaysAgo.timeInMillis..calNow.timeInMillis
+        return isWithin7Days || isSameCalendarWeek
+    }
+
     fun isPastDate(timestamp: Long): Boolean {
         val cal1 = Calendar.getInstance().apply {
             timeInMillis = timestamp

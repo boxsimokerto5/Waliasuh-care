@@ -72,6 +72,7 @@ import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MedicalRecordScreen
 import com.example.ui.screens.PlanScreen
 import com.example.ui.screens.ProfileScreen
+import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.StudentsScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.WaliPrimary
@@ -97,41 +98,48 @@ class MainActivity : ComponentActivity() {
             val viewModel: HealthViewModel = viewModel()
             val userRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
             var adminWantsAppView by rememberSaveable { mutableStateOf(false) }
+            var showSplashScreen by rememberSaveable { mutableStateOf(true) }
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
-                when {
-                    userRole == UserRole.NOT_LOGGED_IN -> {
-                        LoginScreen(
-                            viewModel = viewModel,
-                            onLoginSuccessAdmin = {
-                                adminWantsAppView = false
-                            },
-                            onLoginSuccessWali = { _ ->
-                                adminWantsAppView = false
-                            }
-                        )
-                    }
-                    userRole == UserRole.ADMIN && !adminWantsAppView -> {
-                        AdminScreen(
-                            viewModel = viewModel,
-                            onNavigateToApp = { adminWantsAppView = true },
-                            onLogout = { viewModel.logout() }
-                        )
-                    }
-                    else -> {
-                        WaliAsuhCareApp(
-                            isDarkTheme = isDarkTheme,
-                            onToggleTheme = { isDarkTheme = !isDarkTheme },
-                            initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
-                            viewModel = viewModel,
-                            onLogout = {
-                                viewModel.logout()
-                                adminWantsAppView = false
-                            },
-                            onNavigateToAdmin = if (userRole == UserRole.ADMIN) {
-                                { adminWantsAppView = false }
-                            } else null
-                        )
+                if (showSplashScreen) {
+                    SplashScreen(
+                        onFinish = { showSplashScreen = false }
+                    )
+                } else {
+                    when {
+                        userRole == UserRole.NOT_LOGGED_IN -> {
+                            LoginScreen(
+                                viewModel = viewModel,
+                                onLoginSuccessAdmin = {
+                                    adminWantsAppView = false
+                                },
+                                onLoginSuccessWali = { _ ->
+                                    adminWantsAppView = false
+                                }
+                            )
+                        }
+                        userRole == UserRole.ADMIN && !adminWantsAppView -> {
+                            AdminScreen(
+                                viewModel = viewModel,
+                                onNavigateToApp = { adminWantsAppView = true },
+                                onLogout = { viewModel.logout() }
+                            )
+                        }
+                        else -> {
+                            WaliAsuhCareApp(
+                                isDarkTheme = isDarkTheme,
+                                onToggleTheme = { isDarkTheme = !isDarkTheme },
+                                initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
+                                viewModel = viewModel,
+                                onLogout = {
+                                    viewModel.logout()
+                                    adminWantsAppView = false
+                                },
+                                onNavigateToAdmin = if (userRole == UserRole.ADMIN) {
+                                    { adminWantsAppView = false }
+                                } else null
+                            )
+                        }
                     }
                 }
             }
@@ -181,10 +189,14 @@ fun WaliAsuhCareApp(
     val historySearchQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
     val studentSearchQuery by viewModel.studentSearchQuery.collectAsStateWithLifecycle()
 
-    // Handle back button for secondary screens -> return to Dashboard
+    // Handle back button for secondary screens -> return to Dashboard, or return to Admin Portal if role is Admin
     if (currentScreen != WaliNavScreen.DASHBOARD) {
         BackHandler {
             currentScreen = WaliNavScreen.DASHBOARD
+        }
+    } else if (onNavigateToAdmin != null) {
+        BackHandler {
+            onNavigateToAdmin()
         }
     }
 

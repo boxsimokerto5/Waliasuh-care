@@ -501,5 +501,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onComplete()
         }
     }
+
+    fun updateWaliAccount(account: WaliAccount, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.updateWaliAccount(account)
+            onComplete()
+        }
+    }
 }
 

@@ -108,7 +108,7 @@ fun DashboardScreen(
     val upcomingPlans = remember(activePlans) {
         activePlans.filter { !DateUtils.isToday(it.planDate) }
     }
-    var selectedPlanFilter by remember { mutableStateOf("Semua") }
+    var selectedPlanFilter by remember { mutableStateOf("Hari Ini") }
 
     // Counts for today
     val watesTodayCount = todayPlans.count { it.faskes.contains("Wates", ignoreCase = true) }
@@ -304,20 +304,12 @@ fun DashboardScreen(
                             )
                         }
 
-                        // Filter Chips: Semua, Hari Ini, Mendatang
+                        // Filter Chips: Hari Ini, Mendatang, Semua
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            FilterChip(
-                                selected = selectedPlanFilter == "Semua",
-                                onClick = { selectedPlanFilter = "Semua" },
-                                label = { Text("Semua (${activePlans.size})", fontSize = 11.sp) },
-                                modifier = Modifier
-                                    .height(28.dp)
-                                    .testTag("chip_filter_all_plans")
-                            )
                             FilterChip(
                                 selected = selectedPlanFilter == "Hari Ini",
                                 onClick = { selectedPlanFilter = "Hari Ini" },
@@ -333,6 +325,14 @@ fun DashboardScreen(
                                 modifier = Modifier
                                     .height(28.dp)
                                     .testTag("chip_filter_upcoming_plans")
+                            )
+                            FilterChip(
+                                selected = selectedPlanFilter == "Semua",
+                                onClick = { selectedPlanFilter = "Semua" },
+                                label = { Text("Semua (${activePlans.size})", fontSize = 11.sp) },
+                                modifier = Modifier
+                                    .height(28.dp)
+                                    .testTag("chip_filter_all_plans")
                             )
                         }
                     }
@@ -359,7 +359,11 @@ fun DashboardScreen(
                             ) {
                                 Text(
                                     text = when (selectedPlanFilter) {
-                                        "Hari Ini" -> "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini."
+                                        "Hari Ini" -> if (upcomingPlans.isNotEmpty()) {
+                                            "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini. Terdapat ${upcomingPlans.size} rencana di jadwal 'Mendatang'."
+                                        } else {
+                                            "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini."
+                                        }
                                         "Mendatang" -> "Belum ada rencana berobat untuk tanggal mendatang."
                                         else -> "Alhamdulillah, belum ada rencana berobat aktif."
                                     },

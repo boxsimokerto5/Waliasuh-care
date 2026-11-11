@@ -27,20 +27,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -80,6 +81,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.AddWaliAccountDialog
+import com.example.ui.dialogs.EditWaliAccountDialog
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PasswordGenerator
@@ -96,18 +98,64 @@ fun AdminScreen(
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
 
     var showAddDialog by remember { mutableStateOf(false) }
+    var accountToEdit by remember { mutableStateOf<WaliAccount?>(null) }
     var accountToDelete by remember { mutableStateOf<WaliAccount?>(null) }
+    var showExitConfirmDialog by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var selectedFilterDormitory by remember { mutableStateOf("Semua") }
 
+    // Tangani tombol Back fisik/gesture pada perangkat Android
+    BackHandler {
+        showExitConfirmDialog = true
+    }
+
     val filteredAccounts = waliAccounts.filter { account ->
-        val matchSearch = searchQuery.isBlank() || account.name.contains(searchQuery, ignoreCase = true)
+        val matchSearch = searchQuery.isBlank() ||
+                account.name.contains(searchQuery, ignoreCase = true) ||
+                account.username.contains(searchQuery, ignoreCase = true) ||
+                account.phone.contains(searchQuery, ignoreCase = true)
         val matchDorm = if (selectedFilterDormitory == "Semua") true else account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
         matchSearch && matchDorm
     }
 
     val putraCount = waliAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
     val putriCount = waliAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
+
+    fun shareAllAccountsSummary() {
+        if (waliAccounts.isEmpty()) {
+            Toast.makeText(context, "Belum ada akun wali asuh untuk dibagikan.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val sb = StringBuilder()
+        sb.appendLine("*DAFTAR KARTU AKSES WALI ASUH*")
+        sb.appendLine("_Sekolah Rakyat SRT 1 Kabupaten Kediri_")
+        sb.appendLine("Tanggal: ${DateUtils.formatFullDate(System.currentTimeMillis())}")
+        sb.appendLine("Total: ${waliAccounts.size} Akun Terdaftar")
+        sb.appendLine("----------------------------------------")
+        waliAccounts.forEachIndexed { index, acc ->
+            sb.appendLine("${index + 1}. *${acc.name}* (${acc.dormitory})")
+            sb.appendLine("   • Username: ${acc.username}")
+            sb.appendLine("   • Password: ${acc.password}")
+            if (acc.phone.isNotBlank()) {
+                sb.appendLine("   • WA: ${acc.phone}")
+            }
+            sb.appendLine("")
+        }
+        sb.appendLine("_Dikelola oleh Administrator Utama (Eko Wahyudi)_")
+        val summaryText = sb.toString().trim()
+
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, summaryText)
+        }
+        try {
+            context.startActivity(Intent.createChooser(intent, "Bagikan Rekap Akun Wali Asuh"))
+        } catch (e: Exception) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Rekap Akun Wali Asuh", summaryText))
+            Toast.makeText(context, "Rekap akun disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -139,6 +187,17 @@ fun AdminScreen(
                     }
                 },
                 actions = {
+                    // Tombol Bagikan Rekap Seluruh Akun
+                    IconButton(
+                        onClick = { shareAllAccountsSummary() },
+                        modifier = Modifier.testTag("btn_admin_share_all")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Bagikan Rekap Seluruh Akun",
+                            tint = Color.White
+                        )
+                    }
                     // Tombol Buka Dashboard Aplikasi
                     IconButton(
                         onClick = onNavigateToApp,
@@ -156,7 +215,7 @@ fun AdminScreen(
                         modifier = Modifier.testTag("btn_admin_logout")
                     ) {
                         Icon(
-                            imageVector = Icons.Default.ExitToApp,
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                             contentDescription = "Keluar / Logout",
                             tint = Color.White
                         )
@@ -363,6 +422,7 @@ fun AdminScreen(
                                     context.startActivity(Intent.createChooser(sendIntent, "Bagikan Akun Wali Asuh"))
                                 }
                             },
+                            onEdit = { accountToEdit = account },
                             onResetPassword = {
                                 viewModel.resetWaliPassword(account) { newPass ->
                                     Toast.makeText(context, "Password baru untuk ${account.name}: $newPass", Toast.LENGTH_LONG).show()
@@ -384,6 +444,19 @@ fun AdminScreen(
                     Toast.makeText(context, "Kartu akun untuk $name berhasil dibuat!", Toast.LENGTH_SHORT).show()
                 }
                 showAddDialog = false
+            }
+        )
+    }
+
+    accountToEdit?.let { account ->
+        EditWaliAccountDialog(
+            account = account,
+            onDismiss = { accountToEdit = null },
+            onConfirm = { updated ->
+                viewModel.updateWaliAccount(updated) {
+                    Toast.makeText(context, "Akun ${updated.name} berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                }
+                accountToEdit = null
             }
         )
     }
@@ -414,6 +487,35 @@ fun AdminScreen(
             }
         )
     }
+
+    if (showExitConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showExitConfirmDialog = false },
+            title = { Text("Opsi Navigasi Portal Admin") },
+            text = { Text("Pilih tindakan yang ingin Anda lakukan:") },
+            confirmButton = {
+                Button(onClick = {
+                    showExitConfirmDialog = false
+                    onNavigateToApp()
+                }) {
+                    Text("Buka Aplikasi")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { showExitConfirmDialog = false }) {
+                        Text("Batal")
+                    }
+                    OutlinedButton(onClick = {
+                        showExitConfirmDialog = false
+                        onLogout()
+                    }) {
+                        Text("Logout")
+                    }
+                }
+            }
+        )
+    }
 }
 
 /**
@@ -425,6 +527,7 @@ fun WaliAccountCardItem(
     account: WaliAccount,
     onCopy: (text: String, label: String) -> Unit,
     onShareWhatsApp: () -> Unit,
+    onEdit: () -> Unit,
     onResetPassword: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -646,7 +749,7 @@ fun WaliAccountCardItem(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Tombol Hapus & Acak Ulang di Kiri
+                    // Tombol Hapus, Edit & Acak Ulang di Kiri
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
@@ -660,6 +763,18 @@ fun WaliAccountCardItem(
                                 contentDescription = "Hapus Akun",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(18.dp)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Akun",
+                                tint = dormAccentColor,
+                                modifier = Modifier.size(17.dp)
                             )
                         }
 

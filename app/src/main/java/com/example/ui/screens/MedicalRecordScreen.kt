@@ -132,15 +132,23 @@ fun MedicalRecordScreen(
     // Tab mode: 0 = Riwayat Tindakan (Slim Cards), 1 = Buku Screening Anak (Anak sebagai Primary)
     var selectedTabMode by remember { mutableIntStateOf(0) }
 
-    var selectedDateFilter by remember { mutableStateOf("Semua Tanggal") }
+    var selectedDateFilter by remember { mutableStateOf("Hari Ini") }
 
     val todayStr = remember { DateUtils.formatShortDate(Calendar.getInstance().timeInMillis) }
 
+    val todayRecords = remember(completedRecords) {
+        completedRecords.filter { DateUtils.isToday(it.treatmentDate ?: it.planDate) }
+    }
+    val thisWeekRecords = remember(completedRecords) {
+        completedRecords.filter { DateUtils.isThisWeek(it.treatmentDate ?: it.planDate) }
+    }
+
     val filteredList = completedRecords.filter { record ->
-        val matchesDate = if (selectedDateFilter == "Hari Ini") {
-            DateUtils.isToday(record.treatmentDate ?: record.planDate)
-        } else {
-            true
+        val recordTime = record.treatmentDate ?: record.planDate
+        val matchesDate = when (selectedDateFilter) {
+            "Hari Ini" -> DateUtils.isToday(recordTime)
+            "Minggu Ini" -> DateUtils.isThisWeek(recordTime)
+            else -> true
         }
         val matchesSearch = if (searchQuery.isBlank()) {
             true
@@ -297,24 +305,37 @@ fun MedicalRecordScreen(
                 ) {
                     if (selectedTabMode == 0) {
                         FilterChip(
-                            selected = selectedDateFilter == "Semua Tanggal",
-                            onClick = { selectedDateFilter = "Semua Tanggal" },
-                            label = { Text("Semua Tanggal", fontSize = 11.5.sp) },
-                            shape = RoundedCornerShape(8.dp),
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
-                                selectedLabelColor = WaliPrimary
-                            )
-                        )
-                        FilterChip(
                             selected = selectedDateFilter == "Hari Ini",
                             onClick = { selectedDateFilter = "Hari Ini" },
-                            label = { Text("Hari Ini ($todayStr)", fontSize = 11.5.sp) },
+                            label = { Text("Hari Ini (${todayRecords.size})", fontSize = 11.5.sp) },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
                                 selectedLabelColor = WaliPrimary
-                            )
+                            ),
+                            modifier = Modifier.testTag("chip_filter_today_records")
+                        )
+                        FilterChip(
+                            selected = selectedDateFilter == "Minggu Ini",
+                            onClick = { selectedDateFilter = "Minggu Ini" },
+                            label = { Text("Minggu Ini (${thisWeekRecords.size})", fontSize = 11.5.sp) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
+                                selectedLabelColor = WaliPrimary
+                            ),
+                            modifier = Modifier.testTag("chip_filter_week_records")
+                        )
+                        FilterChip(
+                            selected = selectedDateFilter == "Semua Tanggal",
+                            onClick = { selectedDateFilter = "Semua Tanggal" },
+                            label = { Text("Semua Tanggal (${completedRecords.size})", fontSize = 11.5.sp) },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
+                                selectedLabelColor = WaliPrimary
+                            ),
+                            modifier = Modifier.testTag("chip_filter_all_records")
                         )
                     }
 
@@ -354,10 +375,29 @@ fun MedicalRecordScreen(
                                     modifier = Modifier.size(44.dp)
                                 )
                                 Text(
-                                    text = if (searchQuery.isNotBlank()) "Tidak ditemukan catatan medis yang cocok." else "Belum ada rekam medis pengobatan selesai.",
+                                    text = if (searchQuery.isNotBlank()) {
+                                        "Tidak ditemukan catatan medis yang cocok dengan '$searchQuery'."
+                                    } else {
+                                        when (selectedDateFilter) {
+                                            "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
+                                                "Belum ada tindakan pengobatan hari ini. Terdapat ${thisWeekRecords.size} catatan tindakan di 'Minggu Ini'."
+                                            } else if (completedRecords.isNotEmpty()) {
+                                                "Belum ada tindakan pengobatan hari ini. Tekan 'Semua Tanggal' untuk melihat seluruh riwayat."
+                                            } else {
+                                                "Belum ada rekam medis pengobatan selesai."
+                                            }
+                                            "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
+                                                "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua Tanggal' untuk melihat seluruh riwayat."
+                                            } else {
+                                                "Belum ada rekam medis pengobatan selesai."
+                                            }
+                                            else -> "Belum ada rekam medis pengobatan selesai."
+                                        }
+                                    },
                                     fontWeight = FontWeight.SemiBold,
                                     fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                                 Text(
                                     text = "Gunakan tombol '+ Tindakan Langsung' untuk mendata hasil berobat anak di puskesmas.",

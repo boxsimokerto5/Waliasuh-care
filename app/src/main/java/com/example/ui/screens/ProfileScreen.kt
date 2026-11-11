@@ -80,6 +80,7 @@ fun ProfileScreen(
     modifier: Modifier = Modifier
 ) {
     val students by viewModel.students.collectAsStateWithLifecycle()
+    val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
@@ -252,7 +253,6 @@ fun ProfileScreen(
                 SectionHeader(title = "Lainnya")
             }
 
-            val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
             if (role == UserRole.ADMIN && onNavigateToAdmin != null) {
                 item {
                     MenuSettingCard(
