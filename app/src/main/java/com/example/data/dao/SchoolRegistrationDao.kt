@@ -17,6 +17,12 @@ interface SchoolRegistrationDao {
     @Query("SELECT * FROM school_registrations WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): SchoolRegistration?
 
+    @Query("SELECT * FROM school_registrations WHERE generatedAdminUsername = :username LIMIT 1")
+    suspend fun getByAdminUsername(username: String): SchoolRegistration?
+
+    @Query("SELECT * FROM school_registrations WHERE generatedSchoolCode = :code LIMIT 1")
+    suspend fun getBySchoolCode(code: String): SchoolRegistration?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(registration: SchoolRegistration): Long
 

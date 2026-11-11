@@ -53,6 +53,7 @@ object NotificationHelper {
         roomNumber: String,
         complaint: String,
         faskes: String,
+        schoolName: String = "",
         notificationId: Int = (System.currentTimeMillis() % 100000).toInt()
     ) {
         try {
@@ -93,10 +94,14 @@ object NotificationHelper {
             val roomDisplay = if (roomNumber.isNotBlank()) "Kamar $roomNumber" else "Asrama"
             val classDisplay = if (className.isNotBlank()) "Kelas $className" else "Siswa SRT 1"
             val faskesDisplay = if (faskes.isNotBlank()) faskes else "Puskesmas Rujukan"
+            val schoolBadge = if (schoolName.isNotBlank()) "[$schoolName] " else ""
 
-            val title = "🏥 Anak Asuh Sakit: $studentName"
+            val title = "🏥 ${schoolBadge}Anak Asuh Sakit: $studentName"
             val shortContent = "$classDisplay ($roomDisplay) • Keluhan: $complaint"
             val expandedContent = buildString {
+                if (schoolName.isNotBlank()) {
+                    append("Sekolah: ").append(schoolName).append("\n")
+                }
                 append("Nama Siswa: ").append(studentName).append("\n")
                 append("Jenjang/Kelas: ").append(classDisplay).append(" • ").append(roomDisplay).append("\n")
                 append("Keluhan: ").append(complaint).append("\n")

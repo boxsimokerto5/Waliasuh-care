@@ -99,4 +99,10 @@ class HealthRepository(
 
     suspend fun getSchoolRegistrationById(id: Long): SchoolRegistration? =
         registrationDao.getById(id)
+
+    suspend fun getSchoolByAdminUsername(username: String): SchoolRegistration? =
+        registrationDao.getByAdminUsername(username)
+
+    suspend fun getSchoolByCode(code: String): SchoolRegistration? =
+        registrationDao.getBySchoolCode(code)
 }

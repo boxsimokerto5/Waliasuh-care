@@ -38,11 +38,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Group
@@ -139,11 +143,13 @@ fun SuperAdminScreen(
     var selectedMainTab by remember { mutableStateOf(0) } // 0: Pengajuan Sekolah, 1: Laporan & Rekapitulasi
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedStatusFilter by remember { mutableStateOf("Semua") } // "Semua", "PENDING", "APPROVED", "REJECTED"
+    var selectedStatusFilter by remember { mutableStateOf("Semua") } // "Semua", "PENDING", "APPROVED", "SUSPENDED", "REJECTED"
 
     var registrationToReject by remember { mutableStateOf<SchoolRegistration?>(null) }
     var rejectionReasonInput by remember { mutableStateOf("") }
     var approvedRegistrationDialog by remember { mutableStateOf<SchoolRegistration?>(null) }
+    var schoolToSuspend by remember { mutableStateOf<SchoolRegistration?>(null) }
+    var schoolToDelete by remember { mutableStateOf<SchoolRegistration?>(null) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
     // Intercept back button
@@ -163,6 +169,7 @@ fun SuperAdminScreen(
         val matchStatus = when (selectedStatusFilter) {
             "PENDING" -> reg.status == "PENDING"
             "APPROVED" -> reg.status == "APPROVED"
+            "SUSPENDED" -> reg.status == "SUSPENDED"
             "REJECTED" -> reg.status == "REJECTED"
             else -> true
         }
@@ -173,6 +180,7 @@ fun SuperAdminScreen(
     val totalCount = registrations.size
     val pendingCount = registrations.count { it.status == "PENDING" }
     val approvedCount = registrations.count { it.status == "APPROVED" }
+    val suspendedCount = registrations.count { it.status == "SUSPENDED" }
     val rejectedCount = registrations.count { it.status == "REJECTED" }
 
     fun sendAccessCardViaWhatsApp(reg: SchoolRegistration) {
@@ -349,7 +357,7 @@ fun SuperAdminScreen(
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             SuperadminKpiCard(
                                 title = "Semua",
@@ -373,6 +381,14 @@ fun SuperAdminScreen(
                                 color = Color(0xFF16A34A),
                                 isSelected = selectedStatusFilter == "APPROVED",
                                 onClick = { selectedStatusFilter = "APPROVED" },
+                                modifier = Modifier.weight(1f)
+                            )
+                            SuperadminKpiCard(
+                                title = "Suspend",
+                                count = suspendedCount,
+                                color = Color(0xFFEA580C),
+                                isSelected = selectedStatusFilter == "SUSPENDED",
+                                onClick = { selectedStatusFilter = "SUSPENDED" },
                                 modifier = Modifier.weight(1f)
                             )
                             SuperadminKpiCard(
@@ -416,10 +432,11 @@ fun SuperAdminScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            listOf("Semua", "PENDING", "APPROVED", "REJECTED").forEach { status ->
+                            listOf("Semua", "PENDING", "APPROVED", "SUSPENDED", "REJECTED").forEach { status ->
                                 val label = when (status) {
                                     "PENDING" -> "Menunggu ($pendingCount)"
                                     "APPROVED" -> "Disetujui ($approvedCount)"
+                                    "SUSPENDED" -> "Suspend ($suspendedCount)"
                                     "REJECTED" -> "Ditolak ($rejectedCount)"
                                     else -> "Semua ($totalCount)"
                                 }
@@ -499,6 +516,15 @@ fun SuperAdminScreen(
                                 registrationToReject = item
                                 rejectionReasonInput = ""
                             },
+                            onSuspend = {
+                                schoolToSuspend = item
+                            },
+                            onUnsuspend = {
+                                schoolToSuspend = item
+                            },
+                            onDelete = {
+                                schoolToDelete = item
+                            },
                             onSendWaCard = {
                                 sendAccessCardViaWhatsApp(item)
                             },
@@ -522,6 +548,119 @@ fun SuperAdminScreen(
         }
     }
 }
+
+    // DIALOG SUSPEND / UNSUSPEND SEKOLAH
+    if (schoolToSuspend != null) {
+        val target = schoolToSuspend!!
+        val isCurrentlySuspended = target.status == "SUSPENDED"
+        AlertDialog(
+            onDismissRequest = { schoolToSuspend = null },
+            icon = {
+                Icon(
+                    imageVector = if (isCurrentlySuspended) Icons.Default.PlayArrow else Icons.Default.Block,
+                    contentDescription = null,
+                    tint = if (isCurrentlySuspended) Color(0xFF16A34A) else Color(0xFFEA580C),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (isCurrentlySuspended) "Buka Suspend Sekolah?" else "Suspend Akun Sekolah?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (isCurrentlySuspended)
+                            "Apakah Anda yakin ingin mengaktifkan kembali akses untuk sekolah ${target.schoolName} (${target.generatedSchoolCode})?\n\nSeluruh admin dan wali asuh pada sekolah ini akan dapat login kembali."
+                        else
+                            "Apakah Anda yakin ingin menangguhkan (suspend) sekolah ${target.schoolName} (${target.generatedSchoolCode})?\n\nSeluruh akun admin dan wali asuh pada sekolah ini tidak akan dapat login dan akan menerima notifikasi:\n\"Maaf akun sedang disuspend oleh admin\".",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (isCurrentlySuspended) {
+                            viewModel.unsuspendSchool(target) {
+                                schoolToSuspend = null
+                                Toast.makeText(context, "Sekolah ${target.schoolName} berhasil diaktifkan kembali.", Toast.LENGTH_SHORT).show()
+                            }
+                        } else {
+                            viewModel.suspendSchool(target) {
+                                schoolToSuspend = null
+                                Toast.makeText(context, "Sekolah ${target.schoolName} berhasil disuspend.", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isCurrentlySuspended) Color(0xFF16A34A) else Color(0xFFEA580C)
+                    )
+                ) {
+                    Text(if (isCurrentlySuspended) "Buka Suspend" else "Ya, Suspend Sekolah")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { schoolToSuspend = null }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    // DIALOG HAPUS SEKOLAH
+    if (schoolToDelete != null) {
+        val target = schoolToDelete!!
+        AlertDialog(
+            onDismissRequest = { schoolToDelete = null },
+            icon = {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text("Hapus Sekolah Permanen?", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Apakah Anda yakin ingin menghapus data sekolah ${target.schoolName}?",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Tindakan ini permanen. Seluruh data pendaftaran, serta data siswa dan akun wali asuh yang terikat dengan ID sekolah (${target.generatedSchoolCode.ifBlank { "Baru" }}) akan dihapus dari sistem.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteSchoolRegistration(target) {
+                            schoolToDelete = null
+                            Toast.makeText(context, "Sekolah ${target.schoolName} berhasil dihapus permanen.", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus Permanen")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { schoolToDelete = null }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
 
     // DIALOG TOLAK PENGAJUAN
     if (registrationToReject != null) {
@@ -742,6 +881,9 @@ fun SuperadminRegistrationItemCard(
     registration: SchoolRegistration,
     onApprove: () -> Unit,
     onReject: () -> Unit,
+    onSuspend: () -> Unit,
+    onUnsuspend: () -> Unit,
+    onDelete: () -> Unit,
     onSendWaCard: () -> Unit,
     onCopyCredentials: () -> Unit,
     modifier: Modifier = Modifier
@@ -750,12 +892,14 @@ fun SuperadminRegistrationItemCard(
 
     val statusColor = when (registration.status) {
         "APPROVED" -> Color(0xFF16A34A)
+        "SUSPENDED" -> Color(0xFFEA580C)
         "REJECTED" -> Color(0xFFDC2626)
         else -> Color(0xFFD97706)
     }
 
     val statusLabel = when (registration.status) {
         "APPROVED" -> "DISETUJUI"
+        "SUSPENDED" -> "DITANGGUHKAN / SUSPENDED"
         "REJECTED" -> "DITOLAK"
         else -> "MENUNGGU PERSETUJUAN"
     }
@@ -835,7 +979,7 @@ fun SuperadminRegistrationItemCard(
                 }
             }
 
-            // TAMPILAN JIKA STATUS APPROVED: KARTU AKSES DIGITAL
+            // TAMPILAN JIKA STATUS APPROVED: KARTU AKSES DIGITAL + TOMBOL SUSPEND & HAPUS
             if (registration.status == "APPROVED") {
                 Box(
                     modifier = Modifier
@@ -941,9 +1085,111 @@ fun SuperadminRegistrationItemCard(
                         }
                     }
                 }
+
+                // Row Tombol Suspend & Hapus untuk Sekolah yang Disetujui
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onSuspend,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .testTag("btn_suspend_school_${registration.id}"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEA580C)),
+                        border = BorderStroke(1.dp, Color(0xFFEA580C)),
+                        contentPadding = PaddingValues(horizontal = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Suspend Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    OutlinedButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(38.dp)
+                            .testTag("btn_delete_school_${registration.id}"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                        contentPadding = PaddingValues(horizontal = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Hapus Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                }
             }
 
-            // TAMPILAN JIKA STATUS REJECTED: ALASAN PENOLAKAN
+            // TAMPILAN JIKA STATUS SUSPENDED: BANNER & TOMBOL BUKA SUSPEND / HAPUS
+            if (registration.status == "SUSPENDED") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFFF7ED))
+                        .border(1.5.dp, Color(0xFFFDBA74), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Warning, contentDescription = null, tint = Color(0xFFEA580C), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "AKUN SEKOLAH INI SEDANG DISUSPEND",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 11.5.sp,
+                                color = Color(0xFF9A3412)
+                            )
+                        }
+
+                        Text(
+                            text = "Seluruh user (Admin dan Wali Asuh) pada ID ${registration.generatedSchoolCode} diblokir dari login dan akan menerima notifikasi:\n\"Maaf akun sedang disuspend oleh admin\".",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF7C2D12),
+                            lineHeight = 16.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = onUnsuspend,
+                                modifier = Modifier
+                                    .weight(1.3f)
+                                    .height(38.dp)
+                                    .testTag("btn_unsuspend_school_${registration.id}"),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                contentPadding = PaddingValues(horizontal = 6.dp)
+                            ) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Buka Suspend", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
+                                onClick = onDelete,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .testTag("btn_delete_school_${registration.id}"),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                                contentPadding = PaddingValues(horizontal = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Hapus", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // TAMPILAN JIKA STATUS REJECTED: ALASAN PENOLAKAN + TOMBOL HAPUS
             if (registration.status == "REJECTED") {
                 Box(
                     modifier = Modifier
@@ -953,7 +1199,7 @@ fun SuperadminRegistrationItemCard(
                         .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(8.dp))
                         .padding(10.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = "Alasan Penolakan:",
                             fontWeight = FontWeight.Bold,
@@ -965,6 +1211,18 @@ fun SuperadminRegistrationItemCard(
                             fontSize = 11.5.sp,
                             color = Color(0xFF7F1D1D)
                         )
+                        OutlinedButton(
+                            onClick = onDelete,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(36.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                        ) {
+                            Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Hapus Pengajuan Ini", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
             }
@@ -1034,9 +1292,9 @@ fun SuperadminReportsView(
         status = "Pilot Utama"
     )
 
-    // 2. Sekolah Tenant yang telah Disetujui
+    // 2. Sekolah Tenant yang telah Disetujui / Terdaftar
     val approvedSchools = registrations
-        .filter { it.status == "APPROVED" }
+        .filter { it.status == "APPROVED" || it.status == "SUSPENDED" }
         .map { reg ->
             val schoolWalies = waliAccounts.filter { it.schoolId == reg.generatedSchoolCode }
             val effectiveWaliCount = if (schoolWalies.isNotEmpty()) schoolWalies.size else reg.estimatedWaliCount
@@ -1052,7 +1310,7 @@ fun SuperadminReportsView(
                 picName = reg.picName,
                 picPhone = reg.picPhone,
                 isPrimaryPilot = false,
-                status = "Terdaftar & Aktif"
+                status = if (reg.status == "SUSPENDED") "Disuspend" else "Terdaftar & Aktif"
             )
         }
 
@@ -1483,20 +1741,25 @@ fun SuperadminReportSchoolCard(
                     }
                 }
 
+                val badgeColor = when {
+                    school.isPrimaryPilot -> Color(0xFF8B5CF6)
+                    school.status == "Disuspend" -> Color(0xFFEA580C)
+                    else -> Color(0xFF16A34A)
+                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (school.isPrimaryPilot) Color(0xFF8B5CF6).copy(alpha = 0.12f) else Color(0xFF16A34A).copy(alpha = 0.12f))
+                        .background(badgeColor.copy(alpha = 0.12f))
                         .border(
                             1.dp,
-                            if (school.isPrimaryPilot) Color(0xFF8B5CF6).copy(alpha = 0.4f) else Color(0xFF16A34A).copy(alpha = 0.4f),
+                            badgeColor.copy(alpha = 0.4f),
                             RoundedCornerShape(8.dp)
                         )
                         .padding(horizontal = 8.dp, vertical = 4.dp)
                 ) {
                     Text(
                         text = school.status,
-                        color = if (school.isPrimaryPilot) Color(0xFF7C3AED) else Color(0xFF15803D),
+                        color = badgeColor,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold
                     )

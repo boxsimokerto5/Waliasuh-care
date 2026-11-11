@@ -100,5 +100,92 @@ class ExampleRobolectricTest {
 
     inMemoryDb.close()
   }
+
+  @Test
+  fun `verify multi-tenant notification filtering`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+
+    // Skenario 1: User belum login -> Notifikasi tidak boleh muncul untuk sekolah apapun
+    vm.logout()
+    org.junit.Assert.assertFalse(vm.shouldTriggerNotificationForStudent("SRT1-KDR"))
+    org.junit.Assert.assertFalse(vm.shouldTriggerNotificationForStudent("SEKOLAH-B"))
+
+    // Skenario 2: Login sebagai Admin Sekolah A ("SRT1-KDR")
+    vm.switchRoleToAdmin()
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = "SRT1-KDR",
+        schoolName = "Sekolah Rakyat SRT 1 Kediri"
+      )
+    )
+    // Siswa Sekolah A -> TRUE (Notifikasi muncul)
+    org.junit.Assert.assertTrue(vm.shouldTriggerNotificationForStudent("SRT1-KDR"))
+    // Siswa Sekolah B -> FALSE (Notifikasi di-filter / TIDAK muncul ke user Sekolah A)
+    org.junit.Assert.assertFalse(vm.shouldTriggerNotificationForStudent("SEKOLAH-B"))
+
+    // Skenario 3: Login sebagai SuperAdmin -> Menerima seluruh notifikasi lintas sekolah
+    vm.login("superadmin", "Woyowoyo12@", rememberMe = false) {}
+    org.junit.Assert.assertTrue(vm.shouldTriggerNotificationForStudent("SRT1-KDR"))
+    org.junit.Assert.assertTrue(vm.shouldTriggerNotificationForStudent("SEKOLAH-B"))
+  }
+
+  @Test
+  fun `verify school suspend and login rejection`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val schoolCode = "SCH-SUSPEND-01"
+    val adminUser = "admin_suspend_test"
+    val adminPass = "Secret#123"
+
+    val reg = com.example.data.model.SchoolRegistration(
+      schoolName = "Sekolah Uji Coba Suspend",
+      address = "Jl. Uji Coba No. 1",
+      city = "Kota Uji",
+      estimatedWaliCount = 5,
+      picName = "Bapak Uji",
+      picEmail = "uji@sekolah.id",
+      picPhone = "081234567890",
+      status = "SUSPENDED",
+      generatedSchoolCode = schoolCode,
+      generatedAdminUsername = adminUser,
+      generatedAdminPassword = adminPass
+    )
+    val regId = db.schoolRegistrationDao().insert(reg)
+
+    val waliUser = "wali_suspend_test"
+    val waliPass = "WaliSecret#123"
+    val waliAccount = com.example.data.model.WaliAccount(
+      name = "Wali Uji Suspend",
+      username = waliUser,
+      password = waliPass,
+      dormitory = "Kamar A",
+      schoolId = schoolCode
+    )
+    db.waliAccountDao().insert(waliAccount)
+
+    // Uji Login Admin saat sekolah disuspend
+    val adminLoginResult = vm.executeLogin(adminUser, adminPass, rememberMe = false)
+    org.junit.Assert.assertTrue(adminLoginResult is com.example.ui.LoginResult.Error)
+    org.junit.Assert.assertTrue((adminLoginResult as com.example.ui.LoginResult.Error).message.contains("disuspend"))
+
+    // Uji Login Wali Asuh saat sekolah disuspend
+    val waliLoginResult = vm.executeLogin(waliUser, waliPass, rememberMe = false)
+    org.junit.Assert.assertTrue(waliLoginResult is com.example.ui.LoginResult.Error)
+    org.junit.Assert.assertTrue((waliLoginResult as com.example.ui.LoginResult.Error).message.contains("disuspend"))
+
+    // Buka suspend (unsuspend)
+    val updatedReg = reg.copy(id = regId, status = "APPROVED")
+    db.schoolRegistrationDao().update(updatedReg)
+
+    // Uji Login Admin setelah unsuspend
+    val adminLoginAfterUnsuspend = vm.executeLogin(adminUser, adminPass, rememberMe = false)
+    org.junit.Assert.assertTrue(adminLoginAfterUnsuspend is com.example.ui.LoginResult.SuccessAdmin)
+
+    // Hapus sekolah
+    vm.deleteSchoolRegistration(updatedReg)
+  }
 }
 

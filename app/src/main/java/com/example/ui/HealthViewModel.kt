@@ -52,7 +52,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     val schoolRegistrations: StateFlow<List<SchoolRegistration>> = repository.allSchoolRegistrations
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     val students: StateFlow<List<ChildStudent>> = repository.allStudents
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -217,6 +217,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /**
+     * Memverifikasi apakah notifikasi boleh dimunculkan untuk siswa tertentu.
+     * Dalam arsitektur Multi-Tenant:
+     * - Pengguna yang belum login TIDAK menerima notifikasi.
+     * - Pengguna SuperAdmin menerima notifikasi seluruh sekolah.
+     * - Pengguna Admin / Wali Asuh HANYA menerima notifikasi jika terdaftar & login di sekolah yang sama dengan siswa.
+     */
+    fun shouldTriggerNotificationForStudent(studentSchoolId: String): Boolean {
+        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN) return false
+        if (_currentUserRole.value == UserRole.SUPERADMIN) return true
+
+        val activeSchoolCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        val targetSchoolCode = studentSchoolId.ifBlank { "SRT1-KDR" }
+        return activeSchoolCode.equals(targetSchoolCode, ignoreCase = true)
+    }
+
     // Create Treatment Plan
     fun createTreatmentPlan(
         student: ChildStudent,
@@ -243,16 +259,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             val newId = repository.insertRecord(record)
             val recordWithId = record.copy(id = newId)
-            // Kirim notifikasi resmi sistem Android
-            NotificationHelper.showSickStudentNotification(
-                context = getApplication(),
-                studentName = student.name,
-                className = student.classGrade,
-                roomNumber = student.roomNumber.ifBlank { student.dormitory },
-                complaint = complaint,
-                faskes = faskes,
-                notificationId = (newId % 100000).toInt()
-            )
+            // Multi-tenant filter: Hanya kirim notifikasi resmi sistem Android jika user login di sekolah yang sama atau SuperAdmin
+            if (shouldTriggerNotificationForStudent(student.schoolId)) {
+                NotificationHelper.showSickStudentNotification(
+                    context = getApplication(),
+                    studentName = student.name,
+                    className = student.classGrade,
+                    roomNumber = student.roomNumber.ifBlank { student.dormitory },
+                    complaint = complaint,
+                    faskes = faskes,
+                    schoolName = _schoolProfile.value.shortName,
+                    notificationId = (newId % 100000).toInt()
+                )
+            }
             // Sinkronisasi latar belakang ke Supabase Cloud jika terkonfigurasi
             SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId)
         }
@@ -337,16 +356,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             val newId = repository.insertRecord(record)
             val recordWithId = record.copy(id = newId)
-            // Kirim notifikasi resmi sistem Android
-            NotificationHelper.showSickStudentNotification(
-                context = getApplication(),
-                studentName = student.name,
-                className = student.classGrade,
-                roomNumber = student.roomNumber.ifBlank { student.dormitory },
-                complaint = complaint.ifBlank { diagnosis },
-                faskes = faskes,
-                notificationId = (newId % 100000).toInt()
-            )
+            // Multi-tenant filter: Hanya kirim notifikasi resmi sistem Android jika user login di sekolah yang sama atau SuperAdmin
+            if (shouldTriggerNotificationForStudent(student.schoolId)) {
+                NotificationHelper.showSickStudentNotification(
+                    context = getApplication(),
+                    studentName = student.name,
+                    className = student.classGrade,
+                    roomNumber = student.roomNumber.ifBlank { student.dormitory },
+                    complaint = complaint.ifBlank { diagnosis },
+                    faskes = faskes,
+                    schoolName = _schoolProfile.value.shortName,
+                    notificationId = (newId % 100000).toInt()
+                )
+            }
             // Sinkronisasi latar belakang ke Supabase Cloud
             SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId)
         }
@@ -491,19 +513,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // --- Authentication & Role Management ---
-
-    fun login(
-        username: String,
-        password: String,
-        rememberMe: Boolean,
-        onResult: (LoginResult) -> Unit
-    ) {
-        val cleanUser = username.trim()
-        val cleanPass = password.trim()
+    suspend fun executeLogin(user: String, pass: String, rememberMe: Boolean = false): LoginResult {
+        val cleanUser = user.trim()
+        val cleanPass = pass.trim()
 
         if (cleanUser.isEmpty() || cleanPass.isEmpty()) {
-            onResult(LoginResult.Error("Username dan password wajib diisi."))
-            return
+            return LoginResult.Error("Username dan password wajib diisi.")
         }
 
         // 0. Cek Kredensial Superadmin Resmi
@@ -515,8 +530,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     .putString("saved_username", "superadmin")
                     .apply()
             }
-            onResult(LoginResult.SuccessSuperAdmin)
-            return
+            return LoginResult.SuccessSuperAdmin
         }
 
         // 1. Cek Kredensial Administrator Resmi
@@ -528,55 +542,89 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     .putString("saved_username", "ekowahyudiadmin")
                     .apply()
             }
-            onResult(LoginResult.SuccessAdmin)
-            return
+            return LoginResult.SuccessAdmin
         }
 
         // 2. Cek Akun Admin Sekolah Terdaftar / Baru
-        val matchedApprovedSchool = schoolRegistrations.value.firstOrNull {
-            it.status == "APPROVED" &&
-            it.generatedAdminUsername.equals(cleanUser, ignoreCase = true) &&
-            it.generatedAdminPassword == cleanPass
-        }
-        if (matchedApprovedSchool != null) {
+        val matchedSchool = repository.getSchoolByAdminUsername(cleanUser)
+            ?: schoolRegistrations.value.firstOrNull {
+                it.generatedAdminUsername.equals(cleanUser, ignoreCase = true)
+            }
+
+        if (matchedSchool != null && matchedSchool.generatedAdminPassword == cleanPass) {
+            if (matchedSchool.status == "SUSPENDED") {
+                return LoginResult.Error("Maaf akun sedang disuspend oleh admin")
+            }
+            if (matchedSchool.status != "APPROVED") {
+                return LoginResult.Error("Pengajuan pendaftaran sekolah ini belum disetujui (Status: ${matchedSchool.status}).")
+            }
             _currentUserRole.value = UserRole.ADMIN
-            // Update schoolProfile to the matched approved school
             updateSchoolProfile(
                 SchoolProfile(
-                    schoolName = matchedApprovedSchool.schoolName,
-                    shortName = matchedApprovedSchool.schoolName.take(15),
-                    adminName = matchedApprovedSchool.picName,
-                    city = matchedApprovedSchool.city,
-                    tenantCode = matchedApprovedSchool.generatedSchoolCode
+                    schoolName = matchedSchool.schoolName,
+                    shortName = matchedSchool.schoolName.take(15),
+                    adminName = matchedSchool.picName,
+                    city = matchedSchool.city,
+                    tenantCode = matchedSchool.generatedSchoolCode
                 )
             )
             if (rememberMe) {
                 authPrefs.edit()
                     .putString("saved_role", "ADMIN")
-                    .putString("saved_username", matchedApprovedSchool.generatedAdminUsername)
+                    .putString("saved_username", matchedSchool.generatedAdminUsername)
                     .apply()
             }
-            onResult(LoginResult.SuccessAdmin)
-            return
+            return LoginResult.SuccessAdmin
         }
 
         // 3. Cek Akun Wali Asuh
-        viewModelScope.launch {
-            val account = repository.getWaliAccountByUsername(cleanUser)
-            if (account != null && account.password == cleanPass) {
-                _currentUserRole.value = UserRole.WALI
-                _waliName.value = account.name
-                if (rememberMe) {
-                    authPrefs.edit()
-                        .putString("saved_role", "WALI")
-                        .putString("saved_wali_name", account.name)
-                        .putString("saved_username", account.username)
-                        .apply()
+        val account = repository.getWaliAccountByUsername(cleanUser)
+        if (account != null && account.password == cleanPass) {
+            // Cek apakah sekolah akun wali asuh ini sedang disuspend
+            val matchedSchoolWali = repository.getSchoolByCode(account.schoolId)
+                ?: schoolRegistrations.value.firstOrNull {
+                    it.generatedSchoolCode.equals(account.schoolId, ignoreCase = true)
                 }
-                onResult(LoginResult.SuccessWali(account))
-            } else {
-                onResult(LoginResult.Error("Username atau password salah. Silakan periksa kembali."))
+            if (matchedSchoolWali != null && matchedSchoolWali.status == "SUSPENDED") {
+                return LoginResult.Error("Maaf akun sedang disuspend oleh admin")
             }
+
+            _currentUserRole.value = UserRole.WALI
+            _waliName.value = account.name
+
+            // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh
+            if (matchedSchoolWali != null) {
+                updateSchoolProfile(
+                    SchoolProfile(
+                        schoolName = matchedSchoolWali.schoolName,
+                        shortName = matchedSchoolWali.schoolName.take(15),
+                        adminName = matchedSchoolWali.picName,
+                        city = matchedSchoolWali.city,
+                        tenantCode = matchedSchoolWali.generatedSchoolCode
+                    )
+                )
+            } else if (account.schoolId.isNotBlank()) {
+                _schoolProfile.value = _schoolProfile.value.copy(tenantCode = account.schoolId)
+                schoolPrefs.edit().putString("tenant_code", account.schoolId).apply()
+            }
+
+            if (rememberMe) {
+                authPrefs.edit()
+                    .putString("saved_role", "WALI")
+                    .putString("saved_wali_name", account.name)
+                    .putString("saved_username", account.username)
+                    .apply()
+            }
+            return LoginResult.SuccessWali(account)
+        }
+
+        return LoginResult.Error("Username atau password salah. Silakan periksa kembali.")
+    }
+
+    fun login(user: String, pass: String, rememberMe: Boolean = false, onResult: (LoginResult) -> Unit) {
+        viewModelScope.launch {
+            val result = executeLogin(user, pass, rememberMe)
+            onResult(result)
         }
     }
 
@@ -648,9 +696,39 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun deleteSchoolRegistration(registration: SchoolRegistration) {
+    fun suspendSchool(
+        registration: SchoolRegistration,
+        onComplete: (SchoolRegistration) -> Unit = {}
+    ) {
         viewModelScope.launch {
+            val updated = registration.copy(status = "SUSPENDED")
+            repository.updateSchoolRegistration(updated)
+            onComplete(updated)
+        }
+    }
+
+    fun unsuspendSchool(
+        registration: SchoolRegistration,
+        onComplete: (SchoolRegistration) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = registration.copy(status = "APPROVED")
+            repository.updateSchoolRegistration(updated)
+            onComplete(updated)
+        }
+    }
+
+    fun deleteSchoolRegistration(
+        registration: SchoolRegistration,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            if (registration.generatedSchoolCode.isNotBlank()) {
+                repository.deleteStudentsBySchool(registration.generatedSchoolCode)
+                repository.deleteWaliAccountsBySchool(registration.generatedSchoolCode)
+            }
             repository.deleteSchoolRegistration(registration)
+            onComplete()
         }
     }
 
