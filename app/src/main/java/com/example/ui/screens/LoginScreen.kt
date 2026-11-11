@@ -142,7 +142,7 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Sekolah Rakyat SRT 1 Kabupaten Kediri",
+                        text = "Platform Kesehatan Sekolah & Asrama Terpadu",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = WaliPrimary

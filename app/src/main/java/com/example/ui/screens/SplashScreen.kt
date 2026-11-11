@@ -139,9 +139,9 @@ fun SplashScreen(
 
     // Pesan status rotasi berdasarkan progres 9 detik (berganti tiap 3 detik)
     val statusMessage = when {
-        currentProgress < 0.35f -> "🐼 Dokter Panda sedang menyiapkan data kesehatan anak asuh..."
-        currentProgress < 0.70f -> "🏥 Menghubungkan faskes Puskesmas Wates & Puskesmas Plosoklaten..."
-        else -> "✨ Siaga melayani dan memantau kesehatan siswa SRT 1 Kediri!"
+        currentProgress < 0.35f -> "🐼 Menyiapkan sistem pemantauan kesehatan anak asuh..."
+        currentProgress < 0.70f -> "🏥 Menghubungkan integrasi layanan kesehatan & rujukan faskes..."
+        else -> "✨ Siaga melayani dan menjaga kesehatan seluruh siswa asrama!"
     }
 
     Scaffold(
@@ -308,7 +308,7 @@ fun SplashScreen(
                 )
 
                 Text(
-                    text = "Sekolah Rakyat SRT 1 Kabupaten Kediri",
+                    text = "Platform Kesehatan Sekolah & Asrama Terpadu",
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = WaliPrimary
