@@ -64,8 +64,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.HealthViewModel
+import com.example.ui.UserRole
 import com.example.ui.components.WaliTopBar
+import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MedicalRecordScreen
 import com.example.ui.screens.PlanScreen
 import com.example.ui.screens.ProfileScreen
@@ -91,13 +94,46 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
+            val viewModel: HealthViewModel = viewModel()
+            val userRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+            var adminWantsAppView by rememberSaveable { mutableStateOf(false) }
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
-                WaliAsuhCareApp(
-                    isDarkTheme = isDarkTheme,
-                    onToggleTheme = { isDarkTheme = !isDarkTheme },
-                    initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD
-                )
+                when {
+                    userRole == UserRole.NOT_LOGGED_IN -> {
+                        LoginScreen(
+                            viewModel = viewModel,
+                            onLoginSuccessAdmin = {
+                                adminWantsAppView = false
+                            },
+                            onLoginSuccessWali = { _ ->
+                                adminWantsAppView = false
+                            }
+                        )
+                    }
+                    userRole == UserRole.ADMIN && !adminWantsAppView -> {
+                        AdminScreen(
+                            viewModel = viewModel,
+                            onNavigateToApp = { adminWantsAppView = true },
+                            onLogout = { viewModel.logout() }
+                        )
+                    }
+                    else -> {
+                        WaliAsuhCareApp(
+                            isDarkTheme = isDarkTheme,
+                            onToggleTheme = { isDarkTheme = !isDarkTheme },
+                            initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
+                            viewModel = viewModel,
+                            onLogout = {
+                                viewModel.logout()
+                                adminWantsAppView = false
+                            },
+                            onNavigateToAdmin = if (userRole == UserRole.ADMIN) {
+                                { adminWantsAppView = false }
+                            } else null
+                        )
+                    }
+                }
             }
         }
     }
@@ -109,7 +145,9 @@ fun WaliAsuhCareApp(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
     initialScreen: WaliNavScreen = WaliNavScreen.DASHBOARD,
-    viewModel: HealthViewModel = viewModel()
+    viewModel: HealthViewModel = viewModel(),
+    onLogout: () -> Unit = {},
+    onNavigateToAdmin: (() -> Unit)? = null
 ) {
     var currentScreen by rememberSaveable { mutableStateOf(initialScreen) }
     var showNotifModal by remember { mutableStateOf(false) }

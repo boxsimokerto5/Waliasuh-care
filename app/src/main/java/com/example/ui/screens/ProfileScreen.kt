@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
@@ -63,6 +64,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
+import com.example.ui.UserRole
 import com.example.ui.theme.WaliPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +75,8 @@ fun ProfileScreen(
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
     records: List<MedicalRecord>,
+    onLogout: () -> Unit = {},
+    onNavigateToAdmin: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val students by viewModel.students.collectAsStateWithLifecycle()
@@ -248,6 +252,21 @@ fun ProfileScreen(
                 SectionHeader(title = "Lainnya")
             }
 
+            val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
+            if (role == UserRole.ADMIN && onNavigateToAdmin != null) {
+                item {
+                    MenuSettingCard(
+                        title = "Portal Administrator",
+                        subtitle = "Kelola akun & kartu akses login wali asuh",
+                        icon = Icons.Default.AdminPanelSettings,
+                        iconBg = Color(0xFFE0F2FE),
+                        iconColor = Color(0xFF0288D1),
+                        onClick = onNavigateToAdmin,
+                        testTag = "menu_portal_admin"
+                    )
+                }
+            }
+
             item {
                 MenuSettingCard(
                     title = "Panduan",
@@ -263,7 +282,7 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = "Keluar",
-                    subtitle = "Keluar dari aplikasi",
+                    subtitle = "Keluar dari sesi login aplikasi",
                     icon = Icons.Default.ExitToApp,
                     iconBg = Color(0xFFFEE2E2),
                     iconColor = Color(0xFFDC2626),
@@ -520,7 +539,11 @@ fun ProfileScreen(
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
-                            onClick = { showExitDialog = false },
+                            onClick = {
+                                showExitDialog = false
+                                viewModel.logout()
+                                onLogout()
+                            },
                             shape = RoundedCornerShape(10.dp),
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {

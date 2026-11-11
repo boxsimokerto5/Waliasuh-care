@@ -1,15 +1,18 @@
 package com.example.ui
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.WaliAccount
 import com.example.data.remote.supabase.SupabaseConfig
 import com.example.data.remote.supabase.SupabaseSyncManager
 import com.example.data.repository.HealthRepository
 import com.example.util.NotificationHelper
+import com.example.util.PasswordGenerator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -18,12 +21,25 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+enum class UserRole {
+    NOT_LOGGED_IN,
+    WALI,
+    ADMIN
+}
+
+sealed class LoginResult {
+    object SuccessAdmin : LoginResult()
+    data class SuccessWali(val account: WaliAccount) : LoginResult()
+    data class Error(val message: String) : LoginResult()
+}
+
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: HealthRepository
+    private val authPrefs = application.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE)
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = HealthRepository(db.childStudentDao(), db.medicalRecordDao())
+        repository = HealthRepository(db.childStudentDao(), db.medicalRecordDao(), db.waliAccountDao())
     }
 
     val students: StateFlow<List<ChildStudent>> = repository.allStudents
@@ -41,8 +57,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     val pendingControlRecords: StateFlow<List<MedicalRecord>> = repository.pendingControlRecords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Active Wali Name (Default "Sari Devi" from mockup)
-    private val _waliName = MutableStateFlow("Sari Devi")
+    val waliAccounts: StateFlow<List<WaliAccount>> = repository.allWaliAccounts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Active User Role & Session
+    private val _currentUserRole = MutableStateFlow(
+        when (authPrefs.getString("saved_role", "NOT_LOGGED_IN")) {
+            "ADMIN" -> UserRole.ADMIN
+            "WALI" -> UserRole.WALI
+            else -> UserRole.NOT_LOGGED_IN
+        }
+    )
+    val currentUserRole: StateFlow<UserRole> = _currentUserRole.asStateFlow()
+
+    // Active Wali Name (Default "Sari Devi" from mockup or loaded from preferences)
+    private val _waliName = MutableStateFlow(
+        authPrefs.getString("saved_wali_name", null)?.takeIf { it.isNotBlank() } ?: "Sari Devi"
+    )
     val waliName: StateFlow<String> = _waliName.asStateFlow()
 
     fun setWaliName(name: String) {
@@ -363,4 +394,112 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
     }
+
+    // --- Authentication & Role Management ---
+
+    fun login(
+        username: String,
+        password: String,
+        rememberMe: Boolean,
+        onResult: (LoginResult) -> Unit
+    ) {
+        val cleanUser = username.trim()
+        val cleanPass = password.trim()
+
+        if (cleanUser.isEmpty() || cleanPass.isEmpty()) {
+            onResult(LoginResult.Error("Username dan password wajib diisi."))
+            return
+        }
+
+        // 1. Cek Kredensial Administrator Resmi
+        if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
+            _currentUserRole.value = UserRole.ADMIN
+            if (rememberMe) {
+                authPrefs.edit()
+                    .putString("saved_role", "ADMIN")
+                    .putString("saved_username", "ekowahyudiadmin")
+                    .apply()
+            }
+            onResult(LoginResult.SuccessAdmin)
+            return
+        }
+
+        // 2. Cek Akun Wali Asuh
+        viewModelScope.launch {
+            val account = repository.getWaliAccountByUsername(cleanUser)
+            if (account != null && account.password == cleanPass) {
+                _currentUserRole.value = UserRole.WALI
+                _waliName.value = account.name
+                if (rememberMe) {
+                    authPrefs.edit()
+                        .putString("saved_role", "WALI")
+                        .putString("saved_wali_name", account.name)
+                        .putString("saved_username", account.username)
+                        .apply()
+                }
+                onResult(LoginResult.SuccessWali(account))
+            } else {
+                onResult(LoginResult.Error("Username atau password salah. Silakan periksa kembali."))
+            }
+        }
+    }
+
+    fun logout() {
+        _currentUserRole.value = UserRole.NOT_LOGGED_IN
+        authPrefs.edit().clear().apply()
+    }
+
+    fun switchRoleToAdmin() {
+        _currentUserRole.value = UserRole.ADMIN
+    }
+
+    fun switchRoleToWali() {
+        _currentUserRole.value = UserRole.WALI
+    }
+
+    // --- Manajemen Akun Wali Asuh (Khusus Administrator) ---
+
+    fun addWaliAccount(
+        name: String,
+        dormitory: String,
+        phone: String,
+        customPassword: String? = null,
+        onComplete: (WaliAccount) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val password = if (!customPassword.isNullOrBlank()) {
+                customPassword.trim()
+            } else {
+                PasswordGenerator.generateRandomPassword()
+            }
+
+            val newAccount = WaliAccount(
+                name = name.trim(),
+                username = name.trim(),
+                password = password,
+                dormitory = dormitory.ifBlank { "Asrama Putra" },
+                phone = phone.trim()
+            )
+
+            val id = repository.insertWaliAccount(newAccount)
+            onComplete(newAccount.copy(id = id))
+        }
+    }
+
+    fun resetWaliPassword(account: WaliAccount, onComplete: (String) -> Unit = {}) {
+        viewModelScope.launch {
+            val newPass = PasswordGenerator.generateRandomPassword()
+            val updated = account.copy(password = newPass)
+            repository.updateWaliAccount(updated)
+            onComplete(newPass)
+        }
+    }
+
+    fun deleteWaliAccount(account: WaliAccount, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteWaliAccount(account)
+            onComplete()
+        }
+    }
 }
+

@@ -7,21 +7,24 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.ChildStudentDao
 import com.example.data.dao.MedicalRecordDao
+import com.example.data.dao.WaliAccountDao
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.WaliAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
 @Database(
-    entities = [ChildStudent::class, MedicalRecord::class],
-    version = 4,
+    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class],
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun childStudentDao(): ChildStudentDao
     abstract fun medicalRecordDao(): MedicalRecordDao
+    abstract fun waliAccountDao(): WaliAccountDao
 
     companion object {
         @Volatile
@@ -93,6 +96,7 @@ abstract class AppDatabase : RoomDatabase() {
                         database.medicalRecordDao().deleteAll()
                         database.childStudentDao().insertAll(students)
                     }
+                    seedDefaultWaliAccounts(database)
                 }
             }
         }
@@ -111,7 +115,21 @@ abstract class AppDatabase : RoomDatabase() {
                             database.childStudentDao().insertAll(students)
                         }
                     }
+                    seedDefaultWaliAccounts(database)
                 }
+            }
+        }
+
+        private suspend fun seedDefaultWaliAccounts(database: AppDatabase) {
+            val count = database.waliAccountDao().count()
+            if (count == 0) {
+                val defaultAccounts = listOf(
+                    WaliAccount(name = "Sari Devi", username = "Sari Devi", password = "Sari#7294", dormitory = "Asrama Putri", phone = "081234567891"),
+                    WaliAccount(name = "Budi Santoso", username = "Budi Santoso", password = "Budi#3815", dormitory = "Asrama Putra", phone = "081234567892"),
+                    WaliAccount(name = "Ahmad Fauzi", username = "Ahmad Fauzi", password = "Fauzi#9162", dormitory = "Asrama Putra", phone = "081234567893"),
+                    WaliAccount(name = "Dewi Lestari", username = "Dewi Lestari", password = "Dewi#4921", dormitory = "Asrama Putri", phone = "081234567894")
+                )
+                database.waliAccountDao().insertAll(defaultAccounts)
             }
         }
     }

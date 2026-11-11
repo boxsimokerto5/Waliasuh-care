@@ -2,19 +2,38 @@ package com.example.data.repository
 
 import com.example.data.dao.ChildStudentDao
 import com.example.data.dao.MedicalRecordDao
+import com.example.data.dao.WaliAccountDao
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
 
 class HealthRepository(
     private val studentDao: ChildStudentDao,
-    private val recordDao: MedicalRecordDao
+    private val recordDao: MedicalRecordDao,
+    private val waliAccountDao: WaliAccountDao
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
     val activePlans: Flow<List<MedicalRecord>> = recordDao.getActivePlans()
     val completedRecords: Flow<List<MedicalRecord>> = recordDao.getCompletedRecords()
     val pendingControlRecords: Flow<List<MedicalRecord>> = recordDao.getPendingControlRecords()
+    val allWaliAccounts: Flow<List<WaliAccount>> = waliAccountDao.getAllAccounts()
+
+    suspend fun insertWaliAccount(account: WaliAccount): Long =
+        waliAccountDao.insert(account)
+
+    suspend fun updateWaliAccount(account: WaliAccount) =
+        waliAccountDao.update(account)
+
+    suspend fun deleteWaliAccount(account: WaliAccount) =
+        waliAccountDao.delete(account)
+
+    suspend fun deleteWaliAccountById(id: Long) =
+        waliAccountDao.deleteById(id)
+
+    suspend fun getWaliAccountByUsername(username: String): WaliAccount? =
+        waliAccountDao.getByUsername(username)
 
     fun getRecordsForStudent(studentId: Long): Flow<List<MedicalRecord>> =
         recordDao.getRecordsForStudent(studentId)
