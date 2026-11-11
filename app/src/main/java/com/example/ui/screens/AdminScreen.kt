@@ -110,6 +110,7 @@ fun AdminScreen(
     var showEditSchoolDialog by remember { mutableStateOf(false) }
     var showImportStudentsDialog by remember { mutableStateOf(false) }
     var showImportWaliDialog by remember { mutableStateOf(false) }
+    var showClearDataConfirmDialog by remember { mutableStateOf(false) }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<WaliAccount?>(null) }
@@ -124,11 +125,12 @@ fun AdminScreen(
     }
 
     val activeSchoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
+    // Isolasi ketat: Hanya tampilkan akun dan siswa yang benar-benar terdaftar di sekolah aktif ini
     val schoolAccounts = waliAccounts.filter {
-        it.schoolId.equals(activeSchoolCode, ignoreCase = true) || (activeSchoolCode == "SRT1-KDR" && (it.schoolId.isBlank() || it.schoolId == "SRT1-KDR"))
+        it.schoolId.equals(activeSchoolCode, ignoreCase = true)
     }
     val schoolStudents = students.filter {
-        it.schoolId.equals(activeSchoolCode, ignoreCase = true) || (activeSchoolCode == "SRT1-KDR" && (it.schoolId.isBlank() || it.schoolId == "SRT1-KDR"))
+        it.schoolId.equals(activeSchoolCode, ignoreCase = true)
     }
 
     val filteredAccounts = schoolAccounts.filter { account ->
@@ -387,6 +389,22 @@ fun AdminScreen(
                                         Text("${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
                                     }
                                 }
+                            }
+
+                            // Tombol Bersihkan / Reset Data Siswa & Wali Sekolah Ini
+                            OutlinedButton(
+                                onClick = { showClearDataConfirmDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_clear_school_data"),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Bersihkan Data Siswa & Wali Sekolah Ini (Reset ke 0)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
                             }
                         }
                     }
@@ -676,15 +694,38 @@ fun AdminScreen(
                     showImportStudentsDialog = false
                     Toast.makeText(context, "Berhasil mengimpor $count siswa ke database $activeSchoolCode!", Toast.LENGTH_LONG).show()
                 }
+            }
+        )
+    }
+
+    if (showClearDataConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDataConfirmDialog = false },
+            icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Bersihkan Data Sekolah Ini?") },
+            text = {
+                Text(
+                    "Tindakan ini akan menghapus seluruh data siswa dan akun wali asuh yang terdaftar pada sekolah ${schoolProfile.schoolName} (${activeSchoolCode}). Data akan di-reset menjadi 0 dan bersih total."
+                )
             },
-            onLoadDefaultKediri = if (activeSchoolCode == "SRT1-KDR") {
-                { replace ->
-                    viewModel.loadDefaultKediriStudents { count ->
-                        showImportStudentsDialog = false
-                        Toast.makeText(context, "Berhasil memuat $count siswa SRT 1 Kediri!", Toast.LENGTH_SHORT).show()
-                    }
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.clearSchoolData(activeSchoolCode) {
+                            showClearDataConfirmDialog = false
+                            Toast.makeText(context, "Seluruh data siswa dan wali untuk $activeSchoolCode telah dihapus bersih!", Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Ya, Bersihkan Semua", color = Color.White)
                 }
-            } else null
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showClearDataConfirmDialog = false }) {
+                    Text("Batal")
+                }
+            }
         )
     }
 

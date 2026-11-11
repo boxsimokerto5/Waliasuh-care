@@ -44,6 +44,8 @@ fun QuickMenuTiles(
     onNavigateToRecords: () -> Unit,
     onNavigateToStudents: () -> Unit,
     onShowPuskesmasInfo: () -> Unit,
+    studentsCount: Int = 0,
+    schoolShortName: String = "",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -59,7 +61,7 @@ fun QuickMenuTiles(
                 title = "Rencana Berobat",
                 subtitle = "Jadwal Puskesmas",
                 imageRes = R.drawable.img_menu_rencana,
-                badgeText = "Wates & Klaten",
+                badgeText = "Rujukan",
                 badgeBg = Color(0xFFE0F2FE),
                 badgeColor = WaliPrimary,
                 bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.5f)),
@@ -103,9 +105,15 @@ fun QuickMenuTiles(
                 modifier = Modifier.weight(1f)
             )
 
+            val studentSubtitle = if (studentsCount > 0) {
+                if (schoolShortName.isNotBlank()) "$studentsCount Siswa $schoolShortName" else "$studentsCount Siswa Terdaftar"
+            } else {
+                "Data Siswa Asrama"
+            }
+
             CartoonMenuCard(
                 title = "Anak Asuh",
-                subtitle = "320 Siswa SRT 1",
+                subtitle = studentSubtitle,
                 imageRes = R.drawable.img_menu_anak_asuh,
                 badgeText = "Data Asrama",
                 badgeBg = Color(0xFFF3E8FF),

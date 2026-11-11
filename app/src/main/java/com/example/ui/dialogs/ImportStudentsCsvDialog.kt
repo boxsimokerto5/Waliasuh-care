@@ -78,8 +78,7 @@ fun ImportStudentsCsvDialog(
     currentSchoolId: String = "SRT1-KDR",
     schoolName: String = "Sekolah Rakyat SRT 1 Kediri",
     onDismiss: () -> Unit,
-    onImportConfirm: (studentList: List<ChildStudent>, replace: Boolean) -> Unit,
-    onLoadDefaultKediri: ((replace: Boolean) -> Unit)? = null
+    onImportConfirm: (studentList: List<ChildStudent>, replace: Boolean) -> Unit
 ) {
     val context = LocalContext.current
     var csvText by remember { mutableStateOf("") }
@@ -464,46 +463,6 @@ fun ImportStudentsCsvDialog(
                     }
                 }
 
-                // Opsi Muat Database Default Kediri (khusus sekolah pilot)
-                if (onLoadDefaultKediri != null && currentSchoolId == "SRT1-KDR") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
-                            .padding(12.dp)
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.Group,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Database Bawaan SRT 1 Kediri (342 Siswa)",
-                                    fontSize = 12.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            }
-                            Button(
-                                onClick = { onLoadDefaultKediri(replaceExisting) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(36.dp)
-                                    .testTag("load_default_students_btn"),
-                                colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary)
-                            ) {
-                                Icon(Icons.Default.CloudDownload, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Muat 342 Siswa Bawaan", fontSize = 11.5.sp)
-                            }
-                        }
-                    }
-                }
 
                 // 4. PREVIEW & EDIT MANUAL
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

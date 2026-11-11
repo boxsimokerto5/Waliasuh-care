@@ -20,7 +20,7 @@ import org.json.JSONArray
 
 @Database(
     entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -63,6 +63,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("DELETE FROM child_students")
+                    db.execSQL("DELETE FROM wali_accounts")
+                    db.execSQL("DELETE FROM medical_records")
+                } catch (e: Exception) {
+                    // Table or data may vary
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -71,7 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "waliasuh_care.db"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
                     .build()

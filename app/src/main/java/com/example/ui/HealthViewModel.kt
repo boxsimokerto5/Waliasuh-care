@@ -15,6 +15,7 @@ import com.example.data.remote.supabase.SupabaseSyncManager
 import com.example.data.repository.HealthRepository
 import com.example.util.NotificationHelper
 import com.example.util.PasswordGenerator
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -50,13 +51,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.schoolRegistrationDao()
         )
         // Bersihkan data awal siswa, akun wali asuh, dan rekam medis lama sekali saja sesuai instruksi user
-        val cleanupPrefs = application.getSharedPreferences("waliasuh_cleanup_v2", Context.MODE_PRIVATE)
-        if (!cleanupPrefs.getBoolean("cleaned_initial_data_v2", false)) {
+        val cleanupPrefs = application.getSharedPreferences("waliasuh_cleanup_v3", Context.MODE_PRIVATE)
+        if (!cleanupPrefs.getBoolean("cleaned_initial_data_v3", false)) {
             viewModelScope.launch {
                 repository.deleteAllStudents()
                 repository.deleteAllWaliAccounts()
                 repository.deleteAllRecords()
-                cleanupPrefs.edit().putBoolean("cleaned_initial_data_v2", true).apply()
+                cleanupPrefs.edit().putBoolean("cleaned_initial_data_v3", true).apply()
             }
         }
     }
@@ -210,6 +211,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteAllStudents()
             repository.deleteAllWaliAccounts()
             repository.deleteAllRecords()
+            onComplete()
+        }
+    }
+
+    fun clearSchoolData(schoolId: String, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val targetId = schoolId.trim().ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            repository.deleteStudentsBySchool(targetId)
+            repository.deleteWaliAccountsBySchool(targetId)
             onComplete()
         }
     }

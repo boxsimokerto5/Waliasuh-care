@@ -123,7 +123,7 @@ fun DashboardScreen(
         it.faskes.contains(schoolProfile.secondaryFaskesName, ignoreCase = true) || it.faskes.contains("Klaten", ignoreCase = true)
     }
     val totalToday = todayPlans.size
-    val totalSchoolStudents = if (students.isNotEmpty()) students.size else 342
+    val totalSchoolStudents = students.size
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
 
     Scaffold(
@@ -293,7 +293,9 @@ fun DashboardScreen(
                             onShowPuskesmasInfo = {
                                 TopOnAdManager.onUserActionClick(context)
                                 showPuskesmasInfoSheet = true
-                            }
+                            },
+                            studentsCount = students.size,
+                            schoolShortName = schoolProfile.shortName
                         )
                     }
                 }
