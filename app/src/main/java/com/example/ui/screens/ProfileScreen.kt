@@ -86,6 +86,7 @@ fun ProfileScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
@@ -134,21 +135,6 @@ fun ProfileScreen(
             // GROUP 1: Pengaturan App
             item {
                 SectionHeader(title = "Pengaturan App")
-            }
-
-            item {
-                MenuSettingCard(
-                    title = "Database Supabase Cloud",
-                    subtitle = "Sinkronisasi data online & backup PostgreSQL",
-                    icon = Icons.Default.CloudSync,
-                    iconBg = Color(0xFFDCFCE7),
-                    iconColor = Color(0xFF059669),
-                    onClick = {
-                        TopOnAdManager.onUserActionClick(context)
-                        showSupabaseDialog = true
-                    },
-                    testTag = "menu_supabase"
-                )
             }
 
             item {
@@ -342,7 +328,7 @@ fun ProfileScreen(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Sekolah Rakyat SRT 1 Kabupaten Kediri",
+                        text = schoolProfile.schoolName,
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -44,7 +44,9 @@ object SupabaseConfig {
         } catch (e: Exception) {
             ""
         }
-        if (buildConfigUrl.isNotBlank()) return normalizeBaseUrl(buildConfigUrl)
+        if (buildConfigUrl.isNotBlank() && !buildConfigUrl.contains("your-project.supabase.co")) {
+            return normalizeBaseUrl(buildConfigUrl)
+        }
 
         return normalizeBaseUrl(EMBEDDED_URL)
     }
@@ -63,7 +65,9 @@ object SupabaseConfig {
         } catch (e: Exception) {
             ""
         }
-        if (buildConfigKey.isNotBlank()) return buildConfigKey.trim()
+        if (buildConfigKey.isNotBlank() && !buildConfigKey.contains("your_supabase_anon_key")) {
+            return buildConfigKey.trim()
+        }
 
         return EMBEDDED_ANON_KEY
     }

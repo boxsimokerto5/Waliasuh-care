@@ -245,8 +245,8 @@ fun SplashScreen(
                                 .border(3.dp, Color.White, CircleShape)
                         ) {
                             Image(
-                                painter = painterResource(id = R.drawable.img_doctor_panda),
-                                contentDescription = "Dokter Panda Berbaju Dokter dengan Stetoskop Sedang Berlari",
+                                painter = painterResource(id = R.drawable.logo_sr_care),
+                                contentDescription = "Logo Resmi Wali Asuh Care",
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(CircleShape),

@@ -86,6 +86,14 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PasswordGenerator
 
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.School
+import com.example.ui.dialogs.EditSchoolProfileDialog
+import com.example.ui.dialogs.ImportStudentsCsvDialog
+import com.example.ui.dialogs.ImportWaliCsvDialog
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScreen(
@@ -96,6 +104,12 @@ fun AdminScreen(
 ) {
     val context = LocalContext.current
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
+    val students by viewModel.students.collectAsStateWithLifecycle()
+
+    var showEditSchoolDialog by remember { mutableStateOf(false) }
+    var showImportStudentsDialog by remember { mutableStateOf(false) }
+    var showImportWaliDialog by remember { mutableStateOf(false) }
 
     var showAddDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<WaliAccount?>(null) }
@@ -131,7 +145,7 @@ fun AdminScreen(
         }
         val sb = StringBuilder()
         sb.appendLine("*DAFTAR KARTU AKSES WALI ASUH*")
-        sb.appendLine("_Sekolah Rakyat SRT 1 Kabupaten Kediri_")
+        sb.appendLine("_${schoolProfile.schoolName}_")
         sb.appendLine("Tanggal: ${DateUtils.formatFullDate(System.currentTimeMillis())}")
         sb.appendLine("Total: ${waliAccounts.size} Akun Terdaftar")
         sb.appendLine("----------------------------------------")
@@ -147,7 +161,7 @@ fun AdminScreen(
             }
             sb.appendLine("")
         }
-        sb.appendLine("_Dikelola oleh Administrator Utama (Eko Wahyudi)_")
+        sb.appendLine("_Dikelola oleh Administrator Utama (${schoolProfile.adminName})_")
         val summaryText = sb.toString().trim()
 
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -186,7 +200,7 @@ fun AdminScreen(
                             )
                         }
                         Text(
-                            text = "Eko Wahyudi • SRT 1 Kab. Kediri",
+                            text = "${schoolProfile.shortName} • ${schoolProfile.city}",
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.85f)
                         )
@@ -262,6 +276,114 @@ fun AdminScreen(
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                // Multi-Tenant Core Configuration Card
+                item {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(WaliPrimary.copy(alpha = 0.12f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.School,
+                                            contentDescription = null,
+                                            tint = WaliPrimary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Column {
+                                        Text(
+                                            text = "Pengaturan Sekolah & Multi-Tenant",
+                                            fontSize = 14.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${schoolProfile.schoolName} (${schoolProfile.tenantCode})",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = "Kustomisasi nama sekolah, faskes rujukan, serta impor data anak asuh & wali asuh secara massal menggunakan file CSV.",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            // 3 Action Buttons: Edit School, Import Siswa CSV, Import Wali CSV
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showEditSchoolDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_edit_school_profile")
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(18.dp), tint = WaliPrimary)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("Profil Sekolah", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("Nama & Faskes", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showImportStudentsDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_import_students_csv")
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF16A34A))
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("Import Siswa", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("${students.size} Terdaftar", fontSize = 9.sp, color = Color(0xFF16A34A))
+                                    }
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showImportWaliDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_import_wali_csv")
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF2563EB))
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text("${waliAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Summary Card Admin
                 item {
                     ElevatedCard(
@@ -518,6 +640,49 @@ fun AdminScreen(
                     }) {
                         Text("Logout")
                     }
+                }
+            }
+        )
+    }
+
+    if (showEditSchoolDialog) {
+        EditSchoolProfileDialog(
+            currentProfile = schoolProfile,
+            onDismiss = { showEditSchoolDialog = false },
+            onSave = { updated ->
+                viewModel.updateSchoolProfile(updated) {
+                    Toast.makeText(context, "Profil sekolah & faskes berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                }
+                showEditSchoolDialog = false
+            }
+        )
+    }
+
+    if (showImportStudentsDialog) {
+        ImportStudentsCsvDialog(
+            onDismiss = { showImportStudentsDialog = false },
+            onImportConfirm = { studentList, replace ->
+                viewModel.saveImportedStudents(studentList, replace) { count ->
+                    showImportStudentsDialog = false
+                    Toast.makeText(context, "Berhasil mengimpor $count siswa ke database!", Toast.LENGTH_LONG).show()
+                }
+            },
+            onLoadDefaultKediri = { replace ->
+                viewModel.loadDefaultKediriStudents { count ->
+                    showImportStudentsDialog = false
+                    Toast.makeText(context, "Berhasil memuat $count siswa SRT 1 Kediri!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+    }
+
+    if (showImportWaliDialog) {
+        ImportWaliCsvDialog(
+            onDismiss = { showImportWaliDialog = false },
+            onImportConfirm = { accountList, replace ->
+                viewModel.saveImportedWaliAccounts(accountList, replace) { count ->
+                    showImportWaliDialog = false
+                    Toast.makeText(context, "Berhasil mengimpor $count akun wali asuh!", Toast.LENGTH_LONG).show()
                 }
             }
         )

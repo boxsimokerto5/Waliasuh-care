@@ -181,6 +181,7 @@ fun WaliAsuhCareApp(
     }
 
     // Collect Reactive StateFlows
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val activePlans by viewModel.activePlans.collectAsStateWithLifecycle()
     val completedRecords by viewModel.filteredCompletedRecords.collectAsStateWithLifecycle()
@@ -216,7 +217,8 @@ fun WaliAsuhCareApp(
                     TopOnAdManager.onUserActionClick(context)
                     currentScreen = WaliNavScreen.PROFIL
                 },
-                isDoctorIcon = currentScreen == WaliNavScreen.TINDAKAN
+                isDoctorIcon = currentScreen == WaliNavScreen.TINDAKAN,
+                schoolName = schoolProfile.shortName
             )
         },
         bottomBar = {

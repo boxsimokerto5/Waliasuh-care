@@ -58,6 +58,8 @@ import java.util.Calendar
 @Composable
 fun DirectTreatmentDialog(
     students: List<ChildStudent>,
+    primaryFaskesName: String = "Puskesmas Wates",
+    secondaryFaskesName: String = "Puskesmas Plosoklaten",
     onDismiss: () -> Unit,
     onConfirm: (
         student: ChildStudent,
@@ -75,7 +77,7 @@ fun DirectTreatmentDialog(
     var selectedStudent by remember { mutableStateOf(students.firstOrNull()) }
     var showStudentSearchDialog by remember { mutableStateOf(false) }
 
-    var selectedFaskes by remember { mutableStateOf("Puskesmas Wates") }
+    var selectedFaskes by remember { mutableStateOf(primaryFaskesName) }
     var customFaskes by remember { mutableStateOf("") }
 
     var complaint by remember { mutableStateOf("") }
@@ -257,15 +259,15 @@ fun DirectTreatmentDialog(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     FilterChip(
-                        selected = selectedFaskes == "Puskesmas Wates",
-                        onClick = { selectedFaskes = "Puskesmas Wates" },
-                        label = { Text("Pusk. Wates", fontSize = 11.sp) },
+                        selected = selectedFaskes == primaryFaskesName,
+                        onClick = { selectedFaskes = primaryFaskesName },
+                        label = { Text(primaryFaskesName, fontSize = 11.sp, maxLines = 1) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
-                        selected = selectedFaskes == "Puskesmas Plosoklaten",
-                        onClick = { selectedFaskes = "Puskesmas Plosoklaten" },
-                        label = { Text("Pusk. Plosoklaten", fontSize = 11.sp) },
+                        selected = selectedFaskes == secondaryFaskesName,
+                        onClick = { selectedFaskes = secondaryFaskesName },
+                        label = { Text(secondaryFaskesName, fontSize = 11.sp, maxLines = 1) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(

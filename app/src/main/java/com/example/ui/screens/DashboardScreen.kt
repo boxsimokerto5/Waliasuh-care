@@ -95,6 +95,7 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
@@ -113,9 +114,13 @@ fun DashboardScreen(
     }
     var selectedPlanFilter by remember { mutableStateOf("Hari Ini") }
 
-    // Counts for today
-    val watesTodayCount = todayPlans.count { it.faskes.contains("Wates", ignoreCase = true) }
-    val klatenTodayCount = todayPlans.count { it.faskes.contains("Klaten", ignoreCase = true) || it.faskes.contains("Plosoklaten", ignoreCase = true) }
+    // Counts for today based on school's primary and secondary faskes
+    val faskes1Count = todayPlans.count {
+        it.faskes.contains(schoolProfile.primaryFaskesName, ignoreCase = true) || it.faskes.contains("Wates", ignoreCase = true)
+    }
+    val faskes2Count = todayPlans.count {
+        it.faskes.contains(schoolProfile.secondaryFaskesName, ignoreCase = true) || it.faskes.contains("Klaten", ignoreCase = true)
+    }
     val totalToday = todayPlans.size
     val totalSchoolStudents = if (students.isNotEmpty()) students.size else 342
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
@@ -196,13 +201,13 @@ fun DashboardScreen(
                             Spacer(modifier = Modifier.height(1.dp))
 
                             Text(
-                                text = "Puskesmas Wates: $watesTodayCount Anak",
+                                text = "${schoolProfile.primaryFaskesName}: $faskes1Count Anak",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Puskesmas Klaten: $klatenTodayCount Anak",
+                                text = "${schoolProfile.secondaryFaskesName}: $faskes2Count Anak",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
