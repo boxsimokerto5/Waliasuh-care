@@ -56,7 +56,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.util.TopOnAdManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -81,6 +83,7 @@ fun PlanScreen(
     students: List<ChildStudent>,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedFaskesFilter by remember { mutableStateOf("Semua") }
 
@@ -105,7 +108,10 @@ fun PlanScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showCreatePlanDialog = true },
+                onClick = {
+                    TopOnAdManager.onUserActionClick(context)
+                    showCreatePlanDialog = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.testTag("fab_create_plan")
@@ -140,7 +146,10 @@ fun PlanScreen(
                 ) {
                     Tab(
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTab = 0
+                        },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -160,7 +169,10 @@ fun PlanScreen(
                     )
                     Tab(
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTab = 1
+                        },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -196,13 +208,19 @@ fun PlanScreen(
                     )
                     FilterChip(
                         selected = selectedFaskesFilter == "Semua",
-                        onClick = { selectedFaskesFilter = "Semua" },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedFaskesFilter = "Semua"
+                        },
                         label = { Text("Semua", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
                         selected = selectedFaskesFilter == "Wates",
-                        onClick = { selectedFaskesFilter = "Wates" },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedFaskesFilter = "Wates"
+                        },
                         label = { Text("Pusk. Wates", fontSize = 11.sp) },
                         modifier = Modifier
                             .height(28.dp)
@@ -210,7 +228,10 @@ fun PlanScreen(
                     )
                     FilterChip(
                         selected = selectedFaskesFilter == "Plosoklaten",
-                        onClick = { selectedFaskesFilter = "Plosoklaten" },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedFaskesFilter = "Plosoklaten"
+                        },
                         label = { Text("Pusk. Plosoklaten", fontSize = 11.sp) },
                         modifier = Modifier
                             .height(28.dp)
@@ -285,6 +306,7 @@ fun PlanScreen(
                                 CompactControlCardItem(
                                     record = record,
                                     onCompleteControl = {
+                                        TopOnAdManager.onUserActionClick(context)
                                         viewModel.markControlCompleted(record.id)
                                     }
                                 )
@@ -317,9 +339,18 @@ fun PlanScreen(
                             items(displayPlans, key = { "plan_${it.id}" }) { record ->
                                 CompactPlanCardItem(
                                     record = record,
-                                    onDepart = { viewModel.markDeparted(record.id) },
-                                    onDiagnose = { recordToDiagnose = record },
-                                    onDelete = { viewModel.deleteRecord(record) }
+                                    onDepart = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        viewModel.markDeparted(record.id)
+                                    },
+                                    onDiagnose = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        recordToDiagnose = record
+                                    },
+                                    onDelete = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        viewModel.deleteRecord(record)
+                                    }
                                 )
                             }
                         }
@@ -334,6 +365,7 @@ fun PlanScreen(
             students = students,
             onDismiss = { showCreatePlanDialog = false },
             onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
                 showCreatePlanDialog = false
             }
@@ -345,6 +377,7 @@ fun PlanScreen(
             record = record,
             onDismiss = { recordToDiagnose = null },
             onConfirm = { diagnosis, actionsTaken, prescription, needsControl, controlDate, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.submitTreatmentResult(
                     record = record,
                     diagnosis = diagnosis,

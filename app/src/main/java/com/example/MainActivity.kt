@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.example.util.NotificationHelper
+import com.example.util.TopOnAdManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         NotificationHelper.createNotificationChannel(applicationContext)
+        TopOnAdManager.init(this)
         val targetScreen = intent?.getStringExtra("EXTRA_NAV_SCREEN")
 
         setContent {
@@ -206,8 +208,14 @@ fun WaliAsuhCareApp(
         topBar = {
             WaliTopBar(
                 notificationCount = pendingControls.size + activePlans.size,
-                onNotificationClick = { showNotifModal = true },
-                onProfileClick = { currentScreen = WaliNavScreen.PROFIL },
+                onNotificationClick = {
+                    TopOnAdManager.onUserActionClick(context)
+                    showNotifModal = true
+                },
+                onProfileClick = {
+                    TopOnAdManager.onUserActionClick(context)
+                    currentScreen = WaliNavScreen.PROFIL
+                },
                 isDoctorIcon = currentScreen == WaliNavScreen.TINDAKAN
             )
         },
@@ -229,7 +237,10 @@ fun WaliAsuhCareApp(
                     // 1. Dashboard (from Mockup 3 & 4)
                     NavigationBarItem(
                         selected = currentScreen == WaliNavScreen.DASHBOARD,
-                        onClick = { currentScreen = WaliNavScreen.DASHBOARD },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.DASHBOARD
+                        },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Home,
@@ -257,7 +268,10 @@ fun WaliAsuhCareApp(
                     // 2. Rencana (from Mockup 3 & 4)
                     NavigationBarItem(
                         selected = currentScreen == WaliNavScreen.RENCANA,
-                        onClick = { currentScreen = WaliNavScreen.RENCANA },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.RENCANA
+                        },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.CalendarToday,
@@ -285,7 +299,10 @@ fun WaliAsuhCareApp(
                     // 3. Tindakan / Rekam Medis (from Mockup 2 & 4)
                     NavigationBarItem(
                         selected = currentScreen == WaliNavScreen.TINDAKAN,
-                        onClick = { currentScreen = WaliNavScreen.TINDAKAN },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.TINDAKAN
+                        },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.FormatListBulleted,
@@ -313,7 +330,10 @@ fun WaliAsuhCareApp(
                     // 4. Anak Asuh (from Mockup 1, 2, 3, 4)
                     NavigationBarItem(
                         selected = currentScreen == WaliNavScreen.ANAK_ASUH,
-                        onClick = { currentScreen = WaliNavScreen.ANAK_ASUH },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.ANAK_ASUH
+                        },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.People,
@@ -341,7 +361,10 @@ fun WaliAsuhCareApp(
                     // 5. Profil (from Mockup 1)
                     NavigationBarItem(
                         selected = currentScreen == WaliNavScreen.PROFIL,
-                        onClick = { currentScreen = WaliNavScreen.PROFIL },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.PROFIL
+                        },
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Person,
@@ -382,10 +405,22 @@ fun WaliAsuhCareApp(
                         waliName = waliName,
                         activePlans = activePlans,
                         students = students,
-                        onNavigateToPlan = { currentScreen = WaliNavScreen.RENCANA },
-                        onNavigateToRecords = { currentScreen = WaliNavScreen.TINDAKAN },
-                        onNavigateToStudents = { currentScreen = WaliNavScreen.ANAK_ASUH },
-                        onNavigateToProfile = { currentScreen = WaliNavScreen.PROFIL }
+                        onNavigateToPlan = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.RENCANA
+                        },
+                        onNavigateToRecords = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.TINDAKAN
+                        },
+                        onNavigateToStudents = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.ANAK_ASUH
+                        },
+                        onNavigateToProfile = {
+                            TopOnAdManager.onUserActionClick(context)
+                            currentScreen = WaliNavScreen.PROFIL
+                        }
                     )
                 }
                 WaliNavScreen.RENCANA -> {

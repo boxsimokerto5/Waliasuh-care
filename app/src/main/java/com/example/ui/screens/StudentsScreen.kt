@@ -38,6 +38,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.platform.LocalContext
+import com.example.util.TopOnAdManager
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,6 +63,7 @@ fun StudentsScreen(
     searchQuery: String,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
 
@@ -81,7 +84,10 @@ fun StudentsScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddStudentDialog = true },
+                onClick = {
+                    TopOnAdManager.onUserActionClick(context)
+                    showAddStudentDialog = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 modifier = Modifier.testTag("fab_add_student")
@@ -190,7 +196,10 @@ fun StudentsScreen(
                             CompactStudentCardItem(
                                 student = student,
                                 treatmentCount = studentRecordsCount,
-                                onClick = { selectedStudentForDetail = student }
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    selectedStudentForDetail = student
+                                }
                             )
                         }
                     }
@@ -203,6 +212,7 @@ fun StudentsScreen(
         AddStudentDialog(
             onDismiss = { showAddStudentDialog = false },
             onConfirm = { name, nis, gender, age, dorm, grade, allergies, blood, contact, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.addStudent(name, nis, gender, age, dorm, grade, allergies, blood, contact, notes)
                 showAddStudentDialog = false
             }

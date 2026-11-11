@@ -30,9 +30,11 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.SupabaseConfigDialog
+import com.example.util.TopOnAdManager
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -79,6 +81,7 @@ fun ProfileScreen(
     onNavigateToAdmin: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val students by viewModel.students.collectAsStateWithLifecycle()
     val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
@@ -136,7 +139,10 @@ fun ProfileScreen(
                     icon = Icons.Default.CloudSync,
                     iconBg = Color(0xFFDCFCE7),
                     iconColor = Color(0xFF059669),
-                    onClick = { showSupabaseDialog = true },
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        showSupabaseDialog = true
+                    },
                     testTag = "menu_supabase"
                 )
             }
@@ -148,7 +154,10 @@ fun ProfileScreen(
                     icon = Icons.Default.LocalHospital,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
-                    onClick = { showPuskesmasDialog = true },
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        showPuskesmasDialog = true
+                    },
                     testTag = "menu_puskesmas_saya"
                 )
             }
@@ -160,7 +169,10 @@ fun ProfileScreen(
                     icon = Icons.Default.Notifications,
                     iconBg = Color(0xFFEFF6FF),
                     iconColor = Color(0xFF2563EB),
-                    onClick = { showNotifDialog = true },
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        showNotifDialog = true
+                    },
                     testTag = "menu_notifikasi"
                 )
             }
@@ -172,7 +184,10 @@ fun ProfileScreen(
                     icon = Icons.Default.AccountCircle,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF475569),
-                    onClick = { showEditAccountDialog = true },
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        showEditAccountDialog = true
+                    },
                     testTag = "menu_akun"
                 )
             }
@@ -224,7 +239,10 @@ fun ProfileScreen(
                         }
                         Switch(
                             checked = isDarkTheme,
-                            onCheckedChange = { onToggleTheme() },
+                            onCheckedChange = {
+                                TopOnAdManager.onUserActionClick(context)
+                                onToggleTheme()
+                            },
                             modifier = Modifier.testTag("switch_theme_profile")
                         )
                     }
@@ -243,7 +261,11 @@ fun ProfileScreen(
                     icon = Icons.Default.Assessment,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
-                    onClick = { showMonthlyReportDialog = true },
+                    onClick = {
+                        TopOnAdManager.showRewardAdForMonthlyReport(context) {
+                            showMonthlyReportDialog = true
+                        }
+                    },
                     testTag = "menu_laporan_bulanan"
                 )
             }
@@ -274,7 +296,10 @@ fun ProfileScreen(
                     icon = Icons.Default.MenuBook,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF334155),
-                    onClick = { showGuideDialog = true },
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        showGuideDialog = true
+                    },
                     testTag = "menu_panduan"
                 )
             }

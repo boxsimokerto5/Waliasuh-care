@@ -54,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -71,6 +72,7 @@ import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.TopOnAdManager
 import java.util.Calendar
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -92,6 +94,7 @@ fun DashboardScreen(
     onNavigateToProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
@@ -122,7 +125,10 @@ fun DashboardScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showCreateDialog = true },
+                onClick = {
+                    TopOnAdManager.onUserActionClick(context)
+                    showCreateDialog = true
+                },
                 containerColor = WaliPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp),
@@ -252,7 +258,10 @@ fun DashboardScreen(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         IconButton(
-                            onClick = { showGridTiles = !showGridTiles },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showGridTiles = !showGridTiles
+                            },
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
@@ -269,10 +278,16 @@ fun DashboardScreen(
                     item {
                         QuickMenuTiles(
                             onNavigateToPlan = onNavigateToPlan,
-                            onNavigateToDirectTreatment = { showDirectTreatmentDialog = true },
+                            onNavigateToDirectTreatment = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showDirectTreatmentDialog = true
+                            },
                             onNavigateToRecords = onNavigateToRecords,
                             onNavigateToStudents = onNavigateToStudents,
-                            onShowPuskesmasInfo = { showPuskesmasInfoSheet = true }
+                            onShowPuskesmasInfo = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showPuskesmasInfoSheet = true
+                            }
                         )
                     }
                 }
@@ -312,7 +327,10 @@ fun DashboardScreen(
                         ) {
                             FilterChip(
                                 selected = selectedPlanFilter == "Hari Ini",
-                                onClick = { selectedPlanFilter = "Hari Ini" },
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    selectedPlanFilter = "Hari Ini"
+                                },
                                 label = { Text("Hari Ini (${todayPlans.size})", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .height(28.dp)
@@ -320,7 +338,10 @@ fun DashboardScreen(
                             )
                             FilterChip(
                                 selected = selectedPlanFilter == "Mendatang",
-                                onClick = { selectedPlanFilter = "Mendatang" },
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    selectedPlanFilter = "Mendatang"
+                                },
                                 label = { Text("Mendatang (${upcomingPlans.size})", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .height(28.dp)
@@ -328,7 +349,10 @@ fun DashboardScreen(
                             )
                             FilterChip(
                                 selected = selectedPlanFilter == "Semua",
-                                onClick = { selectedPlanFilter = "Semua" },
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    selectedPlanFilter = "Semua"
+                                },
                                 label = { Text("Semua (${activePlans.size})", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .height(28.dp)
@@ -378,9 +402,18 @@ fun DashboardScreen(
                         DashboardSickChildItem(
                             number = index + 1,
                             record = record,
-                            onDepart = { viewModel.markDeparted(record.id) },
-                            onDiagnose = { recordToDiagnose = record },
-                            onDelete = { viewModel.deleteRecord(record) }
+                            onDepart = {
+                                TopOnAdManager.onUserActionClick(context)
+                                viewModel.markDeparted(record.id)
+                            },
+                            onDiagnose = {
+                                TopOnAdManager.onUserActionClick(context)
+                                recordToDiagnose = record
+                            },
+                            onDelete = {
+                                TopOnAdManager.onUserActionClick(context)
+                                viewModel.deleteRecord(record)
+                            }
                         )
                     }
                 }
@@ -393,6 +426,7 @@ fun DashboardScreen(
             students = students,
             onDismiss = { showCreateDialog = false },
             onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
                 showCreateDialog = false
             }
@@ -404,6 +438,7 @@ fun DashboardScreen(
             record = record,
             onDismiss = { recordToDiagnose = null },
             onConfirm = { diagnosis, actionsTaken, prescription, needsControl, controlDate, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.submitTreatmentResult(
                     record = record,
                     diagnosis = diagnosis,
@@ -423,6 +458,7 @@ fun DashboardScreen(
             students = students,
             onDismiss = { showDirectTreatmentDialog = false },
             onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.recordDirectTreatment(
                     student = student,
                     faskes = faskes,

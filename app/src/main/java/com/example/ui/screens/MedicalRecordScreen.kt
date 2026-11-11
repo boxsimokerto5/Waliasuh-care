@@ -77,7 +77,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.example.util.TopOnAdManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -123,6 +125,7 @@ fun MedicalRecordScreen(
     onNavigateToProfile: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
     var selectedRecordForDetail by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -177,7 +180,10 @@ fun MedicalRecordScreen(
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showDirectTreatmentDialog = true },
+                onClick = {
+                    TopOnAdManager.onUserActionClick(context)
+                    showDirectTreatmentDialog = true
+                },
                 containerColor = WaliPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp),
@@ -237,7 +243,10 @@ fun MedicalRecordScreen(
                 ) {
                     Tab(
                         selected = selectedTabMode == 0,
-                        onClick = { selectedTabMode = 0 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTabMode = 0
+                        },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -252,7 +261,10 @@ fun MedicalRecordScreen(
                     )
                     Tab(
                         selected = selectedTabMode == 1,
-                        onClick = { selectedTabMode = 1 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTabMode = 1
+                        },
                         text = {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
@@ -306,7 +318,10 @@ fun MedicalRecordScreen(
                     if (selectedTabMode == 0) {
                         FilterChip(
                             selected = selectedDateFilter == "Hari Ini",
-                            onClick = { selectedDateFilter = "Hari Ini" },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedDateFilter = "Hari Ini"
+                            },
                             label = { Text("Hari Ini (${todayRecords.size})", fontSize = 11.5.sp) },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
@@ -317,7 +332,10 @@ fun MedicalRecordScreen(
                         )
                         FilterChip(
                             selected = selectedDateFilter == "Minggu Ini",
-                            onClick = { selectedDateFilter = "Minggu Ini" },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedDateFilter = "Minggu Ini"
+                            },
                             label = { Text("Minggu Ini (${thisWeekRecords.size})", fontSize = 11.5.sp) },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
@@ -328,7 +346,10 @@ fun MedicalRecordScreen(
                         )
                         FilterChip(
                             selected = selectedDateFilter == "Semua Tanggal",
-                            onClick = { selectedDateFilter = "Semua Tanggal" },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedDateFilter = "Semua Tanggal"
+                            },
                             label = { Text("Semua Tanggal (${completedRecords.size})", fontSize = 11.5.sp) },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
@@ -424,8 +445,14 @@ fun MedicalRecordScreen(
                                     student = student,
                                     thisMonthCount = thisMonthRecords.size,
                                     totalScreeningCount = allStudentRecords.size,
-                                    onClick = { selectedRecordForDetail = record },
-                                    onShare = { recordToShare = record }
+                                    onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        selectedRecordForDetail = record
+                                    },
+                                    onShare = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        recordToShare = record
+                                    }
                                 )
                             }
                         }
@@ -461,7 +488,10 @@ fun MedicalRecordScreen(
                                     thisMonthCount = thisMonthRecords.size,
                                     totalRecordsCount = studentRecords.size,
                                     latestRecord = latestRecord,
-                                    onClick = { selectedStudentForPassport = student }
+                                    onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        selectedStudentForPassport = student
+                                    }
                                 )
                             }
                         }
@@ -485,13 +515,16 @@ fun MedicalRecordScreen(
             thisMonthCount = thisMonthRecords.size,
             onDismiss = { selectedRecordForDetail = null },
             onPrintPdf = {
+                TopOnAdManager.onUserActionClick(context)
                 student?.let { studentForPdfPrint = it }
             },
             onShare = {
+                TopOnAdManager.onUserActionClick(context)
                 selectedRecordForDetail = null
                 recordToShare = record
             },
             onDelete = {
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.deleteRecord(record)
                 selectedRecordForDetail = null
             }
@@ -510,9 +543,11 @@ fun MedicalRecordScreen(
             thisMonthCount = thisMonthRecords.size,
             onDismiss = { selectedStudentForPassport = null },
             onPrintPdf = {
+                TopOnAdManager.onUserActionClick(context)
                 studentForPdfPrint = student
             },
             onShareRecord = { record ->
+                TopOnAdManager.onUserActionClick(context)
                 selectedStudentForPassport = null
                 recordToShare = record
             }
@@ -534,6 +569,7 @@ fun MedicalRecordScreen(
             students = students,
             onDismiss = { showDirectTreatmentDialog = false },
             onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
+                TopOnAdManager.onUserActionClick(context)
                 viewModel.recordDirectTreatment(
                     student = student,
                     faskes = faskes,

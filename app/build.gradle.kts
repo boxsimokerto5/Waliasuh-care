@@ -141,4 +141,11 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
+
+  // TopOn (AnyThink) SDK & Meta Audience Network Adapter (New TopOn Platform - TPN)
+  implementation("com.anythink.sdk:core-tpn:6.4.88")
+  implementation("com.anythink.sdk:interstitial-tpn:6.4.88")
+  implementation("com.anythink.sdk:rewardedvideo-tpn:6.4.88")
+  implementation("com.anythink.sdk:adapter-tpn-facebook:6.4.88.5")
+  implementation("com.facebook.android:audience-network-sdk:6.19.0")
 }
