@@ -48,4 +48,17 @@ class ExampleRobolectricTest {
     com.example.util.TopOnAdManager.onUserActionClick(context)
     assertEquals(0, com.example.util.TopOnAdManager.getSavedClickCount(context))
   }
+
+  @Test
+  fun `verify Superadmin credentials and login result`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+
+    var loginResult: com.example.ui.LoginResult? = null
+    vm.login("superadmin", "Woyowoyo12@", rememberMe = false) { result ->
+      loginResult = result
+    }
+    org.junit.Assert.assertTrue(loginResult is com.example.ui.LoginResult.SuccessSuperAdmin)
+  }
 }
+

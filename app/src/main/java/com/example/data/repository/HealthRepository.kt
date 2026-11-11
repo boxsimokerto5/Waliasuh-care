@@ -2,16 +2,19 @@ package com.example.data.repository
 
 import com.example.data.dao.ChildStudentDao
 import com.example.data.dao.MedicalRecordDao
+import com.example.data.dao.SchoolRegistrationDao
 import com.example.data.dao.WaliAccountDao
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
 
 class HealthRepository(
     private val studentDao: ChildStudentDao,
     private val recordDao: MedicalRecordDao,
-    private val waliAccountDao: WaliAccountDao
+    private val waliAccountDao: WaliAccountDao,
+    private val registrationDao: SchoolRegistrationDao
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -19,6 +22,7 @@ class HealthRepository(
     val completedRecords: Flow<List<MedicalRecord>> = recordDao.getCompletedRecords()
     val pendingControlRecords: Flow<List<MedicalRecord>> = recordDao.getPendingControlRecords()
     val allWaliAccounts: Flow<List<WaliAccount>> = waliAccountDao.getAllAccounts()
+    val allSchoolRegistrations: Flow<List<SchoolRegistration>> = registrationDao.getAllRegistrations()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -76,4 +80,17 @@ class HealthRepository(
 
     suspend fun insertAllWaliAccounts(accounts: List<WaliAccount>) =
         waliAccountDao.insertAll(accounts)
+
+    // --- School Registration Operations ---
+    suspend fun insertSchoolRegistration(registration: SchoolRegistration): Long =
+        registrationDao.insert(registration)
+
+    suspend fun updateSchoolRegistration(registration: SchoolRegistration) =
+        registrationDao.update(registration)
+
+    suspend fun deleteSchoolRegistration(registration: SchoolRegistration) =
+        registrationDao.delete(registration)
+
+    suspend fun getSchoolRegistrationById(id: Long): SchoolRegistration? =
+        registrationDao.getById(id)
 }

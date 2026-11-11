@@ -75,6 +75,7 @@ import com.example.ui.screens.PlanScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.screens.StudentsScreen
+import com.example.ui.screens.SuperAdminScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -117,7 +118,16 @@ class MainActivity : ComponentActivity() {
                                 },
                                 onLoginSuccessWali = { _ ->
                                     adminWantsAppView = false
+                                },
+                                onLoginSuccessSuperAdmin = {
+                                    adminWantsAppView = false
                                 }
+                            )
+                        }
+                        userRole == UserRole.SUPERADMIN -> {
+                            SuperAdminScreen(
+                                viewModel = viewModel,
+                                onLogout = { viewModel.logout() }
                             )
                         }
                         userRole == UserRole.ADMIN && !adminWantsAppView -> {

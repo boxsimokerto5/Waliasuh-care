@@ -7,9 +7,11 @@ import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.ChildStudentDao
 import com.example.data.dao.MedicalRecordDao
+import com.example.data.dao.SchoolRegistrationDao
 import com.example.data.dao.WaliAccountDao
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,14 +19,15 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 
 @Database(
-    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class],
-    version = 5,
+    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class],
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun childStudentDao(): ChildStudentDao
     abstract fun medicalRecordDao(): MedicalRecordDao
     abstract fun waliAccountDao(): WaliAccountDao
+    abstract fun schoolRegistrationDao(): SchoolRegistrationDao
 
     companion object {
         @Volatile
@@ -97,6 +100,7 @@ abstract class AppDatabase : RoomDatabase() {
                         database.childStudentDao().insertAll(students)
                     }
                     seedDefaultWaliAccounts(database)
+                    seedDefaultRegistrations(database)
                 }
             }
         }
@@ -116,7 +120,43 @@ abstract class AppDatabase : RoomDatabase() {
                         }
                     }
                     seedDefaultWaliAccounts(database)
+                    seedDefaultRegistrations(database)
                 }
+            }
+        }
+
+        private suspend fun seedDefaultRegistrations(database: AppDatabase) {
+            val count = database.schoolRegistrationDao().count()
+            if (count == 0) {
+                val demoRegistrations = listOf(
+                    SchoolRegistration(
+                        schoolName = "SMP IT Al-Hikmah",
+                        address = "Jl. Raya Candi No. 45, Karangploso",
+                        city = "Kabupaten Malang",
+                        estimatedWaliCount = 8,
+                        picName = "Drs. H. Mulyadi, M.Pd",
+                        picEmail = "mulyadi.alhikmah@gmail.com",
+                        picPhone = "081334567890",
+                        submissionDate = System.currentTimeMillis() - 86400000L * 2,
+                        status = "PENDING"
+                    ),
+                    SchoolRegistration(
+                        schoolName = "Panti Asuhan Kasih Mandiri",
+                        address = "Jl. Kenjeran No. 112",
+                        city = "Kota Surabaya",
+                        estimatedWaliCount = 5,
+                        picName = "Hj. Siti Aminah, S.Sos",
+                        picEmail = "kasihmandiri.sby@gmail.com",
+                        picPhone = "085712345678",
+                        submissionDate = System.currentTimeMillis() - 86400000L * 4,
+                        status = "APPROVED",
+                        generatedSchoolCode = "SRT-SBY02",
+                        generatedAdminUsername = "adminsby_kasihmandiri",
+                        generatedAdminPassword = "Mandiri#8419",
+                        approvedDate = System.currentTimeMillis() - 86400000L * 3
+                    )
+                )
+                database.schoolRegistrationDao().insertAll(demoRegistrations)
             }
         }
 

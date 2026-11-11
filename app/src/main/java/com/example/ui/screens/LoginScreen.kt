@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -45,6 +47,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SuggestionChip
@@ -70,6 +73,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.HealthViewModel
 import com.example.ui.LoginResult
+import com.example.ui.dialogs.SchoolRegistrationDialog
 import com.example.ui.theme.WaliPrimary
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -78,6 +82,7 @@ fun LoginScreen(
     viewModel: HealthViewModel,
     onLoginSuccessAdmin: () -> Unit,
     onLoginSuccessWali: (waliName: String) -> Unit,
+    onLoginSuccessSuperAdmin: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -89,6 +94,7 @@ fun LoginScreen(
     var rememberMe by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
+    var showRegistrationDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -266,8 +272,12 @@ fun LoginScreen(
                                 viewModel.login(username, password, rememberMe) { result ->
                                     isLoading = false
                                     when (result) {
+                                        is LoginResult.SuccessSuperAdmin -> {
+                                            Toast.makeText(context, "Selamat datang di Portal Superadmin!", Toast.LENGTH_SHORT).show()
+                                            onLoginSuccessSuperAdmin?.invoke()
+                                        }
                                         is LoginResult.SuccessAdmin -> {
-                                            Toast.makeText(context, "Selamat datang, Administrator Eko Wahyudi!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(context, "Selamat datang, Administrator!", Toast.LENGTH_SHORT).show()
                                             onLoginSuccessAdmin()
                                         }
                                         is LoginResult.SuccessWali -> {
@@ -300,6 +310,57 @@ fun LoginScreen(
                                 Icon(Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
                             }
                         }
+                    }
+                }
+
+                // Tombol Pendaftaran Sekolah Baru (Sesuai Permintaan User)
+                OutlinedCard(
+                    onClick = { showRegistrationDialog = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_open_school_registration"),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.2.dp, WaliPrimary.copy(alpha = 0.5f)),
+                    colors = CardDefaults.outlinedCardColors(containerColor = WaliPrimary.copy(alpha = 0.06f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = null,
+                                tint = WaliPrimary,
+                                modifier = Modifier.size(24.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Sekolah belum terdaftar?",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Silakan klik untuk mengisi formulir pendaftaran",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = null,
+                            tint = WaliPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
 
@@ -339,14 +400,24 @@ fun LoginScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            // Chip Admin
+                            // Chip Superadmin
+                            SuggestionChip(
+                                onClick = {
+                                    username = "superadmin"
+                                    password = "Woyowoyo12@"
+                                    errorMessage = null
+                                },
+                                label = { Text("👑 Superadmin (Master)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                            )
+
+                            // Chip Admin Sekolah
                             SuggestionChip(
                                 onClick = {
                                     username = "ekowahyudiadmin"
                                     password = "Woyowoyo12@"
                                     errorMessage = null
                                 },
-                                label = { Text("🔑 Admin Utama (Eko Wahyudi)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
+                                label = { Text("🔑 Admin SRT 1 (Eko Wahyudi)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
                             )
 
                             // Chip Wali Asuh yang ada
@@ -365,6 +436,24 @@ fun LoginScreen(
                             }
                         }
                     }
+                }
+
+                if (showRegistrationDialog) {
+                    SchoolRegistrationDialog(
+                        onDismiss = { showRegistrationDialog = false },
+                        onSubmit = { schoolName, address, city, estimatedWali, picName, picEmail, picPhone, onSubmitted ->
+                            viewModel.submitSchoolRegistration(
+                                schoolName = schoolName,
+                                address = address,
+                                city = city,
+                                estimatedWaliCount = estimatedWali,
+                                picName = picName,
+                                picEmail = picEmail,
+                                picPhone = picPhone,
+                                onComplete = onSubmitted
+                            )
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

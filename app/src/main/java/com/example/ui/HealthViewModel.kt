@@ -8,6 +8,7 @@ import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
+import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
 import com.example.data.remote.supabase.SupabaseConfig
 import com.example.data.remote.supabase.SupabaseSyncManager
@@ -25,10 +26,12 @@ import kotlinx.coroutines.launch
 enum class UserRole {
     NOT_LOGGED_IN,
     WALI,
-    ADMIN
+    ADMIN,
+    SUPERADMIN
 }
 
 sealed class LoginResult {
+    object SuccessSuperAdmin : LoginResult()
     object SuccessAdmin : LoginResult()
     data class SuccessWali(val account: WaliAccount) : LoginResult()
     data class Error(val message: String) : LoginResult()
@@ -40,8 +43,16 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         val db = AppDatabase.getDatabase(application)
-        repository = HealthRepository(db.childStudentDao(), db.medicalRecordDao(), db.waliAccountDao())
+        repository = HealthRepository(
+            db.childStudentDao(),
+            db.medicalRecordDao(),
+            db.waliAccountDao(),
+            db.schoolRegistrationDao()
+        )
     }
+
+    val schoolRegistrations: StateFlow<List<SchoolRegistration>> = repository.allSchoolRegistrations
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val students: StateFlow<List<ChildStudent>> = repository.allStudents
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -124,6 +135,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Active User Role & Session
     private val _currentUserRole = MutableStateFlow(
         when (authPrefs.getString("saved_role", "NOT_LOGGED_IN")) {
+            "SUPERADMIN" -> UserRole.SUPERADMIN
             "ADMIN" -> UserRole.ADMIN
             "WALI" -> UserRole.WALI
             else -> UserRole.NOT_LOGGED_IN
@@ -472,6 +484,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
+        // 0. Cek Kredensial Superadmin Resmi
+        if (cleanUser.equals("superadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
+            _currentUserRole.value = UserRole.SUPERADMIN
+            if (rememberMe) {
+                authPrefs.edit()
+                    .putString("saved_role", "SUPERADMIN")
+                    .putString("saved_username", "superadmin")
+                    .apply()
+            }
+            onResult(LoginResult.SuccessSuperAdmin)
+            return
+        }
+
         // 1. Cek Kredensial Administrator Resmi
         if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
             _currentUserRole.value = UserRole.ADMIN
@@ -485,7 +510,35 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
-        // 2. Cek Akun Wali Asuh
+        // 2. Cek Akun Admin Sekolah Terdaftar / Baru
+        val matchedApprovedSchool = schoolRegistrations.value.firstOrNull {
+            it.status == "APPROVED" &&
+            it.generatedAdminUsername.equals(cleanUser, ignoreCase = true) &&
+            it.generatedAdminPassword == cleanPass
+        }
+        if (matchedApprovedSchool != null) {
+            _currentUserRole.value = UserRole.ADMIN
+            // Update schoolProfile to the matched approved school
+            updateSchoolProfile(
+                SchoolProfile(
+                    schoolName = matchedApprovedSchool.schoolName,
+                    shortName = matchedApprovedSchool.schoolName.take(15),
+                    adminName = matchedApprovedSchool.picName,
+                    city = matchedApprovedSchool.city,
+                    tenantCode = matchedApprovedSchool.generatedSchoolCode
+                )
+            )
+            if (rememberMe) {
+                authPrefs.edit()
+                    .putString("saved_role", "ADMIN")
+                    .putString("saved_username", matchedApprovedSchool.generatedAdminUsername)
+                    .apply()
+            }
+            onResult(LoginResult.SuccessAdmin)
+            return
+        }
+
+        // 3. Cek Akun Wali Asuh
         viewModelScope.launch {
             val account = repository.getWaliAccountByUsername(cleanUser)
             if (account != null && account.password == cleanPass) {
@@ -502,6 +555,80 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             } else {
                 onResult(LoginResult.Error("Username atau password salah. Silakan periksa kembali."))
             }
+        }
+    }
+
+    // --- Manajemen Pendaftaran Sekolah (Superadmin & Publik) ---
+
+    fun submitSchoolRegistration(
+        schoolName: String,
+        address: String,
+        city: String,
+        estimatedWaliCount: Int,
+        picName: String,
+        picEmail: String,
+        picPhone: String,
+        onComplete: (SchoolRegistration) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val reg = SchoolRegistration(
+                schoolName = schoolName.trim(),
+                address = address.trim(),
+                city = city.trim(),
+                estimatedWaliCount = estimatedWaliCount,
+                picName = picName.trim(),
+                picEmail = picEmail.trim(),
+                picPhone = picPhone.trim(),
+                submissionDate = System.currentTimeMillis(),
+                status = "PENDING"
+            )
+            val newId = repository.insertSchoolRegistration(reg)
+            onComplete(reg.copy(id = newId))
+        }
+    }
+
+    fun approveSchoolRegistration(
+        registration: SchoolRegistration,
+        onApproved: (SchoolRegistration) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val cleanSchool = registration.schoolName.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.take(10)
+            val cityAbbr = registration.city.trim().replace("Kota", "").replace("Kabupaten", "").replace("Kab.", "").trim().take(3).uppercase()
+            val schoolCode = "SRT-${cityAbbr.ifBlank { "REG" }}${registration.id.toString().padStart(2, '0')}"
+            val adminUsername = "admin_${cleanSchool.ifBlank { "sekolah" }}_${registration.id}"
+            val adminPassword = PasswordGenerator.generateRandomPassword()
+
+            val updated = registration.copy(
+                status = "APPROVED",
+                rejectionReason = "",
+                generatedSchoolCode = schoolCode,
+                generatedAdminUsername = adminUsername,
+                generatedAdminPassword = adminPassword,
+                approvedDate = System.currentTimeMillis()
+            )
+            repository.updateSchoolRegistration(updated)
+            onApproved(updated)
+        }
+    }
+
+    fun rejectSchoolRegistration(
+        registration: SchoolRegistration,
+        reason: String,
+        onComplete: (SchoolRegistration) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = registration.copy(
+                status = "REJECTED",
+                rejectionReason = reason.trim().ifBlank { "Data pendaftaran belum memenuhi kelengkapan berkas." }
+            )
+            repository.updateSchoolRegistration(updated)
+            onComplete(updated)
+        }
+    }
+
+    fun deleteSchoolRegistration(registration: SchoolRegistration) {
+        viewModelScope.launch {
+            repository.deleteSchoolRegistration(registration)
         }
     }
 
