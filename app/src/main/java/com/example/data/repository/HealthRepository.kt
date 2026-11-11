@@ -60,6 +60,9 @@ class HealthRepository(
     suspend fun deleteRecord(record: MedicalRecord) =
         recordDao.delete(record)
 
+    suspend fun deleteAllRecords() =
+        recordDao.deleteAll()
+
     suspend fun updateStatus(id: Long, status: String) =
         recordDao.updateStatus(id, status)
 

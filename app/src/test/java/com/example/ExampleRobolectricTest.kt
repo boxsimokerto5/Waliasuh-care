@@ -187,5 +187,52 @@ class ExampleRobolectricTest {
     // Hapus sekolah
     vm.deleteSchoolRegistration(updatedReg)
   }
+
+  @Test
+  fun `verify complete multi-tenant student and wali isolation and clean database`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    // Bersihkan database untuk pengujian
+    db.childStudentDao().deleteAll()
+    db.waliAccountDao().deleteAll()
+
+    // Beralih ke peran Admin pada Sekolah Baru "SRT-KED03"
+    vm.switchRoleToAdmin()
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = "SRT-KED03",
+        schoolName = "Sekolah Rakyat Baru Kediri 3"
+      )
+    )
+
+    // Sekolah baru yang baru dibuat harus bersih: 0 siswa dan 0 wali asuh
+    assertEquals(0, vm.students.value.size)
+    assertEquals(0, vm.waliAccounts.value.size)
+
+    // Tambah 1 siswa khusus sekolah SRT-KED03
+    vm.addStudent(
+      name = "Siswa Baru SRT 3",
+      nis = "1001",
+      gender = "L",
+      age = 12,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-A",
+      allergies = "",
+      bloodType = "O",
+      emergencyContact = "0811111111",
+      specialNotes = ""
+    )
+
+    // Siswa untuk sekolah SRT-KED03 bertambah menjadi 1 di database
+    val studentsKed03 = db.childStudentDao().getStudentsBySchool("SRT-KED03").first()
+    assertEquals(1, studentsKed03.size)
+    assertEquals("SRT-KED03", studentsKed03[0].schoolId)
+
+    // Sekolah lain (misal "SRT1-KDR") tidak boleh melihat siswa milik SRT-KED03
+    val studentsOtherSchool = db.childStudentDao().getStudentsBySchool("SRT1-KDR").first()
+    assertEquals(0, studentsOtherSchool.size)
+  }
 }
 

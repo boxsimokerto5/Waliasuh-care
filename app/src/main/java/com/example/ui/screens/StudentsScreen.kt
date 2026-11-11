@@ -49,6 +49,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
@@ -64,6 +67,7 @@ fun StudentsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
 
@@ -153,10 +157,12 @@ fun StudentsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        text = "SRT 1 Kediri",
+                        text = schoolProfile.shortName.ifBlank { "Sekolah" },
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -247,7 +253,7 @@ fun CompactStudentCardItem(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 9.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Student Portrait Avatar matching mockups
@@ -259,40 +265,60 @@ fun CompactStudentCardItem(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp)
+            ) {
+                // Name & Gender Row - adaptive and flexible without squishing
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
                         text = student.name,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp
+                        fontSize = 13.5.sp,
+                        lineHeight = 17.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
-                            .padding(horizontal = 4.dp, vertical = 1.dp)
+                            .background(
+                                if (student.gender.equals("L", ignoreCase = true)) Color(0xFFE0F2FE) else Color(0xFFFCE7F3)
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (student.gender == "L") "Putra" else "Putri",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Medium
+                            text = if (student.gender.equals("L", ignoreCase = true)) "Putra" else "Putri",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (student.gender.equals("L", ignoreCase = true)) Color(0xFF0284C7) else Color(0xFFDB2777),
+                            maxLines = 1,
+                            softWrap = false
                         )
                     }
                 }
 
+                Spacer(modifier = Modifier.height(2.dp))
+
                 Text(
                     text = "${student.dormitory} • ${student.classGrade}",
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 if (student.allergies.isNotBlank() && !student.allergies.equals("Tidak ada", ignoreCase = true)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 1.dp)
+                        modifier = Modifier.padding(top = 2.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Warning,
@@ -305,7 +331,9 @@ fun CompactStudentCardItem(
                             text = "Alergi: ${student.allergies}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.error,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -316,7 +344,7 @@ fun CompactStudentCardItem(
                 modifier = Modifier
                     .clip(RoundedCornerShape(6.dp))
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
-                    .padding(horizontal = 7.dp, vertical = 4.dp),
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -329,7 +357,9 @@ fun CompactStudentCardItem(
                     Text(
                         text = "Berobat",
                         fontSize = 9.sp,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }

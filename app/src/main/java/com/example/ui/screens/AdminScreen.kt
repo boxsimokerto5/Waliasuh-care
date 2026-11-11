@@ -125,7 +125,10 @@ fun AdminScreen(
 
     val activeSchoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
     val schoolAccounts = waliAccounts.filter {
-        it.schoolId == activeSchoolCode || (activeSchoolCode == "SRT1-KDR" && (it.schoolId.isBlank() || it.schoolId == "SRT1-KDR"))
+        it.schoolId.equals(activeSchoolCode, ignoreCase = true) || (activeSchoolCode == "SRT1-KDR" && (it.schoolId.isBlank() || it.schoolId == "SRT1-KDR"))
+    }
+    val schoolStudents = students.filter {
+        it.schoolId.equals(activeSchoolCode, ignoreCase = true) || (activeSchoolCode == "SRT1-KDR" && (it.schoolId.isBlank() || it.schoolId == "SRT1-KDR"))
     }
 
     val filteredAccounts = schoolAccounts.filter { account ->
@@ -367,7 +370,7 @@ fun AdminScreen(
                                         Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF16A34A))
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text("Import Siswa", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("${students.size} Terdaftar", fontSize = 9.sp, color = Color(0xFF16A34A))
+                                        Text("${schoolStudents.size} Terdaftar", fontSize = 9.sp, color = Color(0xFF16A34A))
                                     }
                                 }
 
@@ -381,7 +384,7 @@ fun AdminScreen(
                                         Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF2563EB))
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text("Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("${waliAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
+                                        Text("${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
                                     }
                                 }
                             }
@@ -421,7 +424,7 @@ fun AdminScreen(
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Text(
-                                        text = "${waliAccounts.size} Wali Terdaftar",
+                                        text = "${schoolAccounts.size} Wali Terdaftar",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = WaliPrimary

@@ -43,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
@@ -99,24 +100,33 @@ fun StudentDetailDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         StudentAvatar(
                             name = student.name,
                             gender = student.gender,
                             size = 44.dp
                         )
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f, fill = false)) {
                             Text(
                                 text = student.name,
-                                fontSize = 16.sp,
+                                fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = "NIS: ${student.nis} • ${student.classGrade}",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }

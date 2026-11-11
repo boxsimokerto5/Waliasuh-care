@@ -49,28 +49,40 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.waliAccountDao(),
             db.schoolRegistrationDao()
         )
+        // Bersihkan data awal siswa, akun wali asuh, dan rekam medis lama sekali saja sesuai instruksi user
+        val cleanupPrefs = application.getSharedPreferences("waliasuh_cleanup_v2", Context.MODE_PRIVATE)
+        if (!cleanupPrefs.getBoolean("cleaned_initial_data_v2", false)) {
+            viewModelScope.launch {
+                repository.deleteAllStudents()
+                repository.deleteAllWaliAccounts()
+                repository.deleteAllRecords()
+                cleanupPrefs.edit().putBoolean("cleaned_initial_data_v2", true).apply()
+            }
+        }
     }
 
-    val schoolRegistrations: StateFlow<List<SchoolRegistration>> = repository.allSchoolRegistrations
-        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    // Active User Role & Session
+    private val _currentUserRole = MutableStateFlow(
+        when (authPrefs.getString("saved_role", "NOT_LOGGED_IN")) {
+            "SUPERADMIN" -> UserRole.SUPERADMIN
+            "ADMIN" -> UserRole.ADMIN
+            "WALI" -> UserRole.WALI
+            else -> UserRole.NOT_LOGGED_IN
+        }
+    )
+    val currentUserRole: StateFlow<UserRole> = _currentUserRole.asStateFlow()
 
-    val students: StateFlow<List<ChildStudent>> = repository.allStudents
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Active Wali Name (Loaded from preferences or active login)
+    private val _waliName = MutableStateFlow(
+        authPrefs.getString("saved_wali_name", null)?.takeIf { it.isNotBlank() } ?: "Wali Asuh"
+    )
+    val waliName: StateFlow<String> = _waliName.asStateFlow()
 
-    val allRecords: StateFlow<List<MedicalRecord>> = repository.allRecords
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val activePlans: StateFlow<List<MedicalRecord>> = repository.activePlans
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val completedRecords: StateFlow<List<MedicalRecord>> = repository.completedRecords
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val pendingControlRecords: StateFlow<List<MedicalRecord>> = repository.pendingControlRecords
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    val waliAccounts: StateFlow<List<WaliAccount>> = repository.allWaliAccounts
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun setWaliName(name: String) {
+        if (name.isNotBlank()) {
+            _waliName.value = name.trim()
+        }
+    }
 
     // School Profile & Tenant Customization
     private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
@@ -99,6 +111,107 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             .putString("secondary_faskes", profile.secondaryFaskesName)
             .apply()
         onComplete()
+    }
+
+    val schoolRegistrations: StateFlow<List<SchoolRegistration>> = repository.allSchoolRegistrations
+        .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // Raw global flows for SuperAdmin
+    val allGlobalStudents: Flow<List<ChildStudent>> = repository.allStudents
+    val allGlobalWaliAccounts: Flow<List<WaliAccount>> = repository.allWaliAccounts
+
+    // Multi-tenant isolated students:
+    // SuperAdmin -> melihat semua siswa secara global
+    // Admin Sekolah / Wali Asuh -> hanya melihat siswa pada sekolah aktif (tenantCode)
+    val students: StateFlow<List<ChildStudent>> = combine(
+        repository.allStudents,
+        _schoolProfile,
+        _currentUserRole
+    ) { studentList, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            studentList
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            studentList.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // Multi-tenant isolated wali accounts:
+    // SuperAdmin -> melihat semua akun wali secara global
+    // Admin Sekolah / Wali Asuh -> hanya melihat akun wali pada sekolah aktif (tenantCode)
+    val waliAccounts: StateFlow<List<WaliAccount>> = combine(
+        repository.allWaliAccounts,
+        _schoolProfile,
+        _currentUserRole
+    ) { accounts, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            accounts
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            accounts.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // Multi-tenant isolated medical records:
+    val allRecords: StateFlow<List<MedicalRecord>> = combine(
+        repository.allRecords,
+        students,
+        _currentUserRole
+    ) { records, tenantStudents, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val validStudentIds = tenantStudents.map { it.id }.toSet()
+            records.filter { it.studentId in validStudentIds }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val activePlans: StateFlow<List<MedicalRecord>> = combine(
+        repository.activePlans,
+        students,
+        _currentUserRole
+    ) { plans, tenantStudents, role ->
+        if (role == UserRole.SUPERADMIN) {
+            plans
+        } else {
+            val validStudentIds = tenantStudents.map { it.id }.toSet()
+            plans.filter { it.studentId in validStudentIds }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val completedRecords: StateFlow<List<MedicalRecord>> = combine(
+        repository.completedRecords,
+        students,
+        _currentUserRole
+    ) { records, tenantStudents, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val validStudentIds = tenantStudents.map { it.id }.toSet()
+            records.filter { it.studentId in validStudentIds }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val pendingControlRecords: StateFlow<List<MedicalRecord>> = combine(
+        repository.pendingControlRecords,
+        students,
+        _currentUserRole
+    ) { records, tenantStudents, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val validStudentIds = tenantStudents.map { it.id }.toSet()
+            records.filter { it.studentId in validStudentIds }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun cleanAllStudentsAndWaliData(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteAllStudents()
+            repository.deleteAllWaliAccounts()
+            repository.deleteAllRecords()
+            onComplete()
+        }
     }
 
     fun saveImportedStudents(
@@ -150,29 +263,6 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
             repository.insertAllWaliAccounts(stampedAccounts)
             onComplete(stampedAccounts.size)
-        }
-    }
-
-    // Active User Role & Session
-    private val _currentUserRole = MutableStateFlow(
-        when (authPrefs.getString("saved_role", "NOT_LOGGED_IN")) {
-            "SUPERADMIN" -> UserRole.SUPERADMIN
-            "ADMIN" -> UserRole.ADMIN
-            "WALI" -> UserRole.WALI
-            else -> UserRole.NOT_LOGGED_IN
-        }
-    )
-    val currentUserRole: StateFlow<UserRole> = _currentUserRole.asStateFlow()
-
-    // Active Wali Name (Loaded from preferences or active login)
-    private val _waliName = MutableStateFlow(
-        authPrefs.getString("saved_wali_name", null)?.takeIf { it.isNotBlank() } ?: "Wali Asuh"
-    )
-    val waliName: StateFlow<String> = _waliName.asStateFlow()
-
-    fun setWaliName(name: String) {
-        if (name.isNotBlank()) {
-            _waliName.value = name.trim()
         }
     }
 

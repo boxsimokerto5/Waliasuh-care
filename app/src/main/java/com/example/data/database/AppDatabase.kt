@@ -123,14 +123,7 @@ abstract class AppDatabase : RoomDatabase() {
     private class DatabaseCallback(private val context: Context) : Callback() {
         override fun onCreate(db: SupportSQLiteDatabase) {
             super.onCreate(db)
-            INSTANCE?.let { database ->
-                CoroutineScope(Dispatchers.IO).launch {
-                    val students = loadStudentsFromAssets(context)
-                    if (students.isNotEmpty()) {
-                        database.childStudentDao().insertAll(students)
-                    }
-                }
-            }
+            // Database dimulai bersih (0 siswa & 0 wali) untuk menjamin multi-tenant isolasi mutlak
         }
 
         override fun onOpen(db: SupportSQLiteDatabase) {
@@ -138,8 +131,11 @@ abstract class AppDatabase : RoomDatabase() {
             INSTANCE?.let { database ->
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
+                        // Bersihkan seluruh data siswa, akun wali asuh, dan rekam medis lama sesuai instruksi user
+                        db.execSQL("DELETE FROM child_students")
+                        db.execSQL("DELETE FROM wali_accounts")
+                        db.execSQL("DELETE FROM medical_records")
                         db.execSQL("DELETE FROM school_registrations WHERE schoolName LIKE '%Al-Hikmah%' OR schoolName LIKE '%Kasih Mandiri%'")
-                        db.execSQL("DELETE FROM wali_accounts WHERE username IN ('saridevi', 'budisantoso', 'ahmadfauzi', 'dewilestari')")
                     } catch (e: Exception) {
                         // ignore if already clean
                     }
