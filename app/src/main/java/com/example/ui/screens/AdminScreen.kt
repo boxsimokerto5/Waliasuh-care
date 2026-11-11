@@ -123,7 +123,12 @@ fun AdminScreen(
         showExitConfirmDialog = true
     }
 
-    val filteredAccounts = waliAccounts.filter { account ->
+    val activeSchoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
+    val schoolAccounts = waliAccounts.filter {
+        it.schoolId == activeSchoolCode || (activeSchoolCode == "SRT1-KDR" && (it.schoolId.isBlank() || it.schoolId == "SRT1-KDR"))
+    }
+
+    val filteredAccounts = schoolAccounts.filter { account ->
         val effUser = account.username.ifBlank {
             account.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
         }
@@ -135,21 +140,21 @@ fun AdminScreen(
         matchSearch && matchDorm
     }
 
-    val putraCount = waliAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
-    val putriCount = waliAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
+    val putraCount = schoolAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
+    val putriCount = schoolAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
 
     fun shareAllAccountsSummary() {
-        if (waliAccounts.isEmpty()) {
+        if (schoolAccounts.isEmpty()) {
             Toast.makeText(context, "Belum ada akun wali asuh untuk dibagikan.", Toast.LENGTH_SHORT).show()
             return
         }
         val sb = StringBuilder()
         sb.appendLine("*DAFTAR KARTU AKSES WALI ASUH*")
-        sb.appendLine("_${schoolProfile.schoolName}_")
+        sb.appendLine("_${schoolProfile.schoolName} [${activeSchoolCode}]_")
         sb.appendLine("Tanggal: ${DateUtils.formatFullDate(System.currentTimeMillis())}")
-        sb.appendLine("Total: ${waliAccounts.size} Akun Terdaftar")
+        sb.appendLine("Total: ${schoolAccounts.size} Akun Terdaftar")
         sb.appendLine("----------------------------------------")
-        waliAccounts.forEachIndexed { index, acc ->
+        schoolAccounts.forEachIndexed { index, acc ->
             val effectiveUser = acc.username.ifBlank {
                 acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
             }
@@ -161,7 +166,7 @@ fun AdminScreen(
             }
             sb.appendLine("")
         }
-        sb.appendLine("_Dikelola oleh Administrator Utama (${schoolProfile.adminName})_")
+        sb.appendLine("_Dikelola oleh Administrator (${schoolProfile.adminName})_")
         val summaryText = sb.toString().trim()
 
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -660,29 +665,35 @@ fun AdminScreen(
 
     if (showImportStudentsDialog) {
         ImportStudentsCsvDialog(
+            currentSchoolId = activeSchoolCode,
+            schoolName = schoolProfile.schoolName,
             onDismiss = { showImportStudentsDialog = false },
             onImportConfirm = { studentList, replace ->
-                viewModel.saveImportedStudents(studentList, replace) { count ->
+                viewModel.saveImportedStudents(studentList, replace, activeSchoolCode) { count ->
                     showImportStudentsDialog = false
-                    Toast.makeText(context, "Berhasil mengimpor $count siswa ke database!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Berhasil mengimpor $count siswa ke database $activeSchoolCode!", Toast.LENGTH_LONG).show()
                 }
             },
-            onLoadDefaultKediri = { replace ->
-                viewModel.loadDefaultKediriStudents { count ->
-                    showImportStudentsDialog = false
-                    Toast.makeText(context, "Berhasil memuat $count siswa SRT 1 Kediri!", Toast.LENGTH_SHORT).show()
+            onLoadDefaultKediri = if (activeSchoolCode == "SRT1-KDR") {
+                { replace ->
+                    viewModel.loadDefaultKediriStudents { count ->
+                        showImportStudentsDialog = false
+                        Toast.makeText(context, "Berhasil memuat $count siswa SRT 1 Kediri!", Toast.LENGTH_SHORT).show()
+                    }
                 }
-            }
+            } else null
         )
     }
 
     if (showImportWaliDialog) {
         ImportWaliCsvDialog(
+            currentSchoolId = activeSchoolCode,
+            schoolName = schoolProfile.schoolName,
             onDismiss = { showImportWaliDialog = false },
             onImportConfirm = { accountList, replace ->
-                viewModel.saveImportedWaliAccounts(accountList, replace) { count ->
+                viewModel.saveImportedWaliAccounts(accountList, replace, activeSchoolCode) { count ->
                     showImportWaliDialog = false
-                    Toast.makeText(context, "Berhasil mengimpor $count akun wali asuh!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Berhasil mengimpor $count akun wali asuh ke database $activeSchoolCode!", Toast.LENGTH_LONG).show()
                 }
             }
         )

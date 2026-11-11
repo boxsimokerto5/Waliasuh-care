@@ -75,7 +75,7 @@ import java.util.Calendar
 fun PrintPdfDialog(
     student: ChildStudent,
     allRecords: List<MedicalRecord>,
-    waliName: String = "Sari Devi",
+    waliName: String = "Wali Asuh",
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current

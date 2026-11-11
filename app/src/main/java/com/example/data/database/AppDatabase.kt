@@ -20,7 +20,7 @@ import org.json.JSONArray
 
 @Database(
     entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class],
-    version = 6,
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -33,6 +33,36 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
+        val MIGRATION_6_7 = object : androidx.room.migration.Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR'")
+                } catch (e: Exception) {
+                    // Column may already exist
+                }
+                try {
+                    db.execSQL("ALTER TABLE wali_accounts ADD COLUMN schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR'")
+                } catch (e: Exception) {
+                    // Column may already exist
+                }
+            }
+        }
+
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("DELETE FROM school_registrations WHERE schoolName LIKE '%Al-Hikmah%' OR schoolName LIKE '%Kasih Mandiri%'")
+                } catch (e: Exception) {
+                    // Table or data may vary
+                }
+                try {
+                    db.execSQL("DELETE FROM wali_accounts WHERE username IN ('saridevi', 'budisantoso', 'ahmadfauzi', 'dewilestari')")
+                } catch (e: Exception) {
+                    // Table or data may vary
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -41,6 +71,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "waliasuh_care.db"
                 )
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8)
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
                     .build()
@@ -76,7 +107,8 @@ abstract class AppDatabase : RoomDatabase() {
                             motherName = obj.optString("motherName", ""),
                             address = obj.optString("address", ""),
                             roomNumber = obj.optString("roomNumber", ""),
-                            jenjang = obj.optString("jenjang", "")
+                            jenjang = obj.optString("jenjang", ""),
+                            schoolId = "SRT1-KDR"
                         )
                     )
                 }
@@ -95,12 +127,8 @@ abstract class AppDatabase : RoomDatabase() {
                 CoroutineScope(Dispatchers.IO).launch {
                     val students = loadStudentsFromAssets(context)
                     if (students.isNotEmpty()) {
-                        database.childStudentDao().deleteAll()
-                        database.medicalRecordDao().deleteAll()
                         database.childStudentDao().insertAll(students)
                     }
-                    seedDefaultWaliAccounts(database)
-                    seedDefaultRegistrations(database)
                 }
             }
         }
@@ -109,74 +137,11 @@ abstract class AppDatabase : RoomDatabase() {
             super.onOpen(db)
             INSTANCE?.let { database ->
                 CoroutineScope(Dispatchers.IO).launch {
-                    val count = database.childStudentDao().count()
-                    // Jika data masih data dummy lama (< 300 siswa), bersihkan dan ganti dengan 342 siswa baru
-                    if (count < 300) {
-                        database.childStudentDao().deleteAll()
-                        database.medicalRecordDao().deleteAll()
-                        val students = loadStudentsFromAssets(context)
-                        if (students.isNotEmpty()) {
-                            database.childStudentDao().insertAll(students)
-                        }
-                    }
-                    seedDefaultWaliAccounts(database)
-                    seedDefaultRegistrations(database)
-                }
-            }
-        }
-
-        private suspend fun seedDefaultRegistrations(database: AppDatabase) {
-            val count = database.schoolRegistrationDao().count()
-            if (count == 0) {
-                val demoRegistrations = listOf(
-                    SchoolRegistration(
-                        schoolName = "SMP IT Al-Hikmah",
-                        address = "Jl. Raya Candi No. 45, Karangploso",
-                        city = "Kabupaten Malang",
-                        estimatedWaliCount = 8,
-                        picName = "Drs. H. Mulyadi, M.Pd",
-                        picEmail = "mulyadi.alhikmah@gmail.com",
-                        picPhone = "081334567890",
-                        submissionDate = System.currentTimeMillis() - 86400000L * 2,
-                        status = "PENDING"
-                    ),
-                    SchoolRegistration(
-                        schoolName = "Panti Asuhan Kasih Mandiri",
-                        address = "Jl. Kenjeran No. 112",
-                        city = "Kota Surabaya",
-                        estimatedWaliCount = 5,
-                        picName = "Hj. Siti Aminah, S.Sos",
-                        picEmail = "kasihmandiri.sby@gmail.com",
-                        picPhone = "085712345678",
-                        submissionDate = System.currentTimeMillis() - 86400000L * 4,
-                        status = "APPROVED",
-                        generatedSchoolCode = "SRT-SBY02",
-                        generatedAdminUsername = "adminsby_kasihmandiri",
-                        generatedAdminPassword = "Mandiri#8419",
-                        approvedDate = System.currentTimeMillis() - 86400000L * 3
-                    )
-                )
-                database.schoolRegistrationDao().insertAll(demoRegistrations)
-            }
-        }
-
-        private suspend fun seedDefaultWaliAccounts(database: AppDatabase) {
-            val count = database.waliAccountDao().count()
-            if (count == 0) {
-                val defaultAccounts = listOf(
-                    WaliAccount(name = "Sari Devi", username = "saridevi", password = "Sari#7294", dormitory = "Asrama Putri", phone = "081234567891"),
-                    WaliAccount(name = "Budi Santoso", username = "budisantoso", password = "Budi#3815", dormitory = "Asrama Putra", phone = "081234567892"),
-                    WaliAccount(name = "Ahmad Fauzi", username = "ahmadfauzi", password = "Fauzi#9162", dormitory = "Asrama Putra", phone = "081234567893"),
-                    WaliAccount(name = "Dewi Lestari", username = "dewilestari", password = "Dewi#4921", dormitory = "Asrama Putri", phone = "081234567894")
-                )
-                database.waliAccountDao().insertAll(defaultAccounts)
-            } else {
-                // Periksa jika ada akun lama dengan username kosong, otomatis perbaiki
-                val existingAccounts = database.waliAccountDao().getAllAccountsList()
-                for (acc in existingAccounts) {
-                    if (acc.username.isBlank()) {
-                        val fixedUsername = acc.name.lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali${acc.id}" }
-                        database.waliAccountDao().update(acc.copy(username = fixedUsername))
+                    try {
+                        db.execSQL("DELETE FROM school_registrations WHERE schoolName LIKE '%Al-Hikmah%' OR schoolName LIKE '%Kasih Mandiri%'")
+                        db.execSQL("DELETE FROM wali_accounts WHERE username IN ('saridevi', 'budisantoso', 'ahmadfauzi', 'dewilestari')")
+                    } catch (e: Exception) {
+                        // ignore if already clean
                     }
                 }
             }

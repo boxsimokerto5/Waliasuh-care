@@ -101,13 +101,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onComplete()
     }
 
-    fun saveImportedStudents(studentList: List<ChildStudent>, replace: Boolean, onComplete: (Int) -> Unit) {
+    fun saveImportedStudents(
+        studentList: List<ChildStudent>,
+        replace: Boolean,
+        schoolId: String? = null,
+        onComplete: (Int) -> Unit
+    ) {
         viewModelScope.launch {
+            val targetSchoolId = schoolId?.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                ?: _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             if (replace) {
-                repository.deleteAllStudents()
+                repository.deleteStudentsBySchool(targetSchoolId)
             }
-            repository.insertAllStudents(studentList)
-            onComplete(studentList.size)
+            val stampedStudents = studentList.map { student ->
+                student.copy(schoolId = targetSchoolId)
+            }
+            repository.insertAllStudents(stampedStudents)
+            onComplete(stampedStudents.size)
         }
     }
 
@@ -115,20 +125,31 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val defaultStudents = AppDatabase.loadStudentsFromAssets(getApplication())
             if (defaultStudents.isNotEmpty()) {
-                repository.deleteAllStudents()
-                repository.insertAllStudents(defaultStudents)
+                repository.deleteStudentsBySchool("SRT1-KDR")
+                val stamped = defaultStudents.map { it.copy(schoolId = "SRT1-KDR") }
+                repository.insertAllStudents(stamped)
             }
             onComplete(defaultStudents.size)
         }
     }
 
-    fun saveImportedWaliAccounts(accountList: List<WaliAccount>, replace: Boolean, onComplete: (Int) -> Unit) {
+    fun saveImportedWaliAccounts(
+        accountList: List<WaliAccount>,
+        replace: Boolean,
+        schoolId: String? = null,
+        onComplete: (Int) -> Unit
+    ) {
         viewModelScope.launch {
+            val targetSchoolId = schoolId?.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                ?: _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             if (replace) {
-                repository.deleteAllWaliAccounts()
+                repository.deleteWaliAccountsBySchool(targetSchoolId)
             }
-            repository.insertAllWaliAccounts(accountList)
-            onComplete(accountList.size)
+            val stampedAccounts = accountList.map { acc ->
+                acc.copy(schoolId = targetSchoolId)
+            }
+            repository.insertAllWaliAccounts(stampedAccounts)
+            onComplete(stampedAccounts.size)
         }
     }
 
@@ -143,9 +164,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     )
     val currentUserRole: StateFlow<UserRole> = _currentUserRole.asStateFlow()
 
-    // Active Wali Name (Default "Sari Devi" from mockup or loaded from preferences)
+    // Active Wali Name (Loaded from preferences or active login)
     private val _waliName = MutableStateFlow(
-        authPrefs.getString("saved_wali_name", null)?.takeIf { it.isNotBlank() } ?: "Sari Devi"
+        authPrefs.getString("saved_wali_name", null)?.takeIf { it.isNotBlank() } ?: "Wali Asuh"
     )
     val waliName: StateFlow<String> = _waliName.asStateFlow()
 
@@ -376,7 +397,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 allergies = if (allergies.isBlank()) "Tidak ada" else allergies.trim(),
                 bloodType = if (bloodType.isBlank()) "-" else bloodType.trim(),
                 emergencyContact = emergencyContact.trim(),
-                specialNotes = specialNotes.trim()
+                specialNotes = specialNotes.trim(),
+                schoolId = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             )
             repository.insertStudent(student)
         }
@@ -671,7 +693,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 username = finalUsername,
                 password = password,
                 dormitory = dormitory.ifBlank { "Asrama Putra" },
-                phone = phone.trim()
+                phone = phone.trim(),
+                schoolId = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             )
 
             val id = repository.insertWaliAccount(newAccount)

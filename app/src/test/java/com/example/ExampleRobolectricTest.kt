@@ -7,6 +7,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import kotlinx.coroutines.flow.first
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -59,6 +60,45 @@ class ExampleRobolectricTest {
       loginResult = result
     }
     org.junit.Assert.assertTrue(loginResult is com.example.ui.LoginResult.SuccessSuperAdmin)
+  }
+
+  @Test
+  fun `verify schoolId tenant binding for imported students and wali`() = kotlinx.coroutines.runBlocking {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val inMemoryDb = androidx.room.Room.inMemoryDatabaseBuilder(context, com.example.data.database.AppDatabase::class.java)
+      .allowMainThreadQueries()
+      .build()
+
+    val customSchoolId = "SCH-TEST-99"
+    val testStudent = com.example.data.model.ChildStudent(
+      name = "Siswa Uji Coba",
+      nis = "9901",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-B",
+      schoolId = customSchoolId
+    )
+
+    inMemoryDb.childStudentDao().insert(testStudent)
+    val fetchedStudents = inMemoryDb.childStudentDao().getStudentsBySchool(customSchoolId).first()
+    assertEquals(1, fetchedStudents.size)
+    assertEquals(customSchoolId, fetchedStudents[0].schoolId)
+
+    val testWali = com.example.data.model.WaliAccount(
+      name = "Wali Uji Coba",
+      username = "waliuji",
+      password = "Password#123",
+      dormitory = "Asrama Putra",
+      schoolId = customSchoolId
+    )
+
+    inMemoryDb.waliAccountDao().insert(testWali)
+    val fetchedAccounts = inMemoryDb.waliAccountDao().getAccountsBySchool(customSchoolId).first()
+    assertEquals(1, fetchedAccounts.size)
+    assertEquals(customSchoolId, fetchedAccounts[0].schoolId)
+
+    inMemoryDb.close()
   }
 }
 

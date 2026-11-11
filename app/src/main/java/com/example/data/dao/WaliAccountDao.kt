@@ -42,6 +42,12 @@ interface WaliAccountDao {
     @Delete
     suspend fun delete(account: WaliAccount)
 
+    @Query("SELECT * FROM wali_accounts WHERE schoolId = :schoolId ORDER BY name ASC")
+    fun getAccountsBySchool(schoolId: String): Flow<List<WaliAccount>>
+
+    @Query("DELETE FROM wali_accounts WHERE schoolId = :schoolId")
+    suspend fun deleteBySchoolId(schoolId: String)
+
     @Query("DELETE FROM wali_accounts WHERE id = :id")
     suspend fun deleteById(id: Long)
 

@@ -75,8 +75,14 @@ class HealthRepository(
     suspend fun deleteAllStudents() =
         studentDao.deleteAll()
 
+    suspend fun deleteStudentsBySchool(schoolId: String) =
+        studentDao.deleteBySchoolId(schoolId)
+
     suspend fun deleteAllWaliAccounts() =
         waliAccountDao.deleteAll()
+
+    suspend fun deleteWaliAccountsBySchool(schoolId: String) =
+        waliAccountDao.deleteBySchoolId(schoolId)
 
     suspend fun insertAllWaliAccounts(accounts: List<WaliAccount>) =
         waliAccountDao.insertAll(accounts)

@@ -12,5 +12,6 @@ data class WaliAccount(
     val password: String,
     val dormitory: String = "Asrama Putra", // Asrama Putra / Asrama Putri / Umum
     val phone: String = "",
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val schoolId: String = "SRT1-KDR"
 )

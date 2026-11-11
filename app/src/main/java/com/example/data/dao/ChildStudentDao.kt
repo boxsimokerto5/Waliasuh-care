@@ -32,6 +32,12 @@ interface ChildStudentDao {
     @Query("SELECT COUNT(*) FROM child_students")
     suspend fun count(): Int
 
+    @Query("SELECT * FROM child_students WHERE schoolId = :schoolId ORDER BY name ASC")
+    fun getStudentsBySchool(schoolId: String): Flow<List<ChildStudent>>
+
+    @Query("DELETE FROM child_students WHERE schoolId = :schoolId")
+    suspend fun deleteBySchoolId(schoolId: String)
+
     @Query("DELETE FROM child_students")
     suspend fun deleteAll()
 }

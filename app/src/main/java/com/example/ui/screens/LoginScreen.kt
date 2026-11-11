@@ -364,79 +364,13 @@ fun LoginScreen(
                     }
                 }
 
-                // Card Akses Cepat / Demo Helper
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AdminPanelSettings,
-                                contentDescription = null,
-                                tint = WaliPrimary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Akses Cepat Pengujian (Tap untuk Isi)",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-
-                        Text(
-                            text = "Tekan chip di bawah untuk langsung mencoba login tanpa harus mengetik manual:",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            // Chip Superadmin
-                            SuggestionChip(
-                                onClick = {
-                                    username = "superadmin"
-                                    password = "Woyowoyo12@"
-                                    errorMessage = null
-                                },
-                                label = { Text("👑 Superadmin (Master)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                            )
-
-                            // Chip Admin Sekolah
-                            SuggestionChip(
-                                onClick = {
-                                    username = "ekowahyudiadmin"
-                                    password = "Woyowoyo12@"
-                                    errorMessage = null
-                                },
-                                label = { Text("🔑 Admin SRT 1 (Eko Wahyudi)", fontSize = 11.sp, fontWeight = FontWeight.Bold) }
-                            )
-
-                            // Chip Wali Asuh yang ada
-                            waliAccounts.take(4).forEach { acc ->
-                                val effectiveUser = acc.username.ifBlank {
-                                    acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
-                                }
-                                SuggestionChip(
-                                    onClick = {
-                                        username = effectiveUser
-                                        password = acc.password
-                                        errorMessage = null
-                                    },
-                                    label = { Text("👤 ${acc.name} ($effectiveUser)", fontSize = 11.sp) }
-                                )
-                            }
-                        }
-                    }
-                }
+                Text(
+                    text = "Aplikasi Kesehatan Sekolah & Asrama Terpadu\nSilakan gunakan kredensial resmi yang diterbitkan oleh Administrator.",
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
 
                 if (showRegistrationDialog) {
                     SchoolRegistrationDialog(

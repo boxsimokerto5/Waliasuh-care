@@ -36,7 +36,7 @@ object PdfReportGenerator {
         records: List<MedicalRecord>,
         periodType: ReportPeriodType,
         periodLabel: String,
-        waliName: String = "Sari Devi"
+        waliName: String = "Wali Asuh"
     ): File? {
         try {
             val document = PdfDocument()
@@ -402,7 +402,7 @@ object PdfReportGenerator {
         records: List<MedicalRecord>,
         totalStudentsCount: Int,
         monthYearLabel: String,
-        waliName: String = "Sari Devi"
+        waliName: String = "Wali Asuh"
     ): File? {
         try {
             val document = PdfDocument()
