@@ -56,13 +56,20 @@ fun QuickMenuTiles(
     onShowPuskesmasInfo: () -> Unit,
     onOpenShiftMessages: () -> Unit = {},
     onOpenCreateShiftMessage: () -> Unit = {},
+    onOpenInputHaid: () -> Unit = {},
+    onOpenDaftarHaid: () -> Unit = {},
+    onOpenDaftarSuci: () -> Unit = {},
+    onOpenFiqihHaid: () -> Unit = {},
     studentsCount: Int = 0,
     activeShiftMessagesCount: Int = 0,
     urgentShiftMessagesCount: Int = 0,
+    activeHaidCount: Int = 0,
+    suciCount: Int = 0,
+    istihadhahCount: Int = 0,
     schoolShortName: String = "",
     modifier: Modifier = Modifier
 ) {
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
 
     Column(
@@ -78,165 +85,246 @@ fun QuickMenuTiles(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (page == 0) {
-                    // ==========================================
-                    // HALAMAN 1: LAYANAN UTAMA KESEHATAN ANAK
-                    // ==========================================
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CartoonMenuCard(
-                            title = "Rencana Berobat",
-                            subtitle = "Jadwal Puskesmas",
-                            imageRes = R.drawable.img_menu_rencana,
-                            badgeText = "Rujukan",
-                            badgeBg = Color(0xFFE0F2FE),
-                            badgeColor = WaliPrimary,
-                            bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.5f)),
-                            borderColor = Color(0xFFBAE6FD),
-                            onClick = onNavigateToPlan,
-                            testTag = "tile_rencana_berobat",
-                            modifier = Modifier.weight(1f)
-                        )
+                when (page) {
+                    0 -> {
+                        // ==========================================
+                        // HALAMAN 1: LAYANAN UTAMA KESEHATAN ANAK
+                        // ==========================================
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CartoonMenuCard(
+                                title = "Rencana Berobat",
+                                subtitle = "Jadwal Puskesmas",
+                                imageRes = R.drawable.img_menu_rencana,
+                                badgeText = "Rujukan",
+                                badgeBg = Color(0xFFE0F2FE),
+                                badgeColor = WaliPrimary,
+                                bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.5f)),
+                                borderColor = Color(0xFFBAE6FD),
+                                onClick = onNavigateToPlan,
+                                testTag = "tile_rencana_berobat",
+                                modifier = Modifier.weight(1f)
+                            )
 
-                        CartoonMenuCard(
-                            title = "Tindakan Medis",
-                            subtitle = "Input Pengobatan",
-                            imageRes = R.drawable.img_menu_tindakan,
-                            badgeText = "Langsung",
-                            badgeBg = Color(0xFFFEF3C7),
-                            badgeColor = Color(0xFFD97706),
-                            bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.5f)),
-                            borderColor = Color(0xFFFDE68A),
-                            onClick = onNavigateToDirectTreatment,
-                            testTag = "tile_tindakan_langsung",
-                            modifier = Modifier.weight(1f)
-                        )
+                            CartoonMenuCard(
+                                title = "Tindakan Medis",
+                                subtitle = "Input Pengobatan",
+                                imageRes = R.drawable.img_menu_tindakan,
+                                badgeText = "Langsung",
+                                badgeBg = Color(0xFFFEF3C7),
+                                badgeColor = Color(0xFFD97706),
+                                bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.5f)),
+                                borderColor = Color(0xFFFDE68A),
+                                onClick = onNavigateToDirectTreatment,
+                                testTag = "tile_tindakan_langsung",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CartoonMenuCard(
+                                title = "Rekam Medis",
+                                subtitle = "Riwayat & Diagnosa",
+                                imageRes = R.drawable.img_menu_rekam_medis,
+                                badgeText = "Resep Obat",
+                                badgeBg = Color(0xFFDCFCE7),
+                                badgeColor = Color(0xFF16A34A),
+                                bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.5f)),
+                                borderColor = Color(0xFFBBF7D0),
+                                onClick = onNavigateToRecords,
+                                testTag = "tile_rekam_medis",
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            val studentSubtitle = if (studentsCount > 0) {
+                                if (schoolShortName.isNotBlank()) "$studentsCount Siswa $schoolShortName" else "$studentsCount Siswa Terdaftar"
+                            } else {
+                                "Data Siswa Asrama"
+                            }
+
+                            CartoonMenuCard(
+                                title = "Anak Asuh",
+                                subtitle = studentSubtitle,
+                                imageRes = R.drawable.img_menu_anak_asuh,
+                                badgeText = "Data Asrama",
+                                badgeBg = Color(0xFFF3E8FF),
+                                badgeColor = Color(0xFF9333EA),
+                                bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.5f)),
+                                borderColor = Color(0xFFE9D5FF),
+                                onClick = onNavigateToStudents,
+                                testTag = "tile_anak_asuh",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
+                    1 -> {
+                        // ==========================================
+                        // HALAMAN 2: LAYANAN OPERASIONAL & PESAN SHIFT
+                        // ==========================================
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            val shiftBadgeText = when {
+                                urgentShiftMessagesCount > 0 -> "$urgentShiftMessagesCount URGENT"
+                                activeShiftMessagesCount > 0 -> "$activeShiftMessagesCount Pesan"
+                                else -> "Operan Jaga"
+                            }
+                            val shiftBadgeBg = when {
+                                urgentShiftMessagesCount > 0 -> Color(0xFFFEE2E2)
+                                activeShiftMessagesCount > 0 -> Color(0xFFFEF3C7)
+                                else -> Color(0xFFE0F2FE)
+                            }
+                            val shiftBadgeColor = when {
+                                urgentShiftMessagesCount > 0 -> Color(0xFFDC2626)
+                                activeShiftMessagesCount > 0 -> Color(0xFFD97706)
+                                else -> WaliPrimary
+                            }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CartoonMenuCard(
-                            title = "Rekam Medis",
-                            subtitle = "Riwayat & Diagnosa",
-                            imageRes = R.drawable.img_menu_rekam_medis,
-                            badgeText = "Resep Obat",
-                            badgeBg = Color(0xFFDCFCE7),
-                            badgeColor = Color(0xFF16A34A),
-                            bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.5f)),
-                            borderColor = Color(0xFFBBF7D0),
-                            onClick = onNavigateToRecords,
-                            testTag = "tile_rekam_medis",
-                            modifier = Modifier.weight(1f)
-                        )
+                            CartoonMenuCard(
+                                title = "Pesan Shift",
+                                subtitle = "Operan Jaga Asrama",
+                                imageRes = R.drawable.img_menu_pesan_shift,
+                                badgeText = shiftBadgeText,
+                                badgeBg = shiftBadgeBg,
+                                badgeColor = shiftBadgeColor,
+                                bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.55f)),
+                                borderColor = Color(0xFFFDE68A),
+                                onClick = onOpenShiftMessages,
+                                testTag = "tile_pesan_shift_berikutnya",
+                                modifier = Modifier.weight(1f)
+                            )
 
-                        val studentSubtitle = if (studentsCount > 0) {
-                            if (schoolShortName.isNotBlank()) "$studentsCount Siswa $schoolShortName" else "$studentsCount Siswa Terdaftar"
-                        } else {
-                            "Data Siswa Asrama"
+                            CartoonMenuCard(
+                                title = "Tulis Pesan",
+                                subtitle = "Voice to Text (Mic)",
+                                imageRes = R.drawable.img_doctor_panda,
+                                badgeText = "Input Suara",
+                                badgeBg = Color(0xFFDCFCE7),
+                                badgeColor = Color(0xFF16A34A),
+                                bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.55f)),
+                                borderColor = Color(0xFFBBF7D0),
+                                onClick = onOpenCreateShiftMessage,
+                                testTag = "tile_tulis_pesan_shift",
+                                modifier = Modifier.weight(1f)
+                            )
                         }
 
-                        CartoonMenuCard(
-                            title = "Anak Asuh",
-                            subtitle = studentSubtitle,
-                            imageRes = R.drawable.img_menu_anak_asuh,
-                            badgeText = "Data Asrama",
-                            badgeBg = Color(0xFFF3E8FF),
-                            badgeColor = Color(0xFF9333EA),
-                            bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.5f)),
-                            borderColor = Color(0xFFE9D5FF),
-                            onClick = onNavigateToStudents,
-                            testTag = "tile_anak_asuh",
-                            modifier = Modifier.weight(1f)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CartoonMenuCard(
+                                title = "Riwayat Operan",
+                                subtitle = "Daftar Serah Terima",
+                                imageRes = R.drawable.img_menu_rekam_medis,
+                                badgeText = "Riwayat Jaga",
+                                badgeBg = Color(0xFFF1F5F9),
+                                badgeColor = Color(0xFF475569),
+                                bgGradient = listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9)),
+                                borderColor = Color(0xFFCBD5E1),
+                                onClick = onOpenShiftMessages,
+                                testTag = "tile_riwayat_operan",
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            CartoonMenuCard(
+                                title = "Data Asrama",
+                                subtitle = if (schoolShortName.isNotBlank()) schoolShortName else "Sekolah Rakyat",
+                                imageRes = R.drawable.img_menu_anak_asuh,
+                                badgeText = "Daftar Asrama",
+                                badgeBg = Color(0xFFF3E8FF),
+                                badgeColor = Color(0xFF9333EA),
+                                bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.5f)),
+                                borderColor = Color(0xFFE9D5FF),
+                                onClick = onNavigateToStudents,
+                                testTag = "tile_asrama_page2",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                } else {
-                    // ==========================================
-                    // HALAMAN 2: LAYANAN OPERASIONAL & PESAN SHIFT
-                    // ==========================================
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        val shiftBadgeText = when {
-                            urgentShiftMessagesCount > 0 -> "$urgentShiftMessagesCount URGENT"
-                            activeShiftMessagesCount > 0 -> "$activeShiftMessagesCount Pesan"
-                            else -> "Operan Jaga"
+                    else -> {
+                        // ==========================================
+                        // HALAMAN 3: PENDATAAN & FIQIH HAID (4 IKON BESAR)
+                        // ==========================================
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Ikon 1: Input Haid (Scan Barcode Kartu Siswa)
+                            CartoonMenuCard(
+                                title = "Input Haid",
+                                subtitle = "Scan Kartu / NIK",
+                                imageRes = R.drawable.img_menu_input_haid,
+                                badgeText = "Scan Barcode",
+                                badgeBg = Color(0xFFFCE7F3),
+                                badgeColor = Color(0xFFDB2777),
+                                bgGradient = listOf(Color(0xFFFFF1F2), Color(0xFFFCE7F3).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFFFBCFE8),
+                                onClick = onOpenInputHaid,
+                                testTag = "tile_input_haid",
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // Ikon 2: Daftar Haid (Sedang Aktif)
+                            val haidBadgeText = if (istihadhahCount > 0) "$istihadhahCount Istihadhah" else "$activeHaidCount Siswi"
+                            val haidBadgeBg = if (istihadhahCount > 0) Color(0xFFFEE2E2) else Color(0xFFFCE7F3)
+                            val haidBadgeColor = if (istihadhahCount > 0) Color(0xFFDC2626) else Color(0xFFBE185D)
+
+                            CartoonMenuCard(
+                                title = "Daftar Haid",
+                                subtitle = if (activeHaidCount > 0) "$activeHaidCount Sedang Haid" else "Tidak Ada Haid",
+                                imageRes = R.drawable.img_menu_daftar_haid,
+                                badgeText = haidBadgeText,
+                                badgeBg = haidBadgeBg,
+                                badgeColor = haidBadgeColor,
+                                bgGradient = listOf(Color(0xFFFDF2F8), Color(0xFFFCE7F3).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFFF472B6),
+                                onClick = onOpenDaftarHaid,
+                                testTag = "tile_daftar_haid",
+                                modifier = Modifier.weight(1f)
+                            )
                         }
-                        val shiftBadgeBg = when {
-                            urgentShiftMessagesCount > 0 -> Color(0xFFFEE2E2)
-                            activeShiftMessagesCount > 0 -> Color(0xFFFEF3C7)
-                            else -> Color(0xFFE0F2FE)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Ikon 3: Daftar Suci (Riwayat Bersuci)
+                            CartoonMenuCard(
+                                title = "Daftar Suci",
+                                subtitle = "Riwayat & Siap Ibadah",
+                                imageRes = R.drawable.img_menu_daftar_suci,
+                                badgeText = if (suciCount > 0) "$suciCount Suci" else "Bersuci",
+                                badgeBg = Color(0xFFDCFCE7),
+                                badgeColor = Color(0xFF16A34A),
+                                bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFFBBF7D0),
+                                onClick = onOpenDaftarSuci,
+                                testTag = "tile_daftar_suci",
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // Ikon 4: Panduan Aplikasi & Fiqih Haid
+                            CartoonMenuCard(
+                                title = "Panduan & Fiqih",
+                                subtitle = "Kaidah Syariat Islam",
+                                imageRes = R.drawable.img_menu_fiqih_haid,
+                                badgeText = "Fiqih Syariat",
+                                badgeBg = Color(0xFFCCFBF1),
+                                badgeColor = Color(0xFF0F766E),
+                                bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFF99F6E4),
+                                onClick = onOpenFiqihHaid,
+                                testTag = "tile_fiqih_haid",
+                                modifier = Modifier.weight(1f)
+                            )
                         }
-                        val shiftBadgeColor = when {
-                            urgentShiftMessagesCount > 0 -> Color(0xFFDC2626)
-                            activeShiftMessagesCount > 0 -> Color(0xFFD97706)
-                            else -> WaliPrimary
-                        }
-
-                        CartoonMenuCard(
-                            title = "Pesan Shift",
-                            subtitle = "Operan Jaga Asrama",
-                            imageRes = R.drawable.img_menu_pesan_shift,
-                            badgeText = shiftBadgeText,
-                            badgeBg = shiftBadgeBg,
-                            badgeColor = shiftBadgeColor,
-                            bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.55f)),
-                            borderColor = Color(0xFFFDE68A),
-                            onClick = onOpenShiftMessages,
-                            testTag = "tile_pesan_shift_berikutnya",
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        CartoonMenuCard(
-                            title = "Tulis Pesan",
-                            subtitle = "Voice to Text (Mic)",
-                            imageRes = R.drawable.img_doctor_panda,
-                            badgeText = "Input Suara",
-                            badgeBg = Color(0xFFDCFCE7),
-                            badgeColor = Color(0xFF16A34A),
-                            bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.55f)),
-                            borderColor = Color(0xFFBBF7D0),
-                            onClick = onOpenCreateShiftMessage,
-                            testTag = "tile_tulis_pesan_shift",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CartoonMenuCard(
-                            title = "Riwayat Operan",
-                            subtitle = "Daftar Serah Terima",
-                            imageRes = R.drawable.img_menu_rekam_medis,
-                            badgeText = "Riwayat Jaga",
-                            badgeBg = Color(0xFFF1F5F9),
-                            badgeColor = Color(0xFF475569),
-                            bgGradient = listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9)),
-                            borderColor = Color(0xFFCBD5E1),
-                            onClick = onOpenShiftMessages,
-                            testTag = "tile_riwayat_operan",
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        CartoonMenuCard(
-                            title = "Data Asrama",
-                            subtitle = if (schoolShortName.isNotBlank()) schoolShortName else "Sekolah Rakyat",
-                            imageRes = R.drawable.img_menu_anak_asuh,
-                            badgeText = "Daftar Asrama",
-                            badgeBg = Color(0xFFF3E8FF),
-                            badgeColor = Color(0xFF9333EA),
-                            bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.5f)),
-                            borderColor = Color(0xFFE9D5FF),
-                            onClick = onNavigateToStudents,
-                            testTag = "tile_asrama_page2",
-                            modifier = Modifier.weight(1f)
-                        )
                     }
                 }
             }
@@ -252,10 +340,10 @@ fun QuickMenuTiles(
         ) {
             // Label Halaman Aktif
             Text(
-                text = if (pagerState.currentPage == 0) {
-                    "Layanan Kesehatan (1/2)"
-                } else {
-                    "Pesan Shift & Operan Jaga (2/2)"
+                text = when (pagerState.currentPage) {
+                    0 -> "Layanan Kesehatan (1/3)"
+                    1 -> "Pesan Shift & Jaga (2/3)"
+                    else -> "Pendataan & Fiqih Haid (3/3)"
                 },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -267,7 +355,7 @@ fun QuickMenuTiles(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                repeat(2) { index ->
+                repeat(3) { index ->
                     val isSelected = pagerState.currentPage == index
                     val dotWidth by animateDpAsState(targetValue = if (isSelected) 18.dp else 6.dp, label = "dotWidth")
                     Box(
@@ -275,7 +363,13 @@ fun QuickMenuTiles(
                             .height(6.dp)
                             .width(dotWidth)
                             .clip(CircleShape)
-                            .background(if (isSelected) WaliPrimary else MaterialTheme.colorScheme.surfaceVariant)
+                            .background(
+                                if (isSelected) {
+                                    if (index == 2) Color(0xFFDB2777) else WaliPrimary
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            )
                             .clickable {
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(index)
@@ -290,16 +384,16 @@ fun QuickMenuTiles(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable {
                     coroutineScope.launch {
-                        val target = if (pagerState.currentPage == 0) 1 else 0
-                        pagerState.animateScrollToPage(target)
+                        val next = (pagerState.currentPage + 1) % 3
+                        pagerState.animateScrollToPage(next)
                     }
                 }
             ) {
                 Text(
-                    text = if (pagerState.currentPage == 0) "Geser ❯" else "❮ Kembali",
+                    text = if (pagerState.currentPage < 2) "Geser ❯" else "Kembali ↺",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = WaliPrimary
+                    color = if (pagerState.currentPage == 2) Color(0xFFDB2777) else WaliPrimary
                 )
             }
         }

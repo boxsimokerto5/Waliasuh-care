@@ -20,9 +20,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
+import com.example.data.dao.HaidRecordDao
+import com.example.data.model.HaidRecord
+
 @Database(
-    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class, ShiftMessage::class],
-    version = 10,
+    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class, ShiftMessage::class, HaidRecord::class],
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -31,6 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun waliAccountDao(): WaliAccountDao
     abstract fun schoolRegistrationDao(): SchoolRegistrationDao
     abstract fun shiftMessageDao(): ShiftMessageDao
+    abstract fun haidRecordDao(): HaidRecordDao
 
     companion object {
         @Volatile

@@ -70,8 +70,12 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.CreateShiftMessageDialog
+import com.example.ui.dialogs.DaftarHaidSheet
+import com.example.ui.dialogs.DaftarSuciSheet
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
+import com.example.ui.dialogs.FiqihHaidDialog
+import com.example.ui.dialogs.InputHaidDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.dialogs.ShiftMessagesSheet
 import com.example.ui.theme.StatusDeparted
@@ -103,11 +107,17 @@ fun DashboardScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
+    val activeHaidRecords by viewModel.activeHaidRecords.collectAsStateWithLifecycle()
+    val suciRecords by viewModel.suciRecords.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
     var showShiftMessagesSheet by remember { mutableStateOf(false) }
     var showCreateShiftMessageDialog by remember { mutableStateOf(false) }
+    var showInputHaidDialog by remember { mutableStateOf(false) }
+    var showDaftarHaidSheet by remember { mutableStateOf(false) }
+    var showDaftarSuciSheet by remember { mutableStateOf(false) }
+    var showFiqihHaidDialog by remember { mutableStateOf(false) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
@@ -302,9 +312,28 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 showCreateShiftMessageDialog = true
                             },
+                            onOpenInputHaid = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showInputHaidDialog = true
+                            },
+                            onOpenDaftarHaid = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showDaftarHaidSheet = true
+                            },
+                            onOpenDaftarSuci = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showDaftarSuciSheet = true
+                            },
+                            onOpenFiqihHaid = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showFiqihHaidDialog = true
+                            },
                             studentsCount = students.size,
                             activeShiftMessagesCount = shiftMessages.count { !it.isCompleted },
                             urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted },
+                            activeHaidCount = activeHaidRecords.size,
+                            suciCount = suciRecords.size,
+                            istihadhahCount = activeHaidRecords.count { it.isIstihadhahWarning },
                             schoolShortName = schoolProfile.shortName
                         )
                     }
@@ -626,6 +655,56 @@ fun DashboardScreen(
             viewModel = viewModel,
             waliAccounts = waliAccounts,
             onDismiss = { showCreateShiftMessageDialog = false }
+        )
+    }
+
+    // Modal Dialog: Pendataan Haid Siswi (Scan Barcode Kartu Siswa)
+    if (showInputHaidDialog) {
+        InputHaidDialog(
+            students = students,
+            activeHaidRecords = activeHaidRecords,
+            waliName = waliName,
+            schoolId = schoolProfile.tenantCode,
+            onSaveHaid = { record ->
+                viewModel.saveHaidRecord(record)
+            },
+            onDismiss = { showInputHaidDialog = false }
+        )
+    }
+
+    // Modal Dialog: Daftar Siswi Sedang Haid
+    if (showDaftarHaidSheet) {
+        DaftarHaidSheet(
+            activeHaidRecords = activeHaidRecords,
+            onCompleteHaid = { id ->
+                viewModel.completeHaidRecord(id)
+            },
+            onDeleteRecord = { rec ->
+                viewModel.deleteHaidRecord(rec)
+            },
+            onOpenInputHaid = {
+                showDaftarHaidSheet = false
+                showInputHaidDialog = true
+            },
+            onDismiss = { showDaftarHaidSheet = false }
+        )
+    }
+
+    // Modal Dialog: Daftar Siswi Suci & Riwayat Siklus
+    if (showDaftarSuciSheet) {
+        DaftarSuciSheet(
+            suciRecords = suciRecords,
+            onDeleteRecord = { rec ->
+                viewModel.deleteHaidRecord(rec)
+            },
+            onDismiss = { showDaftarSuciSheet = false }
+        )
+    }
+
+    // Modal Dialog: Panduan Aplikasi & Fiqih Haid Wanita
+    if (showFiqihHaidDialog) {
+        FiqihHaidDialog(
+            onDismiss = { showFiqihHaidDialog = false }
         )
     }
 }

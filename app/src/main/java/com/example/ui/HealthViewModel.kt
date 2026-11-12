@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
+import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
@@ -51,7 +52,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.medicalRecordDao(),
             db.waliAccountDao(),
             db.schoolRegistrationDao(),
-            db.shiftMessageDao()
+            db.shiftMessageDao(),
+            db.haidRecordDao()
         )
     }
 
@@ -236,6 +238,71 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             messages.filter { it.schoolId.equals(tenant, ignoreCase = true) }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // Multi-tenant isolated haid records (Pendataan Siklus & Fiqih Haid Siswi Asrama):
+    val allHaidRecords: StateFlow<List<HaidRecord>> = combine(
+        repository.allHaidRecords,
+        _schoolProfile,
+        _currentUserRole
+    ) { records, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val activeHaidRecords: StateFlow<List<HaidRecord>> = combine(
+        allHaidRecords,
+        students
+    ) { records, _ ->
+        records.filter { it.isActive }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val suciRecords: StateFlow<List<HaidRecord>> = combine(
+        allHaidRecords,
+        students
+    ) { records, _ ->
+        records.filter { !it.isActive }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun saveHaidRecord(record: HaidRecord, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.insertHaidRecord(record)
+            onComplete()
+        }
+    }
+
+    fun completeHaidRecord(id: Long, endDate: Long = System.currentTimeMillis(), onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.completeHaidRecord(id, endDate, "SUCI")
+            onComplete()
+        }
+    }
+
+    fun deleteHaidRecord(record: HaidRecord, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteHaidRecord(record)
+            onComplete()
+        }
+    }
+
+    fun deleteHaidRecordById(id: Long, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteHaidRecordById(id)
+            onComplete()
+        }
+    }
+
+    fun findStudentByCode(code: String): ChildStudent? {
+        val q = code.trim().lowercase()
+        return students.value.firstOrNull { student ->
+            student.nik.trim().equals(q, ignoreCase = true) ||
+            student.nis.trim().equals(q, ignoreCase = true) ||
+            student.id.toString() == q
+        }
+    }
 
     fun cleanAllStudentsAndWaliData(onComplete: () -> Unit = {}) {
         viewModelScope.launch {

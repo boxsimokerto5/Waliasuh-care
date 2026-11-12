@@ -13,12 +13,16 @@ import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
+import com.example.data.dao.HaidRecordDao
+import com.example.data.model.HaidRecord
+
 class HealthRepository(
     private val studentDao: ChildStudentDao,
     private val recordDao: MedicalRecordDao,
     private val waliAccountDao: WaliAccountDao,
     private val registrationDao: SchoolRegistrationDao,
-    private val shiftMessageDao: ShiftMessageDao? = null
+    private val shiftMessageDao: ShiftMessageDao? = null,
+    private val haidRecordDao: HaidRecordDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -28,6 +32,9 @@ class HealthRepository(
     val allWaliAccounts: Flow<List<WaliAccount>> = waliAccountDao.getAllAccounts()
     val allSchoolRegistrations: Flow<List<SchoolRegistration>> = registrationDao.getAllRegistrations()
     val allShiftMessages: Flow<List<ShiftMessage>> = shiftMessageDao?.getAllMessages() ?: emptyFlow()
+    val allHaidRecords: Flow<List<HaidRecord>> = haidRecordDao?.getAllRecords() ?: emptyFlow()
+    val activeHaidRecords: Flow<List<HaidRecord>> = haidRecordDao?.getActiveHaidRecords() ?: emptyFlow()
+    val suciRecords: Flow<List<HaidRecord>> = haidRecordDao?.getSuciRecords() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -141,5 +148,35 @@ class HealthRepository(
 
     suspend fun deleteShiftMessagesBySchool(schoolId: String) {
         shiftMessageDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Haid Tracking Operations ---
+    suspend fun insertHaidRecord(record: HaidRecord): Long =
+        haidRecordDao?.insert(record) ?: 0L
+
+    suspend fun updateHaidRecord(record: HaidRecord) {
+        haidRecordDao?.update(record)
+    }
+
+    suspend fun deleteHaidRecord(record: HaidRecord) {
+        haidRecordDao?.delete(record)
+    }
+
+    suspend fun deleteHaidRecordById(id: Long) {
+        haidRecordDao?.deleteById(id)
+    }
+
+    suspend fun completeHaidRecord(id: Long, endDate: Long = System.currentTimeMillis(), status: String = "SUCI") {
+        haidRecordDao?.completeHaid(id, endDate, status)
+    }
+
+    suspend fun getActiveHaidForStudent(studentId: Long): HaidRecord? =
+        haidRecordDao?.getActiveRecordForStudent(studentId)
+
+    suspend fun getActiveHaidForNik(nik: String): HaidRecord? =
+        haidRecordDao?.getActiveRecordForNik(nik)
+
+    suspend fun deleteHaidRecordsBySchool(schoolId: String) {
+        haidRecordDao?.deleteBySchoolId(schoolId)
     }
 }
