@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -77,6 +78,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     // School Profile & Tenant Customization
     private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
+    private fun parseFaskesList(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return listOf("Puskesmas Plosoklaten")
+        return raw.split("|||").map { it.trim() }.filter { it.isNotBlank() }
+    }
+
     private val _schoolProfile = MutableStateFlow(
         SchoolProfile(
             schoolName = schoolPrefs.getString("school_name", "Sekolah Rakyat SRT 1 Kabupaten Kediri") ?: "Sekolah Rakyat SRT 1 Kabupaten Kediri",
@@ -84,8 +90,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             adminName = schoolPrefs.getString("admin_name", "Admin Utama") ?: "Admin Utama",
             city = schoolPrefs.getString("city", "Kabupaten Kediri") ?: "Kabupaten Kediri",
             tenantCode = schoolPrefs.getString("tenant_code", "SRT1-KDR") ?: "SRT1-KDR",
-            primaryFaskesName = schoolPrefs.getString("primary_faskes", "Puskesmas Wates") ?: "Puskesmas Wates",
-            secondaryFaskesName = schoolPrefs.getString("secondary_faskes", "Puskesmas Plosoklaten") ?: "Puskesmas Plosoklaten"
+            primaryFaskesName = schoolPrefs.getString("primary_faskes", "UKS Sekolah") ?: "UKS Sekolah",
+            secondaryFaskesName = schoolPrefs.getString("secondary_faskes", "Puskesmas Wates") ?: "Puskesmas Wates",
+            additionalFaskesList = parseFaskesList(schoolPrefs.getString("additional_faskes", "Puskesmas Plosoklaten"))
         )
     )
     val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
@@ -100,6 +107,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             .putString("tenant_code", profile.tenantCode)
             .putString("primary_faskes", profile.primaryFaskesName)
             .putString("secondary_faskes", profile.secondaryFaskesName)
+            .putString("additional_faskes", profile.additionalFaskesList.joinToString("|||"))
             .apply()
         onComplete()
     }
@@ -371,6 +379,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun markDeparted(recordId: Long) {
         viewModelScope.launch {
             repository.updateStatus(recordId, "DEPARTED")
+        }
+    }
+
+    // Mark departed with specific referral faskes and escort
+    fun markDepartedToFaskes(recordId: Long, targetFaskes: String, escortName: String) {
+        viewModelScope.launch {
+            repository.updateDepartureWithFaskes(recordId, "DEPARTED", targetFaskes, escortName)
+            repository.getRecordById(recordId).firstOrNull()?.let { updated ->
+                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated)
+            }
+        }
+    }
+
+    fun updateRecord(record: MedicalRecord) {
+        viewModelScope.launch {
+            repository.updateRecord(record)
+            SupabaseSyncManager.uploadSingleRecord(getApplication(), record)
         }
     }
 

@@ -40,6 +40,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,7 @@ fun CompletedHistoryScreen(
     selectedFaskes: String,
     modifier: Modifier = Modifier
 ) {
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
 
@@ -217,6 +219,9 @@ fun CompletedHistoryScreen(
     if (showDirectTreatmentDialog) {
         DirectTreatmentDialog(
             students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showDirectTreatmentDialog = false },
             onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
                 viewModel.recordDirectTreatment(

@@ -3,6 +3,8 @@ package com.example.ui.dialogs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -54,12 +56,13 @@ import com.example.data.model.ChildStudent
 import com.example.util.DateUtils
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DirectTreatmentDialog(
     students: List<ChildStudent>,
-    primaryFaskesName: String = "Puskesmas Wates",
-    secondaryFaskesName: String = "Puskesmas Plosoklaten",
+    primaryFaskesName: String = "UKS Sekolah",
+    secondaryFaskesName: String = "Puskesmas Wates",
+    allFaskesList: List<String> = emptyList(),
     onDismiss: () -> Unit,
     onConfirm: (
         student: ChildStudent,
@@ -77,7 +80,14 @@ fun DirectTreatmentDialog(
     var selectedStudent by remember { mutableStateOf(students.firstOrNull()) }
     var showStudentSearchDialog by remember { mutableStateOf(false) }
 
-    var selectedFaskes by remember { mutableStateOf(primaryFaskesName) }
+    val faskesOptions = remember(primaryFaskesName, secondaryFaskesName, allFaskesList) {
+        if (allFaskesList.isNotEmpty()) {
+            allFaskesList
+        } else {
+            listOf(primaryFaskesName, secondaryFaskesName).filter { it.isNotBlank() }
+        }
+    }
+    var selectedFaskes by remember { mutableStateOf(faskesOptions.firstOrNull() ?: primaryFaskesName) }
     var customFaskes by remember { mutableStateOf("") }
 
     var complaint by remember { mutableStateOf("") }
@@ -250,26 +260,25 @@ fun DirectTreatmentDialog(
 
                 // Puskesmas Tujuan
                 Text(
-                    text = "Puskesmas / Faskes Pengobatan:",
+                    text = "Faskes / Fasilitas Kesehatan Pengobatan:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    FilterChip(
-                        selected = selectedFaskes == primaryFaskesName,
-                        onClick = { selectedFaskes = primaryFaskesName },
-                        label = { Text(primaryFaskesName, fontSize = 11.sp, maxLines = 1) },
-                        modifier = Modifier.height(28.dp)
-                    )
-                    FilterChip(
-                        selected = selectedFaskes == secondaryFaskesName,
-                        onClick = { selectedFaskes = secondaryFaskesName },
-                        label = { Text(secondaryFaskesName, fontSize = 11.sp, maxLines = 1) },
-                        modifier = Modifier.height(28.dp)
-                    )
+                    faskesOptions.forEachIndexed { idx, faskesName ->
+                        FilterChip(
+                            selected = selectedFaskes == faskesName,
+                            onClick = { selectedFaskes = faskesName },
+                            label = { Text(faskesName, fontSize = 11.sp, maxLines = 1) },
+                            modifier = Modifier
+                                .height(28.dp)
+                                .testTag("chip_direct_faskes_${idx + 1}")
+                        )
+                    }
                     FilterChip(
                         selected = selectedFaskes == "Lainnya",
                         onClick = { selectedFaskes = "Lainnya" },

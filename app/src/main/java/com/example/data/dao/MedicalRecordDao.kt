@@ -44,6 +44,9 @@ interface MedicalRecordDao {
     @Query("UPDATE medical_records SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: Long, status: String)
 
+    @Query("UPDATE medical_records SET status = :status, faskes = :faskes, escortName = :escortName WHERE id = :id")
+    suspend fun updateDepartureWithFaskes(id: Long, status: String, faskes: String, escortName: String)
+
     @Query("UPDATE medical_records SET isControlCompleted = :isCompleted WHERE id = :id")
     suspend fun updateControlCompleted(id: Long, isCompleted: Boolean)
 

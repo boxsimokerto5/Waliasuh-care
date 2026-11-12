@@ -115,13 +115,7 @@ fun DashboardScreen(
     }
     var selectedPlanFilter by remember { mutableStateOf("Hari Ini") }
 
-    // Counts for today based on school's primary and secondary faskes
-    val faskes1Count = todayPlans.count {
-        it.faskes.contains(schoolProfile.primaryFaskesName, ignoreCase = true) || it.faskes.contains("Wates", ignoreCase = true)
-    }
-    val faskes2Count = todayPlans.count {
-        it.faskes.contains(schoolProfile.secondaryFaskesName, ignoreCase = true) || it.faskes.contains("Klaten", ignoreCase = true)
-    }
+    val allFaskes = schoolProfile.getAllFaskes()
     val totalToday = todayPlans.size
     val totalSchoolStudents = students.size
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
@@ -201,18 +195,15 @@ fun DashboardScreen(
 
                             Spacer(modifier = Modifier.height(1.dp))
 
-                            Text(
-                                text = "${schoolProfile.primaryFaskesName}: $faskes1Count Anak",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "${schoolProfile.secondaryFaskesName}: $faskes2Count Anak",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
+                            allFaskes.forEach { faskesName ->
+                                val count = todayPlans.count { it.faskes.contains(faskesName, ignoreCase = true) }
+                                Text(
+                                    text = "$faskesName: $count Anak",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
 
                             Spacer(modifier = Modifier.height(2.dp))
 
@@ -432,6 +423,9 @@ fun DashboardScreen(
     if (showCreateDialog) {
         CreatePlanDialog(
             students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showCreateDialog = false },
             onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
                 TopOnAdManager.onUserActionClick(context)
@@ -464,6 +458,9 @@ fun DashboardScreen(
     if (showDirectTreatmentDialog) {
         DirectTreatmentDialog(
             students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showDirectTreatmentDialog = false },
             onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
                 TopOnAdManager.onUserActionClick(context)

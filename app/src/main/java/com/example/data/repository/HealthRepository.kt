@@ -66,8 +66,14 @@ class HealthRepository(
     suspend fun deleteAllRecords() =
         recordDao.deleteAll()
 
+    fun getRecordById(id: Long): Flow<MedicalRecord?> =
+        recordDao.getRecordById(id)
+
     suspend fun updateStatus(id: Long, status: String) =
         recordDao.updateStatus(id, status)
+
+    suspend fun updateDepartureWithFaskes(id: Long, status: String, faskes: String, escortName: String) =
+        recordDao.updateDepartureWithFaskes(id, status, faskes, escortName)
 
     suspend fun updateControlCompleted(id: Long, isCompleted: Boolean) =
         recordDao.updateControlCompleted(id, isCompleted)

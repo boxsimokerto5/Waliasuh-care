@@ -47,6 +47,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -84,6 +85,7 @@ fun PlanScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedFaskesFilter by remember { mutableStateOf("Semua") }
 
@@ -363,6 +365,9 @@ fun PlanScreen(
     if (showCreatePlanDialog) {
         CreatePlanDialog(
             students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showCreatePlanDialog = false },
             onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
                 TopOnAdManager.onUserActionClick(context)

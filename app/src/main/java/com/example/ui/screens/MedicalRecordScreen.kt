@@ -78,6 +78,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.testTag
 import com.example.util.TopOnAdManager
 import androidx.compose.ui.text.font.FontWeight
@@ -126,6 +127,7 @@ fun MedicalRecordScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
     var selectedRecordForDetail by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -567,6 +569,9 @@ fun MedicalRecordScreen(
     if (showDirectTreatmentDialog) {
         DirectTreatmentDialog(
             students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showDirectTreatmentDialog = false },
             onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
                 TopOnAdManager.onUserActionClick(context)
