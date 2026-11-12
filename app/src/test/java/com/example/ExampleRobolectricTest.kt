@@ -353,5 +353,102 @@ class ExampleRobolectricTest {
     assertEquals("Siswa Tetap", remainingStudents[0].name)
     assertEquals(id1, remainingStudents[0].id)
   }
+
+  @Test
+  fun `verify wali self password change and synchronization to admin`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val schoolId = "SRT-SYNC-PASS"
+    val initialPass = "OldRandom#123"
+    val newCustomPass = "MudahDiingat123@"
+
+    val waliAccount = com.example.data.model.WaliAccount(
+      name = "Ustadz Budi",
+      username = "ustadzbudi",
+      password = initialPass,
+      dormitory = "Asrama Abu Bakar",
+      schoolId = schoolId
+    )
+    val accountId = db.waliAccountDao().insert(waliAccount)
+
+    // 1. Wali login menggunakan password lama
+    val loginOld = vm.executeLogin("ustadzbudi", initialPass, rememberMe = true)
+    org.junit.Assert.assertTrue(loginOld is com.example.ui.LoginResult.SuccessWali)
+
+    // 2. Wali mengganti password mandiri dari profil
+    var changeSuccess = false
+    var resultMsg = ""
+    vm.updateWaliSelfPassword("Ustadz Budi Pengasuh", newCustomPass) { success, msg ->
+      changeSuccess = success
+      resultMsg = msg
+    }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    org.junit.Assert.assertTrue(changeSuccess)
+
+    // 3. Verifikasi di database: password dan nama terupdate
+    val updatedFromDb = db.waliAccountDao().getById(accountId)
+    org.junit.Assert.assertNotNull(updatedFromDb)
+    assertEquals(newCustomPass, updatedFromDb?.password)
+    assertEquals("Ustadz Budi Pengasuh", updatedFromDb?.name)
+
+    // 4. Verifikasi bahwa login berikutnya dengan password baru berhasil
+    val loginNew = vm.executeLogin("ustadzbudi", newCustomPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginNew is com.example.ui.LoginResult.SuccessWali)
+
+    // 5. Verifikasi bahwa login dengan password lama sekarang ditolak
+    val loginWithOldRejected = vm.executeLogin("ustadzbudi", initialPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginWithOldRejected is com.example.ui.LoginResult.Error)
+  }
+
+  @Test
+  fun `verify shift message creation and handover completion`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    vm.setWaliName("Ustadz Fauzi")
+
+    // 1. Buat pesan shift baru (Urgent, Shift Malam)
+    var createdMessage: com.example.data.model.ShiftMessage? = null
+    vm.addShiftMessage(
+      title = "Pantau Suhu Santri Rizky",
+      followUpDate = System.currentTimeMillis() + 86400000L,
+      shift = "Shift Malam (21-07)",
+      targetWali = "Semua Wali Asuh",
+      content = "Suhu tubuh 38.5C, berikan kompres air hangat jam 02:00 malam",
+      priority = "URGENT"
+    ) { msg ->
+      createdMessage = msg
+    }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    org.junit.Assert.assertNotNull(createdMessage)
+    val msgId = createdMessage!!.id
+    assertEquals("Pantau Suhu Santri Rizky", createdMessage?.title)
+    assertEquals("URGENT", createdMessage?.priority)
+    assertEquals("Shift Malam (21-07)", createdMessage?.shift)
+    org.junit.Assert.assertFalse(createdMessage!!.isCompleted)
+
+    // 2. Tandai selesai ditindaklanjuti
+    vm.toggleShiftMessageCompleted(createdMessage!!)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val messages = db.shiftMessageDao().getAllMessages().first()
+    val updated = messages.firstOrNull { it.id == msgId }
+    org.junit.Assert.assertNotNull(updated)
+    org.junit.Assert.assertTrue(updated!!.isCompleted)
+    assertEquals("Ustadz Fauzi", updated.completedBy)
+
+    // 3. Hapus pesan shift
+    vm.deleteShiftMessage(updated)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val messagesAfterDelete = db.shiftMessageDao().getAllMessages().first()
+    org.junit.Assert.assertNull(messagesAfterDelete.firstOrNull { it.id == msgId })
+  }
 }
+
 

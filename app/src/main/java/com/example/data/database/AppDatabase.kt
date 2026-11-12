@@ -8,10 +8,12 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.example.data.dao.ChildStudentDao
 import com.example.data.dao.MedicalRecordDao
 import com.example.data.dao.SchoolRegistrationDao
+import com.example.data.dao.ShiftMessageDao
 import com.example.data.dao.WaliAccountDao
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,8 +21,8 @@ import kotlinx.coroutines.launch
 import org.json.JSONArray
 
 @Database(
-    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class],
-    version = 9,
+    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class, ShiftMessage::class],
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -28,6 +30,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun medicalRecordDao(): MedicalRecordDao
     abstract fun waliAccountDao(): WaliAccountDao
     abstract fun schoolRegistrationDao(): SchoolRegistrationDao
+    abstract fun shiftMessageDao(): ShiftMessageDao
 
     companion object {
         @Volatile

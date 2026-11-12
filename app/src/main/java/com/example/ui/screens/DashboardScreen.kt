@@ -69,9 +69,11 @@ import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.CreatePlanDialog
+import com.example.ui.dialogs.CreateShiftMessageDialog
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import com.example.ui.dialogs.ShiftMessagesSheet
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -99,9 +101,13 @@ fun DashboardScreen(
 ) {
     val context = LocalContext.current
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
+    val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
+    val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
+    var showShiftMessagesSheet by remember { mutableStateOf(false) }
+    var showCreateShiftMessageDialog by remember { mutableStateOf(false) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
@@ -288,7 +294,17 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 showPuskesmasInfoSheet = true
                             },
+                            onOpenShiftMessages = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showShiftMessagesSheet = true
+                            },
+                            onOpenCreateShiftMessage = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showCreateShiftMessageDialog = true
+                            },
                             studentsCount = students.size,
+                            activeShiftMessagesCount = shiftMessages.count { !it.isCompleted },
+                            urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted },
                             schoolShortName = schoolProfile.shortName
                         )
                     }
@@ -592,6 +608,25 @@ fun DashboardScreen(
                 }
             }
         }
+    }
+
+    // Modal Bottom Sheet: Pesan Shift Berikutnya (Daftar Kartu Operan Jaga)
+    if (showShiftMessagesSheet) {
+        ShiftMessagesSheet(
+            viewModel = viewModel,
+            messages = shiftMessages,
+            waliAccounts = waliAccounts,
+            onDismiss = { showShiftMessagesSheet = false }
+        )
+    }
+
+    // Modal Bottom Sheet: Form Tinggalkan Pesan Shift (Voice to Text)
+    if (showCreateShiftMessageDialog) {
+        CreateShiftMessageDialog(
+            viewModel = viewModel,
+            waliAccounts = waliAccounts,
+            onDismiss = { showCreateShiftMessageDialog = false }
+        )
     }
 }
 

@@ -7,14 +7,18 @@ import com.example.data.dao.WaliAccountDao
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolRegistration
+import com.example.data.dao.ShiftMessageDao
+import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 
 class HealthRepository(
     private val studentDao: ChildStudentDao,
     private val recordDao: MedicalRecordDao,
     private val waliAccountDao: WaliAccountDao,
-    private val registrationDao: SchoolRegistrationDao
+    private val registrationDao: SchoolRegistrationDao,
+    private val shiftMessageDao: ShiftMessageDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -23,6 +27,7 @@ class HealthRepository(
     val pendingControlRecords: Flow<List<MedicalRecord>> = recordDao.getPendingControlRecords()
     val allWaliAccounts: Flow<List<WaliAccount>> = waliAccountDao.getAllAccounts()
     val allSchoolRegistrations: Flow<List<SchoolRegistration>> = registrationDao.getAllRegistrations()
+    val allShiftMessages: Flow<List<ShiftMessage>> = shiftMessageDao?.getAllMessages() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -117,4 +122,24 @@ class HealthRepository(
 
     suspend fun getSchoolByCode(code: String): SchoolRegistration? =
         registrationDao.getBySchoolCode(code)
+
+    // --- Shift Message Handover Operations ---
+    suspend fun insertShiftMessage(message: ShiftMessage): Long =
+        shiftMessageDao?.insert(message) ?: 0L
+
+    suspend fun updateShiftMessage(message: ShiftMessage) {
+        shiftMessageDao?.update(message)
+    }
+
+    suspend fun deleteShiftMessage(message: ShiftMessage) {
+        shiftMessageDao?.delete(message)
+    }
+
+    suspend fun updateShiftMessageCompleted(id: Long, isCompleted: Boolean, completedBy: String, completedAt: Long) {
+        shiftMessageDao?.updateCompleted(id, isCompleted, completedBy, completedAt)
+    }
+
+    suspend fun deleteShiftMessagesBySchool(schoolId: String) {
+        shiftMessageDao?.deleteBySchoolId(schoolId)
+    }
 }

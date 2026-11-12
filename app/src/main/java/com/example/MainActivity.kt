@@ -468,7 +468,9 @@ fun WaliAsuhCareApp(
                         waliName = waliName,
                         isDarkTheme = isDarkTheme,
                         onToggleTheme = onToggleTheme,
-                        records = allRecords
+                        records = allRecords,
+                        onLogout = onLogout,
+                        onNavigateToAdmin = onNavigateToAdmin
                     )
                 }
             }

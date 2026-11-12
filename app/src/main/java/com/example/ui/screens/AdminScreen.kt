@@ -1321,6 +1321,14 @@ fun WaliAccountCardItem(
                                 }
                             }
                         }
+
+                        // Keterangan status sinkronisasi
+                        Text(
+                            text = "✓ Password tersinkron otomatis dari profil wali asuh",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = dormAccentColor.copy(alpha = 0.85f)
+                        )
                     }
                 }
 

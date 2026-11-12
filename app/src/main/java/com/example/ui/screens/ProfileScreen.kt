@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.util.TopOnAdManager
@@ -89,6 +90,7 @@ fun ProfileScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val currentWaliAccount by viewModel.currentWaliAccount.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
@@ -169,8 +171,8 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Akun",
-                    subtitle = "Detail wali dan kata sandi",
+                    title = "Akun & Kata Sandi",
+                    subtitle = "Profil akun & ganti kata sandi login",
                     icon = Icons.Default.AccountCircle,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF475569),
@@ -337,56 +339,15 @@ fun ProfileScreen(
         }
     }
 
-    // Modal Bottom Sheet: Akun Wali (Google Maps Style)
+    // Modal Bottom Sheet: Profil & Ganti Kata Sandi Wali Asuh (Tersinkronisasi ke Admin Sekolah)
     if (showEditAccountDialog) {
-        var tempName by remember { mutableStateOf(waliName) }
-        ModalBottomSheet(
-            onDismissRequest = { showEditAccountDialog = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 600.dp)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Detail Akun Wali Asuh", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    OutlinedTextField(
-                        value = tempName,
-                        onValueChange = { tempName = it },
-                        label = { Text("Nama Wali / Pengasuh") },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Text("Peran: Wali Asrama & Koordinator Kesehatan", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("Sekolah: Sekolah Rakyat SRT 1 Kab. Kediri", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        OutlinedButton(onClick = { showEditAccountDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("Batal")
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                viewModel.setWaliName(tempName)
-                                showEditAccountDialog = false
-                            },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Simpan")
-                        }
-                    }
-                }
-            }
-        }
+        ChangeWaliPasswordDialog(
+            viewModel = viewModel,
+            currentAccount = currentWaliAccount,
+            currentWaliName = waliName,
+            schoolName = schoolProfile.schoolName,
+            onDismiss = { showEditAccountDialog = false }
+        )
     }
 
     // Modal Bottom Sheet: Puskesmas Saya (Google Maps Style)

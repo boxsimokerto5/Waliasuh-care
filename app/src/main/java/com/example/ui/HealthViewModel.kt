@@ -9,6 +9,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
 import com.example.data.remote.supabase.SupabaseConfig
 import com.example.data.remote.supabase.SupabaseSyncManager
@@ -49,7 +50,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.childStudentDao(),
             db.medicalRecordDao(),
             db.waliAccountDao(),
-            db.schoolRegistrationDao()
+            db.schoolRegistrationDao(),
+            db.shiftMessageDao()
         )
     }
 
@@ -75,6 +77,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             _waliName.value = name.trim()
         }
     }
+
+    // Active Username (Loaded from preferences or active login)
+    private val _currentUsername = MutableStateFlow<String?>(authPrefs.getString("saved_username", null))
+    val currentUsername: StateFlow<String?> = _currentUsername.asStateFlow()
 
     // School Profile & Tenant Customization
     private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
@@ -151,6 +157,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    // Akun Wali Asuh yang sedang aktif login di sesi aplikasi saat ini
+    val currentWaliAccount: StateFlow<WaliAccount?> = combine(
+        repository.allWaliAccounts,
+        _currentUsername,
+        _waliName
+    ) { accounts, username, name ->
+        if (!username.isNullOrBlank()) {
+            accounts.firstOrNull { it.username.equals(username, ignoreCase = true) }
+        } else {
+            accounts.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
     // Multi-tenant isolated medical records:
     val allRecords: StateFlow<List<MedicalRecord>> = combine(
         repository.allRecords,
@@ -204,11 +223,26 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    // Multi-tenant isolated shift messages (Operan Jaga Antar-Shift Wali Asuh):
+    val shiftMessages: StateFlow<List<ShiftMessage>> = combine(
+        repository.allShiftMessages,
+        _schoolProfile,
+        _currentUserRole
+    ) { messages, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            messages
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            messages.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     fun cleanAllStudentsAndWaliData(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.deleteAllStudents()
             repository.deleteAllWaliAccounts()
             repository.deleteAllRecords()
+            repository.deleteShiftMessagesBySchool(_schoolProfile.value.tenantCode)
             onComplete()
         }
     }
@@ -218,6 +252,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val targetId = schoolId.trim().ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             repository.deleteStudentsBySchool(targetId)
             repository.deleteWaliAccountsBySchool(targetId)
+            repository.deleteShiftMessagesBySchool(targetId)
             onComplete()
         }
     }
@@ -639,6 +674,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         // 0. Cek Kredensial Superadmin Resmi
         if (cleanUser.equals("superadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
             _currentUserRole.value = UserRole.SUPERADMIN
+            _currentUsername.value = "superadmin"
             if (rememberMe) {
                 authPrefs.edit()
                     .putString("saved_role", "SUPERADMIN")
@@ -651,6 +687,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         // 1. Cek Kredensial Administrator Resmi
         if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
             _currentUserRole.value = UserRole.ADMIN
+            _currentUsername.value = "ekowahyudiadmin"
             if (rememberMe) {
                 authPrefs.edit()
                     .putString("saved_role", "ADMIN")
@@ -674,6 +711,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 return LoginResult.Error("Pengajuan pendaftaran sekolah ini belum disetujui (Status: ${matchedSchool.status}).")
             }
             _currentUserRole.value = UserRole.ADMIN
+            _currentUsername.value = matchedSchool.generatedAdminUsername
             updateSchoolProfile(
                 SchoolProfile(
                     schoolName = matchedSchool.schoolName,
@@ -721,6 +759,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             _currentUserRole.value = UserRole.WALI
             _waliName.value = account.name
+            _currentUsername.value = account.username
 
             // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh
             if (matchedSchoolWali != null) {
@@ -874,6 +913,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun logout() {
         _currentUserRole.value = UserRole.NOT_LOGGED_IN
+        _currentUsername.value = null
         authPrefs.edit().clear().apply()
     }
 
@@ -939,6 +979,120 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun updateWaliAccount(account: WaliAccount, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.updateWaliAccount(account)
+            onComplete()
+        }
+    }
+
+    // --- Ganti Password Mandiri oleh Wali Asuh (Tersinkronisasi ke Admin Sekolah) ---
+    fun updateWaliSelfPassword(
+        newName: String,
+        newPassword: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val cleanPass = newPassword.trim()
+            if (cleanPass.length < 6) {
+                onResult(false, "Kata sandi baru minimal harus 6 karakter.")
+                return@launch
+            }
+
+            val cleanName = newName.trim().ifBlank { _waliName.value }
+            val username = _currentUsername.value
+
+            var account: WaliAccount? = null
+            if (!username.isNullOrBlank()) {
+                account = repository.getWaliAccountByUsername(username)
+            }
+            if (account == null) {
+                val all = repository.getAllWaliAccountsList()
+                account = all.firstOrNull {
+                    it.name.equals(_waliName.value, ignoreCase = true) ||
+                    it.username.equals(_waliName.value, ignoreCase = true)
+                }
+            }
+
+            if (account != null) {
+                val updated = account.copy(
+                    name = cleanName,
+                    password = cleanPass
+                )
+                repository.updateWaliAccount(updated)
+                _waliName.value = cleanName
+                _currentUsername.value = updated.username
+                if (authPrefs.getString("saved_role", "") == "WALI") {
+                    authPrefs.edit()
+                        .putString("saved_wali_name", cleanName)
+                        .putString("saved_username", updated.username)
+                        .apply()
+                }
+                onResult(true, "Kata sandi berhasil diperbarui dan tersinkronisasi ke Admin Sekolah.")
+            } else {
+                val defaultSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                val generatedUser = cleanName.lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali" }
+                val newAcc = WaliAccount(
+                    name = cleanName,
+                    username = generatedUser,
+                    password = cleanPass,
+                    dormitory = "Asrama Putra",
+                    schoolId = defaultSchool
+                )
+                repository.insertWaliAccount(newAcc)
+                _waliName.value = cleanName
+                _currentUsername.value = newAcc.username
+                if (authPrefs.getString("saved_role", "") == "WALI") {
+                    authPrefs.edit()
+                        .putString("saved_wali_name", cleanName)
+                        .putString("saved_username", newAcc.username)
+                        .apply()
+                }
+                onResult(true, "Kata sandi berhasil dibuat dan tersinkronisasi ke Admin Sekolah.")
+            }
+        }
+    }
+
+    // --- Layanan Pesan Shift Berikutnya (Handover Jaga Asrama) ---
+
+    fun addShiftMessage(
+        title: String,
+        followUpDate: Long,
+        shift: String,
+        targetWali: String,
+        content: String,
+        priority: String,
+        onComplete: (ShiftMessage) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val newMsg = ShiftMessage(
+                title = title.trim(),
+                followUpDate = followUpDate,
+                shift = shift.trim().ifBlank { "Semua Shift" },
+                targetWali = targetWali.trim().ifBlank { "Semua Wali Asuh" },
+                messageContent = content.trim(),
+                priority = priority.uppercase().ifBlank { "BIASA" },
+                senderName = _waliName.value,
+                createdAt = System.currentTimeMillis(),
+                isCompleted = false,
+                schoolId = tenant
+            )
+            val newId = repository.insertShiftMessage(newMsg)
+            onComplete(newMsg.copy(id = newId))
+        }
+    }
+
+    fun toggleShiftMessageCompleted(message: ShiftMessage, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val newStatus = !message.isCompleted
+            val completedBy = if (newStatus) _waliName.value else ""
+            val completedAt = if (newStatus) System.currentTimeMillis() else 0L
+            repository.updateShiftMessageCompleted(message.id, newStatus, completedBy, completedAt)
+            onComplete()
+        }
+    }
+
+    fun deleteShiftMessage(message: ShiftMessage, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteShiftMessage(message)
             onComplete()
         }
     }
