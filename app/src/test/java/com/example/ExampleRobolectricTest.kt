@@ -224,6 +224,7 @@ class ExampleRobolectricTest {
       emergencyContact = "0811111111",
       specialNotes = ""
     )
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
 
     // Siswa untuk sekolah SRT-KED03 bertambah menjadi 1 di database
     val studentsKed03 = db.childStudentDao().getStudentsBySchool("SRT-KED03").first()

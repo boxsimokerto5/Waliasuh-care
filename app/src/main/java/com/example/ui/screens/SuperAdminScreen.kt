@@ -89,6 +89,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -124,7 +125,8 @@ data class SchoolReportItem(
     val picName: String,
     val picPhone: String,
     val isPrimaryPilot: Boolean = false,
-    val status: String = "AKTIF"
+    val status: String = "AKTIF",
+    val originalRegistration: SchoolRegistration? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -151,6 +153,10 @@ fun SuperAdminScreen(
     var schoolToSuspend by remember { mutableStateOf<SchoolRegistration?>(null) }
     var schoolToDelete by remember { mutableStateOf<SchoolRegistration?>(null) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.cleanLegacyPilotData()
+    }
 
     // Intercept back button
     BackHandler {
@@ -543,7 +549,10 @@ fun SuperAdminScreen(
                 schoolProfile = schoolProfile,
                 registrations = registrations,
                 waliAccounts = waliAccounts,
-                students = students
+                students = students,
+                onDeleteRegistration = { reg ->
+                    schoolToDelete = reg
+                }
             )
         }
     }
@@ -1235,28 +1244,45 @@ fun SuperadminRegistrationItemCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .weight(0.9f)
+                            .height(42.dp)
+                            .testTag("btn_delete_pending_${registration.id}"),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("Hapus", fontSize = 11.5.sp)
+                    }
+
+                    OutlinedButton(
                         onClick = onReject,
                         modifier = Modifier
-                            .weight(1f)
+                            .weight(0.9f)
                             .height(42.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFEA580C)),
+                        contentPadding = PaddingValues(horizontal = 4.dp)
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text("Tolak", fontSize = 12.sp)
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("Tolak", fontSize = 11.5.sp)
                     }
 
                     Button(
                         onClick = onApprove,
                         modifier = Modifier
-                            .weight(1.8f)
+                            .weight(1.4f)
                             .height(42.dp)
                             .testTag("btn_approve_school_${registration.id}"),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                        contentPadding = PaddingValues(horizontal = 6.dp)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Setujui & Buat Akun", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Setujui", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1271,28 +1297,13 @@ fun SuperadminReportsView(
     registrations: List<SchoolRegistration>,
     waliAccounts: List<WaliAccount>,
     students: List<ChildStudent>,
+    onDeleteRegistration: (SchoolRegistration) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     var reportSearchQuery by remember { mutableStateOf("") }
 
-    // 1. Sekolah Pilot Utama
-    val primaryCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
-    val primaryWalies = waliAccounts.filter { it.schoolId == primaryCode || it.schoolId.isBlank() }
-    val primarySchool = SchoolReportItem(
-        schoolCode = primaryCode,
-        schoolName = schoolProfile.schoolName.ifBlank { "Sekolah Rakyat SRT 1 Kediri" },
-        city = schoolProfile.city.ifBlank { "Kabupaten Kediri" },
-        address = "Kampus Utama SRT 1 Kediri, Jawa Timur",
-        waliCount = primaryWalies.size,
-        waliNames = primaryWalies.map { "${it.name} (${it.dormitory})" },
-        picName = schoolProfile.adminName.ifBlank { "Admin Utama" },
-        picPhone = "085755735676",
-        isPrimaryPilot = true,
-        status = "Pilot Utama"
-    )
-
-    // 2. Sekolah Tenant yang telah Disetujui / Terdaftar
+    // Seluruh sekolah tenant resmi yang telah disetujui / aktif (memakai ID Sekolah resmi)
     val approvedSchools = registrations
         .filter { it.status == "APPROVED" || it.status == "SUSPENDED" }
         .map { reg ->
@@ -1310,17 +1321,18 @@ fun SuperadminReportsView(
                 picName = reg.picName,
                 picPhone = reg.picPhone,
                 isPrimaryPilot = false,
-                status = if (reg.status == "SUSPENDED") "Disuspend" else "Terdaftar & Aktif"
+                status = if (reg.status == "SUSPENDED") "Disuspend" else "Terdaftar & Aktif",
+                originalRegistration = reg
             )
         }
 
-    val allSchools = listOf(primarySchool) + approvedSchools
+    val allSchools = approvedSchools
     val totalActiveSchools = allSchools.size
     val totalWaliAccounts = allSchools.sumOf { it.waliCount }
     val avgWaliPerSchool = if (totalActiveSchools > 0) {
         String.format("%.1f", totalWaliAccounts.toDouble() / totalActiveSchools)
     } else "0"
-    val totalStudentsCount = students.size
+    val totalStudentsCount = students.count { s -> approvedSchools.any { it.schoolCode == s.schoolId } }
     val pendingRegistrationsCount = registrations.count { it.status == "PENDING" }
 
     // Filter pencarian
@@ -1631,6 +1643,9 @@ fun SuperadminReportsView(
                         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                         clipboard.setPrimaryClip(ClipData.newPlainText("Info Sekolah", text))
                         Toast.makeText(context, "Info ${schoolItem.schoolName} disalin!", Toast.LENGTH_SHORT).show()
+                    },
+                    onDeleteSchool = schoolItem.originalRegistration?.let { reg ->
+                        { onDeleteRegistration(reg) }
                     }
                 )
             }
@@ -1684,6 +1699,7 @@ fun SuperadminReportSchoolCard(
     school: SchoolReportItem,
     onContactWa: () -> Unit,
     onCopySchoolInfo: () -> Unit,
+    onDeleteSchool: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     ElevatedCard(
@@ -1909,6 +1925,22 @@ fun SuperadminReportSchoolCard(
                     Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(13.dp))
                     Spacer(modifier = Modifier.width(4.dp))
                     Text("Hubungi PJ", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+
+                if (onDeleteSchool != null) {
+                    OutlinedButton(
+                        onClick = onDeleteSchool,
+                        modifier = Modifier
+                            .weight(0.9f)
+                            .height(36.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f)),
+                        contentPadding = PaddingValues(horizontal = 6.dp)
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(13.dp))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("Hapus", fontSize = 11.sp)
+                    }
                 }
             }
         }

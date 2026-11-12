@@ -837,6 +837,16 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun cleanLegacyPilotData(onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteStudentsBySchool("SRT1-KDR")
+            repository.deleteStudentsBySchool("SRT-KED03")
+            repository.deleteWaliAccountsBySchool("SRT1-KDR")
+            repository.deleteWaliAccountsBySchool("SRT-KED03")
+            onComplete()
+        }
+    }
+
     fun logout() {
         _currentUserRole.value = UserRole.NOT_LOGGED_IN
         authPrefs.edit().clear().apply()
