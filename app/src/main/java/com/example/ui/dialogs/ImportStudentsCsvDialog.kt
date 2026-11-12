@@ -88,50 +88,220 @@ fun ImportStudentsCsvDialog(
     var parseError by remember { mutableStateOf<String?>(null) }
 
     val studentTemplateCsv = """
-        No,Nama Lengkap,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,No KK,Tempat Lahir,Tanggal Lahir,Nama Ibu,NIS,No Kamar
-        1,Ahmad Fauzi,VII-A,SMP,Jl. Pemuda No. 10,L,3506012345670001,3506012345670002,Kediri,2011-05-12,Siti Aminah,${currentSchoolId}-001,Kamar 01
-        2,Siti Nurhaliza,VIII-B,SMP,Jl. Melati No. 5,P,3506012345670003,3506012345670004,Kediri,2010-08-20,Nurhayati,${currentSchoolId}-002,Kamar 05
-        3,Rian Ardiansyah,IX-C,SMP,Jl. Kenanga No. 22,L,3506012345670005,3506012345670006,Kediri,2009-11-03,Dewi Sartika,${currentSchoolId}-003,Kamar 02
+        No,Nama,Kelas,Kamar,Jenis Kelamin,NIK,Tempat Lahir,Tanggal Lahir,Nama Ibu,Alamat
+        1,Adam Julian Shano,SD 1-2,PL_103,Laki-laki,3508220907180002,KEDIRI,09-07-2018,RUMIYATI,"DSN. MANUKAN RT 02 RW 08 DS. JABON KEC. BANYAKAN KAB. KEDIRI"
+        2,Azzura Fauziah,SD 1-2,PP_103,Perempuan,1771063004190001,BENGKULU,30-04-2019,AULIA HANIFAH,"Karangtalun, Kras, KAB. KEDIRI"
+        3,Ahmad Syaiful Arsyad,VII-1,PL_104,Laki-laki,3506012001140003,KEDIRI,20-01-2014,SITI MUNJIAH,"Pagung, Semen, KAB. KEDIRI"
+        4,Siti Nurhaliza,VIII-1,PP_104,Perempuan,3506011408130004,KEDIRI,14-08-2013,SITI MASRUROH,"Bulu, Semen, KAB. KEDIRI"
     """.trimIndent()
 
+    // Helper untuk memecah baris CSV dengan aturan RFC-4180 (aman terhadap koma di dalam tanda petik ganda)
+    fun parseCsvLine(line: String): List<String> {
+        val tokens = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            if (c == '"') {
+                if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                    sb.append('"')
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            } else if (c == ',' && !inQuotes) {
+                tokens.add(sb.toString().trim())
+                sb.clear()
+            } else {
+                sb.append(c)
+            }
+            i++
+        }
+        tokens.add(sb.toString().trim())
+        return tokens
+    }
+
+    // Helper untuk membersihkan NIK / KK dari notasi eksponensial (misal: 3.50822E+15)
+    fun cleanNumericId(raw: String?): String {
+        if (raw.isNullOrBlank()) return ""
+        val trimmed = raw.trim().removeSurrounding("\"").trim()
+        if (trimmed.contains("E+", ignoreCase = true) || trimmed.contains("E-", ignoreCase = true)) {
+            try {
+                return java.math.BigDecimal(trimmed).toBigInteger().toString()
+            } catch (_: Exception) {
+                return trimmed
+            }
+        }
+        return trimmed
+    }
+
+    // Estimasi usia siswa dari string tanggal lahir (misal: 9/7/2018, 28-04-2019, 2011-05-12)
+    fun estimateAge(birthDate: String): Int {
+        if (birthDate.isBlank()) return 12
+        val yearMatch = Regex("\\b(19\\d\\d|20\\d\\d)\\b").find(birthDate)
+        val birthYear = yearMatch?.value?.toIntOrNull()
+        if (birthYear != null) {
+            val calculated = 2026 - birthYear
+            if (calculated in 5..25) return calculated
+        }
+        return 12
+    }
+
+    // Ekstraksi otomatis jenjang pendidikan (SD / SMP / SMA) dari kolom kelas
+    fun deriveJenjang(classGrade: String): String {
+        val upper = classGrade.uppercase()
+        return when {
+            upper.contains("SD") || upper.contains("MI") -> "SD"
+            upper.contains("VII") || upper.contains("VIII") || upper.contains("IX") || upper.contains("SMP") || upper.contains("MTS") -> "SMP"
+            upper.contains("X") || upper.contains("XI") || upper.contains("XII") || upper.contains("SMA") || upper.contains("SMK") || upper.contains("MA") -> "SMA"
+            else -> "SMP"
+        }
+    }
+
     fun parseCsv(text: String): List<ChildStudent> {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+        // Bersihkan UTF-8 Byte Order Mark (BOM) jika ada
+        val cleanText = text.removePrefix("\uFEFF").trim()
+        val lines = cleanText.lines().map { it.trim() }.filter { it.isNotBlank() }
         if (lines.isEmpty()) return emptyList()
 
         val result = mutableListOf<ChildStudent>()
-        val startIdx = if (lines.first().contains("Nama", ignoreCase = true) || lines.first().contains("NIK", ignoreCase = true)) 1 else 0
+        val firstLineTokens = parseCsvLine(lines.first())
+
+        // Deteksi apakah baris pertama adalah baris nama kolom (Header)
+        val hasHeader = firstLineTokens.any { token ->
+            val t = token.lowercase()
+            t.contains("nama") || t.contains("kelas") || t.contains("nik") || t.contains("kamar") || t.contains("kelamin")
+        }
+
+        var idxNo = -1
+        var idxName = -1
+        var idxClass = -1
+        var idxRoom = -1
+        var idxGender = -1
+        var idxNik = -1
+        var idxNoKk = -1
+        var idxBirthPlace = -1
+        var idxBirthDate = -1
+        var idxMother = -1
+        var idxAddress = -1
+        var idxJenjang = -1
+        var idxNis = -1
+
+        if (hasHeader) {
+            firstLineTokens.forEachIndexed { idx, rawToken ->
+                val col = rawToken.lowercase().replace("_", " ").replace("-", " ").trim()
+                when {
+                    col == "no" || col == "nomor" -> if (idxNo == -1) idxNo = idx
+                    col.contains("nama lengkap") || col.contains("nama siswa") || col == "nama" -> if (idxName == -1) idxName = idx
+                    col.contains("kelas") || col.contains("tingkat") -> if (idxClass == -1) idxClass = idx
+                    col.contains("kamar") || col.contains("ruang") -> if (idxRoom == -1) idxRoom = idx
+                    col.contains("kelamin") || col.contains("gender") || col == "jk" -> if (idxGender == -1) idxGender = idx
+                    col == "nik" || col.contains("no nik") || col.contains("nomor nik") -> if (idxNik == -1) idxNik = idx
+                    col.contains("kk") -> if (idxNoKk == -1) idxNoKk = idx
+                    col.contains("tempat lahir") || col.contains("tmp lahir") || col == "tempat" -> if (idxBirthPlace == -1) idxBirthPlace = idx
+                    col.contains("tanggal lahir") || col.contains("tgl lahir") || col == "tanggal" || col == "tgl" -> if (idxBirthDate == -1) idxBirthDate = idx
+                    col.contains("ibu") || col.contains("wali") || col.contains("orang tua") -> if (idxMother == -1) idxMother = idx
+                    col.contains("alamat") || col.contains("domisili") || col.contains("asal") -> if (idxAddress == -1) idxAddress = idx
+                    col.contains("jenjang") -> if (idxJenjang == -1) idxJenjang = idx
+                    col.contains("nis") || col.contains("nisn") -> if (idxNis == -1) idxNis = idx
+                }
+            }
+        }
+
+        // Fallback dinamis jika header tidak ada atau format 10 kolom sekolah langsung
+        val isStandard10ColFormat = firstLineTokens.size in 9..11
+        if (idxName == -1) idxName = if (firstLineTokens.size > 1) 1 else 0
+        if (idxClass == -1) idxClass = 2
+
+        if (isStandard10ColFormat && (!hasHeader || idxRoom == -1 || idxGender == -1)) {
+            if (idxRoom == -1) idxRoom = 3
+            if (idxGender == -1) idxGender = 4
+            if (idxNik == -1) idxNik = 5
+            if (idxBirthPlace == -1) idxBirthPlace = 6
+            if (idxBirthDate == -1) idxBirthDate = 7
+            if (idxMother == -1) idxMother = 8
+            if (idxAddress == -1) idxAddress = 9
+        }
+
+        val startIdx = if (hasHeader) 1 else 0
 
         for (i in startIdx until lines.size) {
             val line = lines[i]
-            val tokens = line.split(",").map { it.trim().removeSurrounding("\"") }
+            val tokens = parseCsvLine(line)
             if (tokens.size >= 2) {
-                val name = tokens.getOrNull(1)?.ifBlank { tokens.getOrNull(0) ?: "" } ?: ""
-                if (name.isBlank() || name.equals("Nama", ignoreCase = true)) continue
-                val gender = if (tokens.any { it.equals("P", ignoreCase = true) || it.contains("Perempuan", ignoreCase = true) }) "P" else "L"
-                val dorm = if (gender == "P") "Asrama Putri" else "Asrama Putra"
-                val classGrade = tokens.getOrNull(2)?.ifBlank { "Kelas -" } ?: "Kelas -"
+                val rawName = if (idxName in tokens.indices) tokens[idxName] else tokens.getOrNull(1) ?: tokens.getOrNull(0) ?: ""
+                val name = rawName.trim().removeSurrounding("\"")
+                if (name.isBlank() || name.equals("Nama", ignoreCase = true) || name.equals("Nama Lengkap", ignoreCase = true)) continue
+
+                val rawClass = (if (idxClass in tokens.indices) tokens[idxClass] else "").trim().removeSurrounding("\"")
+                val classGrade = rawClass.ifBlank { "Kelas -" }
+
+                val rawRoom = (if (idxRoom in tokens.indices) tokens[idxRoom] else "").trim().removeSurrounding("\"")
+                val rawGender = (if (idxGender in tokens.indices) tokens[idxGender] else "").trim().removeSurrounding("\"")
+
+                // Deteksi jenis kelamin: periksa nilai kolom, atau inferensikan dari kode kamar (PL = Putra, PP = Putri)
+                val isFemale = rawGender.contains("Perempuan", ignoreCase = true) ||
+                        rawGender.equals("P", ignoreCase = true) ||
+                        rawGender.contains("Putri", ignoreCase = true) ||
+                        rawRoom.startsWith("PP", ignoreCase = true) ||
+                        rawRoom.startsWith("AP", ignoreCase = true)
+                val gender = if (isFemale) "P" else "L"
+
+                // Deteksi otomatis asrama: dari prefix kamar (PL = Putra, PP = Putri) atau jenis kelamin
+                val dormitory = when {
+                    rawRoom.startsWith("PP", ignoreCase = true) || rawRoom.startsWith("AP", ignoreCase = true) -> "Asrama Putri"
+                    rawRoom.startsWith("PL", ignoreCase = true) || rawRoom.startsWith("AL", ignoreCase = true) -> "Asrama Putra"
+                    isFemale -> "Asrama Putri"
+                    else -> "Asrama Putra"
+                }
+
+                val nik = cleanNumericId(if (idxNik in tokens.indices) tokens[idxNik] else "")
+                val noKk = cleanNumericId(if (idxNoKk in tokens.indices) tokens[idxNoKk] else "")
+                val birthPlace = (if (idxBirthPlace in tokens.indices) tokens[idxBirthPlace] else "").trim().removeSurrounding("\"")
+                val birthDate = (if (idxBirthDate in tokens.indices) tokens[idxBirthDate] else "").trim().removeSurrounding("\"")
+                val motherName = (if (idxMother in tokens.indices) tokens[idxMother] else "").trim().removeSurrounding("\"")
+                val address = (if (idxAddress in tokens.indices) tokens[idxAddress] else "").trim().removeSurrounding("\"")
+
+                val jenjangVal = if (idxJenjang in tokens.indices && tokens[idxJenjang].isNotBlank()) {
+                    tokens[idxJenjang].trim().removeSurrounding("\"")
+                } else {
+                    deriveJenjang(classGrade)
+                }
+
+                val rawNo = if (idxNo in tokens.indices) tokens[idxNo].trim() else ""
+                val nis = if (idxNis in tokens.indices && tokens[idxNis].isNotBlank()) {
+                    tokens[idxNis].trim().removeSurrounding("\"")
+                } else if (rawNo.toIntOrNull() != null) {
+                    "${currentSchoolId}-${rawNo}"
+                } else {
+                    "${currentSchoolId}-${i + 1}"
+                }
+
+                val age = estimateAge(birthDate)
+                val emergency = if (motherName.isNotBlank()) "Ibu: $motherName" else "Pengasuh $dormitory"
 
                 result.add(
                     ChildStudent(
-                        id = (i + 1).toLong(),
+                        id = 0L,
                         name = name,
-                        nis = tokens.getOrNull(11)?.ifBlank { "${currentSchoolId}-${i + 1}" } ?: "${currentSchoolId}-${i + 1}",
+                        nis = nis,
                         gender = gender,
-                        age = 12,
-                        dormitory = dorm,
+                        age = age,
+                        dormitory = dormitory,
                         classGrade = classGrade,
                         allergies = "Tidak ada",
                         bloodType = "-",
-                        emergencyContact = "Pengasuh Asrama",
-                        specialNotes = "",
-                        nik = tokens.getOrNull(6) ?: "",
-                        noKk = tokens.getOrNull(7) ?: "",
-                        birthPlace = tokens.getOrNull(8) ?: "",
-                        birthDate = tokens.getOrNull(9) ?: "",
-                        motherName = tokens.getOrNull(10) ?: "",
-                        address = tokens.getOrNull(4) ?: "",
-                        roomNumber = tokens.getOrNull(12) ?: "",
-                        jenjang = tokens.getOrNull(3) ?: "",
+                        emergencyContact = emergency,
+                        specialNotes = if (address.isNotBlank()) "Alamat Asal: $address" else "",
+                        nik = nik,
+                        noKk = noKk,
+                        birthPlace = birthPlace,
+                        birthDate = birthDate,
+                        motherName = motherName,
+                        address = address,
+                        roomNumber = rawRoom,
+                        jenjang = jenjangVal,
                         schoolId = currentSchoolId
                     )
                 )
@@ -333,7 +503,7 @@ fun ImportStudentsCsvDialog(
                             )
                         }
                         Text(
-                            text = "Unduh template berisi format kolom lengkap (Nama, Kelas, NIK, No KK, NIS, dsb) untuk diisi di Excel / Google Sheets.",
+                            text = "Unduh template 10 kolom standar Sekolah Rakyat (No, Nama, Kelas, Kamar, Jenis Kelamin, NIK, Tempat Lahir, Tanggal Lahir, Nama Ibu, Alamat). Mendukung tanda koma pada alamat & format Excel.",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -495,19 +665,110 @@ fun ImportStudentsCsvDialog(
                 }
 
                 if (parsedStudents.isNotEmpty()) {
-                    Box(
+                    val countPutra = parsedStudents.count { it.dormitory.contains("Putra") }
+                    val countPutri = parsedStudents.count { it.dormitory.contains("Putri") }
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(Color(0xFFDCFCE7))
-                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFFF0FDF4))
+                            .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(10.dp))
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "✅ ${parsedStudents.size} Data Siswa Valid",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF15803D)
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFDBEAFE))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Putra: $countPutra", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E40AF))
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFFCE7F3))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text("Putri: $countPutri", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9D174D))
+                                }
+                            }
+                        }
+
                         Text(
-                            text = "✅ Terdeteksi ${parsedStudents.size} data siswa siap diimpor untuk ID $currentSchoolId",
-                            fontSize = 12.sp,
+                            text = "Contoh Hasil Pemetaan Kolom:",
+                            fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF15803D)
+                            color = Color(0xFF166534)
                         )
+
+                        parsedStudents.take(3).forEach { sample ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(8.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color.White),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE2E8F0))
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = sample.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            color = Color(0xFF1E293B)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(4.dp))
+                                                .background(if (sample.gender == "P") Color(0xFFFCE7F3) else Color(0xFFDBEAFE))
+                                                .padding(horizontal = 6.dp, vertical = 1.dp)
+                                        ) {
+                                            Text(
+                                                text = "${sample.dormitory} • ${sample.roomNumber.ifBlank { "-" }}",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (sample.gender == "P") Color(0xFF9D174D) else Color(0xFF1E40AF)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = "Kelas: ${sample.classGrade} (${sample.jenjang}) • NIK: ${sample.nik.ifBlank { "-" }} • Usia: ${sample.age} thn",
+                                        fontSize = 10.5.sp,
+                                        color = Color(0xFF475569)
+                                    )
+                                    if (sample.address.isNotBlank()) {
+                                        Text(
+                                            text = "Alamat: ${sample.address}",
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF64748B),
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

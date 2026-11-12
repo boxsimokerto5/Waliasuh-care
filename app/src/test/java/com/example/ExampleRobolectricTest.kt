@@ -235,5 +235,123 @@ class ExampleRobolectricTest {
     val studentsOtherSchool = db.childStudentDao().getStudentsBySchool("SRT1-KDR").first()
     assertEquals(0, studentsOtherSchool.size)
   }
+
+  @Test
+  fun `verify Dirawat di Sini UKS treatment and referral departure workflow`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val testStudent = com.example.data.model.ChildStudent(
+      name = "Santri Test Alur",
+      nis = "8899",
+      gender = "L",
+      age = 13,
+      dormitory = "Kamar Abu Bakar",
+      classGrade = "VII-C",
+      schoolId = "SRT1-KDR"
+    )
+    val studentId = db.childStudentDao().insert(testStudent)
+
+    // Buat record rencana berobat uji coba
+    val planRecord = com.example.data.model.MedicalRecord(
+      studentId = studentId,
+      studentName = "Santri Test Alur",
+      studentDormitory = "Kamar Abu Bakar",
+      faskes = "UKS Sekolah",
+      complaint = "Demam ringan dan pusing",
+      planDate = System.currentTimeMillis(),
+      departureTime = "08:30",
+      status = "PLANNED"
+    )
+    val planId = db.medicalRecordDao().insert(planRecord)
+
+    // 1. Uji skenario Dirawat di Sini (UKS):
+    // Langsung input diagnosa & penanganan UKS -> status menjadi COMPLETED
+    val recordForUks = planRecord.copy(id = planId, faskes = "UKS Sekolah")
+    vm.submitTreatmentResult(
+      record = recordForUks,
+      diagnosis = "Febris H-1 / Observasi Febris",
+      actionsTaken = "Kompres hangat, istirahat di bed UKS",
+      prescription = "Paracetamol 500mg 3x1",
+      needsControl = false,
+      controlDate = null,
+      additionalNotes = "Suhu awal 37.8C, turun jadi 36.9C"
+    )
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val completedRecord = db.medicalRecordDao().getRecordById(planId).first()
+    org.junit.Assert.assertNotNull(completedRecord)
+    assertEquals("COMPLETED", completedRecord?.status)
+    assertEquals("UKS Sekolah", completedRecord?.faskes)
+    assertEquals("Febris H-1 / Observasi Febris", completedRecord?.diagnosis)
+    assertEquals("Paracetamol 500mg 3x1", completedRecord?.prescription)
+
+    // 2. Uji skenario Berangkatkan / Rujuk ke Faskes lanjutan:
+    val referralPlan = com.example.data.model.MedicalRecord(
+      studentId = studentId,
+      studentName = "Santri Rujukan",
+      studentDormitory = "Kamar Umar",
+      faskes = "UKS Sekolah",
+      complaint = "Nyeri perut kanan bawah hebat",
+      planDate = System.currentTimeMillis(),
+      departureTime = "09:00",
+      status = "PLANNED"
+    )
+    val referralId = db.medicalRecordDao().insert(referralPlan)
+
+    // Petugas memilih berangkatkan ke Puskesmas Wates dengan pendamping Ustadz Ahmad
+    vm.markDepartedToFaskes(referralId, "Puskesmas Wates", "Ustadz Ahmad")
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val departedRecord = db.medicalRecordDao().getRecordById(referralId).first()
+    org.junit.Assert.assertNotNull(departedRecord)
+    assertEquals("DEPARTED", departedRecord?.status)
+    assertEquals("Puskesmas Wates", departedRecord?.faskes)
+    assertEquals("Ustadz Ahmad", departedRecord?.escortName)
+  }
+
+  @Test
+  fun `verify delete single student from admin without affecting others`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val schoolId = "SRT-DEL-TEST"
+    val student1 = com.example.data.model.ChildStudent(
+      name = "Siswa Tetap",
+      nis = "1101",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama A",
+      classGrade = "VII",
+      schoolId = schoolId
+    )
+    val student2 = com.example.data.model.ChildStudent(
+      name = "Siswa Pindah Keluar",
+      nis = "1102",
+      gender = "P",
+      age = 12,
+      dormitory = "Asrama B",
+      classGrade = "VII",
+      schoolId = schoolId
+    )
+
+    val id1 = db.childStudentDao().insert(student1)
+    val id2 = db.childStudentDao().insert(student2)
+
+    val initialStudents = db.childStudentDao().getStudentsBySchool(schoolId).first()
+    assertEquals(2, initialStudents.size)
+
+    // Admin menghapus HANYA siswa 2 yang keluar (student2)
+    val toDelete = student2.copy(id = id2)
+    vm.deleteStudent(toDelete)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val remainingStudents = db.childStudentDao().getStudentsBySchool(schoolId).first()
+    assertEquals(1, remainingStudents.size)
+    assertEquals("Siswa Tetap", remainingStudents[0].name)
+    assertEquals(id1, remainingStudents[0].id)
+  }
 }
 

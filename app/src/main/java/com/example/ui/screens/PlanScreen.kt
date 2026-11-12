@@ -19,13 +19,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.EventRepeat
+import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -70,7 +71,9 @@ import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StatusBadge
 import com.example.ui.dialogs.CreatePlanDialog
+import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.StatusNeedControl
 import com.example.util.DateUtils
@@ -90,6 +93,7 @@ fun PlanScreen(
     var selectedFaskesFilter by remember { mutableStateOf("Semua") }
 
     var showCreatePlanDialog by remember { mutableStateOf(false) }
+    var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
 
     val filterFaskesPredicate: (MedicalRecord) -> Boolean = { record ->
@@ -323,7 +327,7 @@ fun PlanScreen(
                                     modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.DirectionsRun,
+                                        imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.primary,
                                         modifier = Modifier.size(15.dp)
@@ -341,9 +345,16 @@ fun PlanScreen(
                             items(displayPlans, key = { "plan_${it.id}" }) { record ->
                                 CompactPlanCardItem(
                                     record = record,
+                                    onTreatHere = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        val uksFaskes = schoolProfile.primaryFaskesName.ifBlank { "UKS Sekolah" }
+                                        recordToDiagnose = record.copy(
+                                            faskes = if (record.faskes.contains("UKS", ignoreCase = true)) record.faskes else uksFaskes
+                                        )
+                                    },
                                     onDepart = {
                                         TopOnAdManager.onUserActionClick(context)
-                                        viewModel.markDeparted(record.id)
+                                        recordToRefer = record
                                     },
                                     onDiagnose = {
                                         TopOnAdManager.onUserActionClick(context)
@@ -377,6 +388,26 @@ fun PlanScreen(
         )
     }
 
+    recordToRefer?.let { record ->
+        DepartReferralDialog(
+            record = record,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            defaultEscortName = record.escortName.ifBlank { viewModel.waliName.value },
+            onDismiss = { recordToRefer = null },
+            onConfirmDeparture = { targetFaskes, escortName ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.markDepartedToFaskes(record.id, targetFaskes, escortName)
+                recordToRefer = null
+            },
+            onDirectDiagnose = { targetFaskes, escortName ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.markDepartedToFaskes(record.id, targetFaskes, escortName)
+                recordToDiagnose = record.copy(faskes = targetFaskes, escortName = escortName, status = "DEPARTED")
+                recordToRefer = null
+            }
+        )
+    }
+
     recordToDiagnose?.let { record ->
         InputTreatmentResultDialog(
             record = record,
@@ -401,6 +432,7 @@ fun PlanScreen(
 @Composable
 fun CompactPlanCardItem(
     record: MedicalRecord,
+    onTreatHere: () -> Unit,
     onDepart: () -> Unit,
     onDiagnose: () -> Unit,
     onDelete: () -> Unit
@@ -565,20 +597,39 @@ fun CompactPlanCardItem(
                         }
 
                         if (record.status == "PLANNED") {
+                            // Pilihan 1: Dirawat di Sini (UKS)
+                            Button(
+                                onClick = onTreatHere,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B)),
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("btn_treat_here_${record.id}"),
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Healing,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Dirawat di Sini", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Pilihan 2: Berangkatkan / Rujuk ke Faskes
                             Button(
                                 onClick = onDepart,
                                 colors = ButtonDefaults.buttonColors(containerColor = StatusDeparted),
                                 modifier = Modifier
                                     .height(32.dp)
                                     .testTag("btn_depart_${record.id}"),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.DirectionsRun,
+                                    imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text("Berangkatkan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         } else if (record.status == "DEPARTED") {

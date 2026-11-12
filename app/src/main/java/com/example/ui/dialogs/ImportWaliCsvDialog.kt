@@ -90,8 +90,35 @@ fun ImportWaliCsvDialog(
         Dewi Lestari,Asrama Putri,081234567894,dewilestari,Dewi#4921
     """.trimIndent()
 
+    fun parseCsvLine(line: String): List<String> {
+        val tokens = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            if (c == '"') {
+                if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                    sb.append('"')
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            } else if (c == ',' && !inQuotes) {
+                tokens.add(sb.toString().trim())
+                sb.clear()
+            } else {
+                sb.append(c)
+            }
+            i++
+        }
+        tokens.add(sb.toString().trim())
+        return tokens
+    }
+
     fun parseCsv(text: String): List<WaliAccount> {
-        val lines = text.lines().map { it.trim() }.filter { it.isNotBlank() }
+        val cleanText = text.removePrefix("\uFEFF").trim()
+        val lines = cleanText.lines().map { it.trim() }.filter { it.isNotBlank() }
         if (lines.isEmpty()) return emptyList()
 
         val result = mutableListOf<WaliAccount>()
@@ -99,7 +126,7 @@ fun ImportWaliCsvDialog(
 
         for (i in startIdx until lines.size) {
             val line = lines[i]
-            val tokens = line.split(",").map { it.trim().removeSurrounding("\"") }
+            val tokens = parseCsvLine(line)
             if (tokens.isNotEmpty()) {
                 val name = tokens.getOrNull(0) ?: ""
                 if (name.isBlank() || name.equals("Nama", ignoreCase = true)) continue

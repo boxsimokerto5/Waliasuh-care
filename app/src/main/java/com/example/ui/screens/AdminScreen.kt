@@ -37,11 +37,14 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -58,6 +61,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -90,9 +95,13 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.School
+import com.example.data.model.ChildStudent
+import com.example.ui.components.StudentAvatar
+import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
+import com.example.ui.dialogs.StudentDetailDialog
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,12 +115,22 @@ fun AdminScreen(
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
+    val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
 
+    var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
     var showImportStudentsDialog by remember { mutableStateOf(false) }
     var showImportWaliDialog by remember { mutableStateOf(false) }
     var showClearDataConfirmDialog by remember { mutableStateOf(false) }
 
+    // State untuk Kelola Data Siswa
+    var studentSearchQuery by remember { mutableStateOf("") }
+    var selectedStudentGenderFilter by remember { mutableStateOf("Semua") }
+    var studentToDelete by remember { mutableStateOf<ChildStudent?>(null) }
+    var selectedDetailStudent by remember { mutableStateOf<ChildStudent?>(null) }
+    var showAddStudentDialog by remember { mutableStateOf(false) }
+
+    // State untuk Kelola Akun Wali Asuh
     var showAddDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<WaliAccount?>(null) }
     var accountToDelete by remember { mutableStateOf<WaliAccount?>(null) }
@@ -147,6 +166,23 @@ fun AdminScreen(
 
     val putraCount = schoolAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
     val putriCount = schoolAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
+
+    val filteredStudents = schoolStudents.filter { student ->
+        val matchSearch = studentSearchQuery.isBlank() ||
+                student.name.contains(studentSearchQuery, ignoreCase = true) ||
+                student.nis.contains(studentSearchQuery, ignoreCase = true) ||
+                student.classGrade.contains(studentSearchQuery, ignoreCase = true) ||
+                student.dormitory.contains(studentSearchQuery, ignoreCase = true)
+        val matchGender = when (selectedStudentGenderFilter) {
+            "Putra" -> student.gender.equals("L", ignoreCase = true)
+            "Putri" -> student.gender.equals("P", ignoreCase = true)
+            else -> true
+        }
+        matchSearch && matchGender
+    }
+
+    val studentPutraCount = schoolStudents.count { it.gender.equals("L", ignoreCase = true) }
+    val studentPutriCount = schoolStudents.count { it.gender.equals("P", ignoreCase = true) }
 
     fun shareAllAccountsSummary() {
         if (schoolAccounts.isEmpty()) {
@@ -256,19 +292,33 @@ fun AdminScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog = true },
+                onClick = {
+                    if (selectedAdminTab == 0) {
+                        showAddStudentDialog = true
+                    } else {
+                        showAddDialog = true
+                    }
+                },
                 containerColor = WaliPrimary,
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.testTag("fab_add_wali")
+                modifier = Modifier.testTag("fab_admin_action")
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Tambah Wali Asuh", modifier = Modifier.size(20.dp))
+                    Icon(
+                        imageVector = if (selectedAdminTab == 0) Icons.Default.PersonAdd else Icons.Default.Add,
+                        contentDescription = if (selectedAdminTab == 0) "Tambah Siswa" else "Tambah Wali Asuh",
+                        modifier = Modifier.size(20.dp)
+                    )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Tambah Wali Asuh", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(
+                        text = if (selectedAdminTab == 0) "Tambah Siswa" else "Tambah Wali Asuh",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
                 }
             }
         }
@@ -410,7 +460,215 @@ fun AdminScreen(
                     }
                 }
 
-                // Summary Card Admin
+                // Tab Navigasi: Kelola Data Siswa vs Kelola Akun Wali Asuh
+                item {
+                    TabRow(
+                        selectedTabIndex = selectedAdminTab,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp)),
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ) {
+                        Tab(
+                            selected = selectedAdminTab == 0,
+                            onClick = { selectedAdminTab = 0 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.People,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Data Siswa (${schoolStudents.size})",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = if (selectedAdminTab == 0) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testTag("tab_admin_students")
+                        )
+                        Tab(
+                            selected = selectedAdminTab == 1,
+                            onClick = { selectedAdminTab = 1 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Key,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Akun Wali (${schoolAccounts.size})",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = if (selectedAdminTab == 1) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testTag("tab_admin_wali")
+                        )
+                    }
+                }
+
+                if (selectedAdminTab == 0) {
+                    // ==========================================
+                    // TAB 0: KELOLA MASTER DATA SISWA
+                    // ==========================================
+                    item {
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.elevatedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Kelola Master Data Siswa",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFF16A34A).copy(alpha = 0.12f))
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "${schoolStudents.size} Siswa Terdaftar",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF16A34A)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = "Daftar lengkap anak asuh sekolah ini. Admin dapat mencari anak, melihat riwayat medis, mendaftarkan anak baru, atau menghapus satu anak yang keluar/pindah.",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Card(
+                                        modifier = Modifier.weight(1f),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F2FE)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text("Siswa Putra", fontSize = 10.5.sp, color = Color(0xFF0369A1))
+                                            Text("$studentPutraCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
+                                        }
+                                    }
+                                    Card(
+                                        modifier = Modifier.weight(1f),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFCE7F3)),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            Text("Siswa Putri", fontSize = 10.5.sp, color = Color(0xFFBE185D))
+                                            Text("$studentPutriCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE185D))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Search & Filter Bar Siswa
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedTextField(
+                                value = studentSearchQuery,
+                                onValueChange = { studentSearchQuery = it },
+                                placeholder = { Text("Cari nama, NIS, kelas, atau kamar/asrama...", fontSize = 12.sp) },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Search, contentDescription = null, tint = WaliPrimary, modifier = Modifier.size(18.dp))
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(50.dp)
+                                    .testTag("admin_search_student")
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                listOf("Semua", "Putra", "Putri").forEach { filterOpt ->
+                                    FilterChip(
+                                        selected = selectedStudentGenderFilter == filterOpt,
+                                        onClick = { selectedStudentGenderFilter = filterOpt },
+                                        label = {
+                                            val labelText = when (filterOpt) {
+                                                "Putra" -> "Putra ($studentPutraCount)"
+                                                "Putri" -> "Putri ($studentPutriCount)"
+                                                else -> "Semua (${schoolStudents.size})"
+                                            }
+                                            Text(labelText, fontSize = 11.sp)
+                                        },
+                                        modifier = Modifier.height(28.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // List of Student Cards
+                    if (filteredStudents.isEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(32.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (studentSearchQuery.isNotBlank()) "Siswa dengan kata kunci '$studentSearchQuery' tidak ditemukan." else "Belum ada data siswa di sekolah ini. Anda dapat mengimpor file CSV siswa atau menekan '+ Tambah Siswa'.",
+                                        fontSize = 12.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        items(filteredStudents, key = { "student_${it.id}" }) { student ->
+                            AdminStudentCardItem(
+                                student = student,
+                                onViewDetail = { selectedDetailStudent = student },
+                                onDelete = { studentToDelete = student }
+                            )
+                        }
+                    }
+                } else {
+                    // ==========================================
+                    // TAB 1: KELOLA AKUN WALI ASUh
+                    // ==========================================
+                    // Summary Card Admin
                 item {
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -587,6 +845,7 @@ fun AdminScreen(
                     }
                 }
             }
+            }
         }
     }
 
@@ -598,6 +857,98 @@ fun AdminScreen(
                     Toast.makeText(context, "Kartu akun untuk $name berhasil dibuat!", Toast.LENGTH_SHORT).show()
                 }
                 showAddDialog = false
+            }
+        )
+    }
+
+    if (showAddStudentDialog) {
+        AddStudentDialog(
+            onDismiss = { showAddStudentDialog = false },
+            onConfirm = { name, nis, gender, age, dorm, cls, allergy, blood, emergency, notes ->
+                viewModel.addStudent(name, nis, gender, age, dorm, cls, allergy, blood, emergency, notes)
+                Toast.makeText(context, "Siswa $name berhasil didaftarkan ke ${schoolProfile.shortName}!", Toast.LENGTH_SHORT).show()
+                showAddStudentDialog = false
+            }
+        )
+    }
+
+    selectedDetailStudent?.let { student ->
+        StudentDetailDialog(
+            student = student,
+            studentRecords = allRecords.filter { it.studentId == student.id },
+            onDismiss = { selectedDetailStudent = null }
+        )
+    }
+
+    studentToDelete?.let { student ->
+        AlertDialog(
+            onDismissRequest = { studentToDelete = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Hapus Data Siswa?",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Apakah Anda yakin ingin menghapus data siswa:",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(
+                                text = student.name,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "NIS: ${student.nis.ifBlank { "-" }} • ${student.dormitory} • Kelas ${student.classGrade}",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Tindakan ini permanen. Siswa akan dihapus dari sekolah ini dan seluruh riwayat berobat/rencana terkait akan dibersihkan.",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val studentName = student.name
+                        viewModel.deleteStudent(student)
+                        Toast.makeText(context, "Siswa $studentName berhasil dihapus dari sistem.", Toast.LENGTH_SHORT).show()
+                        studentToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("btn_confirm_delete_student")
+                ) {
+                    Text("Hapus Siswa", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { studentToDelete = null }) {
+                    Text("Batal")
+                }
             }
         )
     }
@@ -1050,3 +1401,185 @@ fun WaliAccountCardItem(
         }
     }
 }
+
+@Composable
+fun AdminStudentCardItem(
+    student: ChildStudent,
+    onViewDetail: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val isPutri = student.gender.equals("P", ignoreCase = true)
+    val accentColor = if (isPutri) Color(0xFFBE185D) else Color(0xFF0369A1)
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("admin_student_card_${student.id}"),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StudentAvatar(name = student.name, gender = student.gender, size = 44.dp)
+                Spacer(modifier = Modifier.width(10.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = student.name,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(accentColor.copy(alpha = 0.12f))
+                                .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                        ) {
+                            Text(
+                                text = if (isPutri) "Putri" else "Putra",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (student.nis.isNotBlank()) {
+                            Text(
+                                text = "NIS: ${student.nis}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(text = "•", fontSize = 10.sp, color = MaterialTheme.colorScheme.outline)
+                        }
+                        if (student.classGrade.isNotBlank()) {
+                            Text(
+                                text = "Kelas ${student.classGrade}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    if (student.dormitory.isNotBlank()) {
+                        Text(
+                            text = "🏠 ${student.dormitory}",
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            // Optional note/allergy badges if available
+            val hasAllergy = student.allergies.isNotBlank() && !student.allergies.contains("tidak", ignoreCase = true) && student.allergies != "-"
+            val hasBlood = student.bloodType.isNotBlank() && student.bloodType != "-"
+            if (hasAllergy || hasBlood) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (hasAllergy) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFFEF2F2))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "⚠️ Alergi: ${student.allergies}",
+                                fontSize = 10.sp,
+                                color = Color(0xFFDC2626),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                    if (hasBlood) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFEFF6FF))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "🩸 Gol: ${student.bloodType}",
+                                fontSize = 10.sp,
+                                color = Color(0xFF2563EB),
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Action row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedButton(
+                    onClick = onViewDetail,
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier
+                        .height(30.dp)
+                        .testTag("btn_student_detail_${student.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Visibility,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = WaliPrimary
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Detail & Rekam Medis", fontSize = 10.5.sp, color = WaliPrimary, fontWeight = FontWeight.SemiBold)
+                }
+
+                Button(
+                    onClick = onDelete,
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                        contentColor = MaterialTheme.colorScheme.error
+                    ),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier
+                        .height(30.dp)
+                        .testTag("btn_delete_student_${student.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.DeleteOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(13.dp),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Hapus Siswa", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        }
+    }
+}
+

@@ -20,15 +20,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.DirectionsRun
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.DirectionsRun
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.ViewList
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,6 +69,7 @@ import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.CreatePlanDialog
+import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.theme.StatusDeparted
@@ -100,6 +102,7 @@ fun DashboardScreen(
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
+    var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
 
@@ -262,7 +265,7 @@ fun DashboardScreen(
                             modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
-                                imageVector = if (showGridTiles) Icons.Default.ViewList else Icons.Default.GridView,
+                                imageVector = if (showGridTiles) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
                                 contentDescription = "Toggle Grid Menu",
                                 tint = WaliPrimary,
                                 modifier = Modifier.size(17.dp)
@@ -401,9 +404,16 @@ fun DashboardScreen(
                         DashboardSickChildItem(
                             number = index + 1,
                             record = record,
+                            onTreatHere = {
+                                TopOnAdManager.onUserActionClick(context)
+                                val uksFaskes = schoolProfile.primaryFaskesName.ifBlank { "UKS Sekolah" }
+                                recordToDiagnose = record.copy(
+                                    faskes = if (record.faskes.contains("UKS", ignoreCase = true)) record.faskes else uksFaskes
+                                )
+                            },
                             onDepart = {
                                 TopOnAdManager.onUserActionClick(context)
-                                viewModel.markDeparted(record.id)
+                                recordToRefer = record
                             },
                             onDiagnose = {
                                 TopOnAdManager.onUserActionClick(context)
@@ -431,6 +441,26 @@ fun DashboardScreen(
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
                 showCreateDialog = false
+            }
+        )
+    }
+
+    recordToRefer?.let { record ->
+        DepartReferralDialog(
+            record = record,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            defaultEscortName = record.escortName.ifBlank { waliName },
+            onDismiss = { recordToRefer = null },
+            onConfirmDeparture = { targetFaskes, escortName ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.markDepartedToFaskes(record.id, targetFaskes, escortName)
+                recordToRefer = null
+            },
+            onDirectDiagnose = { targetFaskes, escortName ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.markDepartedToFaskes(record.id, targetFaskes, escortName)
+                recordToDiagnose = record.copy(faskes = targetFaskes, escortName = escortName, status = "DEPARTED")
+                recordToRefer = null
             }
         )
     }
@@ -569,6 +599,7 @@ fun DashboardScreen(
 fun DashboardSickChildItem(
     number: Int,
     record: MedicalRecord,
+    onTreatHere: () -> Unit,
     onDepart: () -> Unit,
     onDiagnose: () -> Unit,
     onDelete: () -> Unit
@@ -733,20 +764,39 @@ fun DashboardSickChildItem(
                         }
 
                         if (record.status == "PLANNED" || record.status == "MENUNGGU" || record.status == "SIAP JALAN") {
+                            // Pilihan 1: Dirawat di Sini (UKS)
+                            Button(
+                                onClick = onTreatHere,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B)),
+                                modifier = Modifier
+                                    .height(32.dp)
+                                    .testTag("btn_treat_here_${record.id}"),
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Healing,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(13.dp)
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text("Dirawat di Sini", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            // Pilihan 2: Berangkatkan / Rujuk ke Faskes
                             Button(
                                 onClick = onDepart,
                                 colors = ButtonDefaults.buttonColors(containerColor = StatusDeparted),
                                 modifier = Modifier
                                     .height(32.dp)
                                     .testTag("btn_depart_${record.id}"),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.DirectionsRun,
+                                    imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
                                     contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(13.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
                                 Text("Berangkatkan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                             }
                         } else if (record.status == "DEPARTED" || record.status == "DIANTER") {

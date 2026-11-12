@@ -102,6 +102,8 @@ fun InputTreatmentResultDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                val isUks = record.faskes.contains("UKS", ignoreCase = true)
+
                 // Header Title
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
@@ -112,7 +114,7 @@ fun InputTreatmentResultDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Input Diagnosa & Hasil Berobat",
+                        text = if (isUks) "Input Diagnosa & Penanganan UKS" else "Input Diagnosa & Hasil Berobat",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -152,8 +154,8 @@ fun InputTreatmentResultDialog(
                 OutlinedTextField(
                     value = diagnosis,
                     onValueChange = { diagnosis = it },
-                    label = { Text("Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: ISPA / Faringitis Akut", fontSize = 12.sp) },
+                    label = { Text(if (isUks) "Diagnosa / Indikasi Petugas UKS *" else "Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isUks) "misal: Febris H-1 / Common Cold / Luka Lecet" else "misal: ISPA / Faringitis Akut", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -165,8 +167,8 @@ fun InputTreatmentResultDialog(
                 OutlinedTextField(
                     value = actionsTaken,
                     onValueChange = { actionsTaken = it },
-                    label = { Text("Tindakan Medis di Puskesmas", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Pemeriksaan fisik, pembersihan luka", fontSize = 12.sp) },
+                    label = { Text(if (isUks) "Tindakan UKS (Kompres, Istirahat, dll)" else "Tindakan Medis di Faskes", fontSize = 12.sp) },
+                    placeholder = { Text(if (isUks) "misal: Kompres hangat, observasi suhu di UKS" else "misal: Pemeriksaan fisik, pembersihan luka", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -176,8 +178,8 @@ fun InputTreatmentResultDialog(
                 OutlinedTextField(
                     value = prescription,
                     onValueChange = { prescription = it },
-                    label = { Text("Resep Obat & Aturan Minum *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Paracetamol 3x1, Amoxicillin 3x1", fontSize = 12.sp) },
+                    label = { Text(if (isUks) "Obat yang Diberikan (dari Kotak UKS) *" else "Resep Obat & Aturan Minum *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isUks) "misal: Paracetamol 500mg, Minyak Kayu Putih" else "misal: Paracetamol 3x1, Amoxicillin 3x1", fontSize = 12.sp) },
                     minLines = 2,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
