@@ -43,6 +43,12 @@ jobs:
           fi
           ls -la my-upload-key.jks
 
+      - name: Prepare Environment File
+        run: |
+          if [ ! -f ".env" ]; then
+            cp .env.example .env
+          fi
+
       - name: Make Gradle Wrapper Executable
         run: |
           if [ -f "gradlew" ]; then
@@ -52,9 +58,11 @@ jobs:
       - name: Build Release APK
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'waliasuhcare2026' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'waliasuhcare2026' }}
+          SECRET_STORE_PASS: ${{ secrets.STORE_PASSWORD }}
+          SECRET_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
+          export STORE_PASSWORD="${SECRET_STORE_PASS:-waliasuhcare2026}"
+          export KEY_PASSWORD="${SECRET_KEY_PASS:-waliasuhcare2026}"
           if [ -f "gradlew" ]; then
             ./gradlew :app:assembleRelease --stacktrace
           else
@@ -64,9 +72,11 @@ jobs:
       - name: Build Release AAB (Android App Bundle)
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || 'waliasuhcare2026' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || 'waliasuhcare2026' }}
+          SECRET_STORE_PASS: ${{ secrets.STORE_PASSWORD }}
+          SECRET_KEY_PASS: ${{ secrets.KEY_PASSWORD }}
         run: |
+          export STORE_PASSWORD="${SECRET_STORE_PASS:-waliasuhcare2026}"
+          export KEY_PASSWORD="${SECRET_KEY_PASS:-waliasuhcare2026}"
           if [ -f "gradlew" ]; then
             ./gradlew :app:bundleRelease --stacktrace
           else
