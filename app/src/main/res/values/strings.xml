@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">Waliasuh Care</string>
+    <string name="disclaimer_short">Alat bantu independen untuk dokumentasi operasional di Sekolah Rakyat. Bukan aplikasi resmi milik Kementerian Sosial RI maupun Sekolah Rakyat.</string>
+    <string name="disclaimer_full">Wali Asuh Care dikembangkan secara independen untuk membantu wali asuh dan pengelola asrama dalam dokumentasi operasional kesehatan di Sekolah Rakyat. Aplikasi ini bukan milik dan tidak berafiliasi secara resmi dengan Kementerian Sosial Republik Indonesia maupun institusi Sekolah Rakyat.</string>
+    <string name="disclaimer_pdf_footer">Dicetak melalui alat bantu dokumentasi operasional Wali Asuh Care (independen, bukan sistem resmi Kemensos RI / Sekolah Rakyat).</string>
 </resources>

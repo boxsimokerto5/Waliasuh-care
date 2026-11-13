@@ -1,10 +1,13 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import com.example.R
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +37,7 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
@@ -52,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -67,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
@@ -331,15 +337,57 @@ fun ProfileScreen(
                         .fillMaxWidth()
                         .padding(vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.logo_sr_care),
-                        contentDescription = "Logo Wali Asuh Care",
+                    Row(
                         modifier = Modifier
-                            .size(54.dp)
-                            .clip(CircleShape)
-                    )
+                            .testTag("profile_branding_logos"),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            shadowElevation = 1.dp
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_kemensos),
+                                contentDescription = "Logo Kementerian Sosial RI",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(6.dp)
+                            )
+                        }
+
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_sr_care),
+                            contentDescription = "Logo Wali Asuh Care",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                        )
+
+                        Surface(
+                            modifier = Modifier.size(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                            shadowElevation = 1.dp
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_sekolah_rakyat),
+                                contentDescription = "Logo Sekolah Rakyat",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(5.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = "Wali Asuh Care v1.0",
                         fontSize = 12.sp,
@@ -351,6 +399,36 @@ fun ProfileScreen(
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Surface(
+                        onClick = { showGuideDialog = true },
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                        modifier = Modifier
+                            .padding(horizontal = 12.dp)
+                            .testTag("profile_independent_disclaimer")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Info,
+                                contentDescription = "Informasi status aplikasi",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = stringResource(R.string.disclaimer_short),
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Start
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -522,6 +600,37 @@ fun ProfileScreen(
                             Text("3. Setelah tiba di puskesmas, nakes/pengasuh mencatat hasil diagnosa & obat.", fontSize = 12.sp)
                             Text("4. Tentukan tanggal kontrol atau centang tidak perlu kontrol.", fontSize = 12.sp)
                             Text("5. Bagikan laporan ke grup WhatsApp pengasuh dengan tombol Laporan WA.", fontSize = 12.sp)
+                        }
+                    }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Info,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = "Tentang & Status Aplikasi",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Text(
+                                text = stringResource(R.string.disclaimer_full),
+                                fontSize = 11.5.sp,
+                                lineHeight = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))

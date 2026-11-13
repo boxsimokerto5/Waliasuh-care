@@ -116,26 +116,63 @@ fun StudentIdCardPreview(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(headerBg)
-                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                        .padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.logo_sr_care),
-                        contentDescription = "Logo Sekolah",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(CircleShape)
-                            .background(Color.White)
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(23.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.White)
+                                .padding(2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_kemensos),
+                                contentDescription = "Logo Kementerian Sosial RI",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
 
-                    Spacer(modifier = Modifier.width(8.dp))
+                        Image(
+                            painter = painterResource(id = R.drawable.logo_sr_care),
+                            contentDescription = "Logo Wali Asuh Care",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color.White)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .size(23.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color.White)
+                                .padding(2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_sekolah_rakyat),
+                                contentDescription = "Logo Sekolah Rakyat",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = cleanSchool,
                             color = Color.White,
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -143,9 +180,11 @@ fun StudentIdCardPreview(
                         Text(
                             text = "KARTU IDENTITAS ANAK ASUH",
                             color = glowColor,
-                            fontSize = 7.5.sp,
+                            fontSize = 7.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.7.sp
+                            letterSpacing = 0.6.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
@@ -156,12 +195,12 @@ fun StudentIdCardPreview(
                             .clip(RoundedCornerShape(50))
                             .background(genderBadgeBg)
                             .border(1.2.dp, neonColor, RoundedCornerShape(50))
-                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                            .padding(horizontal = 7.dp, vertical = 3.dp)
                     ) {
                         Text(
                             text = "${palette.jenjang.label} • ${palette.genderLabel}",
                             color = neonColor,
-                            fontSize = 8.5.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1
                         )

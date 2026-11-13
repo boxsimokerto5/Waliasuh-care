@@ -2,14 +2,19 @@ package com.example.util
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.text.TextPaint
+import android.text.TextUtils
 import android.widget.Toast
 import androidx.core.content.FileProvider
+import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
@@ -55,7 +60,7 @@ object PdfReportGenerator {
             var currentY = 35f
 
             // 1. Header / Kop Surat Resmi Tenant Sekolah
-            currentY = drawHeader(canvas, paint, pageWidth, currentY, schoolProfile)
+            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
 
             // 2. Judul Dokumen & Periode
             currentY = drawTitleAndPeriod(canvas, paint, pageWidth, currentY, periodLabel)
@@ -113,7 +118,7 @@ object PdfReportGenerator {
                 currentY = 40f
             }
 
-            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
 
             document.finishPage(page)
 
@@ -158,44 +163,110 @@ object PdfReportGenerator {
         return signTitle.take(60)
     }
 
+    private fun drawLogoAspectFit(canvas: Canvas, bitmap: Bitmap, targetBox: RectF) {
+        if (bitmap.width <= 0 || bitmap.height <= 0) return
+        val scale = minOf(targetBox.width() / bitmap.width, targetBox.height() / bitmap.height)
+        val drawW = bitmap.width * scale
+        val drawH = bitmap.height * scale
+        val dx = targetBox.left + (targetBox.width() - drawW) / 2f
+        val dy = targetBox.top + (targetBox.height() - drawH) / 2f
+        val destRect = RectF(dx, dy, dx + drawW, dy + drawH)
+        val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        canvas.drawBitmap(bitmap, null, destRect, bmpPaint)
+    }
+
     private fun drawHeader(
+        context: Context,
         canvas: Canvas,
         paint: Paint,
         width: Int,
         startY: Float,
         schoolProfile: SchoolProfile = SchoolProfile()
     ): Float {
-        var y = startY
+        val marginX = 35f
+        val topY = startY - 12f
+        val logoBoxSize = 44f
+
+        val kemensosBitmap = try {
+            BitmapFactory.decodeResource(context.resources, R.drawable.logo_kemensos)
+        } catch (_: Exception) {
+            null
+        }
+        val sekolahRakyatBitmap = try {
+            BitmapFactory.decodeResource(context.resources, R.drawable.logo_sekolah_rakyat)
+        } catch (_: Exception) {
+            null
+        }
+
+        // Logo Kiri: Kemensos
+        kemensosBitmap?.let { bmp ->
+            drawLogoAspectFit(
+                canvas,
+                bmp,
+                RectF(marginX, topY, marginX + logoBoxSize, topY + logoBoxSize)
+            )
+            bmp.recycle()
+        }
+
+        // Logo Kanan: Sekolah Rakyat
+        sekolahRakyatBitmap?.let { bmp ->
+            drawLogoAspectFit(
+                canvas,
+                bmp,
+                RectF(width - marginX - logoBoxSize, topY, width - marginX, topY + logoBoxSize)
+            )
+            bmp.recycle()
+        }
+
         val headerSchoolTitle = buildHeaderTitle(schoolProfile)
+        val maxCenterTextWidth = width - (marginX + logoBoxSize + 12f) * 2f
 
         // Header text center
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textSize = if (headerSchoolTitle.length > 42) 11f else 13f
+        var titleSize = if (headerSchoolTitle.length > 42) 11f else 12.5f
+        paint.textSize = titleSize
+        while (titleSize > 8.5f && paint.measureText(headerSchoolTitle) > maxCenterTextWidth) {
+            titleSize -= 0.5f
+            paint.textSize = titleSize
+        }
         paint.color = Color.rgb(15, 118, 110) // Teal color
-        canvas.drawText(headerSchoolTitle, width / 2f, y, paint)
+        val titleToDraw = TextUtils.ellipsize(
+            headerSchoolTitle,
+            TextPaint(paint),
+            maxCenterTextWidth,
+            TextUtils.TruncateAt.END
+        ).toString()
+        var y = topY + 13f
+        canvas.drawText(titleToDraw, width / 2f, y, paint)
 
         y += 13f
-        paint.textSize = 10.5f
+        paint.textSize = 10f
         paint.color = Color.rgb(30, 41, 59)
         canvas.drawText("UNIT LAYANAN KESEHATAN SANTRI & ANAK ASUH (UKSA)", width / 2f, y, paint)
 
         y += 11f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        paint.textSize = 8.5f
+        paint.textSize = 8f
         paint.color = Color.rgb(100, 116, 139)
-        canvas.drawText(buildSubHeaderLine(schoolProfile), width / 2f, y, paint)
+        val subHeaderToDraw = TextUtils.ellipsize(
+            buildSubHeaderLine(schoolProfile),
+            TextPaint(paint),
+            maxCenterTextWidth,
+            TextUtils.TruncateAt.END
+        ).toString()
+        canvas.drawText(subHeaderToDraw, width / 2f, y, paint)
 
-        y += 10f
+        y = maxOf(y, topY + logoBoxSize) + 7f
         // Garis Pembatas Kop Surat Ganda
         paint.strokeWidth = 2f
         paint.color = Color.rgb(15, 118, 110)
-        canvas.drawLine(35f, y, width - 35f, y, paint)
+        canvas.drawLine(marginX, y, width - marginX, y, paint)
 
         y += 3f
         paint.strokeWidth = 0.8f
         paint.color = Color.rgb(148, 163, 184)
-        canvas.drawLine(35f, y, width - 35f, y, paint)
+        canvas.drawLine(marginX, y, width - marginX, y, paint)
 
         paint.textAlign = Paint.Align.LEFT
         return y + 14f
@@ -395,6 +466,7 @@ object PdfReportGenerator {
     }
 
     private fun drawFooterSignatures(
+        context: Context,
         canvas: Canvas,
         paint: Paint,
         width: Int,
@@ -403,7 +475,7 @@ object PdfReportGenerator {
         waliName: String,
         schoolProfile: SchoolProfile = SchoolProfile()
     ) {
-        val y = (startY + 15f).coerceAtMost(height - 80f)
+        val y = (startY + 15f).coerceAtMost(height - 92f)
         val todayDate = SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(Date())
         val cityLabel = schoolProfile.city.trim().ifBlank { "Indonesia" }
 
@@ -426,6 +498,18 @@ object PdfReportGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.color = Color.rgb(15, 118, 110)
         canvas.drawText("( $waliName )", width - 50f, y + 52f, paint)
+
+        // Catatan kaki halus di bagian paling bawah lembar A4
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+        paint.textSize = 6.5f
+        paint.color = Color.rgb(148, 163, 184)
+        canvas.drawText(
+            context.getString(R.string.disclaimer_pdf_footer),
+            width / 2f,
+            height - 15f,
+            paint
+        )
         paint.textAlign = Paint.Align.LEFT
     }
 
@@ -454,7 +538,7 @@ object PdfReportGenerator {
             var currentY = 35f
 
             // 1. Header / Kop Surat
-            currentY = drawHeader(canvas, paint, pageWidth, currentY, schoolProfile)
+            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
 
             // 2. Judul Dokumen
             paint.textAlign = Paint.Align.CENTER
@@ -570,7 +654,7 @@ object PdfReportGenerator {
                 currentY = 40f
             }
 
-            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
             document.finishPage(page)
 
             val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }

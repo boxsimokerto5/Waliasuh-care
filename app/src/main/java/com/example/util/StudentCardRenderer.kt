@@ -166,6 +166,16 @@ object StudentCardRenderer {
         }
     }
 
+    private fun drawBitmapAspectFit(canvas: Canvas, bitmap: Bitmap, targetBox: RectF, paint: Paint) {
+        if (bitmap.width <= 0 || bitmap.height <= 0) return
+        val scale = minOf(targetBox.width() / bitmap.width, targetBox.height() / bitmap.height)
+        val drawW = bitmap.width * scale
+        val drawH = bitmap.height * scale
+        val dx = targetBox.left + (targetBox.width() - drawW) / 2f
+        val dy = targetBox.top + (targetBox.height() - drawH) / 2f
+        canvas.drawBitmap(bitmap, null, RectF(dx, dy, dx + drawW, dy + drawH), paint)
+    }
+
     /**
      * Menggambar Kartu Anak Asuh berdesain ID Card modern di atas Canvas (digunakan untuk export PDF & cetak A4).
      */
@@ -178,7 +188,9 @@ object StudentCardRenderer {
         student: ChildStudent,
         schoolName: String,
         qrBitmap: Bitmap?,
-        logoBitmap: Bitmap? = null
+        logoBitmap: Bitmap? = null,
+        kemensosBitmap: Bitmap? = null,
+        sekolahRakyatBitmap: Bitmap? = null
     ) {
         val palette = resolvePalette(student)
         val cornerRadius = height * 0.065f
@@ -236,20 +248,37 @@ object StudentCardRenderer {
         val sideStripeW = width * 0.018f
         canvas.drawRect(left, top + headerHeight, left + sideStripeW, top + height - topRibbonH, neonPaint)
 
-        // 5. Header Content (Logo + Nama Sekolah + Badge Jenjang/Gender)
-        val padX = width * 0.045f
-        val logoSize = headerHeight * 0.56f
-        val logoLeft = left + padX
+        // 5. Header Content (Logo Kemensos + Wali Asuh Care + Sekolah Rakyat + Nama Sekolah + Badge Jenjang/Gender)
+        val padX = width * 0.04f
+        val hasExtraLogos = kemensosBitmap != null || sekolahRakyatBitmap != null
+        val logoSize = if (hasExtraLogos) headerHeight * 0.48f else headerHeight * 0.56f
+        val logoGap = width * 0.012f
+        var logoCursorX = left + padX
         val logoTop = top + topRibbonH + (headerHeight - topRibbonH - logoSize) * 0.5f
+        val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        val whiteBadgePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+
+        if (kemensosBitmap != null) {
+            val badgeRect = RectF(logoCursorX, logoTop, logoCursorX + logoSize, logoTop + logoSize)
+            canvas.drawRoundRect(badgeRect, logoSize * 0.22f, logoSize * 0.22f, whiteBadgePaint)
+            val innerPad = logoSize * 0.12f
+            drawBitmapAspectFit(
+                canvas,
+                kemensosBitmap,
+                RectF(badgeRect.left + innerPad, badgeRect.top + innerPad, badgeRect.right - innerPad, badgeRect.bottom - innerPad),
+                bmpPaint
+            )
+            logoCursorX += logoSize + logoGap
+        }
 
         if (logoBitmap != null) {
-            val logoRect = RectF(logoLeft, logoTop, logoLeft + logoSize, logoTop + logoSize)
-            canvas.drawBitmap(logoBitmap, null, logoRect, Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
-        } else {
-            val badgeCirclePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-            val cx = logoLeft + logoSize / 2f
+            val logoRect = RectF(logoCursorX, logoTop, logoCursorX + logoSize, logoTop + logoSize)
+            canvas.drawBitmap(logoBitmap, null, logoRect, bmpPaint)
+            logoCursorX += logoSize + logoGap
+        } else if (!hasExtraLogos) {
+            val cx = logoCursorX + logoSize / 2f
             val cy = logoTop + logoSize / 2f
-            canvas.drawCircle(cx, cy, logoSize / 2f, badgeCirclePaint)
+            canvas.drawCircle(cx, cy, logoSize / 2f, whiteBadgePaint)
             val monoPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = palette.gradientMidArgb
                 textSize = logoSize * 0.44f
@@ -258,6 +287,20 @@ object StudentCardRenderer {
             }
             val yOffset = (monoPaint.descent() + monoPaint.ascent()) / 2f
             canvas.drawText("WA", cx, cy - yOffset, monoPaint)
+            logoCursorX += logoSize + logoGap
+        }
+
+        if (sekolahRakyatBitmap != null) {
+            val badgeRect = RectF(logoCursorX, logoTop, logoCursorX + logoSize, logoTop + logoSize)
+            canvas.drawRoundRect(badgeRect, logoSize * 0.22f, logoSize * 0.22f, whiteBadgePaint)
+            val innerPad = logoSize * 0.1f
+            drawBitmapAspectFit(
+                canvas,
+                sekolahRakyatBitmap,
+                RectF(badgeRect.left + innerPad, badgeRect.top + innerPad, badgeRect.right - innerPad, badgeRect.bottom - innerPad),
+                bmpPaint
+            )
+            logoCursorX += logoSize + logoGap
         }
 
         val cleanSchool = schoolName.trim().ifBlank { "WALI ASUH CARE SCHOOL" }.uppercase()
@@ -269,7 +312,7 @@ object StudentCardRenderer {
         }
         val badgeW = badgePaint.measureText(badgeText) + width * 0.045f
         val badgeH = height * 0.095f
-        val badgeRight = left + width - padX * 0.8f
+        val badgeRight = left + width - padX * 0.85f
         val badgeLeft = badgeRight - badgeW
         val badgeTop = top + topRibbonH + (headerHeight - topRibbonH - badgeH) * 0.5f
         val badgeRect = RectF(badgeLeft, badgeTop, badgeRight, badgeTop + badgeH)
@@ -286,11 +329,11 @@ object StudentCardRenderer {
         canvas.drawText(badgeText, badgeRect.left + width * 0.0225f, badgeTextY, badgePaint)
 
         // Nama Sekolah & Sub-label "KARTU ANAK ASUH"
-        val schoolTextLeft = logoLeft + logoSize + width * 0.025f
-        val schoolTextAvailW = (badgeLeft - schoolTextLeft - width * 0.02f).coerceAtLeast(30f)
+        val schoolTextLeft = logoCursorX + width * 0.012f
+        val schoolTextAvailW = (badgeLeft - schoolTextLeft - width * 0.018f).coerceAtLeast(30f)
         val schoolPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.WHITE
-            textSize = height * 0.056f
+            textSize = if (hasExtraLogos) height * 0.052f else height * 0.056f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val ellipsizedSchool = TextUtils.ellipsize(cleanSchool, schoolPaint, schoolTextAvailW, TextUtils.TruncateAt.END).toString()
@@ -299,11 +342,12 @@ object StudentCardRenderer {
 
         val subLabelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.trimSoftGlowArgb
-            textSize = height * 0.039f
+            textSize = if (hasExtraLogos) height * 0.036f else height * 0.039f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            letterSpacing = 0.08f
+            letterSpacing = 0.06f
         }
-        canvas.drawText("KARTU IDENTITAS ANAK ASUH", schoolTextLeft, schoolTitleY + height * 0.068f, subLabelPaint)
+        val ellipsizedSub = TextUtils.ellipsize("KARTU IDENTITAS ANAK ASUH", subLabelPaint, schoolTextAvailW, TextUtils.TruncateAt.END).toString()
+        canvas.drawText(ellipsizedSub, schoolTextLeft, schoolTitleY + height * 0.068f, subLabelPaint)
 
         // 6. Content Area: Kiri (Biodata) + Kanan (QR Code Besar)
         val contentTop = top + headerHeight + height * 0.045f
