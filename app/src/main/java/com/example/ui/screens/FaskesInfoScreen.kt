@@ -11,12 +11,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
@@ -32,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -39,20 +41,32 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 
 @Composable
 fun FaskesInfoScreen(
     records: List<MedicalRecord>,
+    schoolProfile: SchoolProfile = SchoolProfile(),
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val allFaskesDetails = remember(schoolProfile) { schoolProfile.getAllFaskesWithDetails() }
+    val referralFaskesNames = remember(schoolProfile) { schoolProfile.getAllFaskes().drop(1) }
 
-    val watesCount = records.count { it.faskes.contains("Wates", ignoreCase = true) }
-    val plosoklatenCount = records.count { it.faskes.contains("Plosoklaten", ignoreCase = true) }
-    val otherCount = records.size - watesCount - plosoklatenCount
+    val statFirst = referralFaskesNames.getOrNull(0) ?: schoolProfile.primaryFaskesName.ifBlank { "UKS Sekolah" }
+    val statSecond = referralFaskesNames.getOrNull(1)
+    val countFirst = records.count { it.faskes.contains(statFirst, ignoreCase = true) }
+    val countSecond = if (statSecond != null) {
+        records.count { it.faskes.contains(statSecond, ignoreCase = true) }
+    } else {
+        0
+    }
+    val otherCount = (records.size - countFirst - countSecond).coerceAtLeast(0)
+    val schoolLabel = schoolProfile.shortName.ifBlank { schoolProfile.schoolName }
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -66,7 +80,6 @@ fun FaskesInfoScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item {
-                // Header Card Statistik (Compact)
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp),
@@ -85,7 +98,7 @@ fun FaskesInfoScreen(
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
-                            text = "Total $records.size rujukan anak asuh SRT 1 Kediri",
+                            text = "Total ${records.size} rujukan anak asuh $schoolLabel",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                         )
@@ -97,19 +110,21 @@ fun FaskesInfoScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             CompactStatBox(
-                                title = "Pusk. Wates",
-                                count = watesCount,
+                                title = statFirst,
+                                count = countFirst,
                                 bgColor = Color(0xFF00695C).copy(alpha = 0.14f),
                                 textColor = Color(0xFF00695C),
                                 modifier = Modifier.weight(1f)
                             )
-                            CompactStatBox(
-                                title = "Pusk. Plosoklaten",
-                                count = plosoklatenCount,
-                                bgColor = Color(0xFF2E7D32).copy(alpha = 0.14f),
-                                textColor = Color(0xFF2E7D32),
-                                modifier = Modifier.weight(1f)
-                            )
+                            if (statSecond != null) {
+                                CompactStatBox(
+                                    title = statSecond,
+                                    count = countSecond,
+                                    bgColor = Color(0xFF2E7D32).copy(alpha = 0.14f),
+                                    textColor = Color(0xFF2E7D32),
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
                             CompactStatBox(
                                 title = "Faskes Lain",
                                 count = otherCount,
@@ -124,45 +139,55 @@ fun FaskesInfoScreen(
 
             item {
                 Text(
-                    text = "Fasilitas Kesehatan Mitra Utama",
+                    text = "Fasilitas Kesehatan Mitra ($schoolLabel)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
 
-            // Card Puskesmas Wates (Compact)
-            item {
+            itemsIndexed(allFaskesDetails) { index, info ->
+                val isPrimary = index == 0
+                val displayAddress = info.address.ifBlank {
+                    if (schoolProfile.city.isNotBlank()) "Wilayah ${schoolProfile.city}" else "Alamat belum diisi Admin Sekolah"
+                }
+                val displaySubdistrict = if (isPrimary) {
+                    "Faskes Utama (Internal Sekolah)"
+                } else {
+                    "Faskes Rujukan #$index • ${schoolProfile.city.ifBlank { schoolLabel }}"
+                }
+                val displayHours = if (isPrimary) {
+                    "Layanan Internal Asrama / Sekolah"
+                } else {
+                    "Jadwal sesuai jam layanan / UGD faskes"
+                }
+
                 CompactFaskesDetailCard(
-                    name = "Puskesmas Wates",
-                    subdistrict = "Kec. Wates, Kab. Kediri",
-                    address = "Jl. Raya Wates No. 45, Kab. Kediri",
-                    hours = "Poli: 07.30 - 14.00 WIB • UGD: 24 Jam",
-                    phone = "(0354) 441012",
-                    onCall = {
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:0354441012"))
-                        context.startActivity(intent)
-                    }
+                    name = info.name,
+                    subdistrict = displaySubdistrict,
+                    address = displayAddress,
+                    hours = displayHours,
+                    phone = info.phone,
+                    onCall = if (info.phone.isNotBlank()) {
+                        {
+                            val tel = info.phone.filter { it.isDigit() || it == '+' }
+                            if (tel.isNotBlank()) {
+                                runCatching {
+                                    val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$tel"))
+                                    context.startActivity(intent)
+                                }
+                            }
+                        }
+                    } else null
                 )
             }
 
-            // Card Puskesmas Plosoklaten (Compact)
             item {
-                CompactFaskesDetailCard(
-                    name = "Puskesmas Plosoklaten",
-                    subdistrict = "Kec. Plosoklaten, Kab. Kediri",
-                    address = "Jl. Raya Plosoklaten No. 12, Kab. Kediri",
-                    hours = "Poli: 07.30 - 14.00 WIB • UGD: 24 Jam",
-                    phone = "(0354) 479155",
-                    onCall = {
-                        val intent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:0354479155"))
-                        context.startActivity(intent)
-                    }
-                )
-            }
-
-            // SOP Asrama (Compact)
-            item {
+                val referralText = if (referralFaskesNames.isNotEmpty()) {
+                    referralFaskesNames.joinToString(" / ")
+                } else {
+                    schoolProfile.primaryFaskesName.ifBlank { "Faskes Rujukan" }
+                }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
@@ -181,18 +206,18 @@ fun FaskesInfoScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "SOP Darurat Kesehatan Asrama SRT 1",
+                                text = "SOP Darurat Kesehatan $schoolLabel",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
                             )
                         }
 
                         Text(
-                            text = "1. Demam > 38.5°C lebih dari 24 jam atau sesak nafas: Segera rujuk ke UGD Puskesmas Wates / Plosoklaten.",
+                            text = "1. Demam > 38.5°C lebih dari 24 jam atau sesak nafas: Segera rujuk ke UGD $referralText.",
                             fontSize = 11.sp
                         )
                         Text(
-                            text = "2. Jangan memberikan obat antibiotik tanpa pemeriksaan dokter puskesmas.",
+                            text = "2. Jangan memberikan obat antibiotik tanpa pemeriksaan dokter faskes.",
                             fontSize = 11.sp
                         )
                         Text(
@@ -232,7 +257,9 @@ fun CompactStatBox(
                 text = title,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.SemiBold,
-                color = textColor
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -245,7 +272,7 @@ fun CompactFaskesDetailCard(
     address: String,
     hours: String,
     phone: String,
-    onCall: () -> Unit
+    onCall: (() -> Unit)? = null
 ) {
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -307,24 +334,41 @@ fun CompactFaskesDetailCard(
                 Text(text = hours, fontSize = 11.sp)
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                OutlinedButton(
-                    onClick = onCall,
-                    modifier = Modifier
-                        .height(30.dp)
-                        .testTag("btn_call_${name.replace(" ", "_")}"),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+            if (phone.isNotBlank() && onCall != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
                 ) {
+                    OutlinedButton(
+                        onClick = onCall,
+                        modifier = Modifier
+                            .heightIn(min = 40.dp)
+                            .testTag("btn_call_${name.replace(" ", "_")}"),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Call,
+                            contentDescription = "Hubungi $name",
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("Hubungi ($phone)", fontSize = 11.sp)
+                    }
+                }
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         imageVector = Icons.Default.Call,
                         contentDescription = null,
-                        modifier = Modifier.size(13.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Hubungi ($phone)", fontSize = 11.sp)
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Nomor telepon belum diisi Admin Sekolah",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }

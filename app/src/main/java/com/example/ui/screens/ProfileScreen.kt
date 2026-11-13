@@ -41,6 +41,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
+import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.util.TopOnAdManager
@@ -445,55 +446,13 @@ fun ProfileScreen(
         )
     }
 
-    // Modal Bottom Sheet: Puskesmas Saya (Google Maps Style)
+    // Modal Bottom Sheet: Puskesmas Saya (Dinamis sesuai Faskes Tenant Sekolah)
     if (showPuskesmasDialog) {
-        ModalBottomSheet(
-            onDismissRequest = { showPuskesmasDialog = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 600.dp)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Puskesmas Langganan Rujukan", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text("1. Puskesmas Wates", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("Jl. Raya Wates No. 45, Kab. Kediri", fontSize = 11.sp)
-                            Text("Telepon: (0354) 441012 • UGD 24 Jam", fontSize = 11.sp)
-                        }
-                    }
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Text("2. Puskesmas Plosoklaten", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                            Text("Jl. Raya Plosoklaten No. 12, Kab. Kediri", fontSize = 11.sp)
-                            Text("Telepon: (0354) 479155 • UGD 24 Jam", fontSize = 11.sp)
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(onClick = { showPuskesmasDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("Tutup")
-                        }
-                    }
-                }
-            }
-        }
+        FaskesReferralSheet(
+            schoolProfile = schoolProfile,
+            title = "Puskesmas Langganan Rujukan",
+            onDismiss = { showPuskesmasDialog = false }
+        )
     }
 
     // Modal Bottom Sheet: Notifikasi
@@ -595,9 +554,13 @@ fun ProfileScreen(
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val guideFaskes = schoolProfile.getAllFaskes()
+                                .takeIf { it.isNotEmpty() }
+                                ?.joinToString(" / ")
+                                ?: "Faskes Rujukan"
                             Text("1. Masukkan anak sakit melalui tombol (+) di Dashboard atau Rencana.", fontSize = 12.sp)
-                            Text("2. Pilih Puskesmas Wates atau Puskesmas Plosoklaten dan jam berangkat.", fontSize = 12.sp)
-                            Text("3. Setelah tiba di puskesmas, nakes/pengasuh mencatat hasil diagnosa & obat.", fontSize = 12.sp)
+                            Text("2. Pilih faskes tujuan ($guideFaskes) dan jam berangkat.", fontSize = 12.sp)
+                            Text("3. Setelah tiba di faskes/puskesmas, nakes/pengasuh mencatat hasil diagnosa & obat.", fontSize = 12.sp)
                             Text("4. Tentukan tanggal kontrol atau centang tidak perlu kontrol.", fontSize = 12.sp)
                             Text("5. Bagikan laporan ke grup WhatsApp pengasuh dengan tombol Laporan WA.", fontSize = 12.sp)
                         }

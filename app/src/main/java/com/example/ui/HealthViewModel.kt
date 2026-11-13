@@ -111,7 +111,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             tenantCode = schoolPrefs.getString("tenant_code", "SRT1-KDR") ?: "SRT1-KDR",
             primaryFaskesName = schoolPrefs.getString("primary_faskes", "UKS Sekolah") ?: "UKS Sekolah",
             secondaryFaskesName = schoolPrefs.getString("secondary_faskes", "Puskesmas Wates") ?: "Puskesmas Wates",
-            additionalFaskesList = parseFaskesList(schoolPrefs.getString("additional_faskes", null))
+            additionalFaskesList = parseFaskesList(schoolPrefs.getString("additional_faskes", null)),
+            faskesContacts = SchoolProfile.parseFaskesContacts(schoolPrefs.getString("faskes_contacts", null))
         )
     )
     val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
@@ -147,6 +148,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             putString("primary_faskes", profile.primaryFaskesName)
             putString("secondary_faskes", profile.secondaryFaskesName)
             putString("additional_faskes", profile.additionalFaskesList.joinToString("|||"))
+            putString("faskes_contacts", SchoolProfile.serializeFaskesContacts(profile.faskesContacts))
             if (markCustomized) {
                 putString("customized_tenant", profile.tenantCode)
             }
@@ -186,7 +188,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     val cityLabel = cleanCity.removePrefix("Kabupaten ").removePrefix("Kab. ").removePrefix("Kota ").trim()
                     if (cityLabel.isNotBlank()) "Puskesmas $cityLabel" else "Puskesmas Rujukan"
                 },
-                additionalFaskesList = if (isDefaultKediri) listOf("Puskesmas Plosoklaten") else emptyList()
+                additionalFaskesList = if (isDefaultKediri) listOf("Puskesmas Plosoklaten") else emptyList(),
+                faskesContacts = emptyMap()
             )
         }
     }

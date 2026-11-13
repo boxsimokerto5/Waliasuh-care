@@ -1,5 +1,7 @@
 package com.example.ui.dialogs
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +22,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -27,8 +30,11 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Female
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.BottomSheetDefaults
@@ -44,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -56,14 +63,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
+import com.example.data.model.SchoolProfile
+import com.example.util.PdfReportGenerator
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -72,16 +83,21 @@ import java.util.Locale
 @Composable
 fun DaftarHaidSheet(
     activeHaidRecords: List<HaidRecord>,
+    schoolProfile: SchoolProfile = SchoolProfile(),
+    waliName: String = "Wali Asuh",
     onCompleteHaid: (Long) -> Unit,
     onUpdateRecord: (HaidRecord) -> Unit = {},
     onDeleteRecord: (HaidRecord) -> Unit,
     onOpenInputHaid: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     var searchQuery by remember { mutableStateOf("") }
+    var selectedDetailRecord by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToComplete by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToEdit by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToDelete by remember { mutableStateOf<HaidRecord?>(null) }
+    var showDailyReportSheet by remember { mutableStateOf(false) }
 
     val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")) }
 
@@ -222,6 +238,46 @@ fun DaftarHaidSheet(
                     }
                 }
 
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Tombol Cepat: Laporan Haid Hari Ini (PDF berkop resmi multi-tenant + Ringkasan WA)
+                OutlinedButton(
+                    onClick = { showDailyReportSheet = true },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFFF472B6).copy(alpha = 0.65f)),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        containerColor = Color(0xFFFDF2F8),
+                        contentColor = Color(0xFF9D174D)
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_daily_haid_report")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PictureAsPdf,
+                        contentDescription = null,
+                        tint = Color(0xFFDB2777),
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Laporan Haid Hari Ini (PDF Berkop & WA)",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color(0xFF9D174D),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(10.dp))
 
                 // Search Bar + Tombol Tambah Cepat
@@ -321,12 +377,24 @@ fun DaftarHaidSheet(
                         items(filteredRecords, key = { it.id }) { record ->
                             val days = record.durationDays
                             val isMaxDay = record.isIstihadhahWarning
+                            val clampedDay = days.coerceIn(1, HaidDateCalculator.MAX_HAID_DAYS)
+                            val accentColor = when {
+                                isMaxDay -> Color(0xFFEF4444)
+                                days >= 12 -> Color(0xFFD97706)
+                                else -> Color(0xFFDB2777)
+                            }
+                            val trackColor = when {
+                                isMaxDay -> Color(0xFFFEE2E2)
+                                days >= 12 -> Color(0xFFFEF3C7)
+                                else -> Color(0xFFFCE7F3)
+                            }
 
                             Card(
+                                onClick = { selectedDetailRecord = record },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("item_haid_${record.id}"),
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (isMaxDay) Color(0xFFFEF2F2) else Color(0xFFFDF2F8)
                                 ),
@@ -338,7 +406,8 @@ fun DaftarHaidSheet(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp)
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -350,7 +419,7 @@ fun DaftarHaidSheet(
                                                 .weight(1f)
                                                 .padding(end = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             Box(
                                                 modifier = Modifier
@@ -366,151 +435,501 @@ fun DaftarHaidSheet(
                                                     color = if (isMaxDay) Color(0xFFB91C1C) else Color(0xFF9D174D)
                                                 )
                                             }
-                                            Column {
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = record.studentName,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 13.5.sp,
-                                                    color = if (isMaxDay) Color(0xFF7F1D1D) else Color(0xFF831843)
+                                                    color = if (isMaxDay) Color(0xFF7F1D1D) else Color(0xFF831843),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
-                                                    text = "${record.studentClass} • ${record.studentDorm}${if (record.studentNik.isNotBlank()) " • NIK: ${record.studentNik}" else ""}",
-                                                    fontSize = 10.5.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = Color(0xFF9D174D).copy(alpha = 0.8f)
+                                                    text = record.studentClass.ifBlank { record.studentDorm.ifBlank { "-" } },
+                                                    fontSize = 11.5.sp,
+                                                    color = Color(0xFF9D174D).copy(alpha = 0.85f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
 
-                                        // Badge Durasi Hari Berjalan
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(accentColor)
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                ) {
+                                                    if (isMaxDay) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Warning,
+                                                            contentDescription = null,
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(11.dp)
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = "Hari ke-$days",
+                                                        color = Color.White,
+                                                        fontWeight = FontWeight.Bold,
+                                                        fontSize = 11.sp
+                                                    )
+                                                }
+                                            }
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                contentDescription = "Lihat detail ${record.studentName}",
+                                                tint = Color(0xFF9D174D).copy(alpha = 0.65f),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
+
+                                    // Garis progress tipis (tanpa memenuhi layar)
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(trackColor)
+                                    ) {
                                         Box(
                                             modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(if (isMaxDay) Color(0xFFEF4444) else Color(0xFFDB2777))
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = "Hari ke-$days",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                    }
-
-                                    Spacer(modifier = Modifier.height(8.dp))
-
-                                    // Timeline Berjalan (Hari 1 s.d. 15)
-                                    HaidTimelineBar(currentDay = days)
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    // Info hari ke-15 batas maksimal sebelum pindah otomatis ke Daftar Suci
-                                    if (isMaxDay) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(Color(0xFFFEE2E2))
-                                                .padding(horizontal = 8.dp, vertical = 5.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Warning,
-                                                contentDescription = null,
-                                                tint = Color(0xFFDC2626),
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Hari ke-15 (Maksimal Haid): Wajib mandi suci. Lewat hari ke-15 otomatis pindah ke Daftar Suci.",
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF991B1B)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                    }
-
-                                    // Info Mulai & Catatan
-                                    Text(
-                                        text = "Mulai Hari ke-1: ${dateFormat.format(Date(record.startDate))}",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-
-                                    if (record.notes.isNotBlank()) {
-                                        Text(
-                                            text = "Catatan: ${record.notes}",
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF831843),
-                                            fontWeight = FontWeight.Medium
+                                                .fillMaxWidth(clampedDay / HaidDateCalculator.MAX_HAID_DAYS.toFloat())
+                                                .height(3.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(accentColor)
                                         )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    // Action Buttons Row (Edit Hari/Catatan, Hapus, Mandi Suci / Pindah ke Daftar Suci)
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Oleh: ${record.waliName}",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.weight(1f)
-                                        )
-
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            IconButton(
-                                                onClick = { recordToEdit = record },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Edit,
-                                                    contentDescription = "Ubah Hari atau Catatan",
-                                                    tint = Color(0xFFBE185D),
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-
-                                            IconButton(
-                                                onClick = { recordToDelete = record },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Hapus",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                            }
-
-                                            Button(
-                                                onClick = { recordToComplete = record },
-                                                shape = RoundedCornerShape(10.dp),
-                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                                                modifier = Modifier.heightIn(min = 42.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.CheckCircle,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(14.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Mandi Suci", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                            }
-                                        }
                                     }
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    // Pop-up Detail Lengkap saat kartu slim diklik
+    selectedDetailRecord?.let { rec ->
+        val days = rec.durationDays
+        val isMaxDay = rec.isIstihadhahWarning
+        ModalBottomSheet(
+            onDismissRequest = { selectedDetailRecord = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isMaxDay) Color(0xFFFEE2E2) else Color(0xFFFCE7F3)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = rec.studentName.take(1).uppercase(),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 17.sp,
+                                    color = if (isMaxDay) Color(0xFFB91C1C) else Color(0xFF9D174D)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = rec.studentName,
+                                    fontSize = 15.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${rec.studentClass} • ${rec.studentDorm}",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (rec.studentNik.isNotBlank()) {
+                                    Text(
+                                        text = "NIK: ${rec.studentNik}",
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { selectedDetailRecord = null },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Tutup detail")
+                        }
+                    }
+
+                    // Timeline Berjalan Lengkap (Hari 1 s.d. 15)
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isMaxDay) Color(0xFFFEF2F2) else Color(0xFFFDF2F8)
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isMaxDay) Color(0xFFFCA5A5) else Color(0xFFFBCFE8)
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            HaidTimelineBar(currentDay = days)
+                        }
+                    }
+
+                    if (isMaxDay) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(Color(0xFFFEE2E2))
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Warning,
+                                contentDescription = null,
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Hari ke-15 (Maksimal Haid): Wajib mandi suci. Lewat hari ke-15 otomatis pindah ke Daftar Suci.",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF991B1B)
+                            )
+                        }
+                    }
+
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = "Mulai Hari ke-1: ${dateFormat.format(Date(rec.startDate))}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Dicatat oleh: ${rec.waliName}",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (rec.notes.isNotBlank()) {
+                                Text(
+                                    text = "Catatan: ${rec.notes}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF831843),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    // Aksi Lengkap: Edit & Hapus + Mandi Suci
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                selectedDetailRecord = null
+                                recordToEdit = rec
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_detail_edit_haid_${rec.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = null,
+                                tint = Color(0xFFBE185D),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Ubah Hari", fontSize = 12.sp, color = Color(0xFFBE185D), fontWeight = FontWeight.SemiBold)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                selectedDetailRecord = null
+                                recordToDelete = rec
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_detail_delete_haid_${rec.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Hapus", fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            selectedDetailRecord = null
+                            recordToComplete = rec
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_detail_complete_haid_${rec.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Mandi Suci (Pindah ke Daftar Suci)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+
+    // Pop-up Laporan Haid Hari Ini (Cetak/Bagikan PDF Berkop Multi-Tenant & Teks WA)
+    if (showDailyReportSheet) {
+        val todayFormatted = remember {
+            SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(Date())
+        }
+        ModalBottomSheet(
+            onDismissRequest = { showDailyReportSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFCE7F3)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = null,
+                                    tint = Color(0xFFDB2777),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Laporan Haid Hari Ini",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = todayFormatted,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { showDailyReportSheet = false },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Tutup")
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0xFFFDF2F8),
+                        border = BorderStroke(1.dp, Color(0xFFFBCFE8))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF831843)
+                            )
+                            Text(
+                                text = "Total terdata hari ini: ${activeHaidRecords.size} Siswi sedang haid",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF9D174D)
+                            )
+                            Text(
+                                text = "PDF dilengkapi kop surat sekolah, logo Kemensos & Sekolah Rakyat, serta daftar lengkap siswi sedang haid.",
+                                fontSize = 11.sp,
+                                color = Color(0xFF9D174D).copy(alpha = 0.85f)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            val pdfFile = PdfReportGenerator.generateDailyHaidReportPdf(
+                                context = context,
+                                activeHaidRecords = activeHaidRecords,
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
+                            )
+                            if (pdfFile != null) {
+                                showDailyReportSheet = false
+                                PdfReportGenerator.openPdfFile(context, pdfFile)
+                            } else {
+                                Toast.makeText(context, "Gagal membuat PDF laporan haid.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_open_daily_haid_pdf")
+                    ) {
+                        Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Buka / Pratinjau PDF", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val pdfFile = PdfReportGenerator.generateDailyHaidReportPdf(
+                                context = context,
+                                activeHaidRecords = activeHaidRecords,
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
+                            )
+                            if (pdfFile != null) {
+                                showDailyReportSheet = false
+                                PdfReportGenerator.shareHaidReportPdf(context, pdfFile, schoolProfile)
+                            } else {
+                                Toast.makeText(context, "Gagal membuat PDF laporan haid.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_share_daily_haid_pdf")
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Bagikan File PDF (WhatsApp / Lainnya)", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            val summaryText = PdfReportGenerator.buildDailyHaidSummaryText(
+                                activeHaidRecords = activeHaidRecords,
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
+                            )
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, summaryText)
+                            }
+                            runCatching {
+                                showDailyReportSheet = false
+                                context.startActivity(Intent.createChooser(intent, "Kirim Ringkasan Haid Hari Ini"))
+                            }.onFailure {
+                                Toast.makeText(context, "Tidak dapat membuka aplikasi berbagi.", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_share_daily_haid_text")
+                    ) {
+                        Icon(Icons.Default.WaterDrop, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Kirim Ringkasan Teks ke WhatsApp",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF059669)
+                        )
                     }
                 }
             }

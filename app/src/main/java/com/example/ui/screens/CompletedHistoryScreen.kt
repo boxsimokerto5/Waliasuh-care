@@ -1,6 +1,7 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
@@ -128,10 +130,12 @@ fun CompletedHistoryScreen(
                         .testTag("input_history_search")
                 )
 
-                // Faskes Filter Chips (Compact height 28dp)
+                // Faskes Filter Chips (Dinamis mengikuti daftar Faskes sekolah)
+                val faskesFilterOptions = remember(schoolProfile) { schoolProfile.getAllFaskes() }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -146,24 +150,18 @@ fun CompletedHistoryScreen(
                         selected = selectedFaskes == "Semua",
                         onClick = { viewModel.setFaskesFilter("Semua") },
                         label = { Text("Semua (${completedRecords.size})", fontSize = 11.sp) },
-                        modifier = Modifier.height(28.dp)
+                        modifier = Modifier.height(30.dp)
                     )
-                    FilterChip(
-                        selected = selectedFaskes == "Wates",
-                        onClick = { viewModel.setFaskesFilter("Wates") },
-                        label = { Text("Pusk. Wates", fontSize = 11.sp) },
-                        modifier = Modifier
-                            .height(28.dp)
-                            .testTag("filter_history_wates")
-                    )
-                    FilterChip(
-                        selected = selectedFaskes == "Plosoklaten",
-                        onClick = { viewModel.setFaskesFilter("Plosoklaten") },
-                        label = { Text("Pusk. Plosoklaten", fontSize = 11.sp) },
-                        modifier = Modifier
-                            .height(28.dp)
-                            .testTag("filter_history_plosoklaten")
-                    )
+                    faskesFilterOptions.forEachIndexed { idx, faskesName ->
+                        FilterChip(
+                            selected = selectedFaskes.equals(faskesName, ignoreCase = true),
+                            onClick = { viewModel.setFaskesFilter(faskesName) },
+                            label = { Text(faskesName, fontSize = 11.sp) },
+                            modifier = Modifier
+                                .height(30.dp)
+                                .testTag("filter_history_faskes_$idx")
+                        )
+                    }
                 }
 
                 if (completedRecords.isEmpty()) {

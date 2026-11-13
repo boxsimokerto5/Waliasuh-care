@@ -1,5 +1,6 @@
 package com.example.ui.dialogs
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,16 +8,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocationOn
@@ -24,6 +27,8 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -44,10 +49,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.FaskesContactInfo
 import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
+
+private data class FaskesDraft(
+    val name: String = "",
+    val address: String = "",
+    val phone: String = ""
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,11 +74,38 @@ fun EditSchoolProfileDialog(
     var adminName by remember { mutableStateOf(currentProfile.adminName) }
     var city by remember { mutableStateOf(currentProfile.city) }
     var tenantCode by remember { mutableStateOf(currentProfile.tenantCode) }
+
+    val initialPrimary = remember(currentProfile) {
+        currentProfile.getFaskesContact(currentProfile.primaryFaskesName.ifBlank { "UKS Sekolah" })
+    }
     var primaryFaskesName by remember { mutableStateOf(currentProfile.primaryFaskesName) }
+    var primaryFaskesAddress by remember {
+        mutableStateOf(
+            currentProfile.faskesContacts.entries
+                .firstOrNull { it.key.equals(currentProfile.primaryFaskesName.trim(), ignoreCase = true) }
+                ?.value?.address
+                ?: ""
+        )
+    }
+    var primaryFaskesPhone by remember { mutableStateOf(initialPrimary.phone) }
+
+    val initialSecondary = remember(currentProfile) {
+        if (currentProfile.secondaryFaskesName.isNotBlank()) {
+            currentProfile.getFaskesContact(currentProfile.secondaryFaskesName)
+        } else {
+            FaskesContactInfo("")
+        }
+    }
     var secondaryFaskesName by remember { mutableStateOf(currentProfile.secondaryFaskesName) }
+    var secondaryFaskesAddress by remember { mutableStateOf(initialSecondary.address) }
+    var secondaryFaskesPhone by remember { mutableStateOf(initialSecondary.phone) }
+
     val additionalFaskes = remember {
-        mutableStateListOf<String>().apply {
-            addAll(currentProfile.additionalFaskesList)
+        mutableStateListOf<FaskesDraft>().apply {
+            currentProfile.additionalFaskesList.forEach { name ->
+                val info = currentProfile.getFaskesContact(name)
+                add(FaskesDraft(name = name, address = info.address, phone = info.phone))
+            }
         }
     }
 
@@ -110,7 +150,7 @@ fun EditSchoolProfileDialog(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Sesuaikan identitas sekolah dan faskes rujukan",
+                            text = "Sesuaikan identitas sekolah, faskes rujukan, alamat & telepon",
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -239,84 +279,76 @@ fun EditSchoolProfileDialog(
                             )
                         }
                         Text(
-                            text = "Faskes utama adalah UKS Sekolah untuk penanganan internal, sedangkan faskes rujukan selanjutnya dapat ditambah sesuai kebutuhan sekolah.",
+                            text = "Nama, alamat, dan nomor telepon faskes akan otomatis tampil pada menu Puskesmas Saya & Info Faskes untuk seluruh Wali Asuh di sekolah ini.",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
                     // Faskes 1: Utama (UKS Sekolah)
-                    OutlinedTextField(
-                        value = primaryFaskesName,
-                        onValueChange = { primaryFaskesName = it },
-                        label = { Text("Faskes 1: Utama (UKS Sekolah)") },
-                        placeholder = { Text("UKS Sekolah") },
-                        leadingIcon = { Icon(Icons.Default.LocalHospital, contentDescription = null, tint = WaliPrimary) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("primary_faskes_input")
+                    FaskesEditorCard(
+                        title = "Faskes 1 • Utama (Internal)",
+                        nameLabel = "Nama Faskes Utama",
+                        namePlaceholder = "UKS Sekolah",
+                        name = primaryFaskesName,
+                        onNameChange = { primaryFaskesName = it },
+                        address = primaryFaskesAddress,
+                        onAddressChange = { primaryFaskesAddress = it },
+                        phone = primaryFaskesPhone,
+                        onPhoneChange = { primaryFaskesPhone = it },
+                        nameTestTag = "primary_faskes_input",
+                        addressTestTag = "primary_faskes_address_input",
+                        phoneTestTag = "primary_faskes_phone_input"
                     )
 
                     // Faskes 2: Rujukan Pertama
-                    OutlinedTextField(
-                        value = secondaryFaskesName,
-                        onValueChange = { secondaryFaskesName = it },
-                        label = { Text("Faskes 2: Rujukan Pertama (misal: Puskesmas)") },
-                        placeholder = { Text("misal: Puskesmas Wates") },
-                        leadingIcon = { Icon(Icons.Default.LocalHospital, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("secondary_faskes_input")
+                    FaskesEditorCard(
+                        title = "Faskes 2 • Rujukan Pertama",
+                        nameLabel = "Nama Puskesmas / Klinik Rujukan",
+                        namePlaceholder = "misal: Puskesmas Kecamatan",
+                        name = secondaryFaskesName,
+                        onNameChange = { secondaryFaskesName = it },
+                        address = secondaryFaskesAddress,
+                        onAddressChange = { secondaryFaskesAddress = it },
+                        phone = secondaryFaskesPhone,
+                        onPhoneChange = { secondaryFaskesPhone = it },
+                        nameTestTag = "secondary_faskes_input",
+                        addressTestTag = "secondary_faskes_address_input",
+                        phoneTestTag = "secondary_faskes_phone_input"
                     )
 
                     // Faskes Tambahan (Faskes 3, Faskes 4, dst.)
-                    additionalFaskes.forEachIndexed { index, faskesVal ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = faskesVal,
-                                onValueChange = { additionalFaskes[index] = it },
-                                label = { Text("Faskes ${index + 3}: Rujukan Tambahan") },
-                                placeholder = { Text("misal: RSUD / Puskesmas 2 / Klinik") },
-                                leadingIcon = { Icon(Icons.Default.LocalHospital, contentDescription = null) },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("additional_faskes_input_$index")
-                            )
-
-                            IconButton(
-                                onClick = { additionalFaskes.removeAt(index) },
-                                modifier = Modifier.size(42.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Delete,
-                                    contentDescription = "Hapus Faskes",
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        }
+                    additionalFaskes.forEachIndexed { index, draft ->
+                        FaskesEditorCard(
+                            title = "Faskes ${index + 3} • Rujukan Tambahan",
+                            nameLabel = "Nama Faskes Rujukan",
+                            namePlaceholder = "misal: RSUD / Puskesmas 2 / Klinik",
+                            name = draft.name,
+                            onNameChange = { additionalFaskes[index] = draft.copy(name = it) },
+                            address = draft.address,
+                            onAddressChange = { additionalFaskes[index] = draft.copy(address = it) },
+                            phone = draft.phone,
+                            onPhoneChange = { additionalFaskes[index] = draft.copy(phone = it) },
+                            nameTestTag = "additional_faskes_input_$index",
+                            addressTestTag = "additional_faskes_address_input_$index",
+                            phoneTestTag = "additional_faskes_phone_input_$index",
+                            onRemove = { additionalFaskes.removeAt(index) }
+                        )
                     }
 
                     // Tombol Tambah Faskes Rujukan
                     OutlinedButton(
-                        onClick = { additionalFaskes.add("") },
+                        onClick = { additionalFaskes.add(FaskesDraft()) },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_add_faskes_field"),
                         shape = RoundedCornerShape(12.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "+ Tambah Faskes Rujukan (${additionalFaskes.size + 3})",
+                            text = "Tambah Faskes Rujukan (${additionalFaskes.size + 3})",
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -333,7 +365,7 @@ fun EditSchoolProfileDialog(
                         onClick = onDismiss,
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .heightIn(min = 48.dp)
                     ) {
                         Text("Batal")
                     }
@@ -341,29 +373,178 @@ fun EditSchoolProfileDialog(
                     Button(
                         onClick = {
                             if (schoolName.isNotBlank() && shortName.isNotBlank()) {
+                                val resolvedPrimary = primaryFaskesName.trim().ifBlank { "UKS Sekolah" }
+                                val resolvedSecondary = secondaryFaskesName.trim()
+                                val cleanedAdditional = additionalFaskes
+                                    .map { it.copy(name = it.name.trim(), address = it.address.trim(), phone = it.phone.trim()) }
+                                    .filter { it.name.isNotBlank() }
+
+                                val contactMap = linkedMapOf<String, FaskesContactInfo>()
+                                if (primaryFaskesAddress.isNotBlank() || primaryFaskesPhone.isNotBlank()) {
+                                    contactMap[resolvedPrimary] = FaskesContactInfo(
+                                        name = resolvedPrimary,
+                                        address = primaryFaskesAddress.trim(),
+                                        phone = primaryFaskesPhone.trim()
+                                    )
+                                }
+                                if (resolvedSecondary.isNotBlank() &&
+                                    (secondaryFaskesAddress.isNotBlank() || secondaryFaskesPhone.isNotBlank())
+                                ) {
+                                    contactMap[resolvedSecondary] = FaskesContactInfo(
+                                        name = resolvedSecondary,
+                                        address = secondaryFaskesAddress.trim(),
+                                        phone = secondaryFaskesPhone.trim()
+                                    )
+                                }
+                                cleanedAdditional.forEach { draft ->
+                                    if (draft.address.isNotBlank() || draft.phone.isNotBlank()) {
+                                        contactMap[draft.name] = FaskesContactInfo(
+                                            name = draft.name,
+                                            address = draft.address,
+                                            phone = draft.phone
+                                        )
+                                    }
+                                }
+
                                 onSave(
                                     currentProfile.copy(
                                         schoolName = schoolName.trim(),
                                         shortName = shortName.trim(),
                                         adminName = adminName.trim().ifBlank { "Admin Utama" },
-                                        city = city.trim().ifBlank { "Kabupaten Kediri" },
+                                        city = city.trim().ifBlank { "Indonesia" },
                                         tenantCode = currentProfile.tenantCode.ifBlank { tenantCode.trim() },
-                                        primaryFaskesName = primaryFaskesName.trim().ifBlank { "UKS Sekolah" },
-                                        secondaryFaskesName = secondaryFaskesName.trim().ifBlank { "Puskesmas Wates" },
-                                        additionalFaskesList = additionalFaskes.map { it.trim() }.filter { it.isNotBlank() }
+                                        primaryFaskesName = resolvedPrimary,
+                                        secondaryFaskesName = resolvedSecondary,
+                                        additionalFaskesList = cleanedAdditional.map { it.name },
+                                        faskesContacts = contactMap
                                     )
                                 )
                             }
                         },
                         modifier = Modifier
                             .weight(1f)
-                            .height(48.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("save_school_profile_button")
                     ) {
                         Text("Simpan")
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun FaskesEditorCard(
+    title: String,
+    nameLabel: String,
+    namePlaceholder: String,
+    name: String,
+    onNameChange: (String) -> Unit,
+    address: String,
+    onAddressChange: (String) -> Unit,
+    phone: String,
+    onPhoneChange: (String) -> Unit,
+    nameTestTag: String,
+    addressTestTag: String,
+    phoneTestTag: String,
+    onRemove: (() -> Unit)? = null
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = WaliPrimary
+                )
+                if (onRemove != null) {
+                    IconButton(
+                        onClick = onRemove,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Hapus $title",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = onNameChange,
+                label = { Text(nameLabel, fontSize = 12.sp) },
+                placeholder = { Text(namePlaceholder, fontSize = 12.sp) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.LocalHospital,
+                        contentDescription = null,
+                        tint = WaliPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(nameTestTag)
+            )
+
+            OutlinedTextField(
+                value = address,
+                onValueChange = onAddressChange,
+                label = { Text("Alamat Faskes (opsional)", fontSize = 12.sp) },
+                placeholder = { Text("Jl. ..., Kec. ..., Kab./Kota ...", fontSize = 12.sp) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(addressTestTag)
+            )
+
+            OutlinedTextField(
+                value = phone,
+                onValueChange = onPhoneChange,
+                label = { Text("No. Telepon / IGD (opsional)", fontSize = 12.sp) },
+                placeholder = { Text("misal: (0354) 441012 / 08...", fontSize = 12.sp) },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Call,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag(phoneTestTag)
+            )
         }
     }
 }

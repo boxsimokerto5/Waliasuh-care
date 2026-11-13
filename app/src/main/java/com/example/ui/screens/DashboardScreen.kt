@@ -74,6 +74,7 @@ import com.example.ui.dialogs.DaftarHaidSheet
 import com.example.ui.dialogs.DaftarSuciSheet
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
+import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.InputHaidDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
@@ -566,86 +567,11 @@ fun DashboardScreen(
     }
 
     if (showPuskesmasInfoSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showPuskesmasInfoSheet = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Box(
-                modifier = Modifier.fillMaxWidth(),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 600.dp)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "Faskes & Puskesmas Rujukan",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Fasilitas kesehatan resmi mitra Sekolah Rakyat SRT 1 Kabupaten Kediri:",
-                        fontSize = 11.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("1. Puskesmas Wates", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("UGD 24 Jam", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = WaliPrimary)
-                            }
-                            Text("Jl. Raya Wates No. 45, Kab. Kediri", fontSize = 11.sp)
-                            Text("Telepon: (0354) 441012 • Siaga Rujukan Anak", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("2. Puskesmas Plosoklaten", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text("UGD 24 Jam", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = WaliPrimary)
-                            }
-                            Text("Jl. Raya Plosoklaten No. 12, Kab. Kediri", fontSize = 11.sp)
-                            Text("Telepon: (0354) 479155 • Siaga Rujukan Anak", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        Button(
-                            onClick = { showPuskesmasInfoSheet = false },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            Text("Tutup", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
-        }
+        FaskesReferralSheet(
+            schoolProfile = schoolProfile,
+            title = "Faskes & Puskesmas Rujukan",
+            onDismiss = { showPuskesmasInfoSheet = false }
+        )
     }
 
     // Modal Bottom Sheet: Pesan Shift Berikutnya (Daftar Kartu Operan Jaga)
@@ -707,6 +633,8 @@ fun DashboardScreen(
     if (showDaftarHaidSheet) {
         DaftarHaidSheet(
             activeHaidRecords = activeHaidRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
             onCompleteHaid = { id ->
                 viewModel.completeHaidRecord(id)
             },

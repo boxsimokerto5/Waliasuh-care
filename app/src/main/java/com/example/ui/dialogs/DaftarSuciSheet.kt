@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
@@ -54,8 +55,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -80,6 +83,7 @@ fun DaftarSuciSheet(
     onDismiss: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
+    var selectedDetailRecord by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToDelete by remember { mutableStateOf<HaidRecord?>(null) }
     var recordPendingTissueCheck by remember { mutableStateOf<HaidRecord?>(null) }
 
@@ -316,12 +320,19 @@ fun DaftarSuciSheet(
                             val isCurrentSuciStatus = latestSuciIdByStudentKey[studentIdentityKey(record)] == record.id
                             val suciDay = record.suciDayCount
                             val isStrictWatch = isCurrentSuciStatus && record.isInMinimumSuciPeriod
+                            val accentColor = when {
+                                !isCurrentSuciStatus -> Color(0xFF64748B)
+                                isStrictWatch -> Color(0xFF0284C7)
+                                else -> Color(0xFF16A34A)
+                            }
+                            val trackColor = if (isStrictWatch) Color(0xFFE0F2FE) else Color(0xFFDCFCE7)
 
                             Card(
+                                onClick = { selectedDetailRecord = record },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("item_suci_${record.id}"),
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (isStrictWatch) Color(0xFFF0F9FF) else Color(0xFFF0FDF4)
                                 ),
@@ -333,7 +344,8 @@ fun DaftarSuciSheet(
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp)
+                                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -345,7 +357,7 @@ fun DaftarSuciSheet(
                                                 .weight(1f)
                                                 .padding(end = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             Box(
                                                 modifier = Modifier
@@ -357,158 +369,291 @@ fun DaftarSuciSheet(
                                                 Icon(
                                                     imageVector = Icons.Default.CheckCircle,
                                                     contentDescription = null,
-                                                    tint = if (isStrictWatch) Color(0xFF0284C7) else Color(0xFF16A34A),
+                                                    tint = accentColor,
                                                     modifier = Modifier.size(18.dp)
                                                 )
                                             }
-                                            Column {
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = record.studentName,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 13.5.sp,
-                                                    color = if (isStrictWatch) Color(0xFF0C4A6E) else Color(0xFF14532D)
+                                                    color = if (isStrictWatch) Color(0xFF0C4A6E) else Color(0xFF14532D),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
-                                                    text = "${record.studentClass} • ${record.studentDorm}${if (record.studentNik.isNotBlank()) " • NIK: ${record.studentNik}" else ""}",
-                                                    fontSize = 10.5.sp,
-                                                    fontFamily = FontFamily.Monospace,
-                                                    color = Color(0xFF15803D).copy(alpha = 0.8f)
+                                                    text = record.studentClass.ifBlank { record.studentDorm.ifBlank { "-" } },
+                                                    fontSize = 11.5.sp,
+                                                    color = (if (isStrictWatch) Color(0xFF0369A1) else Color(0xFF15803D)).copy(alpha = 0.85f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
-
-                                        // Badge Hari Suci Berjalan (atau Riwayat Lama)
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(
-                                                    when {
-                                                        !isCurrentSuciStatus -> Color(0xFF64748B)
-                                                        isStrictWatch -> Color(0xFF0284C7)
-                                                        else -> Color(0xFF16A34A)
-                                                    }
-                                                )
-                                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                                        ) {
-                                            Text(
-                                                text = if (isCurrentSuciStatus) "Suci Hari ke-$suciDay" else "Arsip (${record.durationDays}h)",
-                                                color = Color.White,
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 11.sp
-                                            )
-                                        }
-                                    }
-
-                                    // Timeline Masa Suci Berjalan untuk status suci terkini siswi
-                                    if (isCurrentSuciStatus) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        SuciTimelineBar(suciDay = suciDay)
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    // Info Periode Haid Sebelumnya
-                                    val startStr = dateFormat.format(Date(record.startDate))
-                                    val endMillis = record.effectiveEndDate ?: record.endDate ?: System.currentTimeMillis()
-                                    val endStr = dateFormat.format(Date(endMillis))
-                                    Text(
-                                        text = "Siklus haid: ${record.durationDays} hari ($startStr s.d. $endStr)",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-
-                                    Box(
-                                        modifier = Modifier
-                                            .padding(top = 4.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(if (record.isAutoCompletedByLimit) Color(0xFFFEF3C7) else Color(0xFFDCFCE7))
-                                            .padding(horizontal = 7.dp, vertical = 2.dp)
-                                    ) {
-                                        Text(
-                                            text = if (record.isAutoCompletedByLimit) {
-                                                "Otomatis Pindah ke Daftar Suci (Melewati 15 Hari Haid)"
-                                            } else {
-                                                "Sudah Mandi Wajib (Siap Sholat, Puasa, Mengaji)"
-                                            },
-                                            fontSize = 9.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (record.isAutoCompletedByLimit) Color(0xFF92400E) else Color(0xFF15803D)
-                                        )
-                                    }
-
-                                    if (record.notes.isNotBlank()) {
-                                        Text(
-                                            text = "Catatan: ${record.notes}",
-                                            fontSize = 10.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(top = 4.dp)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.height(6.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Text(
-                                            text = "Verifikasi: ${record.waliName}",
-                                            fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.weight(1f)
-                                        )
 
                                         Row(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            IconButton(
-                                                onClick = { recordToDelete = record },
-                                                modifier = Modifier.size(48.dp)
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(accentColor)
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Delete,
-                                                    contentDescription = "Hapus",
-                                                    tint = MaterialTheme.colorScheme.outline,
-                                                    modifier = Modifier.size(16.dp)
+                                                Text(
+                                                    text = if (isCurrentSuciStatus) "Suci Hari ke-$suciDay" else "Arsip (${record.durationDays}h)",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
                                                 )
                                             }
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                contentDescription = "Lihat detail ${record.studentName}",
+                                                tint = accentColor.copy(alpha = 0.7f),
+                                                modifier = Modifier.size(18.dp)
+                                            )
+                                        }
+                                    }
 
-                                            if (isCurrentSuciStatus) {
-                                                OutlinedButton(
-                                                    onClick = {
-                                                        if (record.isInMinimumSuciPeriod) {
-                                                            recordPendingTissueCheck = record
-                                                        } else {
-                                                            onMoveToHaid(record)
-                                                        }
-                                                    },
-                                                    shape = RoundedCornerShape(10.dp),
-                                                    border = BorderStroke(1.dp, Color(0xFFDB2777)),
-                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                                    modifier = Modifier
-                                                        .heightIn(min = 40.dp)
-                                                        .testTag("btn_move_suci_to_haid_${record.id}")
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.WaterDrop,
-                                                        contentDescription = null,
-                                                        tint = Color(0xFFDB2777),
-                                                        modifier = Modifier.size(13.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(4.dp))
-                                                    Text(
-                                                        text = "Pindah ke Haid",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Color(0xFFDB2777)
-                                                    )
-                                                }
-                                            }
+                                    // Garis progress tipis masa suci 1..15 hari untuk status terkini
+                                    if (isCurrentSuciStatus) {
+                                        val progressFraction = suciDay.coerceIn(1, HaidDateCalculator.MIN_SUCI_DAYS) /
+                                            HaidDateCalculator.MIN_SUCI_DAYS.toFloat()
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(3.dp)
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(trackColor)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(progressFraction)
+                                                    .height(3.dp)
+                                                    .clip(RoundedCornerShape(2.dp))
+                                                    .background(accentColor)
+                                            )
                                         }
                                     }
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Pop-up Detail Lengkap saat kartu slim Daftar Suci diklik
+    selectedDetailRecord?.let { rec ->
+        val isCurrentSuciStatus = latestSuciIdByStudentKey[studentIdentityKey(rec)] == rec.id
+        val suciDay = rec.suciDayCount
+        val isStrictWatch = isCurrentSuciStatus && rec.isInMinimumSuciPeriod
+        val startStr = dateFormat.format(Date(rec.startDate))
+        val endMillis = rec.effectiveEndDate ?: rec.endDate ?: System.currentTimeMillis()
+        val endStr = dateFormat.format(Date(endMillis))
+
+        ModalBottomSheet(
+            onDismissRequest = { selectedDetailRecord = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .clip(CircleShape)
+                                    .background(if (isStrictWatch) Color(0xFFE0F2FE) else Color(0xFFDCFCE7)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = if (isStrictWatch) Color(0xFF0284C7) else Color(0xFF16A34A),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = rec.studentName,
+                                    fontSize = 15.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${rec.studentClass} • ${rec.studentDorm}",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                if (rec.studentNik.isNotBlank()) {
+                                    Text(
+                                        text = "NIK: ${rec.studentNik}",
+                                        fontSize = 11.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = { selectedDetailRecord = null },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Tutup detail")
+                        }
+                    }
+
+                    if (isCurrentSuciStatus) {
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isStrictWatch) Color(0xFFF0F9FF) else Color(0xFFF0FDF4)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isStrictWatch) Color(0xFFBAE6FD) else Color(0xFFBBF7D0)
+                            )
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                SuciTimelineBar(suciDay = suciDay)
+                            }
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (rec.isAutoCompletedByLimit) Color(0xFFFEF3C7) else Color(0xFFDCFCE7))
+                            .padding(horizontal = 10.dp, vertical = 7.dp)
+                    ) {
+                        Text(
+                            text = if (rec.isAutoCompletedByLimit) {
+                                "Otomatis Pindah ke Daftar Suci (Melewati 15 Hari Haid)"
+                            } else {
+                                "Sudah Mandi Wajib (Siap Sholat, Puasa, Mengaji)"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (rec.isAutoCompletedByLimit) Color(0xFF92400E) else Color(0xFF15803D)
+                        )
+                    }
+
+                    Card(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Text(
+                                text = "Siklus haid: ${rec.durationDays} hari ($startStr s.d. $endStr)",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Verifikasi: ${rec.waliName}",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (rec.notes.isNotBlank()) {
+                                Text(
+                                    text = "Catatan: ${rec.notes}",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                selectedDetailRecord = null
+                                recordToDelete = rec
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_detail_delete_suci_${rec.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Hapus", fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                        }
+
+                        if (isCurrentSuciStatus) {
+                            Button(
+                                onClick = {
+                                    selectedDetailRecord = null
+                                    if (rec.isInMinimumSuciPeriod) {
+                                        recordPendingTissueCheck = rec
+                                    } else {
+                                        onMoveToHaid(rec)
+                                    }
+                                },
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                                modifier = Modifier
+                                    .weight(1.4f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_move_suci_to_haid_${rec.id}")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.WaterDrop,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Pindah ke Haid",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
                             }
                         }
                     }

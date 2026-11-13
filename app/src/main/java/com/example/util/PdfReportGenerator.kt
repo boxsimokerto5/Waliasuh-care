@@ -16,6 +16,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
 import java.io.File
@@ -725,6 +726,308 @@ object PdfReportGenerator {
             }
 
             context.startActivity(Intent.createChooser(shareIntent, "Bagikan Dokumen PDF"))
+        } catch (e: Exception) {
+            Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Membuat dokumen PDF resmi Laporan Harian Siswi Sedang Haid (Uzur Ibadah)
+     * lengkap dengan kop surat, logo Kemensos & Sekolah Rakyat, serta profil sekolah multi-tenant.
+     */
+    fun generateDailyHaidReportPdf(
+        context: Context,
+        activeHaidRecords: List<HaidRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        reportDateMillis: Long = System.currentTimeMillis()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+
+            var pageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
+
+            val paint = Paint().apply { isAntiAlias = true }
+            val localeId = Locale("id", "ID")
+            val fullDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(reportDateMillis))
+            val shortDateFmt = SimpleDateFormat("dd MMM yyyy", localeId)
+
+            var currentY = 35f
+
+            // 1. Kop Surat Resmi Tenant Sekolah (Logo Kemensos Kiri & Sekolah Rakyat Kanan)
+            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+
+            // 2. Judul Laporan & Tanggal Hari Ini
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 13f
+            paint.color = Color.rgb(157, 23, 77) // Rose 800
+            canvas.drawText("LAPORAN HARIAN SISWI SEDANG HAID (UZUR IBADAH)", pageWidth / 2f, currentY + 12f, paint)
+            currentY += 27f
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 10f
+            paint.color = Color.rgb(51, 65, 85)
+            canvas.drawText("Hari / Tanggal: $fullDateLabel", pageWidth / 2f, currentY, paint)
+            currentY += 16f
+            paint.textAlign = Paint.Align.LEFT
+
+            // 3. Kotak Ringkasan Harian
+            val maxDayCount = activeHaidRecords.count { it.isIstihadhahWarning }
+            val boxLeft = 35f
+            val boxRight = pageWidth - 35f
+            val boxTop = currentY
+            val summaryHeight = 44f
+            paint.color = Color.rgb(253, 242, 248) // Rose 50
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(251, 207, 232) // Rose 200
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(131, 24, 67)
+            canvas.drawText("RINGKASAN HARIAN:", boxLeft + 10f, boxTop + 15f, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 9f
+            paint.color = Color.rgb(51, 65, 85)
+            canvas.drawText("• Total Sedang Haid: ${activeHaidRecords.size} Siswi", boxLeft + 10f, boxTop + 31f, paint)
+            canvas.drawText("• Batas Hari ke-15: $maxDayCount Siswi", boxLeft + 195f, boxTop + 31f, paint)
+            val pencetak = TextUtils.ellipsize(
+                "Petugas: $waliName",
+                TextPaint(paint),
+                170f,
+                TextUtils.TruncateAt.END
+            ).toString()
+            canvas.drawText(pencetak, boxLeft + 355f, boxTop + 31f, paint)
+
+            currentY = boxTop + summaryHeight + 14f
+
+            // 4. Tabel Daftar Siswi Sedang Haid
+            val sortedRecords = activeHaidRecords.sortedWith(
+                compareBy<HaidRecord> { it.studentClass.lowercase(localeId) }
+                    .thenBy { it.studentName.lowercase(localeId) }
+            )
+
+            fun drawHaidTableHeader(startYPos: Float): Float {
+                val hTop = startYPos
+                val hHeight = 24f
+                paint.color = Color.rgb(252, 231, 243) // Rose 100
+                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(244, 114, 182)
+                paint.strokeWidth = 0.9f
+                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.5f
+                paint.color = Color.rgb(131, 24, 67)
+                val textY = hTop + 15.5f
+                canvas.drawText("No", 42f, textY, paint)
+                canvas.drawText("Nama Siswi", 68f, textY, paint)
+                canvas.drawText("Kelas / Asrama", 222f, textY, paint)
+                canvas.drawText("Mulai Haid", 332f, textY, paint)
+                canvas.drawText("Waktu Berjalan", 404f, textY, paint)
+                canvas.drawText("Wali / Catatan", 482f, textY, paint)
+                return hTop + hHeight
+            }
+
+            if (sortedRecords.isEmpty()) {
+                val emptyBoxTop = currentY
+                val emptyBoxHeight = 46f
+                paint.color = Color.rgb(240, 253, 244)
+                canvas.drawRoundRect(RectF(boxLeft, emptyBoxTop, boxRight, emptyBoxTop + emptyBoxHeight), 6f, 6f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(187, 247, 208)
+                paint.strokeWidth = 1f
+                canvas.drawRoundRect(RectF(boxLeft, emptyBoxTop, boxRight, emptyBoxTop + emptyBoxHeight), 6f, 6f, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 10f
+                paint.color = Color.rgb(21, 128, 61)
+                canvas.drawText(
+                    "Nihil — Tidak ada siswi yang tercatat sedang haid pada hari ini (Semua Suci).",
+                    pageWidth / 2f,
+                    emptyBoxTop + 27f,
+                    paint
+                )
+                paint.textAlign = Paint.Align.LEFT
+                currentY = emptyBoxTop + emptyBoxHeight + 16f
+            } else {
+                currentY = drawHaidTableHeader(currentY)
+                val rowHeight = 24f
+
+                sortedRecords.forEachIndexed { idx, rec ->
+                    if (currentY > pageHeight - 125f) {
+                        document.finishPage(page)
+                        pageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        page = document.startPage(pageInfo)
+                        canvas = page.canvas
+                        currentY = 40f
+
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        paint.textSize = 9f
+                        paint.color = Color.rgb(100, 116, 139)
+                        canvas.drawText("Lanjutan Laporan Harian Siswi Sedang Haid — $fullDateLabel (Halaman $pageNumber)", 35f, currentY, paint)
+                        currentY += 12f
+                        currentY = drawHaidTableHeader(currentY)
+                    }
+
+                    val rTop = currentY
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.6f
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                    paint.style = Paint.Style.FILL
+
+                    val textY = rTop + 15f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.textSize = 8.5f
+                    paint.color = Color.rgb(15, 23, 42)
+                    canvas.drawText("${idx + 1}.", 42f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    val nameCell = TextUtils.ellipsize(rec.studentName, TextPaint(paint), 148f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(nameCell, 68f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(51, 65, 85)
+                    val classDorm = listOf(rec.studentClass.trim(), rec.studentDorm.trim())
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • ")
+                        .ifBlank { "-" }
+                    val classCell = TextUtils.ellipsize(classDorm, TextPaint(paint), 104f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(classCell, 222f, textY, paint)
+
+                    val startCell = shortDateFmt.format(Date(rec.startDate))
+                    canvas.drawText(startCell, 332f, textY, paint)
+
+                    val days = rec.durationDays
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = when {
+                        rec.isIstihadhahWarning -> Color.rgb(185, 28, 28)
+                        days >= 12 -> Color.rgb(180, 83, 9)
+                        else -> Color.rgb(190, 24, 93)
+                    }
+                    val dayText = if (rec.isIstihadhahWarning) "Hari ke-$days (Maks)" else "Hari ke-$days / 15"
+                    canvas.drawText(dayText, 404f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(71, 85, 105)
+                    val noteOrWali = rec.notes.trim().ifBlank { rec.waliName.trim() }.ifBlank { "-" }
+                    val noteCell = TextUtils.ellipsize(noteOrWali, TextPaint(paint), 74f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(noteCell, 482f, textY, paint)
+
+                    currentY = rTop + rowHeight
+                }
+                currentY += 14f
+            }
+
+            // 5. Tanda Tangan & Disclaimer Footer
+            if (currentY > pageHeight - 110f) {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                currentY = 40f
+            }
+
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            document.finishPage(page)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(reportDateMillis))
+            val tenantSlug = schoolProfile.tenantCode.replace(Regex("[^a-zA-Z0-9]"), "_").ifBlank { "Sekolah" }
+            val fileName = "Laporan_Haid_Harian_${tenantSlug}_$dateSlug.pdf"
+            val file = File(outputDir, fileName)
+
+            val outputStream = FileOutputStream(file)
+            document.writeTo(outputStream)
+            outputStream.flush()
+            outputStream.close()
+            document.close()
+
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    fun buildDailyHaidSummaryText(
+        activeHaidRecords: List<HaidRecord>,
+        waliName: String,
+        schoolProfile: SchoolProfile,
+        reportDateMillis: Long = System.currentTimeMillis()
+    ): String {
+        val localeId = Locale("id", "ID")
+        val fullDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(reportDateMillis))
+        val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Sekolah Rakyat" } }
+        val sorted = activeHaidRecords.sortedWith(
+            compareBy<HaidRecord> { it.studentClass.lowercase(localeId) }
+                .thenBy { it.studentName.lowercase(localeId) }
+        )
+
+        return buildString {
+            appendLine("*LAPORAN HARIAN SISWI SEDANG HAID*")
+            appendLine("*$schoolTitle*")
+            appendLine("Tanggal: $fullDateLabel")
+            appendLine("Total: ${sorted.size} Siswi")
+            appendLine()
+            if (sorted.isEmpty()) {
+                appendLine("_Nihil — Seluruh siswi dalam status Suci._")
+            } else {
+                sorted.forEachIndexed { idx, rec ->
+                    val classLabel = rec.studentClass.ifBlank { rec.studentDorm }
+                    val classSuffix = if (classLabel.isNotBlank()) " ($classLabel)" else ""
+                    val warn = if (rec.isIstihadhahWarning) " ⚠️ Hari ke-15" else ""
+                    appendLine("${idx + 1}. ${rec.studentName}$classSuffix — Hari ke-${rec.durationDays}/15$warn")
+                }
+            }
+            appendLine()
+            append("Dilaporkan oleh: $waliName")
+        }
+    }
+
+    fun shareHaidReportPdf(
+        context: Context,
+        pdfFile: File,
+        schoolProfile: SchoolProfile,
+        reportDateMillis: Long = System.currentTimeMillis()
+    ) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                pdfFile
+            )
+            val dateLabel = SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(Date(reportDateMillis))
+            val cleanSchool = schoolProfile.schoolName.ifBlank { "Wali Asuh Care" }
+
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, "Laporan Haid Harian ($dateLabel) - $cleanSchool")
+                putExtra(Intent.EXTRA_TEXT, "Terlampir Laporan Harian Siswi Sedang Haid ($dateLabel) untuk $cleanSchool.")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            context.startActivity(Intent.createChooser(shareIntent, "Bagikan Laporan Haid PDF"))
         } catch (e: Exception) {
             Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
         }
