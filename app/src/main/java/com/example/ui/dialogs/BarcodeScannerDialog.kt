@@ -4,17 +4,24 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -34,10 +41,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreditCard
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.BottomSheetDefaults
@@ -51,6 +61,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -72,11 +83,26 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.model.ChildStudent
+import kotlinx.coroutines.delay
+
+enum class ScannerFeedbackStatus {
+    SUCCESS,
+    WARNING,
+    ERROR
+}
+
+data class ScannerFloatingFeedback(
+    val id: Long,
+    val status: ScannerFeedbackStatus,
+    val title: String,
+    val subtitle: String = ""
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,7 +120,10 @@ fun BarcodeScannerDialog(
     cardBgColor: Color = Color(0xFFFDF2F8),
     avatarBgColor: Color = Color(0xFFFBCFE8),
     avatarTextColor: Color = Color(0xFF9D174D),
-    titleTextColor: Color = Color(0xFF831843)
+    titleTextColor: Color = Color(0xFF831843),
+    continuousScan: Boolean = false,
+    sessionParticipantCount: Int? = null,
+    floatingFeedback: ScannerFloatingFeedback? = null
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -121,6 +150,17 @@ fun BarcodeScannerDialog(
     var isFlashOn by remember { mutableStateOf(false) }
     var hasFlashUnit by remember { mutableStateOf(false) }
     var cameraError by remember { mutableStateOf<String?>(null) }
+    var visibleFeedback by remember { mutableStateOf<ScannerFloatingFeedback?>(null) }
+
+    LaunchedEffect(floatingFeedback?.id) {
+        if (floatingFeedback != null) {
+            visibleFeedback = floatingFeedback
+            delay(2500L)
+            if (visibleFeedback?.id == floatingFeedback.id) {
+                visibleFeedback = null
+            }
+        }
+    }
 
     val filteredFemaleStudents = remember(femaleStudents, quickSearchQuery) {
         val q = quickSearchQuery.trim().lowercase()
@@ -159,7 +199,7 @@ fun BarcodeScannerDialog(
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.TopCenter
         ) {
             Column(
                 modifier = Modifier
@@ -209,6 +249,22 @@ fun BarcodeScannerDialog(
                             )
                         }
                     }
+                    if (continuousScan && sessionParticipantCount != null) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(accentBgColor)
+                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = "$sessionParticipantCount Anak",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = accentColor
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
@@ -242,10 +298,13 @@ fun BarcodeScannerDialog(
                         if (hasCameraPermission && cameraError == null) {
                             CameraBarcodePreview(
                                 isFlashOn = isFlashOn,
+                                continuousScan = continuousScan,
                                 onBarcodeDetected = { detectedCode ->
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onScanned(detectedCode)
-                                    onDismiss()
+                                    if (!continuousScan) {
+                                        onDismiss()
+                                    }
                                 },
                                 onFlashAvailabilityChanged = { available ->
                                     hasFlashUnit = available
@@ -417,8 +476,13 @@ fun BarcodeScannerDialog(
                     Button(
                         onClick = {
                             if (manualNikInput.isNotBlank()) {
-                                onScanned(manualNikInput.trim())
-                                onDismiss()
+                                val code = manualNikInput.trim()
+                                onScanned(code)
+                                if (continuousScan) {
+                                    manualNikInput = ""
+                                } else {
+                                    onDismiss()
+                                }
                             }
                         },
                         enabled = manualNikInput.isNotBlank(),
@@ -428,7 +492,7 @@ fun BarcodeScannerDialog(
                             .heightIn(min = 48.dp)
                             .testTag("btn_confirm_manual_nik")
                     ) {
-                        Text("Pilih", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (continuousScan) "Input" else "Pilih", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -493,8 +557,11 @@ fun BarcodeScannerDialog(
                             Card(
                                 onClick = {
                                     val codeToUse = if (student.nik.isNotBlank()) student.nik else if (student.nis.isNotBlank()) student.nis else student.id.toString()
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onScanned(codeToUse)
-                                    onDismiss()
+                                    if (!continuousScan) {
+                                        onDismiss()
+                                    }
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 colors = CardDefaults.cardColors(containerColor = cardBgColor)
@@ -538,10 +605,117 @@ fun BarcodeScannerDialog(
                                     }
 
                                     Text(
-                                        text = "Scan",
+                                        text = if (continuousScan) "Input" else "Scan",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = accentColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if (continuousScan) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onDismiss,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
+                        contentPadding = PaddingValues(vertical = 12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_done_continuous_scan")
+                    ) {
+                        Text(
+                            text = "Selesai & Tutup Kamera${sessionParticipantCount?.let { " ($it Terinput)" } ?: ""}",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // Pop-Up Mengambang Otomatis Muncul & Hilang Saat Scan Berkelanjutan
+            androidx.compose.animation.AnimatedVisibility(
+                visible = visibleFeedback != null,
+                enter = fadeIn(animationSpec = tween(220)) + slideInVertically(
+                    initialOffsetY = { -it / 2 },
+                    animationSpec = tween(250)
+                ),
+                exit = fadeOut(animationSpec = tween(260)) + slideOutVertically(
+                    targetOffsetY = { -it / 2 },
+                    animationSpec = tween(260)
+                ),
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 20.dp, vertical = 14.dp)
+                    .widthIn(max = 520.dp)
+            ) {
+                visibleFeedback?.let { fb ->
+                    val bgColor = when (fb.status) {
+                        ScannerFeedbackStatus.SUCCESS -> Color(0xFF15803D)
+                        ScannerFeedbackStatus.WARNING -> Color(0xFFD97706)
+                        ScannerFeedbackStatus.ERROR -> Color(0xFFDC2626)
+                    }
+                    val borderColor = when (fb.status) {
+                        ScannerFeedbackStatus.SUCCESS -> Color(0xFF86EFAC)
+                        ScannerFeedbackStatus.WARNING -> Color(0xFFFDE68A)
+                        ScannerFeedbackStatus.ERROR -> Color(0xFFFCA5A5)
+                    }
+                    val icon = when (fb.status) {
+                        ScannerFeedbackStatus.SUCCESS -> Icons.Default.CheckCircle
+                        ScannerFeedbackStatus.WARNING -> Icons.Default.Info
+                        ScannerFeedbackStatus.ERROR -> Icons.Default.ErrorOutline
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = bgColor,
+                        shadowElevation = 10.dp,
+                        border = BorderStroke(1.5.dp, borderColor),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("floating_scan_feedback_popup")
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = fb.title,
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (fb.subtitle.isNotBlank()) {
+                                    Text(
+                                        text = fb.subtitle,
+                                        fontSize = 11.5.sp,
+                                        color = Color.White.copy(alpha = 0.92f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
                             }

@@ -56,6 +56,7 @@ fun CameraBarcodePreview(
     onBarcodeDetected: (String) -> Unit,
     onFlashAvailabilityChanged: (Boolean) -> Unit,
     onCameraError: (String) -> Unit,
+    continuousScan: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -79,6 +80,7 @@ fun CameraBarcodePreview(
 
     var boundCamera by remember { mutableStateOf<Camera?>(null) }
     val hasTriggeredScan = remember { AtomicBoolean(false) }
+    val continuousGuard = remember { ContinuousScanGuard() }
 
     LaunchedEffect(isFlashOn, boundCamera) {
         val camera = boundCamera ?: return@LaunchedEffect
@@ -133,6 +135,8 @@ fun CameraBarcodePreview(
                                     imageProxy = imageProxy,
                                     barcodeScanner = barcodeScanner,
                                     hasTriggeredScan = hasTriggeredScan,
+                                    continuousScan = continuousScan,
+                                    continuousGuard = continuousGuard,
                                     onDetected = { code ->
                                         mainExecutor.execute {
                                             if (!isDisposed) {
@@ -193,14 +197,38 @@ fun CameraBarcodePreview(
     )
 }
 
+private class ContinuousScanGuard {
+    private val lock = Any()
+    private var lastCode: String = ""
+    private var lastCodeAtMs: Long = 0L
+    private var lastAnyAtMs: Long = 0L
+
+    fun shouldAccept(code: String, nowMs: Long = System.currentTimeMillis()): Boolean {
+        synchronized(lock) {
+            if (nowMs - lastAnyAtMs < 450L) {
+                return false
+            }
+            if (code == lastCode && (nowMs - lastCodeAtMs) < 2200L) {
+                return false
+            }
+            lastCode = code
+            lastCodeAtMs = nowMs
+            lastAnyAtMs = nowMs
+            return true
+        }
+    }
+}
+
 @OptIn(ExperimentalGetImage::class)
 private fun processBarcodeFrame(
     imageProxy: ImageProxy,
     barcodeScanner: BarcodeScanner,
     hasTriggeredScan: AtomicBoolean,
+    continuousScan: Boolean,
+    continuousGuard: ContinuousScanGuard,
     onDetected: (String) -> Unit
 ) {
-    if (hasTriggeredScan.get()) {
+    if (!continuousScan && hasTriggeredScan.get()) {
         imageProxy.close()
         return
     }
@@ -218,8 +246,15 @@ private fun processBarcodeFrame(
             }
             if (rawCode != null) {
                 val extracted = extractBarcodePayload(rawCode)
-                if (extracted.isNotBlank() && hasTriggeredScan.compareAndSet(false, true)) {
-                    onDetected(extracted)
+                if (extracted.isNotBlank()) {
+                    val accepted = if (continuousScan) {
+                        continuousGuard.shouldAccept(extracted)
+                    } else {
+                        hasTriggeredScan.compareAndSet(false, true)
+                    }
+                    if (accepted) {
+                        onDetected(extracted)
+                    }
                 }
             }
         }

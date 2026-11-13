@@ -98,6 +98,7 @@ fun InputPuasaDialog(
     var searchQuery by remember { mutableStateOf("") }
     var showBarcodeScanner by remember { mutableStateOf(false) }
     var lastFeedback by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var scannerFloatingFeedback by remember { mutableStateOf<ScannerFloatingFeedback?>(null) }
 
     LaunchedEffect(availableSessions) {
         if (selectedSessionId == null && availableSessions.isNotEmpty()) {
@@ -603,17 +604,43 @@ fun InputPuasaDialog(
                 if (matched == null) {
                     val err = "Kartu siswa dengan kode \"$scannedCode\" tidak ditemukan di data sekolah."
                     lastFeedback = false to err
-                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                    scannerFloatingFeedback = ScannerFloatingFeedback(
+                        id = System.nanoTime(),
+                        status = ScannerFeedbackStatus.ERROR,
+                        title = "Kartu tidak ditemukan",
+                        subtitle = "Kode \"$scannedCode\" belum terdaftar"
+                    )
                 } else {
                     onRegisterStudent(selectedSession, matched) { added, message ->
                         lastFeedback = added to message
-                        Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+                        val jenjang = FastingJenjangHelper.resolveJenjang(matched)
+                        val infoLine = listOf(jenjang, matched.classGrade.trim(), matched.dormitory.trim())
+                            .filter { it.isNotBlank() }
+                            .joinToString(" • ")
+                        scannerFloatingFeedback = if (added) {
+                            ScannerFloatingFeedback(
+                                id = System.nanoTime(),
+                                status = ScannerFeedbackStatus.SUCCESS,
+                                title = "Telah terinput puasa anak ${matched.name}",
+                                subtitle = infoLine.ifBlank { selectedSession.title }
+                            )
+                        } else {
+                            ScannerFloatingFeedback(
+                                id = System.nanoTime(),
+                                status = ScannerFeedbackStatus.WARNING,
+                                title = "${matched.name} sudah terinput",
+                                subtitle = "Sudah terdaftar pada sesi ${selectedSession.title}"
+                            )
+                        }
                     }
                 }
             },
-            onDismiss = { showBarcodeScanner = false },
+            onDismiss = {
+                showBarcodeScanner = false
+                scannerFloatingFeedback = null
+            },
             dialogTitle = "Scan Barcode Puasa Siswa",
-            dialogSubtitle = "Sesi: ${selectedSession.title} • Otomatis terinput saat terbaca",
+            dialogSubtitle = "Sesi: ${selectedSession.title} • Kamera tetap aktif untuk banyak kartu",
             quickPickTitle = "Pilih Cepat Kartu Siswa (${students.size} Siswa):",
             searchPlaceholder = "Cari nama, kelas, kamar, atau NIK siswa...",
             emptyListMessage = "Belum ada data siswa terdaftar di sekolah ini.",
@@ -622,7 +649,10 @@ fun InputPuasaDialog(
             cardBgColor = Color(0xFFF0FDFA),
             avatarBgColor = Color(0xFF99F6E4),
             avatarTextColor = Color(0xFF0F766E),
-            titleTextColor = Color(0xFF134E4A)
+            titleTextColor = Color(0xFF134E4A),
+            continuousScan = true,
+            sessionParticipantCount = sessionRecords.size,
+            floatingFeedback = scannerFloatingFeedback
         )
     }
 }
