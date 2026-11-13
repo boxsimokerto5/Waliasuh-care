@@ -329,8 +329,8 @@ fun DashboardScreen(
                                 showFiqihHaidDialog = true
                             },
                             studentsCount = students.size,
-                            activeShiftMessagesCount = shiftMessages.count { !it.isCompleted },
-                            urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted },
+                            activeShiftMessagesCount = shiftMessages.count { !it.isCompleted && DateUtils.isToday(it.followUpDate) },
+                            urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted && DateUtils.isToday(it.followUpDate) },
                             activeHaidCount = activeHaidRecords.size,
                             suciCount = suciRecords.size,
                             istihadhahCount = activeHaidRecords.count { it.isIstihadhahWarning },

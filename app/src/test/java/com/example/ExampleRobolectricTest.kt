@@ -739,7 +739,69 @@ class ExampleRobolectricTest {
     assertEquals("KEDIRI", deva.birthPlace)
     assertEquals("25-12-2009", deva.birthDate)
   }
+
+  @Test
+  fun `verify DateUtils categorizes shift messages into today vs tomorrow or later`() {
+    val calTodayNoon = java.util.Calendar.getInstance().apply {
+      set(java.util.Calendar.HOUR_OF_DAY, 12)
+      set(java.util.Calendar.MINUTE, 0)
+      set(java.util.Calendar.SECOND, 0)
+      set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val calTomorrowStart = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, 1)
+      set(java.util.Calendar.HOUR_OF_DAY, 0)
+      set(java.util.Calendar.MINUTE, 0)
+      set(java.util.Calendar.SECOND, 1)
+      set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val calNextWeek = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, 7)
+      set(java.util.Calendar.HOUR_OF_DAY, 12)
+    }
+    val calYesterday = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, -1)
+      set(java.util.Calendar.HOUR_OF_DAY, 23)
+      set(java.util.Calendar.MINUTE, 59)
+    }
+
+    val todayMillis = calTodayNoon.timeInMillis
+    val tomorrowMillis = calTomorrowStart.timeInMillis
+    val nextWeekMillis = calNextWeek.timeInMillis
+    val yesterdayMillis = calYesterday.timeInMillis
+
+    org.junit.Assert.assertTrue(com.example.util.DateUtils.isToday(todayMillis))
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isTomorrowOrLater(todayMillis))
+
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isToday(tomorrowMillis))
+    org.junit.Assert.assertTrue(com.example.util.DateUtils.isTomorrowOrLater(tomorrowMillis))
+
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isToday(nextWeekMillis))
+    org.junit.Assert.assertTrue(com.example.util.DateUtils.isTomorrowOrLater(nextWeekMillis))
+
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isToday(yesterdayMillis))
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isTomorrowOrLater(yesterdayMillis))
+
+    // Verify UTC DatePicker midnight converts to exact local calendar day at noon
+    val utcCal = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+      set(java.util.Calendar.YEAR, 2026)
+      set(java.util.Calendar.MONTH, java.util.Calendar.NOVEMBER)
+      set(java.util.Calendar.DAY_OF_MONTH, 14)
+      set(java.util.Calendar.HOUR_OF_DAY, 0)
+      set(java.util.Calendar.MINUTE, 0)
+      set(java.util.Calendar.SECOND, 0)
+      set(java.util.Calendar.MILLISECOND, 0)
+    }
+    val localNoonCal = java.util.Calendar.getInstance().apply {
+      timeInMillis = com.example.util.DateUtils.utcDateMillisToLocalNoon(utcCal.timeInMillis)
+    }
+    assertEquals(2026, localNoonCal.get(java.util.Calendar.YEAR))
+    assertEquals(java.util.Calendar.NOVEMBER, localNoonCal.get(java.util.Calendar.MONTH))
+    assertEquals(14, localNoonCal.get(java.util.Calendar.DAY_OF_MONTH))
+    assertEquals(12, localNoonCal.get(java.util.Calendar.HOUR_OF_DAY))
+  }
 }
+
 
 
 

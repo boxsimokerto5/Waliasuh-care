@@ -40,6 +40,31 @@ object DateUtils {
                 cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
     }
 
+    fun isTomorrowOrLater(timestamp: Long): Boolean {
+        val calTodayEnd = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 23)
+            set(Calendar.MINUTE, 59)
+            set(Calendar.SECOND, 59)
+            set(Calendar.MILLISECOND, 999)
+        }
+        return timestamp > calTodayEnd.timeInMillis
+    }
+
+    fun utcDateMillisToLocalNoon(utcMillis: Long): Long {
+        val utcCal = Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = utcMillis
+        }
+        return Calendar.getInstance().apply {
+            set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+            set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+            set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+            set(Calendar.HOUR_OF_DAY, 12)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
     fun isThisWeek(timestamp: Long): Boolean {
         val calNow = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 23)

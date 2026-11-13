@@ -12,10 +12,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -77,7 +80,7 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun CreateShiftMessageDialog(
     viewModel: HealthViewModel,
@@ -254,29 +257,23 @@ fun CreateShiftMessageDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        shiftOptions.take(2).forEach { opt ->
+                        shiftOptions.forEach { opt ->
                             FilterChip(
                                 selected = selectedShift == opt,
                                 onClick = { selectedShift = opt },
-                                label = { Text(opt, fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        shiftOptions.drop(2).forEach { opt ->
-                            FilterChip(
-                                selected = selectedShift == opt,
-                                onClick = { selectedShift = opt },
-                                label = { Text(opt, fontSize = 11.sp) },
-                                modifier = Modifier.weight(1f)
+                                label = {
+                                    Text(
+                                        text = opt,
+                                        fontSize = 11.sp,
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
                             )
                         }
                     }
@@ -343,24 +340,26 @@ fun CreateShiftMessageDialog(
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
                             text = "Isi Pesan / Instruksi Operan *",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
                         )
 
                         // Tombol Mikrofon Voice to Text
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
+                                .heightIn(min = 36.dp)
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(Color(0xFFDCFCE7))
                                 .clickable { startVoiceRecognition() }
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                .padding(horizontal = 10.dp, vertical = 6.dp)
                                 .testTag("btn_voice_to_text")
                         ) {
                             Icon(
@@ -374,7 +373,9 @@ fun CreateShiftMessageDialog(
                                 text = "Bicara (Suara)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF16A34A)
+                                color = Color(0xFF16A34A),
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
@@ -403,44 +404,66 @@ fun CreateShiftMessageDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Row(
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         // Urgent
                         FilterChip(
                             selected = selectedPriority == "URGENT",
                             onClick = { selectedPriority = "URGENT" },
-                            label = { Text("🔴 Urgent (Darurat)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            label = {
+                                Text(
+                                    text = "🔴 Urgent (Darurat)",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Color(0xFFFEE2E2),
                                 selectedLabelColor = Color(0xFFDC2626)
-                            ),
-                            modifier = Modifier.weight(1f)
+                            )
                         )
 
                         // Sedang
                         FilterChip(
                             selected = selectedPriority == "SEDANG",
                             onClick = { selectedPriority = "SEDANG" },
-                            label = { Text("🟠 Sedang", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            label = {
+                                Text(
+                                    text = "🟠 Sedang",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Color(0xFFFEF3C7),
                                 selectedLabelColor = Color(0xFFD97706)
-                            ),
-                            modifier = Modifier.weight(1f)
+                            )
                         )
 
                         // Biasa
                         FilterChip(
                             selected = selectedPriority == "BIASA",
                             onClick = { selectedPriority = "BIASA" },
-                            label = { Text("🟢 Biasa", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            label = {
+                                Text(
+                                    text = "🟢 Biasa",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
+                            },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Color(0xFFDCFCE7),
                                 selectedLabelColor = Color(0xFF16A34A)
-                            ),
-                            modifier = Modifier.weight(1f)
+                            )
                         )
                     }
                 }
@@ -456,9 +479,10 @@ fun CreateShiftMessageDialog(
                     OutlinedButton(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp),
-                        enabled = !isSubmitting
+                        enabled = !isSubmitting,
+                        modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Text("Batal")
+                        Text("Batal", maxLines = 1, softWrap = false)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Button(
@@ -493,7 +517,9 @@ fun CreateShiftMessageDialog(
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary),
                         enabled = !isSubmitting,
-                        modifier = Modifier.testTag("btn_submit_shift_message")
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_submit_shift_message")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Send,
@@ -501,7 +527,11 @@ fun CreateShiftMessageDialog(
                             modifier = Modifier.size(17.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (isSubmitting) "Menyimpan..." else "Tinggalkan Pesan")
+                        Text(
+                            text = if (isSubmitting) "Menyimpan..." else "Tinggalkan Pesan",
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
                 }
             }
@@ -515,7 +545,7 @@ fun CreateShiftMessageDialog(
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let {
-                        followUpDate = it
+                        followUpDate = DateUtils.utcDateMillisToLocalNoon(it)
                     }
                     showDatePicker = false
                 }) {
