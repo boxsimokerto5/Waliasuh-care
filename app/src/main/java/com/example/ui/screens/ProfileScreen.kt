@@ -30,7 +30,6 @@ import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Assessment
-import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExitToApp
@@ -53,7 +52,6 @@ import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.ProfileLegalBottomSheet
 import com.example.ui.dialogs.ProfileLegalSheetType
 import com.example.ui.dialogs.RewardAdDeclarationDialog
-import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.util.TopOnAdManager
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -110,7 +108,6 @@ fun ProfileScreen(
     var showEditAccountDialog by remember { mutableStateOf(false) }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
-    var showSupabaseDialog by remember { mutableStateOf(false) }
     var showMonthlyReportDialog by remember { mutableStateOf(false) }
     var showMonthlyReportAdConfirm by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
@@ -203,23 +200,6 @@ fun ProfileScreen(
                     },
                     testTag = "menu_akun"
                 )
-            }
-
-            if (role == UserRole.SUPERADMIN) {
-                item {
-                    MenuSettingCard(
-                        title = "Sinkronisasi Cloud & Supabase",
-                        subtitle = "Tarik / unggah data siswa, haid, wali & rekam medis antar perangkat",
-                        icon = Icons.Default.CloudSync,
-                        iconBg = Color(0xFFDCFCE7),
-                        iconColor = Color(0xFF16A34A),
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            showSupabaseDialog = true
-                        },
-                        testTag = "menu_supabase_sync"
-                    )
-                }
             }
 
             item {
@@ -577,14 +557,6 @@ fun ProfileScreen(
                 }
             }
         }
-    }
-
-    // Modal Bottom Sheet: Konfigurasi & Sinkronisasi Supabase (Khusus Superadmin)
-    if (showSupabaseDialog && role == UserRole.SUPERADMIN) {
-        SupabaseConfigDialog(
-            viewModel = viewModel,
-            onDismiss = { showSupabaseDialog = false }
-        )
     }
 
     // Modal Bottom Sheet: Laporan Bulanan

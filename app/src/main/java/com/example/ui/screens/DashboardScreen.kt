@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -64,7 +65,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
@@ -410,16 +414,32 @@ fun DashboardScreen(
                 // Quick Menu Tiles with Cute 3D Cartoon Icons
                 item {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp, vertical = 2.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp, vertical = 2.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "Layanan Kesehatan Anak",
-                            fontSize = 13.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "Geser untuk lebih banyak fitur",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = WaliPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
                         IconButton(
                             onClick = {
                                 TopOnAdManager.onUserActionClick(context)
@@ -523,21 +543,28 @@ fun DashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Daftar Rencana Berobat ke Faskes",
+                                text = "Daftar Rencana Berobat",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Hari ini: $todayDateFormatted",
+                                text = todayDateFormatted,
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Medium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
                             )
                         }
 
@@ -1152,11 +1179,15 @@ fun DashboardSickChildItem(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("sick_child_item_${record.id}"),
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
     ) {
-        Row(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
             // Left Accent Color Stripe
             Box(
                 modifier = Modifier
@@ -1168,10 +1199,10 @@ fun DashboardSickChildItem(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                // Header: Nama Siswa & Status
+                // Baris 1: Nama + Asrama di kiri, Status + Edit/Hapus di kanan
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1181,117 +1212,26 @@ fun DashboardSickChildItem(
                         Text(
                             text = "$number. ${record.studentName}",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.5.sp
+                            fontSize = 13.5.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = record.studentDormitory,
                             fontSize = 10.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
-                    StatusBadge(status = record.status)
-                }
 
-                // VIEW TANGGAL KE FASILITAS KESEHATAN
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
-                            else accentColor.copy(alpha = 0.08f)
-                        )
-                        .padding(horizontal = 8.dp, vertical = 6.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    imageVector = Icons.Default.CalendarToday,
-                                    contentDescription = "Tanggal ke Faskes",
-                                    tint = accentColor,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = "Tanggal ke Fasilitas Kesehatan:",
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = accentColor
-                                )
-                            }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(accentColor.copy(alpha = 0.15f))
-                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
-                            ) {
-                                Text(
-                                    text = DateUtils.getRelativeDateLabel(record.planDate),
-                                    fontSize = 9.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = accentColor
-                                )
-                            }
-                        }
-
-                        Text(
-                            text = "${DateUtils.formatFullDate(record.planDate)} • Pukul ${record.departureTime} WIB",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Text(
-                                text = "Tujuan Faskes:",
-                                fontSize = 10.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            FaskesBadge(faskes = record.faskes)
-                        }
-                    }
-                }
-
-                // Compact Keluhan
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
-                        .padding(horizontal = 7.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = "Keluhan: ${record.complaint}",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
-
-                // Escort & Action Row (Tight layout)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (record.escortName.isNotBlank()) "👤 ${record.escortName}" else "",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
+                        StatusBadge(status = record.status)
                         IconButton(
                             onClick = onEdit,
                             modifier = Modifier
@@ -1305,7 +1245,6 @@ fun DashboardSickChildItem(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-
                         IconButton(
                             onClick = onDelete,
                             modifier = Modifier.size(30.dp)
@@ -1317,72 +1256,190 @@ fun DashboardSickChildItem(
                                 modifier = Modifier.size(16.dp)
                             )
                         }
-
-                        if (record.status == "PLANNED" || record.status == "MENUNGGU" || record.status == "SIAP JALAN") {
-                            // Pilihan 1: Dirawat di Sini (UKS)
-                            Button(
-                                onClick = onTreatHere,
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B)),
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .testTag("btn_treat_here_${record.id}"),
-                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Healing,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("Dirawat di Sini", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            // Pilihan 2: Berangkatkan / Rujuk ke Faskes
-                            Button(
-                                onClick = onDepart,
-                                colors = ButtonDefaults.buttonColors(containerColor = StatusDeparted),
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .testTag("btn_depart_${record.id}"),
-                                contentPadding = PaddingValues(horizontal = 9.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(13.dp)
-                                )
-                                Spacer(modifier = Modifier.width(3.dp))
-                                Text("Berangkatkan", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        } else if (record.status == "DEPARTED" || record.status == "DIANTER") {
-                            Button(
-                                onClick = onDiagnose,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                modifier = Modifier
-                                    .height(32.dp)
-                                    .testTag("btn_input_result_${record.id}"),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MedicalServices,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
                     }
                 }
 
-                val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
-                Text(
-                    text = "Diinput oleh: $creatorLabel",
-                    fontSize = 9.5.sp,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                // Baris 2: Strip Jadwal & Tujuan Faskes sejajar (1 baris ringkas tanpa pengulangan tanggal)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            if (isToday) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.30f)
+                            else accentColor.copy(alpha = 0.08f)
+                        )
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = "Jadwal ke Faskes",
+                            tint = accentColor,
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        val scheduleLabel = buildString {
+                            append(DateUtils.getRelativeDateLabel(record.planDate))
+                            if (record.departureTime.isNotBlank()) {
+                                append(" • ${record.departureTime} WIB")
+                            }
+                        }
+                        Text(
+                            text = scheduleLabel,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    FaskesBadge(faskes = record.faskes)
+                }
+
+                // Baris 3: Keluhan
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = buildAnnotatedString {
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                append("Keluhan: ")
+                            }
+                            withStyle(
+                                SpanStyle(
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            ) {
+                                append(record.complaint.ifBlank { "-" })
+                            }
+                        },
+                        fontSize = 11.5.sp,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Baris 4: Info Pendamping & Penginput sejajar rapi (tidak terjepit tombol)
+                val escortLabel = record.escortName.trim()
+                val creatorLabel = record.createdBy.ifBlank { escortLabel.ifBlank { "-" } }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (escortLabel.isNotBlank()) "👤 $escortLabel" else "",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Input: $creatorLabel",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                // Baris 5: Tombol Aksi seimbang memanfaatkan ruang penuh
+                if (record.status == "PLANNED" || record.status == "MENUNGGU" || record.status == "SIAP JALAN") {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = onTreatHere,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00796B)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(34.dp)
+                                .testTag("btn_treat_here_${record.id}"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Healing,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Dirawat di Sini",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        Button(
+                            onClick = onDepart,
+                            colors = ButtonDefaults.buttonColors(containerColor = StatusDeparted),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(34.dp)
+                                .testTag("btn_depart_${record.id}"),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.DirectionsRun,
+                                contentDescription = null,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Berangkatkan",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                } else if (record.status == "DEPARTED" || record.status == "DIANTER") {
+                    Button(
+                        onClick = onDiagnose,
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(34.dp)
+                            .testTag("btn_input_result_${record.id}"),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.MedicalServices,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
     }
