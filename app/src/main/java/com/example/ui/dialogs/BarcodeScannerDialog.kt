@@ -12,7 +12,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,8 +27,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
@@ -38,7 +39,7 @@ import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -47,10 +48,11 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -66,11 +68,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.example.data.model.ChildStudent
 
@@ -132,23 +132,24 @@ fun BarcodeScannerDialog(
         label = "laserOffset"
     )
 
-    BasicAlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .widthIn(max = 480.dp)
-                .heightIn(max = 680.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp),
+                    .widthIn(max = 600.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 28.dp)
+                    .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header
@@ -158,6 +159,7 @@ fun BarcodeScannerDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -191,7 +193,9 @@ fun BarcodeScannerDialog(
                     }
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp).testTag("btn_close_scanner")
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("btn_close_scanner")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -201,18 +205,20 @@ fun BarcodeScannerDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(12.dp))
 
                 // Scanner Viewfinder Card
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp),
+                        .height(190.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
                 ) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().height(200.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(190.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         // Background Camera Simulation / Dark Viewfinder
@@ -238,7 +244,7 @@ fun BarcodeScannerDialog(
                         // Framing Guide Rect
                         Box(
                             modifier = Modifier
-                                .size(width = 240.dp, height = 150.dp)
+                                .size(width = 240.dp, height = 140.dp)
                                 .border(
                                     width = 2.dp,
                                     brush = Brush.horizontalGradient(
@@ -272,16 +278,22 @@ fun BarcodeScannerDialog(
                             onClick = { isFlashOn = !isFlashOn },
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(8.dp)
-                                .size(36.dp)
-                                .background(Color.Black.copy(alpha = 0.4f), CircleShape)
+                                .padding(6.dp)
+                                .size(48.dp)
                         ) {
-                            Icon(
-                                imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                                contentDescription = "Flashlight",
-                                tint = if (isFlashOn) Color(0xFFFACC15) else Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                    contentDescription = "Flashlight",
+                                    tint = if (isFlashOn) Color(0xFFFACC15) else Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -290,7 +302,9 @@ fun BarcodeScannerDialog(
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
                         onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
                     ) {
                         Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
@@ -336,7 +350,9 @@ fun BarcodeScannerDialog(
                         enabled = manualNikInput.isNotBlank(),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
-                        modifier = Modifier.testTag("btn_confirm_manual_nik")
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_confirm_manual_nik")
                     ) {
                         Text("Pilih", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
@@ -396,7 +412,7 @@ fun BarcodeScannerDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 200.dp),
+                            .heightIn(min = 120.dp, max = 210.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(filteredFemaleStudents, key = { it.id }) { student ->
@@ -412,7 +428,7 @@ fun BarcodeScannerDialog(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Box(

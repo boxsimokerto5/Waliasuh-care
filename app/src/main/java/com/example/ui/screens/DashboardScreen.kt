@@ -676,50 +676,90 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Dialog: Pendataan Haid Siswi (Scan Barcode Kartu Siswa)
+    var preselectedHaidStudent by remember { mutableStateOf<com.example.data.model.ChildStudent?>(null) }
+    var preselectedTissueVerified by remember { mutableStateOf(false) }
+
+    // Modal Bottom Sheet: Pendataan Haid Siswi (Scan Barcode Kartu Siswa)
     if (showInputHaidDialog) {
         InputHaidDialog(
             students = students,
             activeHaidRecords = activeHaidRecords,
+            suciRecords = suciRecords,
             waliName = waliName,
             schoolId = schoolProfile.tenantCode,
+            initialStudent = preselectedHaidStudent,
+            initialTissueVerified = preselectedTissueVerified,
             onSaveHaid = { record ->
                 viewModel.saveHaidRecord(record)
             },
-            onDismiss = { showInputHaidDialog = false }
+            onCompleteHaid = { id ->
+                viewModel.completeHaidRecord(id)
+            },
+            onDismiss = {
+                showInputHaidDialog = false
+                preselectedHaidStudent = null
+                preselectedTissueVerified = false
+            }
         )
     }
 
-    // Modal Dialog: Daftar Siswi Sedang Haid
+    // Modal Bottom Sheet: Daftar Siswi Sedang Haid
     if (showDaftarHaidSheet) {
         DaftarHaidSheet(
             activeHaidRecords = activeHaidRecords,
             onCompleteHaid = { id ->
                 viewModel.completeHaidRecord(id)
             },
+            onUpdateRecord = { rec ->
+                viewModel.updateHaidRecord(rec)
+            },
             onDeleteRecord = { rec ->
                 viewModel.deleteHaidRecord(rec)
             },
             onOpenInputHaid = {
                 showDaftarHaidSheet = false
+                preselectedHaidStudent = null
+                preselectedTissueVerified = false
                 showInputHaidDialog = true
             },
             onDismiss = { showDaftarHaidSheet = false }
         )
     }
 
-    // Modal Dialog: Daftar Siswi Suci & Riwayat Siklus
+    // Modal Bottom Sheet: Daftar Siswi Suci & Timeline Masa Suci
     if (showDaftarSuciSheet) {
         DaftarSuciSheet(
             suciRecords = suciRecords,
+            activeHaidRecords = activeHaidRecords,
             onDeleteRecord = { rec ->
                 viewModel.deleteHaidRecord(rec)
+            },
+            onMoveToHaid = { rec ->
+                val matchedStudent = students.firstOrNull {
+                    (rec.studentId > 0L && it.id == rec.studentId) ||
+                        (rec.studentNik.isNotBlank() && it.nik.equals(rec.studentNik, ignoreCase = true)) ||
+                        (rec.studentNis.isNotBlank() && it.nis.equals(rec.studentNis, ignoreCase = true))
+                } ?: com.example.data.model.ChildStudent(
+                    id = rec.studentId,
+                    name = rec.studentName,
+                    nis = rec.studentNis,
+                    gender = "P",
+                    age = 15,
+                    dormitory = rec.studentDorm,
+                    classGrade = rec.studentClass,
+                    nik = rec.studentNik,
+                    schoolId = rec.schoolId
+                )
+                preselectedHaidStudent = matchedStudent
+                preselectedTissueVerified = true
+                showDaftarSuciSheet = false
+                showInputHaidDialog = true
             },
             onDismiss = { showDaftarSuciSheet = false }
         )
     }
 
-    // Modal Dialog: Panduan Aplikasi & Fiqih Haid Wanita
+    // Modal Bottom Sheet: Panduan Aplikasi & Fiqih Haid Wanita
     if (showFiqihHaidDialog) {
         FiqihHaidDialog(
             onDismiss = { showFiqihHaidDialog = false }

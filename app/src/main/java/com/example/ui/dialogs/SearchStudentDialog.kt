@@ -24,7 +24,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,9 +32,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -46,9 +47,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ChildStudent
 import com.example.util.StudentClassifier
 
@@ -75,34 +76,34 @@ fun SearchStudentDialog(
             } else {
                 val q = searchQuery.trim().lowercase()
                 student.name.lowercase().contains(q) ||
-                        student.dormitory.lowercase().contains(q) ||
-                        student.classGrade.lowercase().contains(q) ||
-                        student.nis.lowercase().contains(q) ||
-                        student.nik.lowercase().contains(q) ||
-                        student.roomNumber.lowercase().contains(q) ||
-                        student.allergies.lowercase().contains(q)
+                    student.dormitory.lowercase().contains(q) ||
+                    student.classGrade.lowercase().contains(q) ||
+                    student.nis.lowercase().contains(q) ||
+                    student.nik.lowercase().contains(q) ||
+                    student.roomNumber.lowercase().contains(q) ||
+                    student.allergies.lowercase().contains(q)
             }
             matchesDorm && matchesQuery
         }
     }
 
-    BasicAlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .widthIn(max = 520.dp)
-                .heightIn(max = 620.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp)
+                    .widthIn(max = 640.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
             ) {
                 // Header
                 Row(
@@ -111,12 +112,13 @@ fun SearchStudentDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(36.dp)
+                                .size(38.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -145,7 +147,7 @@ fun SearchStudentDialog(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(48.dp)
                             .testTag("btn_close_student_search")
                     ) {
                         Icon(
@@ -156,7 +158,7 @@ fun SearchStudentDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Search Input Field
                 OutlinedTextField(
@@ -175,7 +177,7 @@ fun SearchStudentDialog(
                         if (searchQuery.isNotBlank()) {
                             IconButton(
                                 onClick = { searchQuery = "" },
-                                modifier = Modifier.size(28.dp)
+                                modifier = Modifier.size(48.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
@@ -205,8 +207,7 @@ fun SearchStudentDialog(
                             FilterChip(
                                 selected = selectedDormitoryFilter == dorm,
                                 onClick = { selectedDormitoryFilter = dorm },
-                                label = { Text(dorm, fontSize = 11.sp) },
-                                modifier = Modifier.height(28.dp)
+                                label = { Text(dorm, fontSize = 11.sp) }
                             )
                         }
                     }
@@ -222,14 +223,19 @@ fun SearchStudentDialog(
 
                 // List of Students
                 if (filteredStudents.isEmpty()) {
-                    Box(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(vertical = 8.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
                     ) {
                         Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
@@ -243,12 +249,14 @@ fun SearchStudentDialog(
                                 text = "Tidak ada anak asuh yang cocok",
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
                             )
                             Text(
                                 text = "Coba kata kunci lain atau ubah filter asrama",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -256,7 +264,7 @@ fun SearchStudentDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .heightIn(min = 160.dp, max = 410.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(filteredStudents, key = { it.id }) { student ->

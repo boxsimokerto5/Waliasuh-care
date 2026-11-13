@@ -351,10 +351,28 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    private val autoCompletedHaidIds = java.util.Collections.synchronizedSet(mutableSetOf<Long>())
+
     val activeHaidRecords: StateFlow<List<HaidRecord>> = combine(
         allHaidRecords,
         students
     ) { records, _ ->
+        val expiredRecords = records.filter { it.status == "HAID" && it.endDate == null && it.isAutoCompletedByLimit }
+        if (expiredRecords.isNotEmpty()) {
+            viewModelScope.launch {
+                expiredRecords.forEach { rec ->
+                    if (autoCompletedHaidIds.add(rec.id)) {
+                        val autoEnd = rec.effectiveEndDate ?: System.currentTimeMillis()
+                        repository.completeHaidRecord(rec.id, autoEnd, "SUCI_AUTO")
+                        if (!isUnitTestEnvironment()) {
+                            repository.getHaidRecordById(rec.id)?.let { updated ->
+                                SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
+                            }
+                        }
+                    }
+                }
+            }
+        }
         records.filter { it.isActive }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -362,7 +380,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         allHaidRecords,
         students
     ) { records, _ ->
-        records.filter { !it.isActive }
+        records
+            .filter { !it.isActive }
+            .sortedByDescending { it.effectiveEndDate ?: it.endDate ?: it.startDate }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun saveHaidRecord(record: HaidRecord, onComplete: () -> Unit = {}) {
@@ -374,6 +394,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onComplete()
             if (!isUnitTestEnvironment()) {
                 SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), stamped)
+            }
+        }
+    }
+
+    fun updateHaidRecord(record: HaidRecord, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            val updated = record.copy(updatedAt = System.currentTimeMillis())
+            repository.updateHaidRecord(updated)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
             }
         }
     }

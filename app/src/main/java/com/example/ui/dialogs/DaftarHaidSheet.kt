@@ -1,10 +1,11 @@
 package com.example.ui.dialogs
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,26 +25,30 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Female
-import androidx.compose.material.icons.filled.Healing
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,9 +59,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
+import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,15 +73,17 @@ import java.util.Locale
 fun DaftarHaidSheet(
     activeHaidRecords: List<HaidRecord>,
     onCompleteHaid: (Long) -> Unit,
+    onUpdateRecord: (HaidRecord) -> Unit = {},
     onDeleteRecord: (HaidRecord) -> Unit,
     onOpenInputHaid: () -> Unit,
     onDismiss: () -> Unit
 ) {
     var searchQuery by remember { mutableStateOf("") }
     var recordToComplete by remember { mutableStateOf<HaidRecord?>(null) }
+    var recordToEdit by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToDelete by remember { mutableStateOf<HaidRecord?>(null) }
 
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID")) }
+    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")) }
 
     val filteredRecords = remember(searchQuery, activeHaidRecords) {
         if (searchQuery.isBlank()) {
@@ -84,34 +92,34 @@ fun DaftarHaidSheet(
             val q = searchQuery.trim().lowercase()
             activeHaidRecords.filter {
                 it.studentName.lowercase().contains(q) ||
-                it.studentClass.lowercase().contains(q) ||
-                it.studentDorm.lowercase().contains(q) ||
-                it.studentNik.contains(q)
+                    it.studentClass.lowercase().contains(q) ||
+                    it.studentDorm.lowercase().contains(q) ||
+                    it.studentNik.contains(q)
             }
         }
     }
 
-    val istihadhahCount = remember(activeHaidRecords) {
+    val maxDayCount = remember(activeHaidRecords) {
         activeHaidRecords.count { it.isIstihadhahWarning }
     }
 
-    BasicAlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .widthIn(max = 520.dp)
-                .heightIn(max = 680.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .widthIn(max = 640.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
             ) {
                 // Header
                 Row(
@@ -120,6 +128,7 @@ fun DaftarHaidSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -145,8 +154,8 @@ fun DaftarHaidSheet(
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${activeHaidRecords.size} Santriwati Aktif dalam Masa Haid",
-                                fontSize = 11.5.sp,
+                                text = "${activeHaidRecords.size} Santriwati Aktif (Maks 15 Hari • Auto Suci)",
+                                fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -154,7 +163,9 @@ fun DaftarHaidSheet(
 
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp).testTag("btn_close_daftar_haid")
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("btn_close_daftar_haid")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -166,7 +177,7 @@ fun DaftarHaidSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Ringkasan Cepat & Peringatan Fiqih
+                // Ringkasan Cepat & Status Batas 15 Hari
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -188,24 +199,24 @@ fun DaftarHaidSheet(
                     }
 
                     Card(
-                        modifier = Modifier.weight(1.2f),
+                        modifier = Modifier.weight(1.25f),
                         shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(
-                            containerColor = if (istihadhahCount > 0) Color(0xFFFEE2E2) else Color(0xFFF0FDF4)
+                            containerColor = if (maxDayCount > 0) Color(0xFFFEE2E2) else Color(0xFFF0FDF4)
                         )
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                text = if (istihadhahCount > 0) "⚠️ Peringatan Fiqih" else "Status Normal",
+                                text = if (maxDayCount > 0) "Batas Hari ke-15" else "Aturan Fleksibel 15h",
                                 fontSize = 10.sp,
-                                color = if (istihadhahCount > 0) Color(0xFFB91C1C) else Color(0xFF15803D),
+                                color = if (maxDayCount > 0) Color(0xFFB91C1C) else Color(0xFF15803D),
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (istihadhahCount > 0) "$istihadhahCount Istihadhah (>14h)" else "Semua < 15 Hari",
-                                fontSize = 13.sp,
+                                text = if (maxDayCount > 0) "$maxDayCount Siswi Hari ke-15" else "Auto Suci > 15 Hari",
+                                fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (istihadhahCount > 0) Color(0xFF991B1B) else Color(0xFF166534)
+                                color = if (maxDayCount > 0) Color(0xFF991B1B) else Color(0xFF166534)
                             )
                         }
                     }
@@ -228,8 +239,11 @@ fun DaftarHaidSheet(
                         },
                         trailingIcon = {
                             if (searchQuery.isNotBlank()) {
-                                IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
-                                    Icon(Icons.Default.Clear, contentDescription = null, modifier = Modifier.size(14.dp))
+                                IconButton(
+                                    onClick = { searchQuery = "" },
+                                    modifier = Modifier.size(48.dp)
+                                ) {
+                                    Icon(Icons.Default.Clear, contentDescription = "Hapus pencarian", modifier = Modifier.size(16.dp))
                                 }
                             }
                         },
@@ -244,7 +258,10 @@ fun DaftarHaidSheet(
                         onClick = onOpenInputHaid,
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
-                        modifier = Modifier.testTag("btn_add_haid_from_list")
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_add_haid_from_list")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
@@ -256,14 +273,21 @@ fun DaftarHaidSheet(
 
                 // List Siswi Sedang Haid
                 if (filteredRecords.isEmpty()) {
-                    Box(
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
+                            .padding(vertical = 8.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                        )
                     ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Icon(
                                 imageVector = Icons.Default.Female,
                                 contentDescription = null,
@@ -275,12 +299,15 @@ fun DaftarHaidSheet(
                                 text = if (activeHaidRecords.isEmpty()) "Tidak ada siswi yang sedang haid saat ini" else "Tidak ada siswi yang cocok dengan pencarian",
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Semua santriwati berstatus suci dan siap beribadah.",
+                                text = "Semua santriwati berada di Daftar Suci dan siap beribadah.",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
                             )
                         }
                     }
@@ -288,12 +315,12 @@ fun DaftarHaidSheet(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f),
+                            .heightIn(min = 160.dp, max = 430.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(filteredRecords, key = { it.id }) { record ->
                             val days = record.durationDays
-                            val isIstihadhah = record.isIstihadhahWarning
+                            val isMaxDay = record.isIstihadhahWarning
 
                             Card(
                                 modifier = Modifier
@@ -301,11 +328,11 @@ fun DaftarHaidSheet(
                                     .testTag("item_haid_${record.id}"),
                                 shape = RoundedCornerShape(14.dp),
                                 colors = CardDefaults.cardColors(
-                                    containerColor = if (isIstihadhah) Color(0xFFFEF2F2) else Color(0xFFFDF2F8)
+                                    containerColor = if (isMaxDay) Color(0xFFFEF2F2) else Color(0xFFFDF2F8)
                                 ),
-                                border = androidx.compose.foundation.BorderStroke(
+                                border = BorderStroke(
                                     1.dp,
-                                    if (isIstihadhah) Color(0xFFFCA5A5) else Color(0xFFFBCFE8)
+                                    if (isMaxDay) Color(0xFFFCA5A5) else Color(0xFFFBCFE8)
                                 )
                             ) {
                                 Column(
@@ -319,6 +346,9 @@ fun DaftarHaidSheet(
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Row(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(end = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                                         ) {
@@ -326,14 +356,14 @@ fun DaftarHaidSheet(
                                                 modifier = Modifier
                                                     .size(34.dp)
                                                     .clip(CircleShape)
-                                                    .background(if (isIstihadhah) Color(0xFFFEE2E2) else Color(0xFFFBCFE8)),
+                                                    .background(if (isMaxDay) Color(0xFFFEE2E2) else Color(0xFFFBCFE8)),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = record.studentName.take(1).uppercase(),
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 14.sp,
-                                                    color = if (isIstihadhah) Color(0xFFB91C1C) else Color(0xFF9D174D)
+                                                    color = if (isMaxDay) Color(0xFFB91C1C) else Color(0xFF9D174D)
                                                 )
                                             }
                                             Column {
@@ -341,7 +371,7 @@ fun DaftarHaidSheet(
                                                     text = record.studentName,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 13.5.sp,
-                                                    color = if (isIstihadhah) Color(0xFF7F1D1D) else Color(0xFF831843)
+                                                    color = if (isMaxDay) Color(0xFF7F1D1D) else Color(0xFF831843)
                                                 )
                                                 Text(
                                                     text = "${record.studentClass} • ${record.studentDorm}${if (record.studentNik.isNotBlank()) " • NIK: ${record.studentNik}" else ""}",
@@ -352,11 +382,11 @@ fun DaftarHaidSheet(
                                             }
                                         }
 
-                                        // Badge Durasi Hari
+                                        // Badge Durasi Hari Berjalan
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(8.dp))
-                                                .background(if (isIstihadhah) Color(0xFFEF4444) else Color(0xFFDB2777))
+                                                .background(if (isMaxDay) Color(0xFFEF4444) else Color(0xFFDB2777))
                                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                                         ) {
                                             Text(
@@ -368,16 +398,21 @@ fun DaftarHaidSheet(
                                         }
                                     }
 
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // Timeline Berjalan (Hari 1 s.d. 15)
+                                    HaidTimelineBar(currentDay = days)
+
                                     Spacer(modifier = Modifier.height(6.dp))
 
-                                    // Peringatan Fiqih Istihadhah (>14 hari)
-                                    if (isIstihadhah) {
+                                    // Info hari ke-15 batas maksimal sebelum pindah otomatis ke Daftar Suci
+                                    if (isMaxDay) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(6.dp))
                                                 .background(Color(0xFFFEE2E2))
-                                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                                                .padding(horizontal = 8.dp, vertical = 5.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Icon(
@@ -388,7 +423,7 @@ fun DaftarHaidSheet(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "Fiqih: Melebihi 15 hari dihitung Istihadhah. Wajib mandi suci & sholat.",
+                                                text = "Hari ke-15 (Maksimal Haid): Wajib mandi suci. Lewat hari ke-15 otomatis pindah ke Daftar Suci.",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF991B1B)
@@ -397,33 +432,25 @@ fun DaftarHaidSheet(
                                         Spacer(modifier = Modifier.height(4.dp))
                                     }
 
-                                    // Info Mulai, Keluhan & Catatan
+                                    // Info Mulai & Catatan
                                     Text(
-                                        text = "Mulai: ${dateFormat.format(Date(record.startDate))}",
+                                        text = "Mulai Hari ke-1: ${dateFormat.format(Date(record.startDate))}",
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
 
-                                    if (record.symptoms.isNotBlank() && record.symptoms != "Normal (Tanpa Keluhan)") {
-                                        Text(
-                                            text = "Keluhan: ${record.symptoms}",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Medium,
-                                            color = Color(0xFFBE185D)
-                                        )
-                                    }
-
                                     if (record.notes.isNotBlank()) {
                                         Text(
                                             text = "Catatan: ${record.notes}",
-                                            fontSize = 10.5.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF831843),
+                                            fontWeight = FontWeight.Medium
                                         )
                                     }
 
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(modifier = Modifier.height(6.dp))
 
-                                    // Action Buttons Row
+                                    // Action Buttons Row (Edit Hari/Catatan, Hapus, Mandi Suci / Pindah ke Daftar Suci)
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -432,35 +459,52 @@ fun DaftarHaidSheet(
                                         Text(
                                             text = "Oleh: ${record.waliName}",
                                             fontSize = 10.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f)
                                         )
 
-                                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            IconButton(
+                                                onClick = { recordToEdit = record },
+                                                modifier = Modifier.size(48.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = "Ubah Hari atau Catatan",
+                                                    tint = Color(0xFFBE185D),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+
                                             IconButton(
                                                 onClick = { recordToDelete = record },
-                                                modifier = Modifier.size(28.dp)
+                                                modifier = Modifier.size(48.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.Delete,
                                                     contentDescription = "Hapus",
                                                     tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(16.dp)
+                                                    modifier = Modifier.size(18.dp)
                                                 )
                                             }
 
                                             Button(
                                                 onClick = { recordToComplete = record },
-                                                shape = RoundedCornerShape(8.dp),
+                                                shape = RoundedCornerShape(10.dp),
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
-                                                modifier = Modifier.height(30.dp)
+                                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                                modifier = Modifier.heightIn(min = 42.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.CheckCircle,
                                                     contentDescription = null,
-                                                    modifier = Modifier.size(13.dp)
+                                                    modifier = Modifier.size(14.dp)
                                                 )
                                                 Spacer(modifier = Modifier.width(4.dp))
-                                                Text("Mandi Suci", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                                Text("Mandi Suci", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                             }
                                         }
                                     }
@@ -473,46 +517,116 @@ fun DaftarHaidSheet(
         }
     }
 
-    // Modal Konfirmasi Mandi Suci
-    if (recordToComplete != null) {
-        val rec = recordToComplete!!
-        BasicAlertDialog(onDismissRequest = { recordToComplete = null }) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.padding(16.dp).widthIn(max = 400.dp)
+    // Bottom Sheet Edit Hari ke-... / Catatan
+    if (recordToEdit != null) {
+        val rec = recordToEdit!!
+        var editDay by remember(rec.id) { mutableIntStateOf(rec.durationDays.coerceIn(1, HaidDateCalculator.MAX_HAID_DAYS)) }
+        var editNotes by remember(rec.id) { mutableStateOf(rec.notes) }
+
+        ModalBottomSheet(
+            onDismissRequest = { recordToEdit = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                     Text(
-                        text = "Konfirmasi Mandi Suci",
+                        text = "Sesuaikan Hari Haid & Catatan",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = "Catat bahwa ${rec.studentName} telah selesai haid (durasi ${rec.durationDays} hari) dan telah bersuci/mandi wajib? Status akan dipindahkan ke 'Daftar Suci'.",
-                        fontSize = 12.5.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = rec.studentName,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFDB2777)
                     )
-                    Spacer(modifier = Modifier.height(16.dp))
+
                     Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFFDF2F8))
+                            .padding(10.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = { recordToComplete = null }) {
+                        FilledTonalIconButton(
+                            onClick = { if (editDay > 1) editDay-- },
+                            enabled = editDay > 1,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Remove, contentDescription = "Kurangi Hari")
+                        }
+                        Text(
+                            text = "Haid Hari ke-$editDay",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFDB2777)
+                        )
+                        FilledTonalIconButton(
+                            onClick = { if (editDay < HaidDateCalculator.MAX_HAID_DAYS) editDay++ },
+                            enabled = editDay < HaidDateCalculator.MAX_HAID_DAYS,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Tambah Hari")
+                        }
+                    }
+
+                    OutlinedTextField(
+                        value = editNotes,
+                        onValueChange = { editNotes = it },
+                        label = { Text("Catatan") },
+                        minLines = 2,
+                        maxLines = 4,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { recordToEdit = null },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                        ) {
                             Text("Batal")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
                         Button(
                             onClick = {
-                                onCompleteHaid(rec.id)
-                                recordToComplete = null
+                                val updatedStart = HaidDateCalculator.calculateStartDateForHaidDay(editDay)
+                                onUpdateRecord(
+                                    rec.copy(
+                                        startDate = updatedStart,
+                                        notes = editNotes.trim()
+                                    )
+                                )
+                                recordToEdit = null
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669))
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .heightIn(min = 48.dp)
                         ) {
-                            Text("Ya, Sudah Suci")
+                            Text("Simpan Perubahan", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -520,45 +634,172 @@ fun DaftarHaidSheet(
         }
     }
 
-    // Modal Konfirmasi Hapus
-    if (recordToDelete != null) {
-        val rec = recordToDelete!!
-        BasicAlertDialog(onDismissRequest = { recordToDelete = null }) {
-            Surface(
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.padding(16.dp).widthIn(max = 380.dp)
+    // Bottom Sheet Konfirmasi Mandi Suci (Pindah ke Daftar Suci di hari berapa pun, misal hari ke-8)
+    if (recordToComplete != null) {
+        val rec = recordToComplete!!
+        ModalBottomSheet(
+            onDismissRequest = { recordToComplete = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
             ) {
-                Column(modifier = Modifier.padding(18.dp)) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFDCFCE7)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF059669),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Text(
+                            text = "Konfirmasi Mandi Suci",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+
                     Text(
-                        text = "Hapus Catatan Haid?",
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error
+                        text = "Catat bahwa ${rec.studentName} telah selesai haid di Hari ke-${rec.durationDays} dan sudah bersuci/mandi wajib? Siswi akan langsung dipindahkan ke 'Daftar Suci' (Suci Hari ke-1).",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        lineHeight = 19.sp
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Hapus catatan haid untuk ${rec.studentName}?",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        TextButton(onClick = { recordToDelete = null }) {
+                        OutlinedButton(
+                            onClick = { recordToComplete = null },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                        ) {
                             Text("Batal")
                         }
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                onCompleteHaid(rec.id)
+                                recordToComplete = null
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .heightIn(min = 48.dp)
+                        ) {
+                            Text("Ya, Pindah ke Daftar Suci", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Bottom Sheet Konfirmasi Hapus
+    if (recordToDelete != null) {
+        val rec = recordToDelete!!
+        ModalBottomSheet(
+            onDismissRequest = { recordToDelete = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 520.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.errorContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Text(
+                            text = "Hapus Catatan Haid?",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    Text(
+                        text = "Hapus catatan haid untuk ${rec.studentName}?",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = { recordToDelete = null },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                        ) {
+                            Text("Batal")
+                        }
                         Button(
                             onClick = {
                                 onDeleteRecord(rec)
                                 recordToDelete = null
                             },
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
                         ) {
-                            Text("Hapus")
+                            Text("Hapus", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

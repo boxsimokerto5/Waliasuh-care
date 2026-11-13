@@ -1,7 +1,6 @@
 package com.example.ui.dialogs
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,25 +18,21 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
-import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.PrimaryTabRow
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,16 +41,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.DialogProperties
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,23 +58,23 @@ fun FiqihHaidDialog(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabTitles = listOf("Fiqih Haid", "Mandi Suci", "Amalan & Doa", "Panduan Scan")
 
-    BasicAlertDialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .widthIn(max = 520.dp)
-                .heightIn(max = 700.dp),
-            shape = RoundedCornerShape(24.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 8.dp
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .widthIn(max = 640.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp)
             ) {
                 // Header
                 Row(
@@ -90,6 +83,7 @@ fun FiqihHaidDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
@@ -124,7 +118,9 @@ fun FiqihHaidDialog(
 
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp).testTag("btn_close_fiqih_guide")
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("btn_close_fiqih_guide")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -134,7 +130,7 @@ fun FiqihHaidDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 // Tabs Navigation
                 PrimaryTabRow(
@@ -150,7 +146,9 @@ fun FiqihHaidDialog(
                                 Text(
                                     text = title,
                                     fontSize = 11.5.sp,
-                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium
+                                    fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         )
@@ -163,7 +161,7 @@ fun FiqihHaidDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .heightIn(min = 240.dp, max = 460.dp)
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -408,7 +406,7 @@ fun PanduanScanSection() {
                 }
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "1. Buka menu 'Input Haid' di layar dashboard.\n2. Klik tombol merah muda 'Scan Kartu Siswa'.\n3. Berikan izin akses kamera jika diminta.\n4. Arahkan kamera HP ke barcode / QR Code pada kartu siswa (berisi nomor NIK / NIS).\n5. Aplikasi secara instan mengisi data nama siswi, kelas, dan asrama tanpa perlu ketik manual.\n6. Pilih keluhan fisik siswi dan tindakan UKS, lalu tekan 'Simpan Pendataan Haid'.",
+                    text = "1. Buka menu 'Input Haid' di layar dashboard.\n2. Klik 'Scan Kartu Siswa' (atau 'Pilih Siswi').\n3. Jika siswi masih di Daftar Suci (< 15 hari), muncul pop-up peringatan: pastikan siswi benar-benar haid dengan tes sampel darah menggunakan tisu sebelum memindahkannya ke Daftar Haid.\n4. Pilih 'Haid Hari ke-...' (1 s.d. 15) dan tambahkan catatan bila perlu, lalu tekan 'Simpan'.\n5. Timeline di Daftar Haid & Daftar Suci akan berjalan otomatis setiap hari.",
                     fontSize = 11.5.sp,
                     color = Color(0xFF0C4A6E)
                 )
@@ -422,14 +420,14 @@ fun PanduanScanSection() {
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Text(
-                    text = "💡 Tips untuk Pengasuh & Wali Asuh:",
+                    text = "💡 Aturan Fleksibel untuk Pengasuh & Wali Asuh:",
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.5.sp,
                     color = Color(0xFFB45309)
                 )
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "• Jika kartu fisik tertinggal atau barcode rusak, Anda dapat mengetik nomor NIK langsung di kolom input manual, atau memilih siswi dari daftar cepat.\n• Cek menu 'Daftar Haid' setiap hari untuk memantau durasi siswi dan memastikan tidak ada yang terlewat melewati batas 15 hari.\n• Saat siswi sudah bersuci, klik tombol 'Mandi Suci' agar status ibadahnya di asrama tercatat suci kembali.",
+                    text = "• Jika haid sudah selesai lebih cepat (misal hari ke-6 atau ke-8), tekan tombol 'Mandi Suci' di Daftar Haid agar langsung pindah ke Daftar Suci.\n• Jika melewati batas maksimal 15 hari haid, sistem memindahkan siswi secara otomatis ke Daftar Suci.\n• Di Daftar Suci, timeline Hari Suci ke-... terus berjalan agar pengasuh langsung tahu bila siswi melapor haid terlalu cepat.",
                     fontSize = 11.sp,
                     color = Color(0xFF92400E)
                 )
@@ -461,7 +459,10 @@ fun FiqihCard(
                     text = title,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
                 )
                 Box(
                     modifier = Modifier

@@ -302,9 +302,13 @@ class ExampleRobolectricTest {
 
     // Petugas memilih berangkatkan ke Puskesmas Wates dengan pendamping Ustadz Ahmad
     vm.markDepartedToFaskes(referralId, "Puskesmas Wates", "Ustadz Ahmad")
-    org.robolectric.shadows.ShadowLooper.idleMainLooper()
-
-    val departedRecord = db.medicalRecordDao().getRecordById(referralId).first()
+    var departedRecord: com.example.data.model.MedicalRecord? = null
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      departedRecord = db.medicalRecordDao().getRecordById(referralId).first()
+      if (departedRecord?.status == "DEPARTED") break
+      kotlinx.coroutines.delay(30)
+    }
     org.junit.Assert.assertNotNull(departedRecord)
     assertEquals("DEPARTED", departedRecord?.status)
     assertEquals("Puskesmas Wates", departedRecord?.faskes)
@@ -429,7 +433,11 @@ class ExampleRobolectricTest {
     ) { msg ->
       createdMessage = msg
     }
-    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (createdMessage != null) break
+      kotlinx.coroutines.delay(30)
+    }
 
     org.junit.Assert.assertNotNull(createdMessage)
     val msgId = createdMessage!!.id
@@ -1120,5 +1128,86 @@ class ExampleRobolectricTest {
 
     pilotReg?.let { db.schoolRegistrationDao().delete(it) }
     Unit
+  }
+
+  @Test
+  fun `verify haid day calculation, flexible manual suci at day 8, and auto-move to suci after day 15`() {
+    val now = System.currentTimeMillis()
+
+    // 1. Input Haid Hari ke-3 -> mundur 2 hari kalender, durasi = 3 hari, masih aktif
+    val startForDay3 = com.example.data.model.HaidDateCalculator.calculateStartDateForHaidDay(3, now)
+    val day3Record = com.example.data.model.HaidRecord(
+      id = 1L,
+      studentId = 101L,
+      studentName = "Siti Aisyah",
+      startDate = startForDay3,
+      status = "HAID"
+    )
+    assertEquals(3, day3Record.durationDays)
+    org.junit.Assert.assertTrue(day3Record.isActive)
+    assertEquals(0, day3Record.suciDayCount)
+
+    // 2. Hari ke-8 haid ternyata sudah suci -> dipindah manual ke Daftar Suci
+    val start8DaysAgo = com.example.data.model.HaidDateCalculator.calculateStartDateForHaidDay(8, now)
+    val manualSuciAtDay8 = com.example.data.model.HaidRecord(
+      id = 2L,
+      studentId = 102L,
+      studentName = "Fatimah Az-Zahra",
+      startDate = start8DaysAgo,
+      endDate = now,
+      status = "SUCI"
+    )
+    assertEquals(8, manualSuciAtDay8.durationDays)
+    org.junit.Assert.assertFalse(manualSuciAtDay8.isActive)
+    assertEquals(1, manualSuciAtDay8.suciDayCount)
+    org.junit.Assert.assertTrue(manualSuciAtDay8.isInMinimumSuciPeriod)
+
+    // 3. Hari ke-15 masih di Daftar Haid dengan peringatan batas maksimal
+    val start15DaysAgo = com.example.data.model.HaidDateCalculator.calculateStartDateForHaidDay(15, now)
+    val day15Record = com.example.data.model.HaidRecord(
+      id = 3L,
+      studentId = 103L,
+      studentName = "Khadijah",
+      startDate = start15DaysAgo,
+      status = "HAID"
+    )
+    assertEquals(15, day15Record.durationDays)
+    org.junit.Assert.assertTrue(day15Record.isActive)
+    org.junit.Assert.assertTrue(day15Record.isIstihadhahWarning)
+    org.junit.Assert.assertFalse(day15Record.isAutoCompletedByLimit)
+
+    // 4. Lebih dari 15 hari (16 hari sejak mulai) -> otomatis berpindah ke Daftar Suci (Suci Hari ke-1)
+    val cal16 = java.util.Calendar.getInstance().apply {
+      timeInMillis = now
+      add(java.util.Calendar.DAY_OF_YEAR, -15) // hari ini adalah hari ke-16
+    }.timeInMillis
+    val autoMovedRecord = com.example.data.model.HaidRecord(
+      id = 4L,
+      studentId = 104L,
+      studentName = "Zainab",
+      startDate = cal16,
+      status = "HAID"
+    )
+    org.junit.Assert.assertTrue(autoMovedRecord.isAutoCompletedByLimit)
+    org.junit.Assert.assertFalse(autoMovedRecord.isActive)
+    assertEquals(15, autoMovedRecord.durationDays)
+    assertEquals(1, autoMovedRecord.suciDayCount)
+    org.junit.Assert.assertTrue(autoMovedRecord.isInMinimumSuciPeriod)
+
+    // 5. Suci sudah memasuki hari ke-15+ -> masa minimal suci terpenuhi (tidak lagi terindikasi < 15 hari)
+    val calSuci15 = java.util.Calendar.getInstance().apply {
+      timeInMillis = now
+      add(java.util.Calendar.DAY_OF_YEAR, -14) // hari ini Suci Hari ke-15
+    }.timeInMillis
+    val suciDay15Record = com.example.data.model.HaidRecord(
+      id = 5L,
+      studentId = 105L,
+      studentName = "Maryam",
+      startDate = calSuci15 - (6L * 86_400_000L),
+      endDate = calSuci15,
+      status = "SUCI"
+    )
+    assertEquals(15, suciDay15Record.suciDayCount)
+    org.junit.Assert.assertFalse(suciDay15Record.isInMinimumSuciPeriod)
   }
 }

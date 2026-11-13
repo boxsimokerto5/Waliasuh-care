@@ -293,7 +293,7 @@ fun QuickMenuTiles(
                             )
 
                             // Ikon 2: Daftar Haid (Sedang Aktif)
-                            val haidBadgeText = if (istihadhahCount > 0) "$istihadhahCount Istihadhah" else "$activeHaidCount Siswi"
+                            val haidBadgeText = if (istihadhahCount > 0) "$istihadhahCount Hari ke-15" else "$activeHaidCount Siswi"
                             val haidBadgeBg = if (istihadhahCount > 0) Color(0xFFFEE2E2) else Color(0xFFFCE7F3)
                             val haidBadgeColor = if (istihadhahCount > 0) Color(0xFFDC2626) else Color(0xFFBE185D)
 
