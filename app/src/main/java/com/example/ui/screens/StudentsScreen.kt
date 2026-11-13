@@ -255,6 +255,7 @@ fun StudentsScreen(
         StudentDetailDialog(
             student = student,
             studentRecords = studentHistory,
+            schoolProfile = schoolProfile,
             onDismiss = { selectedStudentForDetail = null }
         )
     }

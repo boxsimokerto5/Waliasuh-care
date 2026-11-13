@@ -915,6 +915,107 @@ class ExampleRobolectricTest {
     )
     assertEquals(listOf(msgYesterdayUncompleted), bySearch)
   }
+
+  @Test
+  fun `verify SchoolProfile sanitizeShortName un-truncates legacy 15-char truncation`() {
+    val fullName = "SEKOLAH RAKYAT KOTA MALANG"
+    val legacyTruncated = fullName.take(15) // "SEKOLAH RAKYAT "
+    assertEquals(fullName, com.example.data.model.SchoolProfile.sanitizeShortName(fullName, legacyTruncated))
+    assertEquals(fullName, com.example.data.model.SchoolProfile.sanitizeShortName(fullName, "SEKOLAH RAKYAT"))
+    assertEquals(fullName, com.example.data.model.SchoolProfile.sanitizeShortName(fullName, ""))
+    // Distinct custom short name should still be respected
+    assertEquals("SRT Malang", com.example.data.model.SchoolProfile.sanitizeShortName(fullName, "SRT Malang"))
+  }
+
+  @Test
+  fun `verify tenant login preserves full schoolName and updates registration on profile edit`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val schoolCode = "SR-MLG-901"
+    val adminUser = "admin_malang_test"
+    val adminPass = "Malang#2026"
+    val fullSchoolName = "Sekolah Rakyat Terpadu Kota Malang"
+
+    val reg = com.example.data.model.SchoolRegistration(
+      schoolName = fullSchoolName,
+      address = "Jl. Ijen No. 88",
+      city = "Kota Malang",
+      estimatedWaliCount = 12,
+      picName = "Ibu Ratna Sari",
+      picEmail = "ratna@malang.sch.id",
+      picPhone = "081299988877",
+      status = "APPROVED",
+      generatedSchoolCode = schoolCode,
+      generatedAdminUsername = adminUser,
+      generatedAdminPassword = adminPass
+    )
+    db.schoolRegistrationDao().insert(reg)
+
+    // 1. Login as tenant admin
+    val loginRes = vm.executeLogin(adminUser, adminPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessAdmin)
+
+    // Must NOT truncate schoolName to 15 characters and must NOT hardcode Kediri faskes
+    val activeProfile = vm.schoolProfile.value
+    assertEquals(fullSchoolName, activeProfile.schoolName)
+    assertEquals(fullSchoolName, activeProfile.shortName)
+    assertEquals("Kota Malang", activeProfile.city)
+    assertEquals("Ibu Ratna Sari", activeProfile.adminName)
+    org.junit.Assert.assertFalse(activeProfile.secondaryFaskesName.contains("Wates"))
+    org.junit.Assert.assertTrue(activeProfile.additionalFaskesList.isEmpty())
+
+    // 2. Update SchoolProfile -> should sync back to SchoolRegistration
+    val editedProfile = activeProfile.copy(
+      schoolName = "Sekolah Rakyat 2 Kota Malang",
+      shortName = "Sekolah Rakyat 2 Kota Malang",
+      city = "Malang Raya",
+      adminName = "Bapak Hendra",
+      secondaryFaskesName = "Puskesmas Klojen"
+    )
+    vm.updateSchoolProfile(editedProfile)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    var matchedReg: com.example.data.model.SchoolRegistration? = null
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      matchedReg = db.schoolRegistrationDao().getBySchoolCode(schoolCode)
+      if (matchedReg?.schoolName == "Sekolah Rakyat 2 Kota Malang") break
+      kotlinx.coroutines.delay(50)
+    }
+    assertEquals("Sekolah Rakyat 2 Kota Malang", matchedReg?.schoolName)
+    assertEquals("Malang Raya", matchedReg?.city)
+    assertEquals("Bapak Hendra", matchedReg?.picName)
+
+    // 3. WhatsApp access message must reflect tenant's school, faskes, and admin
+    val wali = com.example.data.model.WaliAccount(
+      name = "Ustadzah Nia",
+      username = "ustnia",
+      password = "Asuh#4421",
+      dormitory = "Asrama Putri",
+      schoolId = schoolCode
+    )
+    val waMsg = com.example.util.PasswordGenerator.formatWhatsAppMessage(wali, vm.schoolProfile.value)
+    org.junit.Assert.assertTrue(waMsg.contains("Sekolah Rakyat 2 Kota Malang"))
+    org.junit.Assert.assertTrue(waMsg.contains("Puskesmas Klojen"))
+    org.junit.Assert.assertTrue(waMsg.contains("Bapak Hendra"))
+    org.junit.Assert.assertFalse(waMsg.contains("SRT 1"))
+    org.junit.Assert.assertFalse(waMsg.contains("Eko Wahyudi"))
+
+    // 4. PDF kop surat, sub-header, and signature labels must reflect dynamic SchoolProfile
+    val headerTitle = com.example.util.PdfReportGenerator.buildHeaderTitle(vm.schoolProfile.value)
+    val subHeaderLine = com.example.util.PdfReportGenerator.buildSubHeaderLine(vm.schoolProfile.value)
+    val footerSignTitle = com.example.util.PdfReportGenerator.buildFooterSignatureTitle(vm.schoolProfile.value)
+    assertEquals("SEKOLAH RAKYAT 2 KOTA MALANG", headerTitle)
+    org.junit.Assert.assertTrue(subHeaderLine.contains("Puskesmas Klojen"))
+    org.junit.Assert.assertFalse(subHeaderLine.contains("Wates"))
+    org.junit.Assert.assertTrue(footerSignTitle.contains("Sekolah Rakyat 2 Kota Malang"))
+
+    matchedReg?.let { vm.deleteSchoolRegistration(it) }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    Unit
+  }
 }
 
 

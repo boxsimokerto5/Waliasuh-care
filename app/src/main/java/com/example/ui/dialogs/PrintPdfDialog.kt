@@ -60,10 +60,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -76,6 +78,7 @@ fun PrintPdfDialog(
     student: ChildStudent,
     allRecords: List<MedicalRecord>,
     waliName: String = "Wali Asuh",
+    schoolProfile: SchoolProfile = SchoolProfile(),
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -156,7 +159,10 @@ fun PrintPdfDialog(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(38.dp)
@@ -172,21 +178,25 @@ fun PrintPdfDialog(
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Cetak Rekap Screening PDF",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Dokumen resmi Sekolah Rakyat SRT 1 Kediri",
+                                text = "Dokumen resmi ${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }}",
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp)) {
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
                         Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup")
                     }
                 }
@@ -440,10 +450,16 @@ fun PrintPdfDialog(
                                     else -> PdfReportGenerator.ReportPeriodType.ALL
                                 },
                                 periodLabel = periodLabel,
-                                waliName = waliName
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
                             )
                             if (pdfFile != null) {
-                                PdfReportGenerator.sharePdfFile(context, pdfFile, student.name)
+                                PdfReportGenerator.sharePdfFile(
+                                    context = context,
+                                    pdfFile = pdfFile,
+                                    studentName = student.name,
+                                    schoolName = schoolProfile.schoolName
+                                )
                             } else {
                                 Toast.makeText(context, "Gagal membuat dokumen PDF.", Toast.LENGTH_SHORT).show()
                             }
@@ -469,7 +485,8 @@ fun PrintPdfDialog(
                                     else -> PdfReportGenerator.ReportPeriodType.ALL
                                 },
                                 periodLabel = periodLabel,
-                                waliName = waliName
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
                             )
                             if (pdfFile != null) {
                                 PdfReportGenerator.openPdfFile(context, pdfFile)

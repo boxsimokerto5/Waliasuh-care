@@ -44,12 +44,14 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ShareWhatsAppDialog(
     record: MedicalRecord,
+    schoolProfile: SchoolProfile = SchoolProfile(),
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -64,9 +66,12 @@ fun ShareWhatsAppDialog(
         "✅ *Kontrol:* Tidak perlu kontrol (Tuntas)"
     }
 
+    val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
+    val activeShortTitle = schoolProfile.shortName.trim().ifBlank { activeSchoolTitle }
+
     val reportText = """
 🏥 *LAPORAN PENGOBATAN ANAK ASUH*
-*Sekolah Rakyat SRT 1 Kab. Kediri*
+*$activeSchoolTitle*
 ----------------------------------------
 👦 *Nama:* ${record.studentName}
 🏠 *Asrama:* ${record.studentDormitory}
@@ -78,10 +83,10 @@ fun ShareWhatsAppDialog(
 💉 *Tindakan:* ${record.actionsTaken.ifBlank { "Pemeriksaan fisik" }}
 💊 *Obat:* ${record.prescription.ifBlank { "-" }}
 $controlInfo
-👤 *Pendamping:* ${record.escortName.ifBlank { "Pengasuh SRT 1" }}
+👤 *Pendamping:* ${record.escortName.ifBlank { "Pengasuh $activeShortTitle" }}
 ${if (record.notes.isNotBlank()) "📝 *Catatan:* ${record.notes}" else ""}
 ----------------------------------------
-_SIK Anak Asuh SRT 1 Kediri_
+_SIK Anak Asuh ${activeSchoolTitle}_
 """.trimIndent()
 
     ModalBottomSheet(

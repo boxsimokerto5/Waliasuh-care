@@ -91,20 +91,27 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // School Profile & Tenant Customization
     private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
     private fun parseFaskesList(raw: String?): List<String> {
-        if (raw.isNullOrBlank()) return listOf("Puskesmas Plosoklaten")
+        if (raw == null) return listOf("Puskesmas Plosoklaten")
+        if (raw.isBlank()) return emptyList()
         return raw.split("|||").map { it.trim() }.filter { it.isNotBlank() }
     }
 
+    private val initialSchoolName = schoolPrefs.getString("school_name", "Sekolah Rakyat SRT 1 Kabupaten Kediri")
+        ?: "Sekolah Rakyat SRT 1 Kabupaten Kediri"
+
     private val _schoolProfile = MutableStateFlow(
         SchoolProfile(
-            schoolName = schoolPrefs.getString("school_name", "Sekolah Rakyat SRT 1 Kabupaten Kediri") ?: "Sekolah Rakyat SRT 1 Kabupaten Kediri",
-            shortName = schoolPrefs.getString("short_name", "SRT 1 Kediri") ?: "SRT 1 Kediri",
+            schoolName = initialSchoolName,
+            shortName = SchoolProfile.sanitizeShortName(
+                schoolName = initialSchoolName,
+                savedShortName = schoolPrefs.getString("short_name", "SRT 1 Kediri")
+            ),
             adminName = schoolPrefs.getString("admin_name", "Admin Utama") ?: "Admin Utama",
             city = schoolPrefs.getString("city", "Kabupaten Kediri") ?: "Kabupaten Kediri",
             tenantCode = schoolPrefs.getString("tenant_code", "SRT1-KDR") ?: "SRT1-KDR",
             primaryFaskesName = schoolPrefs.getString("primary_faskes", "UKS Sekolah") ?: "UKS Sekolah",
             secondaryFaskesName = schoolPrefs.getString("secondary_faskes", "Puskesmas Wates") ?: "Puskesmas Wates",
-            additionalFaskesList = parseFaskesList(schoolPrefs.getString("additional_faskes", "Puskesmas Plosoklaten"))
+            additionalFaskesList = parseFaskesList(schoolPrefs.getString("additional_faskes", null))
         )
     )
     val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
@@ -129,18 +136,85 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun updateSchoolProfile(profile: SchoolProfile, onComplete: () -> Unit = {}) {
+    private fun persistSchoolProfile(profile: SchoolProfile, markCustomized: Boolean) {
         _schoolProfile.value = profile
-        schoolPrefs.edit()
-            .putString("school_name", profile.schoolName)
-            .putString("short_name", profile.shortName)
-            .putString("admin_name", profile.adminName)
-            .putString("city", profile.city)
-            .putString("tenant_code", profile.tenantCode)
-            .putString("primary_faskes", profile.primaryFaskesName)
-            .putString("secondary_faskes", profile.secondaryFaskesName)
-            .putString("additional_faskes", profile.additionalFaskesList.joinToString("|||"))
-            .apply()
+        schoolPrefs.edit().apply {
+            putString("school_name", profile.schoolName)
+            putString("short_name", profile.shortName)
+            putString("admin_name", profile.adminName)
+            putString("city", profile.city)
+            putString("tenant_code", profile.tenantCode)
+            putString("primary_faskes", profile.primaryFaskesName)
+            putString("secondary_faskes", profile.secondaryFaskesName)
+            putString("additional_faskes", profile.additionalFaskesList.joinToString("|||"))
+            if (markCustomized) {
+                putString("customized_tenant", profile.tenantCode)
+            }
+        }.apply()
+    }
+
+    private fun buildProfileForSchool(reg: SchoolRegistration): SchoolProfile {
+        val cleanSchoolName = reg.schoolName.trim().ifBlank { "Sekolah Rakyat" }
+        val cleanCity = reg.city.trim().ifBlank { "Indonesia" }
+        val cleanCode = reg.generatedSchoolCode.trim()
+        val customizedTenant = schoolPrefs.getString("customized_tenant", "").orEmpty()
+        val isCustomizedForThisTenant = customizedTenant.equals(cleanCode, ignoreCase = true) &&
+            _schoolProfile.value.tenantCode.equals(cleanCode, ignoreCase = true)
+
+        return if (isCustomizedForThisTenant) {
+            val current = _schoolProfile.value
+            val resolvedFullName = current.schoolName.ifBlank { cleanSchoolName }
+            current.copy(
+                schoolName = resolvedFullName,
+                shortName = SchoolProfile.sanitizeShortName(resolvedFullName, current.shortName),
+                adminName = current.adminName.ifBlank { reg.picName },
+                city = current.city.ifBlank { cleanCity },
+                tenantCode = cleanCode
+            )
+        } else {
+            val isDefaultKediri = cleanCode.equals("SRT1-KDR", ignoreCase = true)
+            SchoolProfile(
+                schoolName = cleanSchoolName,
+                shortName = cleanSchoolName,
+                adminName = reg.picName.trim().ifBlank { "Admin Sekolah" },
+                city = cleanCity,
+                tenantCode = cleanCode,
+                primaryFaskesName = "UKS Sekolah",
+                secondaryFaskesName = if (isDefaultKediri) {
+                    "Puskesmas Wates"
+                } else {
+                    val cityLabel = cleanCity.removePrefix("Kabupaten ").removePrefix("Kab. ").removePrefix("Kota ").trim()
+                    if (cityLabel.isNotBlank()) "Puskesmas $cityLabel" else "Puskesmas Rujukan"
+                },
+                additionalFaskesList = if (isDefaultKediri) listOf("Puskesmas Plosoklaten") else emptyList()
+            )
+        }
+    }
+
+    fun updateSchoolProfile(profile: SchoolProfile, onComplete: () -> Unit = {}) {
+        val cleanProfile = profile.copy(
+            schoolName = profile.schoolName.trim(),
+            shortName = SchoolProfile.sanitizeShortName(profile.schoolName, profile.shortName),
+            adminName = profile.adminName.trim().ifBlank { "Admin Utama" },
+            city = profile.city.trim().ifBlank { "Indonesia" }
+        )
+        persistSchoolProfile(cleanProfile, markCustomized = true)
+        if (cleanProfile.tenantCode.isNotBlank()) {
+            viewModelScope.launch {
+                val existingReg = repository.getSchoolByCode(cleanProfile.tenantCode)
+                if (existingReg != null) {
+                    val updatedReg = existingReg.copy(
+                        schoolName = cleanProfile.schoolName,
+                        city = cleanProfile.city,
+                        picName = cleanProfile.adminName
+                    )
+                    repository.updateSchoolRegistration(updatedReg)
+                    if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+                        SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updatedReg)
+                    }
+                }
+            }
+        }
         onComplete()
     }
 
@@ -957,6 +1031,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
             _currentUserRole.value = UserRole.ADMIN
             _currentUsername.value = "ekowahyudiadmin"
+            if (!_schoolProfile.value.tenantCode.equals("SRT1-KDR", ignoreCase = true)) {
+                persistSchoolProfile(SchoolProfile(), markCustomized = false)
+            }
             if (rememberMe) {
                 authPrefs.edit()
                     .putString("saved_role", "ADMIN")
@@ -1012,15 +1089,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
             _currentUserRole.value = UserRole.ADMIN
             _currentUsername.value = matchedSchool.generatedAdminUsername
-            updateSchoolProfile(
-                SchoolProfile(
-                    schoolName = matchedSchool.schoolName,
-                    shortName = matchedSchool.schoolName.take(15),
-                    adminName = matchedSchool.picName,
-                    city = matchedSchool.city,
-                    tenantCode = matchedSchool.generatedSchoolCode
-                )
-            )
+            persistSchoolProfile(buildProfileForSchool(matchedSchool), markCustomized = false)
             if (rememberMe) {
                 authPrefs.edit()
                     .putString("saved_role", "ADMIN")
@@ -1061,15 +1130,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh
             val activeSchoolCode = when {
                 matchedSchoolWali != null -> {
-                    updateSchoolProfile(
-                        SchoolProfile(
-                            schoolName = matchedSchoolWali.schoolName,
-                            shortName = matchedSchoolWali.schoolName.take(15),
-                            adminName = matchedSchoolWali.picName,
-                            city = matchedSchoolWali.city,
-                            tenantCode = matchedSchoolWali.generatedSchoolCode
-                        )
-                    )
+                    persistSchoolProfile(buildProfileForSchool(matchedSchoolWali), markCustomized = false)
                     matchedSchoolWali.generatedSchoolCode
                 }
                 account.schoolId.isNotBlank() -> {

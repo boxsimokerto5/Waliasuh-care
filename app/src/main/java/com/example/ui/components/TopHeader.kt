@@ -32,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -41,6 +42,7 @@ fun TopHeader(
     controlCount: Int,
     isDarkTheme: Boolean,
     onToggleTheme: () -> Unit,
+    schoolName: String = "Sekolah Rakyat",
     modifier: Modifier = Modifier
 ) {
     Surface(
@@ -79,14 +81,18 @@ fun TopHeader(
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
-                            lineHeight = 18.sp
+                            lineHeight = 18.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "SRT 1 Kabupaten Kediri",
+                            text = schoolName.ifBlank { "Sekolah Rakyat" },
                             color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
-                            lineHeight = 14.sp
+                            lineHeight = 14.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }

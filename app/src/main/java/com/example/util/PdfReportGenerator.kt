@@ -12,6 +12,7 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -36,7 +37,8 @@ object PdfReportGenerator {
         records: List<MedicalRecord>,
         periodType: ReportPeriodType,
         periodLabel: String,
-        waliName: String = "Wali Asuh"
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
             val document = PdfDocument()
@@ -52,8 +54,8 @@ object PdfReportGenerator {
 
             var currentY = 35f
 
-            // 1. Header / Kop Surat Resmi Sekolah Rakyat SRT 1
-            currentY = drawHeader(canvas, paint, pageWidth, currentY)
+            // 1. Header / Kop Surat Resmi Tenant Sekolah
+            currentY = drawHeader(canvas, paint, pageWidth, currentY, schoolProfile)
 
             // 2. Judul Dokumen & Periode
             currentY = drawTitleAndPeriod(canvas, paint, pageWidth, currentY, periodLabel)
@@ -111,7 +113,7 @@ object PdfReportGenerator {
                 currentY = 40f
             }
 
-            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName)
+            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
 
             document.finishPage(page)
 
@@ -135,15 +137,43 @@ object PdfReportGenerator {
         }
     }
 
-    private fun drawHeader(canvas: Canvas, paint: Paint, width: Int, startY: Float): Float {
+    internal fun buildHeaderTitle(schoolProfile: SchoolProfile): String {
+        return schoolProfile.schoolName.trim()
+            .ifBlank { schoolProfile.shortName.trim().ifBlank { "WALI ASUH CARE" } }
+            .uppercase(Locale("id", "ID"))
+    }
+
+    internal fun buildSubHeaderLine(schoolProfile: SchoolProfile): String {
+        val referralFaskes = schoolProfile.getAllFaskes().drop(1)
+        return when {
+            referralFaskes.isNotEmpty() -> "Kerjasama Fasilitas Kesehatan: ${referralFaskes.joinToString(" & ")}"
+            schoolProfile.city.isNotBlank() -> "Wilayah Operasional: ${schoolProfile.city}"
+            else -> "Layanan Kesehatan Anak Asuh & Pesantren / Asrama"
+        }
+    }
+
+    internal fun buildFooterSignatureTitle(schoolProfile: SchoolProfile): String {
+        val schoolSignLabel = schoolProfile.shortName.trim().ifBlank { schoolProfile.schoolName.trim() }
+        val signTitle = if (schoolSignLabel.isNotBlank()) "Wali Asuh Kesehatan $schoolSignLabel," else "Wali Asuh Kesehatan,"
+        return signTitle.take(60)
+    }
+
+    private fun drawHeader(
+        canvas: Canvas,
+        paint: Paint,
+        width: Int,
+        startY: Float,
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): Float {
         var y = startY
+        val headerSchoolTitle = buildHeaderTitle(schoolProfile)
 
         // Header text center
         paint.textAlign = Paint.Align.CENTER
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textSize = 13f
+        paint.textSize = if (headerSchoolTitle.length > 42) 11f else 13f
         paint.color = Color.rgb(15, 118, 110) // Teal color
-        canvas.drawText("SEKOLAH RAKYAT SRT 1 KABUPATEN KEDIRI", width / 2f, y, paint)
+        canvas.drawText(headerSchoolTitle, width / 2f, y, paint)
 
         y += 13f
         paint.textSize = 10.5f
@@ -154,7 +184,7 @@ object PdfReportGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.textSize = 8.5f
         paint.color = Color.rgb(100, 116, 139)
-        canvas.drawText("Kerjasama Fasilitas Kesehatan: Puskesmas Wates & Puskesmas Plosoklaten", width / 2f, y, paint)
+        canvas.drawText(buildSubHeaderLine(schoolProfile), width / 2f, y, paint)
 
         y += 10f
         // Garis Pembatas Kop Surat Ganda
@@ -370,24 +400,29 @@ object PdfReportGenerator {
         width: Int,
         height: Int,
         startY: Float,
-        waliName: String
+        waliName: String,
+        schoolProfile: SchoolProfile = SchoolProfile()
     ) {
         val y = (startY + 15f).coerceAtMost(height - 80f)
         val todayDate = SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(Date())
+        val cityLabel = schoolProfile.city.trim().ifBlank { "Indonesia" }
 
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.textSize = 8.5f
         paint.color = Color.rgb(71, 85, 105)
 
         // Kiri: Petugas Pengasuh
-        canvas.drawText("Kediri, $todayDate", 50f, y, paint)
+        canvas.drawText("$cityLabel, $todayDate", 50f, y, paint)
         canvas.drawText("Petugas / Pengasuh Asrama,", 50f, y + 12f, paint)
         canvas.drawText("( ................................................ )", 50f, y + 52f, paint)
 
         // Kanan: Wali Asuh Kesehatan
+        val footerSignTitle = buildFooterSignatureTitle(schoolProfile)
         paint.textAlign = Paint.Align.RIGHT
         canvas.drawText("Mengetahui,", width - 50f, y, paint)
-        canvas.drawText("Wali Asuh Kesehatan SRT 1,", width - 50f, y + 12f, paint)
+        paint.textSize = if (footerSignTitle.length > 44) 7.5f else 8.5f
+        canvas.drawText(footerSignTitle, width - 50f, y + 12f, paint)
+        paint.textSize = 8.5f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.color = Color.rgb(15, 118, 110)
         canvas.drawText("( $waliName )", width - 50f, y + 52f, paint)
@@ -402,7 +437,8 @@ object PdfReportGenerator {
         records: List<MedicalRecord>,
         totalStudentsCount: Int,
         monthYearLabel: String,
-        waliName: String = "Wali Asuh"
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
             val document = PdfDocument()
@@ -418,7 +454,7 @@ object PdfReportGenerator {
             var currentY = 35f
 
             // 1. Header / Kop Surat
-            currentY = drawHeader(canvas, paint, pageWidth, currentY)
+            currentY = drawHeader(canvas, paint, pageWidth, currentY, schoolProfile)
 
             // 2. Judul Dokumen
             paint.textAlign = Paint.Align.CENTER
@@ -455,8 +491,17 @@ object PdfReportGenerator {
             val femaleCount = records.count { it.studentDormitory.contains("Putri", ignoreCase = true) }
             val tuntasCount = records.count { !it.needsControl }
             val kontrolCount = records.count { it.needsControl }
-            val watesCount = records.count { it.faskes.contains("Wates", ignoreCase = true) }
-            val klatenCount = records.count { it.faskes.contains("Plosoklaten", ignoreCase = true) || it.faskes.contains("Klaten", ignoreCase = true) }
+            val faskesList = schoolProfile.getAllFaskes()
+            val faskesSummaryText = if (faskesList.isNotEmpty()) {
+                val topTwo = faskesList.take(2).joinToString(" | ") { fName ->
+                    val cnt = records.count { it.faskes.equals(fName, ignoreCase = true) || it.faskes.contains(fName, ignoreCase = true) }
+                    val shortF = fName.replace("Puskesmas ", "Pusk. ")
+                    "$cnt $shortF"
+                }
+                "• Faskes: $topTwo"
+            } else {
+                "• Total Rujukan: ${records.size} Kali"
+            }
             val morbiditasPct = if (totalStudentsCount > 0) (uniqueSick.toFloat() / totalStudentsCount * 100).toInt() else 0
 
             var statY = currentY + 14f
@@ -476,7 +521,7 @@ object PdfReportGenerator {
             statY += 12f
             canvas.drawText("• Distribusi Asrama: $maleCount Putra | $femaleCount Putri", boxLeft + 10f, statY, paint)
             canvas.drawText("• Status: $tuntasCount Tuntas | $kontrolCount Perlu Kontrol", boxLeft + 175f, statY, paint)
-            canvas.drawText("• Rujukan Faskes: $watesCount Wates | $klatenCount Plosoklaten", boxLeft + 350f, statY, paint)
+            canvas.drawText(faskesSummaryText, boxLeft + 350f, statY, paint)
 
             currentY += boxHeight + 14f
 
@@ -525,7 +570,7 @@ object PdfReportGenerator {
                 currentY = 40f
             }
 
-            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName)
+            drawFooterSignatures(canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
             document.finishPage(page)
 
             val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
@@ -573,19 +618,25 @@ object PdfReportGenerator {
     /**
      * Membagikan file dokumen PDF langsung via WhatsApp, Google Drive, Email, dll.
      */
-    fun sharePdfFile(context: Context, pdfFile: File, studentName: String) {
+    fun sharePdfFile(
+        context: Context,
+        pdfFile: File,
+        studentName: String,
+        schoolName: String = "Wali Asuh Care"
+    ) {
         try {
             val uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.provider",
                 pdfFile
             )
+            val cleanSchool = schoolName.ifBlank { "Wali Asuh Care" }
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
                 putExtra(Intent.EXTRA_SUBJECT, "Rekap Screening Kesehatan - $studentName")
-                putExtra(Intent.EXTRA_TEXT, "Dokumen resmi Rekapitulasi Screening Kesehatan Anak Asuh $studentName (Sekolah Rakyat SRT 1 Kediri).")
+                putExtra(Intent.EXTRA_TEXT, "Dokumen resmi Rekapitulasi Screening Kesehatan Anak Asuh $studentName ($cleanSchool).")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 

@@ -37,6 +37,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.WaliPrimary
@@ -74,7 +75,10 @@ fun WaliTopBar(
                 // Logo & Brand Name: "Wali Asuh Care"
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.testTag("brand_logo_title")
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(end = 8.dp)
+                        .testTag("brand_logo_title")
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.logo_sr_care),
@@ -84,18 +88,23 @@ fun WaliTopBar(
                             .clip(CircleShape)
                     )
                     Spacer(modifier = Modifier.width(9.dp))
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = "Wali Asuh Care",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = WaliPrimary,
-                            letterSpacing = 0.1.sp
+                            letterSpacing = 0.1.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = schoolName.ifBlank { "SRT 1 Kabupaten Kediri" },
+                            text = schoolName.ifBlank { "Sekolah Rakyat" },
                             fontSize = 10.5.sp,
                             fontWeight = FontWeight.Medium,
+                            lineHeight = 13.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

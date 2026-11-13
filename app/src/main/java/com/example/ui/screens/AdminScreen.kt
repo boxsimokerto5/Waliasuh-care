@@ -80,6 +80,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -257,9 +258,11 @@ fun AdminScreen(
                             )
                         }
                         Text(
-                            text = "${schoolProfile.shortName} • ${schoolProfile.city}",
+                            text = "${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }} • ${schoolProfile.city}",
                             fontSize = 11.sp,
-                            color = Color.White.copy(alpha = 0.85f)
+                            color = Color.White.copy(alpha = 0.88f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 },
@@ -846,6 +849,7 @@ fun AdminScreen(
                     items(filteredAccounts, key = { it.id }) { account ->
                         WaliAccountCardItem(
                             account = account,
+                            schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             onCopy = { text, label ->
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 val clip = ClipData.newPlainText(label, text)
@@ -853,7 +857,7 @@ fun AdminScreen(
                                 Toast.makeText(context, "$label berhasil disalin!", Toast.LENGTH_SHORT).show()
                             },
                             onShareWhatsApp = {
-                                val message = PasswordGenerator.formatWhatsAppMessage(account)
+                                val message = PasswordGenerator.formatWhatsAppMessage(account, schoolProfile)
                                 val intent = Intent(Intent.ACTION_VIEW).apply {
                                     val url = if (account.phone.isNotBlank()) {
                                         val cleanPhone = if (account.phone.startsWith("0")) "62" + account.phone.substring(1) else account.phone
@@ -892,6 +896,7 @@ fun AdminScreen(
 
     if (showAddDialog) {
         AddWaliAccountDialog(
+            schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
             onDismiss = { showAddDialog = false },
             onConfirm = { name, username, dormitory, phone, password ->
                 viewModel.addWaliAccount(name, username, dormitory, phone, password) {
@@ -951,6 +956,7 @@ fun AdminScreen(
         StudentDetailDialog(
             student = student,
             studentRecords = allRecords.filter { it.studentId == student.id },
+            schoolProfile = schoolProfile,
             onEditStudent = { toEdit ->
                 selectedDetailStudent = null
                 studentToEdit = toEdit
@@ -1181,6 +1187,7 @@ fun AdminScreen(
 @Composable
 fun WaliAccountCardItem(
     account: WaliAccount,
+    schoolName: String = "Sekolah Anda",
     onCopy: (text: String, label: String) -> Unit,
     onShareWhatsApp: () -> Unit,
     onEdit: () -> Unit,
@@ -1223,7 +1230,7 @@ fun WaliAccountCardItem(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(
                             text = "KARTU AKSES WALI ASUH",
                             fontSize = 11.5.sp,
@@ -1232,9 +1239,11 @@ fun WaliAccountCardItem(
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = "Sekolah Rakyat SRT 1 Kab. Kediri",
+                            text = schoolName.ifBlank { "Sekolah Anda" },
                             fontSize = 9.5.sp,
-                            color = Color.White.copy(alpha = 0.9f)
+                            color = Color.White.copy(alpha = 0.9f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 

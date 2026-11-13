@@ -342,7 +342,8 @@ fun DashboardScreen(
                             activeHaidCount = activeHaidRecords.size,
                             suciCount = suciRecords.size,
                             istihadhahCount = activeHaidRecords.count { it.isIstihadhahWarning },
-                            schoolShortName = schoolProfile.shortName
+                            schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+                            faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
                         )
                     }
                 }

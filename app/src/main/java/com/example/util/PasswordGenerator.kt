@@ -1,5 +1,6 @@
 package com.example.util
 
+import com.example.data.model.SchoolProfile
 import com.example.data.model.WaliAccount
 import kotlin.random.Random
 
@@ -21,13 +22,24 @@ object PasswordGenerator {
     /**
      * Format pesan WhatsApp resmi untuk membagikan akun login kepada Wali Asuh.
      */
-    fun formatWhatsAppMessage(account: WaliAccount): String {
+    fun formatWhatsAppMessage(
+        account: WaliAccount,
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): String {
         val effectiveUser = account.username.ifBlank {
             account.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
         }
+        val schoolDisplay = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }.ifBlank { "Sekolah" }
+        val referrals = schoolProfile.getAllFaskes().drop(1)
+        val faskesText = if (referrals.isNotEmpty()) {
+            referrals.joinToString(" / ")
+        } else {
+            schoolProfile.primaryFaskesName.ifBlank { "UKS Sekolah" }
+        }
+        val adminDisplay = schoolProfile.adminName.ifBlank { "Administrator Sekolah" }
         return """
             *KARTU AKSES LOGIN APLIKASI WALI ASUH CARE*
-            _Sekolah Rakyat SRT 1 Kabupaten Kediri_
+            _${schoolDisplay}_
             
             Yth. Bapak/Ibu *${account.name}*,
             Berikut adalah akun akses resmi untuk login ke aplikasi Wali Asuh Care:
@@ -36,9 +48,9 @@ object PasswordGenerator {
             🔑 *Password:* ${account.password}
             🏢 *Tugas Asrama:* ${account.dormitory}
             
-            Gunakan akun di atas untuk memantau kesehatan anak asuh dan rujukan ke Puskesmas Wates / Puskesmas Plosoklaten.
+            Gunakan akun di atas untuk memantau kesehatan anak asuh dan rujukan ke $faskesText.
             
-            _Pesan ini dikirim otomatis oleh Administrator Utama (Eko Wahyudi)._
+            _Pesan ini dikirim oleh Administrator ($adminDisplay)._
         """.trimIndent()
     }
 }

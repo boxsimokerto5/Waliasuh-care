@@ -228,7 +228,7 @@ fun WaliAsuhCareApp(
                     currentScreen = WaliNavScreen.PROFIL
                 },
                 isDoctorIcon = currentScreen == WaliNavScreen.TINDAKAN,
-                schoolName = schoolProfile.shortName
+                schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
             )
         },
         bottomBar = {
@@ -541,8 +541,11 @@ fun WaliAsuhCareApp(
                         }
                     }
 
+                    val referralTargetText = schoolProfile.getAllFaskes().drop(1)
+                        .joinToString(" / ")
+                        .ifBlank { schoolProfile.primaryFaskesName.ifBlank { "fasilitas kesehatan rujukan" } }
                     Text(
-                        text = "Pastikan anak asuh telah sarapan dan membawa identitas/BPJS sebelum diberangkatkan ke Puskesmas Wates / Plosoklaten.",
+                        text = "Pastikan anak asuh telah sarapan dan membawa identitas/BPJS sebelum diberangkatkan ke $referralTargetText.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

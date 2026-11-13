@@ -485,6 +485,7 @@ fun ProfileScreen(
             records = records,
             students = students,
             waliName = waliName,
+            schoolProfile = schoolProfile,
             onDismiss = { showMonthlyReportDialog = false }
         )
     }

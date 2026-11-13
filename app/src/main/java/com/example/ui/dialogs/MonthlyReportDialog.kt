@@ -66,10 +66,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
@@ -81,6 +83,7 @@ fun MonthlyReportDialog(
     records: List<MedicalRecord>,
     students: List<ChildStudent>,
     waliName: String,
+    schoolProfile: SchoolProfile = SchoolProfile(),
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -116,9 +119,19 @@ fun MonthlyReportDialog(
     val tuntasCount = monthRecords.count { !it.needsControl }
     val kontrolCount = monthRecords.count { it.needsControl }
 
-    val watesCount = monthRecords.count { it.faskes.contains("Wates", ignoreCase = true) }
-    val klatenCount = monthRecords.count { it.faskes.contains("Plosoklaten", ignoreCase = true) || it.faskes.contains("Klaten", ignoreCase = true) }
-    val otherFaskesCount = totalVisits - watesCount - klatenCount
+    val configuredFaskes = remember(schoolProfile) { schoolProfile.getAllFaskes() }
+    val faskesCounts = remember(monthRecords, configuredFaskes) {
+        configuredFaskes.map { faskesName ->
+            faskesName to monthRecords.count {
+                it.faskes.equals(faskesName, ignoreCase = true) || it.faskes.contains(faskesName, ignoreCase = true)
+            }
+        }
+    }
+    val matchedOtherCount = remember(monthRecords, configuredFaskes) {
+        monthRecords.count { rec ->
+            configuredFaskes.none { f -> rec.faskes.equals(f, ignoreCase = true) || rec.faskes.contains(f, ignoreCase = true) }
+        }
+    }
 
     val shiftPagiCount = monthRecords.count { it.escortName.contains("Pagi", ignoreCase = true) }
     val shiftSoreCount = monthRecords.count { it.escortName.contains("Sore", ignoreCase = true) }
@@ -138,11 +151,13 @@ fun MonthlyReportDialog(
         countMap.entries.sortedByDescending { it.value }.take(5)
     }
 
+    val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
+
     // Text for WhatsApp Share
-    val whatsappReportText = remember(monthRecords, periodLabel, waliName, totalStudents) {
+    val whatsappReportText = remember(monthRecords, periodLabel, waliName, totalStudents, schoolProfile) {
         buildString {
             appendLine("📋 *LAPORAN REKAPITULASI KESEHATAN BULANAN*")
-            appendLine("*Sekolah Rakyat SRT 1 Kabupaten Kediri*")
+            appendLine("*$activeSchoolTitle*")
             appendLine("*Periode:* $periodLabel")
             appendLine("━━━━━━━━━━━━━━━━━━━━━")
             appendLine("📊 *RINGKASAN STATISTIK:*")
@@ -152,10 +167,11 @@ fun MonthlyReportDialog(
             appendLine("• Status: Sembuh/Tuntas: $tuntasCount | Perlu Kontrol: $kontrolCount")
             appendLine("")
             appendLine("🏥 *FASKES RUJUKAN:*")
-            appendLine("• Puskesmas Wates: $watesCount rujukan")
-            appendLine("• Puskesmas Plosoklaten: $klatenCount rujukan")
-            if (otherFaskesCount > 0) {
-                appendLine("• Faskes Lainnya: $otherFaskesCount rujukan")
+            faskesCounts.forEach { (name, count) ->
+                appendLine("• $name: $count kunjungan/rujukan")
+            }
+            if (matchedOtherCount > 0) {
+                appendLine("• Faskes Lainnya: $matchedOtherCount rujukan")
             }
             appendLine("")
             appendLine("🚗 *PETUGAS PENGANTAR (SHIFT):*")
@@ -213,6 +229,7 @@ fun MonthlyReportDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
@@ -230,23 +247,27 @@ fun MonthlyReportDialog(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = "Laporan Bulanan Kesehatan",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Sekolah Rakyat SRT 1 Kabupaten Kediri",
+                                text = activeSchoolTitle,
                                 fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
                     IconButton(
                         onClick = onDismiss,
-                        modifier = Modifier.size(32.dp).testTag("btn_close_monthly_report")
+                        modifier = Modifier.size(40.dp).testTag("btn_close_monthly_report")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -461,8 +482,13 @@ fun MonthlyReportDialog(
                                             fontSize = 12.5.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
+                                        val faskesText = buildString {
+                                            append("• Faskes: ")
+                                            append(faskesCounts.joinToString(" • ") { (name, cnt) -> "$name ($cnt)" })
+                                            if (matchedOtherCount > 0) append(" • Lainnya ($matchedOtherCount)")
+                                        }
                                         Text(
-                                            text = "• Faskes: Pusk. Wates ($watesCount) • Pusk. Plosoklaten ($klatenCount)${if (otherFaskesCount > 0) " • Lainnya ($otherFaskesCount)" else ""}",
+                                            text = faskesText,
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -632,7 +658,8 @@ fun MonthlyReportDialog(
                                     records = monthRecords,
                                     totalStudentsCount = totalStudents,
                                     monthYearLabel = periodLabel,
-                                    waliName = waliName
+                                    waliName = waliName,
+                                    schoolProfile = schoolProfile
                                 )
                                 if (pdfFile != null) {
                                     PdfReportGenerator.openPdfFile(context, pdfFile)

@@ -54,6 +54,7 @@ import com.example.util.PasswordGenerator
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddWaliAccountDialog(
+    schoolName: String = "Sekolah Anda",
     onDismiss: () -> Unit,
     onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String) -> Unit
 ) {
@@ -106,7 +107,7 @@ fun AddWaliAccountDialog(
                 }
 
                 Text(
-                    text = "Daftarkan akun login wali asuh untuk Sekolah Rakyat SRT 1 Kediri. Username & password akan ditampilkan di Kartu Akses untuk login ke aplikasi.",
+                    text = "Daftarkan akun login wali asuh untuk $schoolName. Username & password akan ditampilkan di Kartu Akses untuk login ke aplikasi.",
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

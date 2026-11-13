@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
@@ -70,6 +71,7 @@ fun QuickMenuTiles(
     suciCount: Int = 0,
     istihadhahCount: Int = 0,
     schoolShortName: String = "",
+    faskesBannerSubtitle: String = "",
     modifier: Modifier = Modifier
 ) {
     val pagerState = rememberPagerState(pageCount = { 3 })
@@ -419,6 +421,7 @@ fun QuickMenuTiles(
 
         // Baris 3: Puskesmas Rujukan (Banner Horisontal Cantik)
         PuskesmasWideCard(
+            faskesSubtitle = faskesBannerSubtitle,
             onClick = onShowPuskesmasInfo,
             modifier = Modifier.fillMaxWidth()
         )
@@ -495,7 +498,8 @@ fun CartoonMenuCard(
                     fontSize = 10.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
-                    maxLines = 1
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -521,6 +525,7 @@ fun CartoonMenuCard(
 
 @Composable
 fun PuskesmasWideCard(
+    faskesSubtitle: String = "",
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -591,9 +596,11 @@ fun PuskesmasWideCard(
                     }
                 }
                 Text(
-                    text = "Puskesmas Wates • Puskesmas Plosoklaten Kab. Kediri",
+                    text = faskesSubtitle.ifBlank { "Lihat daftar fasilitas kesehatan & SOP darurat" },
                     fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }

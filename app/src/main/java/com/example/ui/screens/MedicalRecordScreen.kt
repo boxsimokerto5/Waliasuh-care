@@ -562,6 +562,7 @@ fun MedicalRecordScreen(
             student = student,
             allRecords = allRecords,
             waliName = waliName,
+            schoolProfile = schoolProfile,
             onDismiss = { studentForPdfPrint = null }
         )
     }
@@ -595,6 +596,7 @@ fun MedicalRecordScreen(
     recordToShare?.let { record ->
         ShareWhatsAppDialog(
             record = record,
+            schoolProfile = schoolProfile,
             onDismiss = { recordToShare = null }
         )
     }

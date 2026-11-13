@@ -244,6 +244,7 @@ fun CompletedHistoryScreen(
     recordToShare?.let { record ->
         ShareWhatsAppDialog(
             record = record,
+            schoolProfile = schoolProfile,
             onDismiss = { recordToShare = null }
         )
     }

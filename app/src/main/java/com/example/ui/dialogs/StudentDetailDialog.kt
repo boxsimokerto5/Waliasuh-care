@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
@@ -76,6 +77,7 @@ import java.util.Calendar
 fun StudentDetailDialog(
     student: ChildStudent,
     studentRecords: List<MedicalRecord>,
+    schoolProfile: SchoolProfile = SchoolProfile(),
     onEditStudent: ((ChildStudent) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -580,6 +582,7 @@ fun StudentDetailDialog(
         PrintPdfDialog(
             student = student,
             allRecords = studentRecords,
+            schoolProfile = schoolProfile,
             onDismiss = { showPrintPdfDialog = false }
         )
     }

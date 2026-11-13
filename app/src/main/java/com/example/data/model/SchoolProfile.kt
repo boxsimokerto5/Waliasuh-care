@@ -34,4 +34,26 @@ data class SchoolProfile(
         }
         return list
     }
+
+    fun getReferralFaskesSummary(): String {
+        val referrals = getAllFaskes().drop(1)
+        return when {
+            referrals.isNotEmpty() && city.isNotBlank() -> "${referrals.joinToString(" • ")} ($city)"
+            referrals.isNotEmpty() -> referrals.joinToString(" • ")
+            city.isNotBlank() -> "${primaryFaskesName.ifBlank { "UKS Sekolah" }} • $city"
+            else -> primaryFaskesName.ifBlank { "UKS Sekolah" }
+        }
+    }
+
+    companion object {
+        fun sanitizeShortName(schoolName: String, savedShortName: String?): String {
+            val cleanFull = schoolName.trim().ifBlank { "Sekolah Rakyat SRT 1 Kabupaten Kediri" }
+            val cleanShort = savedShortName?.trim().orEmpty()
+            if (cleanShort.isBlank()) return cleanFull
+            if (cleanFull.length > 15 && cleanShort.equals(cleanFull.take(15).trim(), ignoreCase = true)) {
+                return cleanFull
+            }
+            return cleanShort
+        }
+    }
 }
