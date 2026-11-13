@@ -109,10 +109,16 @@ create table if not exists public.medical_records (
   is_control_completed boolean default false,
   escort_name text default '',
   notes text default '',
+  is_inpatient boolean default false,
+  inpatient_room text default '',
+  discharge_date bigint,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 alter table public.medical_records add column if not exists school_id text not null default 'SRT1-KDR';
+alter table public.medical_records add column if not exists is_inpatient boolean default false;
+alter table public.medical_records add column if not exists inpatient_room text default '';
+alter table public.medical_records add column if not exists discharge_date bigint;
 create index if not exists idx_medical_records_school_id on public.medical_records (school_id);
 
 -- 3. TABEL PENDATAAN HAID & SUCI SISWI (haid_records)

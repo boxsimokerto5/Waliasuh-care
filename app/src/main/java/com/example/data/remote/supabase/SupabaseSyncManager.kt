@@ -120,6 +120,21 @@ object SupabaseSyncManager {
             }
         }
 
+    private suspend fun upsertMedicalRecordsWithFallback(
+        service: SupabaseService,
+        records: List<MedicalRecord>,
+        schoolId: String
+    ) {
+        val dtos = records.map { SupabaseMedicalRecordDto.fromDomain(it, schoolId) }
+        val resp = service.upsertMedicalRecords(dtos)
+        if (!resp.isSuccessful && resp.code() == 400) {
+            Log.w(TAG, "Kolom rawat inap belum ada di Supabase, fallback ke upsert legacy.")
+            service.upsertMedicalRecordsLegacy(records.map { SupabaseMedicalRecordLegacyDto.fromDomain(it, schoolId) })
+        } else if (!resp.isSuccessful) {
+            Log.w(TAG, "Gagal push records ke Supabase: ${resp.code()}")
+        }
+    }
+
     // --- Medical Records ---
     suspend fun syncMedicalRecords(
         context: Context,
@@ -133,12 +148,8 @@ object SupabaseSyncManager {
 
         try {
             if (localRecords.isNotEmpty()) {
-                val localDtos = localRecords.map { SupabaseMedicalRecordDto.fromDomain(it, schoolId) }
-                localDtos.chunked(50).forEach { batch ->
-                    val response = service.upsertMedicalRecords(batch)
-                    if (!response.isSuccessful) {
-                        Log.w(TAG, "Gagal push records ke Supabase: ${response.code()}")
-                    }
+                localRecords.chunked(50).forEach { batch ->
+                    upsertMedicalRecordsWithFallback(service, batch, schoolId)
                 }
             }
 
@@ -169,8 +180,7 @@ object SupabaseSyncManager {
         if (!SupabaseConfig.isConfigured(context)) return@withContext
         try {
             val service = SupabaseClient.getService(context) ?: return@withContext
-            val dto = SupabaseMedicalRecordDto.fromDomain(record, schoolId)
-            service.upsertMedicalRecords(listOf(dto))
+            upsertMedicalRecordsWithFallback(service, listOf(record), schoolId)
         } catch (e: Exception) {
             Log.e(TAG, "Silent error uploadSingleRecord ke Supabase", e)
         }
@@ -409,7 +419,7 @@ object SupabaseSyncManager {
                 val localRecords = repository.getAllRecordsList().filter { it.studentId in validStudentIds }
                 if (localRecords.isNotEmpty()) {
                     localRecords.chunked(50).forEach { batch ->
-                        service.upsertMedicalRecords(batch.map { SupabaseMedicalRecordDto.fromDomain(it, cleanSchoolId) })
+                        upsertMedicalRecordsWithFallback(service, batch, cleanSchoolId)
                     }
                 }
                 val remoteRecResp = service.getMedicalRecordsBySchool("eq.$cleanSchoolId")

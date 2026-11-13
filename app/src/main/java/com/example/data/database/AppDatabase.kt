@@ -25,7 +25,7 @@ import com.example.data.model.HaidRecord
 
 @Database(
     entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class, ShiftMessage::class, HaidRecord::class],
-    version = 11,
+    version = 12,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -82,6 +82,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_11_12 = object : androidx.room.migration.Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE medical_records ADD COLUMN isInpatient INTEGER NOT NULL DEFAULT 0")
+                } catch (e: Exception) {
+                    // Column may already exist
+                }
+                try {
+                    db.execSQL("ALTER TABLE medical_records ADD COLUMN inpatientRoom TEXT NOT NULL DEFAULT ''")
+                } catch (e: Exception) {
+                    // Column may already exist
+                }
+                try {
+                    db.execSQL("ALTER TABLE medical_records ADD COLUMN dischargeDate INTEGER")
+                } catch (e: Exception) {
+                    // Column may already exist
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -90,7 +110,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "waliasuh_care.db"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_11_12)
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
                     .build()

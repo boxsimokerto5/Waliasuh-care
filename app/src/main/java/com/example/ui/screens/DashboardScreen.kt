@@ -1,10 +1,15 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.example.ui.screens
 
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -77,7 +82,11 @@ import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.InputHaidDialog
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.LocalHospital
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import com.example.ui.dialogs.PrintPdfDialog
+import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.ui.dialogs.ShiftHistorySheet
 import com.example.ui.dialogs.ShiftMessagesSheet
 import com.example.ui.theme.StatusDeparted
@@ -91,6 +100,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.ui.text.style.TextOverflow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -111,6 +121,7 @@ fun DashboardScreen(
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val activeHaidRecords by viewModel.activeHaidRecords.collectAsStateWithLifecycle()
     val suciRecords by viewModel.suciRecords.collectAsStateWithLifecycle()
+    val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
@@ -123,6 +134,10 @@ fun DashboardScreen(
     var showFiqihHaidDialog by remember { mutableStateOf(false) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
+    var selectedInpatientRecordForDetail by remember { mutableStateOf<MedicalRecord?>(null) }
+    var inpatientPickerForFaskes by remember { mutableStateOf<Pair<String, List<MedicalRecord>>?>(null) }
+    var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
+    var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
 
     val todayDateFormatted = remember {
@@ -134,6 +149,11 @@ fun DashboardScreen(
     }
     val upcomingPlans = remember(activePlans) {
         activePlans.filter { !DateUtils.isToday(it.planDate) }
+    }
+    val inpatientRecords = remember(allRecords) {
+        allRecords
+            .filter { it.isInpatient && it.status != "CANCELLED" }
+            .sortedByDescending { it.treatmentDate ?: it.planDate }
     }
     var selectedPlanFilter by remember { mutableStateOf("Hari Ini") }
 
@@ -219,12 +239,123 @@ fun DashboardScreen(
 
                             allFaskes.forEach { faskesName ->
                                 val count = todayPlans.count { it.faskes.contains(faskesName, ignoreCase = true) }
-                                Text(
-                                    text = "$faskesName: $count Anak",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
+                                val faskesInpatients = inpatientRecords.filter {
+                                    it.faskes.contains(faskesName, ignoreCase = true)
+                                }
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "$faskesName: $count Anak",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.align(Alignment.CenterVertically)
+                                    )
+                                    if (faskesInpatients.isNotEmpty()) {
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFFDC2626).copy(alpha = 0.12f))
+                                                .clickable {
+                                                    TopOnAdManager.onUserActionClick(context)
+                                                    if (faskesInpatients.size == 1) {
+                                                        selectedInpatientRecordForDetail = faskesInpatients.first()
+                                                    } else {
+                                                        inpatientPickerForFaskes = faskesName to faskesInpatients
+                                                    }
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                                .testTag("badge_inpatient_${faskesName.lowercase().replace(" ", "_")}")
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.LocalHospital,
+                                                    contentDescription = "Rawat Inap",
+                                                    tint = Color(0xFFDC2626),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = "${faskesInpatients.size} Anak Rawat Inap",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFB91C1C)
+                                                )
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFB91C1C),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Jika ada anak rawat inap di faskes custom / "Lainnya" di luar daftar utama sekolah
+                            val customFaskesInpatients = inpatientRecords.filter { rec ->
+                                allFaskes.none { f -> rec.faskes.contains(f, ignoreCase = true) }
+                            }.groupBy { it.faskes.ifBlank { "Faskes Rujukan" } }
+
+                            customFaskesInpatients.forEach { (faskesName, list) ->
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "$faskesName: 0 Anak",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.align(Alignment.CenterVertically)
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFFDC2626).copy(alpha = 0.12f))
+                                            .clickable {
+                                                TopOnAdManager.onUserActionClick(context)
+                                                if (list.size == 1) {
+                                                    selectedInpatientRecordForDetail = list.first()
+                                                } else {
+                                                    inpatientPickerForFaskes = faskesName to list
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                            .testTag("badge_inpatient_custom")
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.LocalHospital,
+                                                contentDescription = "Rawat Inap",
+                                                tint = Color(0xFFDC2626),
+                                                modifier = Modifier.size(13.dp)
+                                            )
+                                            Text(
+                                                text = "${list.size} Anak Rawat Inap",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFB91C1C)
+                                            )
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                contentDescription = null,
+                                                tint = Color(0xFFB91C1C),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        }
+                                    }
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(2.dp))
@@ -524,7 +655,7 @@ fun DashboardScreen(
         InputTreatmentResultDialog(
             record = record,
             onDismiss = { recordToDiagnose = null },
-            onConfirm = { diagnosis, actionsTaken, prescription, needsControl, controlDate, notes ->
+            onConfirm = { diagnosis, actionsTaken, prescription, needsControl, controlDate, notes, isInpatient, inpatientRoom ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.submitTreatmentResult(
                     record = record,
@@ -533,7 +664,9 @@ fun DashboardScreen(
                     prescription = prescription,
                     needsControl = needsControl,
                     controlDate = controlDate,
-                    additionalNotes = notes
+                    additionalNotes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
                 )
                 recordToDiagnose = null
             }
@@ -547,7 +680,7 @@ fun DashboardScreen(
             secondaryFaskesName = schoolProfile.secondaryFaskesName,
             allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showDirectTreatmentDialog = false },
-            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
+            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.recordDirectTreatment(
                     student = student,
@@ -559,10 +692,166 @@ fun DashboardScreen(
                     needsControl = needsCtrl,
                     controlDate = ctrlDate,
                     escortName = escort,
-                    notes = notes
+                    notes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
                 )
                 showDirectTreatmentDialog = false
             }
+        )
+    }
+
+    // Picker bila ada >1 anak rawat inap di faskes yang sama
+    inpatientPickerForFaskes?.let { (faskesTitle, records) ->
+        ModalBottomSheet(
+            onDismissRequest = { inpatientPickerForFaskes = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.LocalHospital,
+                        contentDescription = null,
+                        tint = Color(0xFFDC2626),
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "Anak Sedang Rawat Inap",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "$faskesTitle • Ketuk anak untuk membuka kartu tindakan",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                records.forEach { rec ->
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFDC2626).copy(alpha = 0.06f)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFDC2626).copy(alpha = 0.25f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                inpatientPickerForFaskes = null
+                                selectedInpatientRecordForDetail = rec
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = rec.studentName,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp
+                                )
+                                Text(
+                                    text = buildString {
+                                        append(rec.diagnosis.ifBlank { rec.complaint })
+                                        if (rec.inpatientRoom.isNotBlank()) append(" • Ruang ${rec.inpatientRoom}")
+                                    },
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = "Buka Kartu Tindakan",
+                                tint = Color(0xFFDC2626)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Kartu Detail Tindakan langsung saat notif Rawat Inap di Dashboard diklik
+    selectedInpatientRecordForDetail?.let { record ->
+        val student = students.find { it.id == record.studentId }
+        val allStudentRecords = allRecords.filter { it.studentId == record.studentId }
+            .sortedByDescending { it.treatmentDate ?: it.planDate }
+        val calNow = Calendar.getInstance()
+        val curM = calNow.get(Calendar.MONTH)
+        val curY = calNow.get(Calendar.YEAR)
+        val thisMonthCount = allStudentRecords.count { rec ->
+            val cal = Calendar.getInstance().apply { timeInMillis = rec.treatmentDate ?: rec.planDate }
+            cal.get(Calendar.MONTH) == curM && cal.get(Calendar.YEAR) == curY
+        }
+
+        MedicalRecordDetailSheet(
+            record = record,
+            student = student,
+            allStudentRecords = allStudentRecords,
+            thisMonthCount = thisMonthCount,
+            onDismiss = { selectedInpatientRecordForDetail = null },
+            onPrintPdf = {
+                TopOnAdManager.onUserActionClick(context)
+                student?.let { studentForPdfPrint = it }
+            },
+            onShare = {
+                TopOnAdManager.onUserActionClick(context)
+                selectedInpatientRecordForDetail = null
+                recordToShare = record
+            },
+            onDelete = {
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.deleteRecord(record)
+                selectedInpatientRecordForDetail = null
+            },
+            onDischargeInpatient = { updDiagnosis, updPrescription, needsCtrl, ctrlDate, dischargeNotes ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.dischargeInpatient(
+                    record = record,
+                    updatedDiagnosis = updDiagnosis,
+                    updatedPrescription = updPrescription,
+                    needsControl = needsCtrl,
+                    controlDate = ctrlDate,
+                    dischargeNotes = dischargeNotes
+                )
+                Toast.makeText(context, "${record.studentName} ditandai sudah pulang rawat inap", Toast.LENGTH_SHORT).show()
+                selectedInpatientRecordForDetail = null
+            }
+        )
+    }
+
+    recordToShare?.let { record ->
+        ShareWhatsAppDialog(
+            record = record,
+            schoolProfile = schoolProfile,
+            onDismiss = { recordToShare = null }
+        )
+    }
+
+    studentForPdfPrint?.let { student ->
+        PrintPdfDialog(
+            student = student,
+            allRecords = allRecords,
+            waliName = waliName,
+            schoolProfile = schoolProfile,
+            onDismiss = { studentForPdfPrint = null }
         )
     }
 

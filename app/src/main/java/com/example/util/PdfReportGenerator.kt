@@ -244,7 +244,7 @@ object PdfReportGenerator {
         y += 13f
         paint.textSize = 10f
         paint.color = Color.rgb(30, 41, 59)
-        canvas.drawText("UNIT LAYANAN KESEHATAN SANTRI & ANAK ASUH (UKSA)", width / 2f, y, paint)
+        canvas.drawText("UNIT LAYANAN KESEHATAN WALIASUH", width / 2f, y, paint)
 
         y += 11f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)

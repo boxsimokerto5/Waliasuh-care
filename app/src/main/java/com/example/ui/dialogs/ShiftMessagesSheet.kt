@@ -1,6 +1,12 @@
 package com.example.ui.dialogs
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,9 +36,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -47,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -67,6 +77,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
@@ -82,7 +94,9 @@ fun ShiftMessagesSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
+    var messageToShare by remember { mutableStateOf<ShiftMessage?>(null) }
     // 0 = Hari Ini (default), 1 = Akan Datang (Besok & Seterusnya)
     var selectedDateTab by remember { mutableIntStateOf(0) }
     var selectedFilter by remember { mutableStateOf("Aktif") } // Aktif, Urgent, Selesai, Semua
@@ -333,6 +347,9 @@ fun ShiftMessagesSheet(
                         items(filteredMessages, key = { it.id }) { msg ->
                             ShiftMessageCardItem(
                                 message = msg,
+                                onShareWhatsApp = {
+                                    messageToShare = msg
+                                },
                                 onToggleComplete = {
                                     viewModel.toggleShiftMessageCompleted(msg) {
                                         val status = if (!msg.isCompleted) "ditandai selesai" else "dibuka kembali"
@@ -374,6 +391,234 @@ fun ShiftMessagesSheet(
             waliAccounts = waliAccounts,
             onDismiss = { showCreateDialog = false }
         )
+    }
+
+    // Pop-up Share Pengingat Pesan Shift via WhatsApp
+    messageToShare?.let { msg ->
+        val reminderText = remember(msg.id, schoolProfile) {
+            buildShiftReminderWhatsAppText(msg, schoolProfile)
+        }
+        val matchedWali = remember(msg.targetWali, waliAccounts) {
+            val cleanTarget = msg.targetWali.trim()
+            waliAccounts.firstOrNull {
+                it.name.trim().equals(cleanTarget, ignoreCase = true) ||
+                    it.username.trim().equals(cleanTarget, ignoreCase = true)
+            }
+        }
+        val waPhone = remember(matchedWali) {
+            matchedWali?.phone?.let { formatWhatsAppPhone(it) }
+        }
+
+        ModalBottomSheet(
+            onDismissRequest = { messageToShare = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(
+                modifier = Modifier.fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 560.dp)
+                        .padding(horizontal = 20.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFDCFCE7)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Share,
+                                    contentDescription = null,
+                                    tint = Color(0xFF059669),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Ingatkan via WhatsApp",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "Kepada: ${msg.targetWali} • ${msg.shift}",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = { messageToShare = null },
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Tutup")
+                        }
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    ) {
+                        Text(
+                            text = reminderText,
+                            fontSize = 11.5.sp,
+                            lineHeight = 16.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        )
+                    }
+
+                    if (waPhone != null && matchedWali != null) {
+                        Button(
+                            onClick = {
+                                val uri = Uri.parse("https://wa.me/$waPhone?text=${Uri.encode(reminderText)}")
+                                val waIntent = Intent(Intent.ACTION_VIEW, uri)
+                                runCatching {
+                                    messageToShare = null
+                                    context.startActivity(waIntent)
+                                }.onFailure {
+                                    Toast.makeText(context, "Tidak dapat membuka WhatsApp.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF059669)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_direct_wa_shift_${msg.id}")
+                        ) {
+                            Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Chat Langsung WA ke ${matchedWali.name}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Pengingat Shift", reminderText))
+                                Toast.makeText(context, "Teks pengingat disalin!", Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_copy_shift_wa_${msg.id}")
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Salin Teks", fontSize = 12.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, reminderText)
+                                }
+                                runCatching {
+                                    messageToShare = null
+                                    context.startActivity(
+                                        Intent.createChooser(sendIntent, "Bagikan Pengingat Shift ke WhatsApp")
+                                    )
+                                }.onFailure {
+                                    Toast.makeText(context, "Gagal membuka menu berbagi.", Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (waPhone == null) Color(0xFF059669) else WaliPrimary
+                            ),
+                            modifier = Modifier
+                                .weight(1.35f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_share_group_shift_${msg.id}")
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Bagikan ke Grup WA",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatWhatsAppPhone(raw: String): String? {
+    val digits = raw.filter { it.isDigit() }
+    if (digits.length < 8) return null
+    return when {
+        digits.startsWith("0") -> "62${digits.drop(1)}"
+        digits.startsWith("62") -> digits
+        else -> digits
+    }
+}
+
+private fun buildShiftReminderWhatsAppText(
+    msg: ShiftMessage,
+    schoolProfile: SchoolProfile
+): String {
+    val priorityBadge = when (msg.priority) {
+        "URGENT" -> "🔴 *URGENT*"
+        "SEDANG" -> "🟠 *SEDANG*"
+        else -> "🟢 *BIASA*"
+    }
+    val schoolLabel = schoolProfile.schoolName.trim().ifBlank {
+        schoolProfile.shortName.trim().ifBlank { "Wali Asuh Care" }
+    }
+    val statusLabel = if (msg.isCompleted) "✅ Sudah Selesai" else "⏳ Belum Selesai (Mohon Tindak Lanjut)"
+    return buildString {
+        appendLine("🔔 *PENGINGAT OPERAN SHIFT WALI ASUH*")
+        appendLine("*$schoolLabel*")
+        appendLine("----------------------------------------")
+        appendLine("$priorityBadge • ${msg.shift}")
+        appendLine("📌 *Tugas:* ${msg.title}")
+        appendLine("👤 *Kepada:* ${msg.targetWali}")
+        appendLine("📅 *Tindak Lanjut:* ${DateUtils.formatFullDate(msg.followUpDate)}")
+        appendLine("📝 *Isi Pesan:*")
+        appendLine(msg.messageContent)
+        appendLine("----------------------------------------")
+        appendLine("Status: $statusLabel")
+        append("Dibuat oleh: ${msg.senderName}")
     }
 }
 
@@ -429,6 +674,7 @@ private fun ShiftHeaderTitleBlock(
 @Composable
 fun ShiftMessageCardItem(
     message: ShiftMessage,
+    onShareWhatsApp: () -> Unit = {},
     onToggleComplete: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -517,18 +763,36 @@ fun ShiftMessageCardItem(
                     }
                 }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("btn_delete_shift_message_${message.id}")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Hapus Pesan",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                    IconButton(
+                        onClick = onShareWhatsApp,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("btn_share_shift_message_${message.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Ingatkan via WhatsApp",
+                            tint = Color(0xFF059669),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("btn_delete_shift_message_${message.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Hapus Pesan",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
 

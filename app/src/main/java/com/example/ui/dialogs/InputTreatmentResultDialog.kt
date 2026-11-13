@@ -1,5 +1,6 @@
 package com.example.ui.dialogs
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -39,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,7 +62,9 @@ fun InputTreatmentResultDialog(
         prescription: String,
         needsControl: Boolean,
         controlDate: Long?,
-        notes: String
+        notes: String,
+        isInpatient: Boolean,
+        inpatientRoom: String
     ) -> Unit
 ) {
     var diagnosis by remember { mutableStateOf("") }
@@ -67,6 +72,8 @@ fun InputTreatmentResultDialog(
     var prescription by remember { mutableStateOf("") }
     var additionalNotes by remember { mutableStateOf("") }
 
+    var isInpatient by remember { mutableStateOf(record.isInpatient) }
+    var inpatientRoom by remember { mutableStateOf(record.inpatientRoom) }
     var needsControl by remember { mutableStateOf(false) }
 
     val calIn3Days = remember {
@@ -174,18 +181,107 @@ fun InputTreatmentResultDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // Resep Obat
+                // Resep Obat (Opsional saat Rawat Inap karena obat pulang biasanya menyusul)
                 OutlinedTextField(
                     value = prescription,
                     onValueChange = { prescription = it },
-                    label = { Text(if (isUks) "Obat yang Diberikan (dari Kotak UKS) *" else "Resep Obat & Aturan Minum *", fontSize = 12.sp) },
-                    placeholder = { Text(if (isUks) "misal: Paracetamol 500mg, Minyak Kayu Putih" else "misal: Paracetamol 3x1, Amoxicillin 3x1", fontSize = 12.sp) },
+                    label = {
+                        Text(
+                            text = when {
+                                isInpatient -> "Resep Obat / Terapi Sementara (Opsional)"
+                                isUks -> "Obat yang Diberikan (dari Kotak UKS) *"
+                                else -> "Resep Obat & Aturan Minum *"
+                            },
+                            fontSize = 12.sp
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            text = when {
+                                isInpatient -> "misal: Infus RL / kosongkan dulu jika opname"
+                                isUks -> "misal: Paracetamol 500mg, Minyak Kayu Putih"
+                                else -> "misal: Paracetamol 3x1, Amoxicillin 3x1"
+                            },
+                            fontSize = 12.sp
+                        )
+                    },
                     minLines = 2,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("input_prescription")
                 )
+
+                // Toggle Rawat Inap (Opname / IGD)
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isInpatient) {
+                            Color(0xFFDC2626).copy(alpha = 0.08f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                        }
+                    ),
+                    border = if (isInpatient) BorderStroke(1.dp, Color(0xFFDC2626).copy(alpha = 0.35f)) else null,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalHospital,
+                                    contentDescription = null,
+                                    tint = if (isInpatient) Color(0xFFDC2626) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(
+                                        text = "Sedang Rawat Inap (Opname)?",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (isInpatient) Color(0xFFB91C1C) else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = if (isInpatient) {
+                                            "Notif rawat inap tampil di Dashboard & resep boleh menyusul"
+                                        } else {
+                                            "Aktifkan jika ternyata anak harus rawat inap"
+                                        },
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                            Switch(
+                                checked = isInpatient,
+                                onCheckedChange = { isInpatient = it },
+                                modifier = Modifier.testTag("switch_inpatient")
+                            )
+                        }
+
+                        if (isInpatient) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = inpatientRoom,
+                                onValueChange = { inpatientRoom = it },
+                                label = { Text("Nama Ruang / Kamar (Opsional)", fontSize = 12.sp) },
+                                placeholder = { Text("misal: Ruang Melati Lt. 2 / IGD", fontSize = 12.sp) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_inpatient_room")
+                            )
+                        }
+                    }
+                }
 
                 // Pilihan Kontrol Kembali (Compact Card)
                 Card(
@@ -304,24 +400,28 @@ fun InputTreatmentResultDialog(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    val isFormValid = diagnosis.isNotBlank() && (isInpatient || prescription.isNotBlank())
+
                     Button(
                         onClick = {
-                            if (diagnosis.isNotBlank() && prescription.isNotBlank()) {
+                            if (isFormValid) {
                                 onConfirm(
                                     diagnosis.trim(),
                                     actionsTaken.trim(),
                                     prescription.trim(),
                                     needsControl,
                                     if (needsControl) selectedControlDateMillis else null,
-                                    additionalNotes.trim()
+                                    additionalNotes.trim(),
+                                    isInpatient,
+                                    inpatientRoom.trim()
                                 )
                             }
                         },
-                        enabled = diagnosis.isNotBlank() && prescription.isNotBlank(),
+                        enabled = isFormValid,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("confirm_submit_treatment_button")
                     ) {
-                        Text("Simpan & Selesaikan", fontSize = 12.sp)
+                        Text(if (isInpatient) "Simpan Rawat Inap" else "Simpan & Selesaikan", fontSize = 12.sp)
                     }
                 }
             }

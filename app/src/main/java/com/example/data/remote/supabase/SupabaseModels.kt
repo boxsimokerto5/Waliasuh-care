@@ -106,7 +106,10 @@ data class SupabaseMedicalRecordDto(
     @Json(name = "control_date") val controlDate: Long? = null,
     @Json(name = "is_control_completed") val isControlCompleted: Boolean = false,
     @Json(name = "escort_name") val escortName: String? = null,
-    @Json(name = "notes") val notes: String? = null
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "is_inpatient") val isInpatient: Boolean = false,
+    @Json(name = "inpatient_room") val inpatientRoom: String? = null,
+    @Json(name = "discharge_date") val dischargeDate: Long? = null
 ) {
     fun toDomainModel(): MedicalRecord {
         return MedicalRecord(
@@ -128,13 +131,70 @@ data class SupabaseMedicalRecordDto(
             controlDate = controlDate,
             isControlCompleted = isControlCompleted,
             escortName = escortName ?: "",
-            notes = notes ?: ""
+            notes = notes ?: "",
+            isInpatient = isInpatient,
+            inpatientRoom = inpatientRoom ?: "",
+            dischargeDate = dischargeDate
         )
     }
 
     companion object {
         fun fromDomain(model: MedicalRecord, schoolId: String = "SRT1-KDR"): SupabaseMedicalRecordDto {
             return SupabaseMedicalRecordDto(
+                id = if (model.id > 0) model.id else null,
+                schoolId = schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentDormitory = model.studentDormitory,
+                faskes = model.faskes,
+                complaint = model.complaint,
+                isDirectTreatment = model.isDirectTreatment,
+                planDate = model.planDate,
+                departureTime = model.departureTime,
+                status = model.status,
+                treatmentDate = model.treatmentDate,
+                diagnosis = model.diagnosis,
+                actionsTaken = model.actionsTaken,
+                prescription = model.prescription,
+                needsControl = model.needsControl,
+                controlDate = model.controlDate,
+                isControlCompleted = model.isControlCompleted,
+                escortName = model.escortName,
+                notes = model.notes,
+                isInpatient = model.isInpatient,
+                inpatientRoom = model.inpatientRoom,
+                dischargeDate = model.dischargeDate
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class SupabaseMedicalRecordLegacyDto(
+    @Json(name = "id") val id: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long,
+    @Json(name = "student_name") val studentName: String,
+    @Json(name = "student_dormitory") val studentDormitory: String? = null,
+    @Json(name = "faskes") val faskes: String,
+    @Json(name = "complaint") val complaint: String,
+    @Json(name = "is_direct_treatment") val isDirectTreatment: Boolean = false,
+    @Json(name = "plan_date") val planDate: Long,
+    @Json(name = "departure_time") val departureTime: String? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "treatment_date") val treatmentDate: Long? = null,
+    @Json(name = "diagnosis") val diagnosis: String? = null,
+    @Json(name = "actions_taken") val actionsTaken: String? = null,
+    @Json(name = "prescription") val prescription: String? = null,
+    @Json(name = "needs_control") val needsControl: Boolean = false,
+    @Json(name = "control_date") val controlDate: Long? = null,
+    @Json(name = "is_control_completed") val isControlCompleted: Boolean = false,
+    @Json(name = "escort_name") val escortName: String? = null,
+    @Json(name = "notes") val notes: String? = null
+) {
+    companion object {
+        fun fromDomain(model: MedicalRecord, schoolId: String = "SRT1-KDR"): SupabaseMedicalRecordLegacyDto {
+            return SupabaseMedicalRecordLegacyDto(
                 id = if (model.id > 0) model.id else null,
                 schoolId = schoolId.ifBlank { "SRT1-KDR" },
                 studentId = model.studentId,

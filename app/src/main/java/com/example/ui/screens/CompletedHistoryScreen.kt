@@ -221,7 +221,7 @@ fun CompletedHistoryScreen(
             secondaryFaskesName = schoolProfile.secondaryFaskesName,
             allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showDirectTreatmentDialog = false },
-            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
+            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
                 viewModel.recordDirectTreatment(
                     student = student,
                     faskes = faskes,
@@ -232,7 +232,9 @@ fun CompletedHistoryScreen(
                     needsControl = needsCtrl,
                     controlDate = ctrlDate,
                     escortName = escort,
-                    notes = notes
+                    notes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
                 )
                 showDirectTreatmentDialog = false
             }

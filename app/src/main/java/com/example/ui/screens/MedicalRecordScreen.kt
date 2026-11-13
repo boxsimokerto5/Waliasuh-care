@@ -5,9 +5,15 @@
 
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,13 +32,16 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import android.widget.Toast
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -44,6 +53,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -63,11 +73,14 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +89,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -138,6 +153,9 @@ fun MedicalRecordScreen(
     var selectedTabMode by remember { mutableIntStateOf(0) }
 
     var selectedDateFilter by remember { mutableStateOf("Hari Ini") }
+    var isSearchExpanded by remember { mutableStateOf(false) }
+    val searchFocusRequester = remember { FocusRequester() }
+    val showSearchField = isSearchExpanded || searchQuery.isNotBlank()
 
     val todayStr = remember { DateUtils.formatShortDate(Calendar.getInstance().timeInMillis) }
 
@@ -213,35 +231,125 @@ fun MedicalRecordScreen(
                     .fillMaxSize()
                     .widthIn(max = 640.dp)
             ) {
-                // Header Titles
+                // Header Titles + Tombol Kaca Pembesar Pencarian
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                        .padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 0.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Rekam Medis & Tindakan",
-                        fontSize = 17.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Wali: $waliName",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.clickable(onClick = onNavigateToProfile)
+                    Column(
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = "Rekam Medis & Tindakan",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Wali: $waliName",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clickable(onClick = onNavigateToProfile)
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            if (showSearchField) {
+                                viewModel.setHistorySearchQuery("")
+                                isSearchExpanded = false
+                            } else {
+                                isSearchExpanded = true
+                            }
+                        },
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .background(
+                                if (showSearchField) WaliPrimary.copy(alpha = 0.12f)
+                                else Color.Transparent
+                            )
+                            .testTag("btn_toggle_medical_search")
+                    ) {
+                        Icon(
+                            imageVector = if (showSearchField) Icons.Default.Close else Icons.Default.Search,
+                            contentDescription = if (showSearchField) "Tutup pencarian" else "Cari rekam medis",
+                            tint = if (showSearchField) WaliPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+
+                // Search Field Ringkas (Muncul Saat Ikon Kaca Pembesar Ditekan)
+                AnimatedVisibility(
+                    visible = showSearchField,
+                    enter = expandVertically() + fadeIn(),
+                    exit = shrinkVertically() + fadeOut()
+                ) {
+                    LaunchedEffect(Unit) {
+                        if (isSearchExpanded) {
+                            runCatching { searchFocusRequester.requestFocus() }
+                        }
+                    }
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { viewModel.setHistorySearchQuery(it) },
+                        placeholder = {
+                            Text(
+                                text = if (selectedTabMode == 0) "Cari siswa, diagnosa, faskes..." else "Cari anak asuh, NIS, asrama...",
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = WaliPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        viewModel.setHistorySearchQuery("")
+                                    } else {
+                                        isSearchExpanded = false
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Clear,
+                                    contentDescription = "Hapus atau tutup pencarian",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 4.dp)
+                            .focusRequester(searchFocusRequester)
+                            .testTag("input_medical_search")
                     )
                 }
 
-                // Tab Switcher: Tab 0 = Kunjungan Medis, Tab 1 = Buku Screening Anak (Primary)
+                // Tab Switcher: Tab 0 = Riwayat Tindakan, Tab 1 = Screening Anak (Rapi 1 Baris)
                 TabRow(
                     selectedTabIndex = selectedTabMode,
                     containerColor = MaterialTheme.colorScheme.surface,
                     contentColor = WaliPrimary,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp)
                 ) {
                     Tab(
                         selected = selectedTabMode == 0,
@@ -256,8 +364,14 @@ fun MedicalRecordScreen(
                                     contentDescription = null,
                                     modifier = Modifier.size(15.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Riwayat Tindakan", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Riwayat Tindakan",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     )
@@ -274,48 +388,27 @@ fun MedicalRecordScreen(
                                     contentDescription = null,
                                     modifier = Modifier.size(15.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Buku Screening Anak", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    text = "Screening Anak",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
                             }
                         }
                     )
                 }
 
-                // Search Field (Full Width, Menyesuaikan Layar)
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { viewModel.setHistorySearchQuery(it) },
-                    placeholder = {
-                        Text(
-                            text = if (selectedTabMode == 0) "Cari tindakan, siswa, diagnosa, faskes..." else "Cari nama anak asuh, NIS, asrama...",
-                            fontSize = 12.sp
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(18.dp))
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { viewModel.setHistorySearchQuery("") }) {
-                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
+                // Filter Chips & Info Bar dalam 1 Baris Horizontal Ringkas
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                        .testTag("input_medical_search")
-                )
-
-                // Filter Chips & Info Bar (FlowRow Menyesuaikan Berbagai Lebar Perangkat)
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 12.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (selectedTabMode == 0) {
                         FilterChip(
@@ -324,7 +417,13 @@ fun MedicalRecordScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 selectedDateFilter = "Hari Ini"
                             },
-                            label = { Text("Hari Ini (${todayRecords.size})", fontSize = 11.5.sp) },
+                            label = {
+                                Text(
+                                    text = "Hari Ini (${todayRecords.size})",
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
@@ -338,7 +437,13 @@ fun MedicalRecordScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 selectedDateFilter = "Minggu Ini"
                             },
-                            label = { Text("Minggu Ini (${thisWeekRecords.size})", fontSize = 11.5.sp) },
+                            label = {
+                                Text(
+                                    text = "Minggu (${thisWeekRecords.size})",
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
@@ -347,12 +452,18 @@ fun MedicalRecordScreen(
                             modifier = Modifier.testTag("chip_filter_week_records")
                         )
                         FilterChip(
-                            selected = selectedDateFilter == "Semua Tanggal",
+                            selected = selectedDateFilter == "Semua",
                             onClick = {
                                 TopOnAdManager.onUserActionClick(context)
-                                selectedDateFilter = "Semua Tanggal"
+                                selectedDateFilter = "Semua"
                             },
-                            label = { Text("Semua Tanggal (${completedRecords.size})", fontSize = 11.5.sp) },
+                            label = {
+                                Text(
+                                    text = "Semua (${completedRecords.size})",
+                                    fontSize = 11.sp,
+                                    maxLines = 1
+                                )
+                            },
                             shape = RoundedCornerShape(8.dp),
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
@@ -364,16 +475,16 @@ fun MedicalRecordScreen(
 
                     Box(
                         modifier = Modifier
-                            .align(Alignment.CenterVertically)
                             .clip(RoundedCornerShape(6.dp))
                             .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = if (selectedTabMode == 0) "${filteredList.size} Riwayat Tindakan" else "${filteredStudents.size} Anak Asuh",
+                            text = if (selectedTabMode == 0) "${filteredList.size} Data" else "${filteredStudents.size} Anak Asuh",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = WaliPrimary
+                            color = WaliPrimary,
+                            maxLines = 1
                         )
                     }
                 }
@@ -405,12 +516,12 @@ fun MedicalRecordScreen(
                                             "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
                                                 "Belum ada tindakan pengobatan hari ini. Terdapat ${thisWeekRecords.size} catatan tindakan di 'Minggu Ini'."
                                             } else if (completedRecords.isNotEmpty()) {
-                                                "Belum ada tindakan pengobatan hari ini. Tekan 'Semua Tanggal' untuk melihat seluruh riwayat."
+                                                "Belum ada tindakan pengobatan hari ini. Tekan 'Semua' untuk melihat seluruh riwayat."
                                             } else {
                                                 "Belum ada rekam medis pengobatan selesai."
                                             }
                                             "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
-                                                "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua Tanggal' untuk melihat seluruh riwayat."
+                                                "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua' untuk melihat seluruh riwayat."
                                             } else {
                                                 "Belum ada rekam medis pengobatan selesai."
                                             }
@@ -529,6 +640,19 @@ fun MedicalRecordScreen(
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.deleteRecord(record)
                 selectedRecordForDetail = null
+            },
+            onDischargeInpatient = { updDiagnosis, updPrescription, needsCtrl, ctrlDate, dischargeNotes ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.dischargeInpatient(
+                    record = record,
+                    updatedDiagnosis = updDiagnosis,
+                    updatedPrescription = updPrescription,
+                    needsControl = needsCtrl,
+                    controlDate = ctrlDate,
+                    dischargeNotes = dischargeNotes
+                )
+                Toast.makeText(context, "${record.studentName} ditandai sudah pulang rawat inap", Toast.LENGTH_SHORT).show()
+                selectedRecordForDetail = null
             }
         )
     }
@@ -574,7 +698,7 @@ fun MedicalRecordScreen(
             secondaryFaskesName = schoolProfile.secondaryFaskesName,
             allFaskesList = schoolProfile.getAllFaskes(),
             onDismiss = { showDirectTreatmentDialog = false },
-            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes ->
+            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.recordDirectTreatment(
                     student = student,
@@ -586,7 +710,9 @@ fun MedicalRecordScreen(
                     needsControl = needsCtrl,
                     controlDate = ctrlDate,
                     escortName = escort,
-                    notes = notes
+                    notes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
                 )
                 showDirectTreatmentDialog = false
             }
@@ -758,6 +884,37 @@ fun SlimMedicalRecordCardItem(
 
                 // Faskes
                 FaskesBadge(faskes = record.faskes)
+
+                // Badge Rawat Inap / Sudah Pulang
+                if (record.isInpatient) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFFEE2E2))
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                    ) {
+                        Text(
+                            text = if (record.inpatientRoom.isNotBlank()) "🏥 RAWAT INAP (${record.inpatientRoom})" else "🏥 RAWAT INAP",
+                            color = Color(0xFFB91C1C),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else if (record.dischargeDate != null) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(5.dp))
+                            .background(Color(0xFFDCFCE7))
+                            .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                    ) {
+                        Text(
+                            text = "✅ Pulang ${DateUtils.formatShortDate(record.dischargeDate)}",
+                            color = Color(0xFF15803D),
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
                 // Status Kontrol jika ada
                 if (record.needsControl) {
@@ -964,9 +1121,11 @@ fun MedicalRecordDetailSheet(
     onDismiss: () -> Unit,
     onPrintPdf: () -> Unit = {},
     onShare: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onDischargeInpatient: ((diagnosis: String, prescription: String, needsControl: Boolean, controlDate: Long?, notes: String) -> Unit)? = null
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    var showDischargeDialog by remember { mutableStateOf(false) }
     val treatmentDateStr = record.treatmentDate?.let { DateUtils.formatFullDate(it) }
         ?: DateUtils.formatFullDate(record.planDate)
     val gradeText = student?.classGrade ?: "Kelas Siswa"
@@ -1078,6 +1237,110 @@ fun MedicalRecordDetailSheet(
                         controlDateFormatted = record.controlDate?.let { DateUtils.formatShortDate(it) },
                         isCompleted = record.isControlCompleted
                     )
+                }
+
+                // Banner Status Rawat Inap + Tombol Cepat Sudah Pulang
+                if (record.isInpatient) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFDC2626).copy(alpha = 0.08f)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFDC2626).copy(alpha = 0.35f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LocalHospital,
+                                    contentDescription = null,
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = "STATUS: SEDANG RAWAT INAP (OPNAME)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFB91C1C)
+                                )
+                            }
+                            Text(
+                                text = buildString {
+                                    append("Dirawat di ${record.faskes}")
+                                    if (record.inpatientRoom.isNotBlank()) {
+                                        append(" • Ruang: ${record.inpatientRoom}")
+                                    }
+                                    append(" • Masuk: ${DateUtils.formatShortDate(record.treatmentDate ?: record.planDate)}")
+                                },
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (onDischargeInpatient != null) {
+                                Button(
+                                    onClick = { showDischargeDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = Color(0xFF16A34A),
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("btn_discharge_inpatient")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Sudah Pulang / Selesai Rawat Inap",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (record.dischargeDate != null) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFF16A34A).copy(alpha = 0.08f)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFF16A34A).copy(alpha = 0.25f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF15803D),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = buildString {
+                                    append("Selesai Rawat Inap • Pulang: ${DateUtils.formatFullDate(record.dischargeDate)}")
+                                    if (record.inpatientRoom.isNotBlank()) {
+                                        append(" (${record.inpatientRoom})")
+                                    }
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+                    }
                 }
 
                 // Card 1: Informasi Kunjungan & Waktu
@@ -1429,6 +1692,122 @@ fun MedicalRecordDetailSheet(
                 }
             }
         }
+    }
+
+    if (showDischargeDialog && onDischargeInpatient != null) {
+        var updDiagnosis by remember(record.id) { mutableStateOf(record.diagnosis) }
+        var updPrescription by remember(record.id) { mutableStateOf(record.prescription) }
+        var dischargeNeedsControl by remember(record.id) { mutableStateOf(record.needsControl) }
+        var dischargeNotes by remember { mutableStateOf("") }
+        val calIn3Days = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 3) }.timeInMillis }
+        val calIn7Days = remember { Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 7) }.timeInMillis }
+        var selectedCtrlMillis by remember(record.id) {
+            mutableStateOf(record.controlDate ?: calIn3Days)
+        }
+
+        AlertDialog(
+            onDismissRequest = { showDischargeDialog = false },
+            title = {
+                Text(
+                    text = "Selesai Rawat Inap",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 17.sp
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Konfirmasi ${record.studentName} telah pulang dari ${record.faskes}. Anda dapat melengkapi diagnosa akhir atau resep pulang jika diperlukan.",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    OutlinedTextField(
+                        value = updDiagnosis,
+                        onValueChange = { updDiagnosis = it },
+                        label = { Text("Diagnosa Akhir", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = updPrescription,
+                        onValueChange = { updPrescription = it },
+                        label = { Text("Resep Obat Pulang (Opsional)", fontSize = 12.sp) },
+                        placeholder = { Text("misal: Paracetamol 3x1, Vitamin", fontSize = 12.sp) },
+                        minLines = 2,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Perlu Kontrol Ulang?",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Switch(
+                            checked = dischargeNeedsControl,
+                            onCheckedChange = { dischargeNeedsControl = it }
+                        )
+                    }
+                    if (dischargeNeedsControl) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            FilterChip(
+                                selected = selectedCtrlMillis == calIn3Days,
+                                onClick = { selectedCtrlMillis = calIn3Days },
+                                label = { Text("+3 Hari", fontSize = 11.sp) }
+                            )
+                            FilterChip(
+                                selected = selectedCtrlMillis == calIn7Days,
+                                onClick = { selectedCtrlMillis = calIn7Days },
+                                label = { Text("+1 Minggu", fontSize = 11.sp) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = dischargeNotes,
+                        onValueChange = { dischargeNotes = it },
+                        label = { Text("Catatan Pulang (Opsional)", fontSize = 12.sp) },
+                        placeholder = { Text("misal: Istirahat 2 hari di asrama", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDischargeDialog = false
+                        onDischargeInpatient(
+                            updDiagnosis,
+                            updPrescription,
+                            dischargeNeedsControl,
+                            if (dischargeNeedsControl) selectedCtrlMillis else null,
+                            dischargeNotes
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF16A34A),
+                        contentColor = Color.White
+                    ),
+                    modifier = Modifier.testTag("confirm_discharge_inpatient_button")
+                ) {
+                    Text("Konfirmasi Pulang", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDischargeDialog = false }) {
+                    Text("Batal", fontSize = 12.sp)
+                }
+            }
+        )
     }
 }
 

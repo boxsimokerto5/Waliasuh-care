@@ -47,6 +47,10 @@ interface SupabaseService {
     @Headers("Prefer: resolution=merge-duplicates")
     suspend fun upsertMedicalRecords(@Body records: List<SupabaseMedicalRecordDto>): Response<ResponseBody>
 
+    @POST("rest/v1/medical_records")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertMedicalRecordsLegacy(@Body records: List<SupabaseMedicalRecordLegacyDto>): Response<ResponseBody>
+
     @DELETE("rest/v1/medical_records")
     suspend fun deleteMedicalRecord(@Query("id") idFilter: String): Response<ResponseBody>
 

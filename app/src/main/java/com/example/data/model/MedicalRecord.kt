@@ -37,5 +37,8 @@ data class MedicalRecord(
     val isControlCompleted: Boolean = false, // Status jika kunjungan kontrol sudah selesai
     val escortName: String = "", // Nama pendamping/pengasuh yang mengantar
     val notes: String = "", // Catatan tambahan
+    val isInpatient: Boolean = false, // True jika anak sedang rawat inap / opname
+    val inpatientRoom: String = "", // Nama ruang / kamar rawat inap (opsional)
+    val dischargeDate: Long? = null, // Tanggal keluar / pulang dari rawat inap
     val createdAt: Long = System.currentTimeMillis()
 )

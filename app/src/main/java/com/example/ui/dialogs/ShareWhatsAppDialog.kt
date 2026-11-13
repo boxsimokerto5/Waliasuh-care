@@ -69,6 +69,12 @@ fun ShareWhatsAppDialog(
     val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
     val activeShortTitle = schoolProfile.shortName.trim().ifBlank { activeSchoolTitle }
 
+    val inpatientInfo = when {
+        record.isInpatient -> "🏥 *Status Perawatan:* SEDANG RAWAT INAP${if (record.inpatientRoom.isNotBlank()) " (Ruang: ${record.inpatientRoom})" else ""}\n"
+        record.dischargeDate != null -> "✅ *Status Perawatan:* Sudah Pulang Rawat Inap (${DateUtils.formatShortDate(record.dischargeDate)})\n"
+        else -> ""
+    }
+
     val reportText = """
 🏥 *LAPORAN PENGOBATAN ANAK ASUH*
 *$activeSchoolTitle*
@@ -77,7 +83,7 @@ fun ShareWhatsAppDialog(
 🏠 *Asrama:* ${record.studentDormitory}
 📍 *Faskes:* ${record.faskes}
 📅 *Waktu:* $treatmentDateStr
-
+$inpatientInfo
 ⚠️ *Keluhan:* ${record.complaint}
 🩺 *Diagnosa:* ${record.diagnosis.ifBlank { "-" }}
 💉 *Tindakan:* ${record.actionsTaken.ifBlank { "Pemeriksaan fisik" }}

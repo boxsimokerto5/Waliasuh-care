@@ -412,7 +412,7 @@ fun PlanScreen(
         InputTreatmentResultDialog(
             record = record,
             onDismiss = { recordToDiagnose = null },
-            onConfirm = { diagnosis, actionsTaken, prescription, needsControl, controlDate, notes ->
+            onConfirm = { diagnosis, actionsTaken, prescription, needsControl, controlDate, notes, isInpatient, inpatientRoom ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.submitTreatmentResult(
                     record = record,
@@ -421,7 +421,9 @@ fun PlanScreen(
                     prescription = prescription,
                     needsControl = needsControl,
                     controlDate = controlDate,
-                    additionalNotes = notes
+                    additionalNotes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
                 )
                 recordToDiagnose = null
             }

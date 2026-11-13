@@ -765,7 +765,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         prescription: String,
         needsControl: Boolean,
         controlDate: Long?,
-        additionalNotes: String
+        additionalNotes: String,
+        isInpatient: Boolean = false,
+        inpatientRoom: String = ""
     ) {
         viewModelScope.launch {
             val updated = record.copy(
@@ -777,6 +779,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 needsControl = needsControl,
                 controlDate = if (needsControl) controlDate else null,
                 isControlCompleted = false,
+                isInpatient = isInpatient,
+                inpatientRoom = if (isInpatient) inpatientRoom.trim() else "",
+                dischargeDate = if (isInpatient) null else record.dischargeDate,
                 notes = if (additionalNotes.isNotBlank()) "${record.notes}\n$additionalNotes".trim() else record.notes
             )
             repository.updateRecord(updated)
@@ -799,7 +804,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         needsControl: Boolean,
         controlDate: Long?,
         escortName: String = _waliName.value,
-        notes: String = ""
+        notes: String = "",
+        isInpatient: Boolean = false,
+        inpatientRoom: String = ""
     ) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
@@ -823,7 +830,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 controlDate = if (needsControl) controlDate else null,
                 isControlCompleted = false,
                 escortName = if (escortName.isBlank()) _waliName.value else escortName,
-                notes = notes
+                notes = notes,
+                isInpatient = isInpatient,
+                inpatientRoom = if (isInpatient) inpatientRoom.trim() else "",
+                dischargeDate = null
             )
             val newId = repository.insertRecord(record)
             val recordWithId = record.copy(id = newId)
@@ -843,6 +853,37 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             // Sinkronisasi latar belakang ke Supabase Cloud
             if (!isUnitTestEnvironment()) {
                 SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId, activeSchool)
+            }
+        }
+    }
+
+    // Tandai anak asuh sudah pulang / selesai rawat inap
+    fun dischargeInpatient(
+        record: MedicalRecord,
+        updatedDiagnosis: String,
+        updatedPrescription: String,
+        needsControl: Boolean,
+        controlDate: Long?,
+        dischargeNotes: String = ""
+    ) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val mergedNotes = listOf(record.notes.trim(), dischargeNotes.trim())
+                .filter { it.isNotBlank() }
+                .joinToString("\n")
+            val updated = record.copy(
+                isInpatient = false,
+                dischargeDate = now,
+                diagnosis = updatedDiagnosis.trim().ifBlank { record.diagnosis },
+                prescription = updatedPrescription.trim().ifBlank { record.prescription },
+                needsControl = needsControl,
+                controlDate = if (needsControl) controlDate else null,
+                notes = mergedNotes
+            )
+            repository.updateRecord(updated)
+            if (!isUnitTestEnvironment()) {
+                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
             }
         }
     }
