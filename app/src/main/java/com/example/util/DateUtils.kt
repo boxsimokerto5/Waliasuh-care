@@ -86,6 +86,27 @@ object DateUtils {
         return isWithin7Days || isSameCalendarWeek
     }
 
+    private val monthYearFormat = SimpleDateFormat("MMMM yyyy", Locale("id", "ID"))
+    private val monthKeyFormat = SimpleDateFormat("yyyy-MM", Locale.US)
+
+    fun formatMonthYear(timestamp: Long): String {
+        return monthYearFormat.format(Date(timestamp))
+    }
+
+    fun getMonthKey(timestamp: Long): String {
+        return monthKeyFormat.format(Date(timestamp))
+    }
+
+    fun isBeforeToday(timestamp: Long): Boolean {
+        val calTodayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return timestamp < calTodayStart.timeInMillis
+    }
+
     fun isPastDate(timestamp: Long): Boolean {
         val cal1 = Calendar.getInstance().apply {
             timeInMillis = timestamp

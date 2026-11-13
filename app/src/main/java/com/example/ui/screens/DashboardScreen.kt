@@ -77,6 +77,7 @@ import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.InputHaidDialog
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import com.example.ui.dialogs.ShiftHistorySheet
 import com.example.ui.dialogs.ShiftMessagesSheet
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
@@ -114,6 +115,7 @@ fun DashboardScreen(
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
     var showShiftMessagesSheet by remember { mutableStateOf(false) }
     var showCreateShiftMessageDialog by remember { mutableStateOf(false) }
+    var showShiftHistorySheet by remember { mutableStateOf(false) }
     var showInputHaidDialog by remember { mutableStateOf(false) }
     var showDaftarHaidSheet by remember { mutableStateOf(false) }
     var showDaftarSuciSheet by remember { mutableStateOf(false) }
@@ -312,6 +314,10 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 showCreateShiftMessageDialog = true
                             },
+                            onOpenShiftHistory = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showShiftHistorySheet = true
+                            },
                             onOpenInputHaid = {
                                 TopOnAdManager.onUserActionClick(context)
                                 showInputHaidDialog = true
@@ -331,6 +337,8 @@ fun DashboardScreen(
                             studentsCount = students.size,
                             activeShiftMessagesCount = shiftMessages.count { !it.isCompleted && DateUtils.isToday(it.followUpDate) },
                             urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted && DateUtils.isToday(it.followUpDate) },
+                            pastShiftMessagesCount = shiftMessages.count { DateUtils.isBeforeToday(it.followUpDate) },
+                            uncompletedPastShiftCount = shiftMessages.count { !it.isCompleted && DateUtils.isBeforeToday(it.followUpDate) },
                             activeHaidCount = activeHaidRecords.size,
                             suciCount = suciRecords.size,
                             istihadhahCount = activeHaidRecords.count { it.isIstihadhahWarning },
@@ -655,6 +663,15 @@ fun DashboardScreen(
             viewModel = viewModel,
             waliAccounts = waliAccounts,
             onDismiss = { showCreateShiftMessageDialog = false }
+        )
+    }
+
+    // Modal Bottom Sheet: Riwayat Operan (Arsip Pesan Lewat Hari Ini)
+    if (showShiftHistorySheet) {
+        ShiftHistorySheet(
+            viewModel = viewModel,
+            messages = shiftMessages,
+            onDismiss = { showShiftHistorySheet = false }
         )
     }
 

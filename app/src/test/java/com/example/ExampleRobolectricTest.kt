@@ -800,6 +800,121 @@ class ExampleRobolectricTest {
     assertEquals(14, localNoonCal.get(java.util.Calendar.DAY_OF_MONTH))
     assertEquals(12, localNoonCal.get(java.util.Calendar.HOUR_OF_DAY))
   }
+
+  @Test
+  fun `verify ShiftHistoryFilterHelper filters only past messages with month, status, and search`() {
+    val today = java.util.Calendar.getInstance().apply {
+      set(java.util.Calendar.HOUR_OF_DAY, 10)
+    }.timeInMillis
+    val tomorrow = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, 1)
+      set(java.util.Calendar.HOUR_OF_DAY, 10)
+    }.timeInMillis
+    val yesterday = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, -1)
+      set(java.util.Calendar.HOUR_OF_DAY, 14)
+    }.timeInMillis
+    val fortyDaysAgo = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, -40)
+      set(java.util.Calendar.HOUR_OF_DAY, 9)
+    }.timeInMillis
+
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isBeforeToday(today))
+    org.junit.Assert.assertFalse(com.example.util.DateUtils.isBeforeToday(tomorrow))
+    org.junit.Assert.assertTrue(com.example.util.DateUtils.isBeforeToday(yesterday))
+    org.junit.Assert.assertTrue(com.example.util.DateUtils.isBeforeToday(fortyDaysAgo))
+
+    val msgToday = com.example.data.model.ShiftMessage(
+      id = 1L,
+      title = "Operan Hari Ini",
+      followUpDate = today,
+      shift = "Shift Pagi (07-14)",
+      senderName = "Ustadz Ali",
+      targetWali = "Semua Wali Asuh",
+      messageContent = "Cek suhu santri baru",
+      isCompleted = false
+    )
+    val msgTomorrow = com.example.data.model.ShiftMessage(
+      id = 2L,
+      title = "Operan Besok",
+      followUpDate = tomorrow,
+      shift = "Shift Siang (14-21)",
+      senderName = "Ustadz Budi",
+      targetWali = "Semua Wali Asuh",
+      messageContent = "Jadwal kontrol puskesmas",
+      isCompleted = false
+    )
+    val msgYesterdayUncompleted = com.example.data.model.ShiftMessage(
+      id = 3L,
+      title = "Jaga Menara Kemarin",
+      followUpDate = yesterday,
+      shift = "Shift Malam (21-07)",
+      senderName = "Abisarwan Rafif",
+      targetWali = "Ustadz Hasan",
+      messageContent = "Pastikan gerbang terkunci pukul 22.00",
+      isCompleted = false
+    )
+    val msgOlderCompleted = com.example.data.model.ShiftMessage(
+      id = 4L,
+      title = "Pemberian Vitamin Asrama",
+      followUpDate = fortyDaysAgo,
+      shift = "Shift Pagi (07-14)",
+      senderName = "Ustadzah Sari",
+      targetWali = "Semua Wali Asuh",
+      messageContent = "Vitamin C dibagikan setelah sarapan",
+      isCompleted = true,
+      completedBy = "Ustadzah Dewi",
+      completedAt = fortyDaysAgo + 3600_000L
+    )
+
+    val allMessages = listOf(msgToday, msgTomorrow, msgYesterdayUncompleted, msgOlderCompleted)
+    val past = com.example.ui.dialogs.ShiftHistoryFilterHelper.getPastMessages(allMessages)
+
+    // Strictly past messages only, newest first
+    assertEquals(2, past.size)
+    assertEquals(3L, past[0].id)
+    assertEquals(4L, past[1].id)
+
+    // Months derived cleanly in descending order
+    val months = com.example.ui.dialogs.ShiftHistoryFilterHelper.getAvailableMonths(past)
+    org.junit.Assert.assertTrue(months.isNotEmpty())
+    val olderMonthKey = com.example.util.DateUtils.getMonthKey(fortyDaysAgo)
+
+    // Filter by Status: Belum Selesai vs Selesai
+    val onlyUncompleted = com.example.ui.dialogs.ShiftHistoryFilterHelper.filterMessages(
+      pastMessages = past,
+      selectedMonthKey = "ALL",
+      selectedStatus = "Belum Selesai",
+      searchQuery = ""
+    )
+    assertEquals(listOf(msgYesterdayUncompleted), onlyUncompleted)
+
+    val onlyCompleted = com.example.ui.dialogs.ShiftHistoryFilterHelper.filterMessages(
+      pastMessages = past,
+      selectedMonthKey = "ALL",
+      selectedStatus = "Selesai",
+      searchQuery = ""
+    )
+    assertEquals(listOf(msgOlderCompleted), onlyCompleted)
+
+    // Filter by Month
+    val byMonth = com.example.ui.dialogs.ShiftHistoryFilterHelper.filterMessages(
+      pastMessages = past,
+      selectedMonthKey = olderMonthKey,
+      selectedStatus = "Semua",
+      searchQuery = ""
+    )
+    assertEquals(listOf(msgOlderCompleted), byMonth)
+
+    // Search by sender, recipient, or content
+    val bySearch = com.example.ui.dialogs.ShiftHistoryFilterHelper.filterMessages(
+      pastMessages = past,
+      selectedMonthKey = "ALL",
+      selectedStatus = "Semua",
+      searchQuery = "gerbang"
+    )
+    assertEquals(listOf(msgYesterdayUncompleted), bySearch)
+  }
 }
 
 

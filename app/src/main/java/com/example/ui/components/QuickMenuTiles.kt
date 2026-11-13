@@ -56,6 +56,7 @@ fun QuickMenuTiles(
     onShowPuskesmasInfo: () -> Unit,
     onOpenShiftMessages: () -> Unit = {},
     onOpenCreateShiftMessage: () -> Unit = {},
+    onOpenShiftHistory: () -> Unit = {},
     onOpenInputHaid: () -> Unit = {},
     onOpenDaftarHaid: () -> Unit = {},
     onOpenDaftarSuci: () -> Unit = {},
@@ -63,6 +64,8 @@ fun QuickMenuTiles(
     studentsCount: Int = 0,
     activeShiftMessagesCount: Int = 0,
     urgentShiftMessagesCount: Int = 0,
+    pastShiftMessagesCount: Int = 0,
+    uncompletedPastShiftCount: Int = 0,
     activeHaidCount: Int = 0,
     suciCount: Int = 0,
     istihadhahCount: Int = 0,
@@ -219,16 +222,32 @@ fun QuickMenuTiles(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            val historyBadgeText = when {
+                                uncompletedPastShiftCount > 0 -> "$uncompletedPastShiftCount Terlewat"
+                                pastShiftMessagesCount > 0 -> "$pastShiftMessagesCount Arsip"
+                                else -> "Riwayat Jaga"
+                            }
+                            val historyBadgeBg = when {
+                                uncompletedPastShiftCount > 0 -> Color(0xFFFEF3C7)
+                                pastShiftMessagesCount > 0 -> Color(0xFFDCFCE7)
+                                else -> Color(0xFFF1F5F9)
+                            }
+                            val historyBadgeColor = when {
+                                uncompletedPastShiftCount > 0 -> Color(0xFFD97706)
+                                pastShiftMessagesCount > 0 -> Color(0xFF16A34A)
+                                else -> Color(0xFF475569)
+                            }
+
                             CartoonMenuCard(
                                 title = "Riwayat Operan",
-                                subtitle = "Daftar Serah Terima",
+                                subtitle = "Arsip Lewat Hari Ini",
                                 imageRes = R.drawable.img_menu_rekam_medis,
-                                badgeText = "Riwayat Jaga",
-                                badgeBg = Color(0xFFF1F5F9),
-                                badgeColor = Color(0xFF475569),
+                                badgeText = historyBadgeText,
+                                badgeBg = historyBadgeBg,
+                                badgeColor = historyBadgeColor,
                                 bgGradient = listOf(Color(0xFFF8FAFC), Color(0xFFF1F5F9)),
                                 borderColor = Color(0xFFCBD5E1),
-                                onClick = onOpenShiftMessages,
+                                onClick = onOpenShiftHistory,
                                 testTag = "tile_riwayat_operan",
                                 modifier = Modifier.weight(1f)
                             )
