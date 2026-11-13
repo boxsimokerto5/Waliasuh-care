@@ -13,6 +13,7 @@ data class SchoolProfile(
     val schoolName: String = "Sekolah Rakyat SRT 1 Kabupaten Kediri",
     val shortName: String = "SRT 1 Kediri",
     val adminName: String = "Admin Utama",
+    val address: String = "",
     val city: String = "Kabupaten Kediri",
     val tenantCode: String = "SRT1-KDR",
     val primaryFaskesName: String = "UKS Sekolah",
@@ -61,8 +62,10 @@ data class SchoolProfile(
         val isDefaultKediri = tenantCode.equals("SRT1-KDR", ignoreCase = true)
         val defaultAddress = when {
             matched != null && matched.address.isNotBlank() -> matched.address.trim()
-            cleanName.equals(primaryFaskesName.trim().ifBlank { "UKS Sekolah" }, ignoreCase = true) ->
-                if (city.isNotBlank()) "Lingkungan $schoolName • $city" else "Lingkungan $schoolName"
+            cleanName.equals(primaryFaskesName.trim().ifBlank { "UKS Sekolah" }, ignoreCase = true) -> {
+                val loc = address.trim().ifBlank { city.trim() }
+                if (loc.isNotBlank()) "Lingkungan $schoolName • $loc" else "Lingkungan $schoolName"
+            }
             isDefaultKediri && cleanName.equals("Puskesmas Wates", ignoreCase = true) ->
                 "Jl. Raya Wates No. 45, Kab. Kediri"
             isDefaultKediri && cleanName.equals("Puskesmas Plosoklaten", ignoreCase = true) ->

@@ -174,7 +174,8 @@ fun StudentCardGeneratorSheet(
                     context = context,
                     students = list,
                     schoolName = resolvedSchoolName,
-                    filterLabel = filterSummaryLabel
+                    filterLabel = filterSummaryLabel,
+                    schoolAddress = schoolProfile.address.trim().ifBlank { schoolProfile.city.trim() }
                 )
             }
             isGenerating = false

@@ -1,6 +1,7 @@
 package com.example.util
 
 import com.example.data.model.ChildStudent
+import com.example.data.model.WaliAccount
 import java.math.BigDecimal
 import java.nio.charset.Charset
 import java.util.Calendar
@@ -459,5 +460,61 @@ object StudentCsvParser {
             )
         }
         return result
+    }
+
+    fun escapeCsvField(raw: String?): String {
+        val text = raw?.trim().orEmpty()
+        if (text.isEmpty()) return ""
+        val needsQuotes = text.contains(',') || text.contains(';') || text.contains('"') ||
+            text.contains('\n') || text.contains('\r')
+        return if (needsQuotes) {
+            "\"${text.replace("\"", "\"\"")}\""
+        } else {
+            text
+        }
+    }
+
+    fun exportStudentsToCsv(students: List<ChildStudent>): String {
+        val sb = StringBuilder()
+        sb.appendLine(STANDARD_HEADER)
+        students.forEachIndexed { index, student ->
+            val jenjang = student.jenjang.trim().ifBlank { deriveJenjang(student.classGrade) }
+            val gender = student.gender.trim().ifBlank { "L" }
+            val row = listOf(
+                (index + 1).toString(),
+                escapeCsvField(student.name),
+                escapeCsvField(student.classGrade),
+                escapeCsvField(jenjang),
+                escapeCsvField(student.address),
+                escapeCsvField(gender),
+                escapeCsvField(student.nik),
+                escapeCsvField(student.noKk),
+                escapeCsvField(student.birthPlace),
+                escapeCsvField(student.birthDate),
+                escapeCsvField(student.motherName),
+                escapeCsvField(student.nis)
+            ).joinToString(",")
+            sb.appendLine(row)
+        }
+        return sb.toString().trimEnd()
+    }
+
+    fun exportWaliToCsv(accounts: List<WaliAccount>): String {
+        val sb = StringBuilder()
+        sb.appendLine("Nama Lengkap,Asrama,No WhatsApp,Username,Password")
+        accounts.forEach { acc ->
+            val effUser = acc.username.trim().ifBlank {
+                acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+            }
+            val row = listOf(
+                escapeCsvField(acc.name),
+                escapeCsvField(acc.dormitory),
+                escapeCsvField(acc.phone),
+                escapeCsvField(effUser),
+                escapeCsvField(acc.password)
+            ).joinToString(",")
+            sb.appendLine(row)
+        }
+        return sb.toString().trimEnd()
     }
 }

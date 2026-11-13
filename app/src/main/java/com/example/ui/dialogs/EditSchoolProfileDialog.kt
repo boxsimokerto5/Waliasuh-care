@@ -72,6 +72,7 @@ fun EditSchoolProfileDialog(
     var schoolName by remember { mutableStateOf(currentProfile.schoolName) }
     var shortName by remember { mutableStateOf(currentProfile.shortName) }
     var adminName by remember { mutableStateOf(currentProfile.adminName) }
+    var address by remember { mutableStateOf(currentProfile.address) }
     var city by remember { mutableStateOf(currentProfile.city) }
     var tenantCode by remember { mutableStateOf(currentProfile.tenantCode) }
 
@@ -257,6 +258,25 @@ fun EditSchoolProfileDialog(
                     )
                 }
 
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Alamat Lengkap Sekolah (Tampil di Kop Surat)") },
+                    placeholder = { Text("Jl. ..., Kec. ..., Kab./Kota ..., Kode Pos ...", fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
+                    supportingText = {
+                        Text(
+                            text = "Alamat ini otomatis digunakan pada seluruh kop surat laporan PDF.",
+                            fontSize = 11.sp
+                        )
+                    },
+                    minLines = 1,
+                    maxLines = 2,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("school_address_input")
+                )
+
                 // Section: Fasilitas Kesehatan (Faskes)
                 Column(
                     modifier = Modifier.fillMaxWidth(),
@@ -411,6 +431,7 @@ fun EditSchoolProfileDialog(
                                         schoolName = schoolName.trim(),
                                         shortName = shortName.trim(),
                                         adminName = adminName.trim().ifBlank { "Admin Utama" },
+                                        address = address.trim(),
                                         city = city.trim().ifBlank { "Indonesia" },
                                         tenantCode = currentProfile.tenantCode.ifBlank { tenantCode.trim() },
                                         primaryFaskesName = resolvedPrimary,

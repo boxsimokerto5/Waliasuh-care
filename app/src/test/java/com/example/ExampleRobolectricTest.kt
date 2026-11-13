@@ -978,6 +978,7 @@ class ExampleRobolectricTest {
     val editedProfile = activeProfile.copy(
       schoolName = "Sekolah Rakyat 2 Kota Malang",
       shortName = "Sekolah Rakyat 2 Kota Malang",
+      address = "Jl. Ijen No. 88, Klojen, Kota Malang",
       city = "Malang Raya",
       adminName = "Bapak Hendra",
       secondaryFaskesName = "Puskesmas Klojen"
@@ -993,6 +994,7 @@ class ExampleRobolectricTest {
       kotlinx.coroutines.delay(50)
     }
     assertEquals("Sekolah Rakyat 2 Kota Malang", matchedReg?.schoolName)
+    assertEquals("Jl. Ijen No. 88, Klojen, Kota Malang", matchedReg?.address)
     assertEquals("Malang Raya", matchedReg?.city)
     assertEquals("Bapak Hendra", matchedReg?.picName)
 
@@ -1011,14 +1013,17 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertFalse(waMsg.contains("SRT 1"))
     org.junit.Assert.assertFalse(waMsg.contains("Eko Wahyudi"))
 
-    // 4. PDF kop surat, sub-header, and signature labels must reflect dynamic SchoolProfile
+    // 4. PDF kop surat, sub-header (address), unit titles, and signature labels must reflect dynamic SchoolProfile
     val headerTitle = com.example.util.PdfReportGenerator.buildHeaderTitle(vm.schoolProfile.value)
     val subHeaderLine = com.example.util.PdfReportGenerator.buildSubHeaderLine(vm.schoolProfile.value)
     val footerSignTitle = com.example.util.PdfReportGenerator.buildFooterSignatureTitle(vm.schoolProfile.value)
     assertEquals("SEKOLAH RAKYAT 2 KOTA MALANG", headerTitle)
-    org.junit.Assert.assertTrue(subHeaderLine.contains("Puskesmas Klojen"))
-    org.junit.Assert.assertFalse(subHeaderLine.contains("Wates"))
-    org.junit.Assert.assertTrue(footerSignTitle.contains("Sekolah Rakyat 2 Kota Malang"))
+    assertEquals("Jl. Ijen No. 88, Klojen, Kota Malang", subHeaderLine)
+    org.junit.Assert.assertFalse(subHeaderLine.contains("Kerjasama"))
+    assertEquals("Wali Asuh Sekolah Rakyat 2 Kota Malang,", footerSignTitle)
+    org.junit.Assert.assertFalse(footerSignTitle.contains("Kesehatan"))
+    assertEquals("UNIT LAYANAN KESEHATAN WALIASUH", com.example.util.PdfReportGenerator.UNIT_LAYANAN_KESEHATAN)
+    assertEquals("UNIT BIMBINGAN SPIRITUAL WALIASUH", com.example.util.PdfReportGenerator.UNIT_BIMBINGAN_SPIRITUAL)
 
     matchedReg?.let { vm.deleteSchoolRegistration(it) }
     org.robolectric.shadows.ShadowLooper.idleMainLooper()

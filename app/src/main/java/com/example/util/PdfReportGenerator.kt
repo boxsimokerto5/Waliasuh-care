@@ -146,6 +146,9 @@ object PdfReportGenerator {
         }
     }
 
+    internal const val UNIT_LAYANAN_KESEHATAN = "UNIT LAYANAN KESEHATAN WALIASUH"
+    internal const val UNIT_BIMBINGAN_SPIRITUAL = "UNIT BIMBINGAN SPIRITUAL WALIASUH"
+
     internal fun buildHeaderTitle(schoolProfile: SchoolProfile): String {
         return schoolProfile.schoolName.trim()
             .ifBlank { schoolProfile.shortName.trim().ifBlank { "WALI ASUH CARE" } }
@@ -153,17 +156,17 @@ object PdfReportGenerator {
     }
 
     internal fun buildSubHeaderLine(schoolProfile: SchoolProfile): String {
-        val referralFaskes = schoolProfile.getAllFaskes().drop(1)
+        val cleanAddress = schoolProfile.address.trim()
         return when {
-            referralFaskes.isNotEmpty() -> "Kerjasama Fasilitas Kesehatan: ${referralFaskes.joinToString(" & ")}"
-            schoolProfile.city.isNotBlank() -> "Wilayah Operasional: ${schoolProfile.city}"
-            else -> "Layanan Kesehatan Anak Asuh & Pesantren / Asrama"
+            cleanAddress.isNotBlank() -> cleanAddress
+            schoolProfile.city.isNotBlank() -> schoolProfile.city.trim()
+            else -> "Sekolah Rakyat • Indonesia"
         }
     }
 
     internal fun buildFooterSignatureTitle(schoolProfile: SchoolProfile): String {
         val schoolSignLabel = schoolProfile.shortName.trim().ifBlank { schoolProfile.schoolName.trim() }
-        val signTitle = if (schoolSignLabel.isNotBlank()) "Wali Asuh Kesehatan $schoolSignLabel," else "Wali Asuh Kesehatan,"
+        val signTitle = if (schoolSignLabel.isNotBlank()) "Wali Asuh $schoolSignLabel," else "Wali Asuh,"
         return signTitle.take(60)
     }
 
@@ -185,7 +188,8 @@ object PdfReportGenerator {
         paint: Paint,
         width: Int,
         startY: Float,
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        unitTitle: String = UNIT_LAYANAN_KESEHATAN
     ): Float {
         val marginX = 35f
         val topY = startY - 12f
@@ -247,14 +251,15 @@ object PdfReportGenerator {
         y += 13f
         paint.textSize = 10f
         paint.color = Color.rgb(30, 41, 59)
-        canvas.drawText("UNIT LAYANAN KESEHATAN WALIASUH", width / 2f, y, paint)
+        canvas.drawText(unitTitle, width / 2f, y, paint)
 
         y += 11f
+        val subHeaderText = buildSubHeaderLine(schoolProfile)
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        paint.textSize = 8f
+        paint.textSize = if (subHeaderText.length > 62) 7.5f else 8f
         paint.color = Color.rgb(100, 116, 139)
         val subHeaderToDraw = TextUtils.ellipsize(
-            buildSubHeaderLine(schoolProfile),
+            subHeaderText,
             TextPaint(paint),
             maxCenterTextWidth,
             TextUtils.TruncateAt.END
@@ -1062,8 +1067,16 @@ object PdfReportGenerator {
 
             var currentY = 35f
 
-            // 1. Kop Surat Resmi
-            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+            // 1. Kop Surat Resmi (Unit Bimbingan Spiritual)
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = UNIT_BIMBINGAN_SPIRITUAL
+            )
 
             // 2. Judul Laporan & Info Sesi
             paint.textAlign = Paint.Align.CENTER
@@ -1282,8 +1295,16 @@ object PdfReportGenerator {
 
             var currentY = 35f
 
-            // 1. Kop Surat Resmi
-            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+            // 1. Kop Surat Resmi (Unit Bimbingan Spiritual)
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = UNIT_BIMBINGAN_SPIRITUAL
+            )
 
             // 2. Judul Laporan
             paint.textAlign = Paint.Align.CENTER

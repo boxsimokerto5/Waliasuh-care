@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -49,6 +50,8 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.Key
@@ -121,6 +124,7 @@ import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
 import com.example.data.remote.supabase.SupabaseSchemaProvider
 import com.example.ui.HealthViewModel
+import com.example.ui.dialogs.SuperadminSchoolDetailSheet
 import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -163,6 +167,7 @@ fun SuperAdminScreen(
     var approvedRegistrationDialog by remember { mutableStateOf<SchoolRegistration?>(null) }
     var schoolToSuspend by remember { mutableStateOf<SchoolRegistration?>(null) }
     var schoolToDelete by remember { mutableStateOf<SchoolRegistration?>(null) }
+    var selectedSchoolForDetail by remember { mutableStateOf<SchoolRegistration?>(null) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
     // Intercept back button
@@ -228,6 +233,25 @@ fun SuperAdminScreen(
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(ClipData.newPlainText("Kartu Akses Admin Sekolah", message))
             Toast.makeText(context, "Kartu akses disalin ke clipboard! Silakan kirimkan via WhatsApp.", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    fun copyAdminCredentials(reg: SchoolRegistration) {
+        val text = "ID: ${reg.generatedSchoolCode}\nUsername: ${reg.generatedAdminUsername}\nPassword: ${reg.generatedAdminPassword}"
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Akun Admin", text))
+        Toast.makeText(context, "Kredensial berhasil disalin!", Toast.LENGTH_SHORT).show()
+    }
+
+    fun contactPicViaWhatsApp(picName: String, schoolName: String, picPhone: String) {
+        val cleanPhone = picPhone.replace("-", "").replace(" ", "").trim()
+        val intlPhone = if (cleanPhone.startsWith("0")) "62" + cleanPhone.drop(1) else cleanPhone
+        val msg = "Halo Yth. $picName ($schoolName), saya menghubungi dari Superadmin Wali Asuh Care mengenai akun dan pengelolaan data sekolah Anda."
+        val uri = Uri.parse("https://api.whatsapp.com/send?phone=$intlPhone&text=${Uri.encode(msg)}")
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW, uri))
+        } catch (e: Exception) {
+            Toast.makeText(context, "Tidak dapat membuka WhatsApp", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -586,10 +610,10 @@ fun SuperAdminScreen(
                                 sendAccessCardViaWhatsApp(item)
                             },
                             onCopyCredentials = {
-                                val text = "ID: ${item.generatedSchoolCode}\nUsername: ${item.generatedAdminUsername}\nPassword: ${item.generatedAdminPassword}"
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Akun Admin", text))
-                                Toast.makeText(context, "Kredensial berhasil disalin!", Toast.LENGTH_SHORT).show()
+                                copyAdminCredentials(item)
+                            },
+                            onClick = {
+                                selectedSchoolForDetail = item
                             }
                         )
                     }
@@ -601,6 +625,9 @@ fun SuperAdminScreen(
                 registrations = registrations,
                 waliAccounts = waliAccounts,
                 students = students,
+                onSelectSchool = { reg ->
+                    selectedSchoolForDetail = reg
+                },
                 onDeleteRegistration = { reg ->
                     schoolToDelete = reg
                 }
@@ -898,6 +925,20 @@ fun SuperAdminScreen(
             }
         )
     }
+
+    // BOTTOM SHEET DETAIL SEKOLAH LENGKAP (SLIDE DARI BAWAH)
+    if (selectedSchoolForDetail != null) {
+        val target = selectedSchoolForDetail!!
+        SuperadminSchoolDetailSheet(
+            registration = target,
+            students = students,
+            waliAccounts = waliAccounts,
+            onCopyCredentials = { copyAdminCredentials(target) },
+            onSendWaCard = { sendAccessCardViaWhatsApp(target) },
+            onContactWa = { contactPicViaWhatsApp(target.picName, target.schoolName, target.picPhone) },
+            onDismiss = { selectedSchoolForDetail = null }
+        )
+    }
 }
 
 @Composable
@@ -954,6 +995,7 @@ fun SuperadminRegistrationItemCard(
     onDelete: () -> Unit,
     onSendWaCard: () -> Unit,
     onCopyCredentials: () -> Unit,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
@@ -973,6 +1015,7 @@ fun SuperadminRegistrationItemCard(
     }
 
     ElevatedCard(
+        onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
             .testTag("school_reg_item_${registration.id}"),
@@ -1356,6 +1399,7 @@ fun SuperadminReportsView(
     registrations: List<SchoolRegistration>,
     waliAccounts: List<WaliAccount>,
     students: List<ChildStudent>,
+    onSelectSchool: (SchoolRegistration) -> Unit = {},
     onDeleteRegistration: (SchoolRegistration) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
@@ -1705,6 +1749,11 @@ fun SuperadminReportsView(
                     },
                     onDeleteSchool = schoolItem.originalRegistration?.let { reg ->
                         { onDeleteRegistration(reg) }
+                    },
+                    onClick = {
+                        schoolItem.originalRegistration?.let { reg ->
+                            onSelectSchool(reg)
+                        }
                     }
                 )
             }
@@ -1759,9 +1808,11 @@ fun SuperadminReportSchoolCard(
     onContactWa: () -> Unit,
     onCopySchoolInfo: () -> Unit,
     onDeleteSchool: (() -> Unit)? = null,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     ElevatedCard(
+        onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
             .testTag("report_school_${school.schoolCode}"),
@@ -1917,37 +1968,59 @@ fun SuperadminReportSchoolCard(
                 }
             }
 
-            // Tampilkan daftar nama akun wali asuh jika tersedia
+            // Tampilkan daftar nama akun wali asuh jika tersedia (default tersembunyi, bisa dibuka-tutup)
             if (school.waliNames.isNotEmpty()) {
+                var isWaliListExpanded by remember(school.schoolCode) { mutableStateOf(false) }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(top = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "Daftar User Wali Asuh Aktif:",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { isWaliListExpanded = !isWaliListExpanded }
+                            .padding(horizontal = 4.dp, vertical = 6.dp)
+                            .testTag("toggle_wali_list_${school.schoolCode}"),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        school.waliNames.forEach { waliName ->
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = waliName,
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = FontWeight.Medium
-                                )
+                        Text(
+                            text = "Daftar User Wali Asuh Aktif (${school.waliNames.size})",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Icon(
+                            imageVector = if (isWaliListExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = if (isWaliListExpanded) "Sembunyikan daftar wali asuh" else "Tampilkan daftar wali asuh",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    AnimatedVisibility(visible = isWaliListExpanded) {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            school.waliNames.forEach { waliName ->
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = waliName,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     }

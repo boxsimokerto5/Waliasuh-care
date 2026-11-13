@@ -47,4 +47,57 @@ class ExampleUnitTest {
     assertEquals("Laki-laki", tokens[4])
     assertEquals("Nyawangan, Kras, KAB. KEDIRI", tokens[9])
   }
+
+  @Test
+  fun testExportStudentsToCsv_roundTripsThroughParser() {
+    val students = listOf(
+      com.example.data.model.ChildStudent(
+        id = 1L,
+        name = "Aisyah Putri",
+        nis = "3185428544",
+        gender = "P",
+        age = 13,
+        dormitory = "Asrama Putri",
+        classGrade = "VII-1",
+        nik = "3506015105090001",
+        noKk = "3506010412103889",
+        birthPlace = "KEDIRI",
+        birthDate = "11-05-2013",
+        motherName = "Siti Aminah",
+        address = "Dsn. Krajan, Kec. Semen, \"Kab. Kediri\"",
+        jenjang = "SMP",
+        schoolId = "SRT1-KDR"
+      )
+    )
+    val csv = com.example.util.StudentCsvParser.exportStudentsToCsv(students)
+    val parsed = com.example.util.StudentCsvParser.parseCsv(csv, "SRT1-KDR")
+    assertEquals(1, parsed.size)
+    assertEquals("Aisyah Putri", parsed[0].name)
+    assertEquals("VII-1", parsed[0].classGrade)
+    assertEquals("SMP", parsed[0].jenjang)
+    assertEquals("P", parsed[0].gender)
+    assertEquals("3506015105090001", parsed[0].nik)
+    assertEquals("3506010412103889", parsed[0].noKk)
+    assertEquals("3185428544", parsed[0].nis)
+    assertTrue(parsed[0].address.contains("Dsn. Krajan, Kec. Semen"))
+  }
+
+  @Test
+  fun testExportWaliToCsv_formatsExpectedColumns() {
+    val accounts = listOf(
+      com.example.data.model.WaliAccount(
+        id = 1L,
+        name = "Ustadz Ahmad",
+        username = "ustahmad",
+        password = "Pass#1234",
+        dormitory = "Asrama Putra",
+        phone = "081234567890",
+        schoolId = "SRT1-KDR"
+      )
+    )
+    val csv = com.example.util.StudentCsvParser.exportWaliToCsv(accounts)
+    val lines = csv.lines()
+    assertEquals("Nama Lengkap,Asrama,No WhatsApp,Username,Password", lines[0])
+    assertEquals("Ustadz Ahmad,Asrama Putra,081234567890,ustahmad,Pass#1234", lines[1])
+  }
 }

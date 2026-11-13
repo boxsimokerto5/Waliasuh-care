@@ -45,7 +45,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -109,6 +108,9 @@ import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberDatePickerState
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.FileDownload
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingSession
@@ -120,12 +122,15 @@ import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.util.StudentClassifier
+import com.example.util.StudentCsvParser
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminScreen(
     viewModel: HealthViewModel,
-    onNavigateToApp: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -184,6 +189,46 @@ fun AdminScreen(
         fastingSessions
             .filter { it.schoolId.equals(activeSchoolCode, ignoreCase = true) }
             .sortedByDescending { it.sessionDate }
+    }
+
+    val exportStudentsCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val csvContent = "\uFEFF" + StudentCsvParser.exportStudentsToCsv(schoolStudents)
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(csvContent.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(
+                    context,
+                    "Berhasil mengekspor ${schoolStudents.size} data siswa ke CSV!",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal mengekspor CSV siswa: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    val exportWaliCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val csvContent = "\uFEFF" + StudentCsvParser.exportWaliToCsv(schoolAccounts)
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(csvContent.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(
+                    context,
+                    "Berhasil mengekspor ${schoolAccounts.size} akun wali ke CSV!",
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal mengekspor CSV wali: ${e.message}", Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     val filteredAccounts = schoolAccounts.filter { account ->
@@ -303,17 +348,6 @@ fun AdminScreen(
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Bagikan Rekap Seluruh Akun",
-                            tint = Color.White
-                        )
-                    }
-                    // Tombol Buka Dashboard Aplikasi
-                    IconButton(
-                        onClick = onNavigateToApp,
-                        modifier = Modifier.testTag("btn_admin_to_app")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Widgets,
-                            contentDescription = "Buka Dashboard Aplikasi",
                             tint = Color.White
                         )
                     }
@@ -437,12 +471,21 @@ fun AdminScreen(
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        if (schoolProfile.address.isNotBlank()) {
+                                            Text(
+                                                text = schoolProfile.address,
+                                                fontSize = 10.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
                             }
 
                             Text(
-                                text = "Kustomisasi nama sekolah, faskes rujukan, serta impor data anak asuh & wali asuh secara massal menggunakan file CSV.",
+                                text = "Kustomisasi nama sekolah, alamat kop surat, faskes rujukan, serta impor/ekspor data anak asuh & wali asuh secara massal menggunakan file CSV.",
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -462,7 +505,7 @@ fun AdminScreen(
                                         Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(18.dp), tint = WaliPrimary)
                                         Spacer(modifier = Modifier.height(2.dp))
                                         Text("Profil Sekolah", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("Nama & Faskes", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("Nama, Alamat & Faskes", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
 
@@ -492,6 +535,64 @@ fun AdminScreen(
                                         Text("Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                         Text("${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
                                     }
+                                }
+                            }
+
+                            // 2 Action Buttons: Export Siswa CSV & Export Wali CSV (cadangan backup)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        if (schoolStudents.isEmpty()) {
+                                            Toast.makeText(context, "Belum ada data siswa untuk diekspor.", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                                            val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
+                                            exportStudentsCsvLauncher.launch("data_siswa_${codeSlug}_$dateSlug.csv")
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_export_students_csv")
+                                ) {
+                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F766E))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Export Siswa (.csv)",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = {
+                                        if (schoolAccounts.isEmpty()) {
+                                            Toast.makeText(context, "Belum ada akun wali asuh untuk diekspor.", Toast.LENGTH_SHORT).show()
+                                        } else {
+                                            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+                                            val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
+                                            exportWaliCsvLauncher.launch("data_wali_${codeSlug}_$dateSlug.csv")
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_export_wali_csv")
+                                ) {
+                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF1D4ED8))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Export Wali (.csv)",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 }
                             }
 
@@ -1339,27 +1440,22 @@ fun AdminScreen(
     if (showExitConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showExitConfirmDialog = false },
-            title = { Text("Opsi Navigasi Portal Admin") },
-            text = { Text("Pilih tindakan yang ingin Anda lakukan:") },
+            title = { Text("Keluar dari Portal Admin?") },
+            text = { Text("Apakah Anda yakin ingin keluar (logout) dari sesi Administrator Sekolah?") },
             confirmButton = {
-                Button(onClick = {
-                    showExitConfirmDialog = false
-                    onNavigateToApp()
-                }) {
-                    Text("Buka Aplikasi")
+                Button(
+                    onClick = {
+                        showExitConfirmDialog = false
+                        onLogout()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Logout")
                 }
             },
             dismissButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { showExitConfirmDialog = false }) {
-                        Text("Batal")
-                    }
-                    OutlinedButton(onClick = {
-                        showExitConfirmDialog = false
-                        onLogout()
-                    }) {
-                        Text("Logout")
-                    }
+                TextButton(onClick = { showExitConfirmDialog = false }) {
+                    Text("Batal")
                 }
             }
         )

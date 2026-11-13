@@ -214,6 +214,7 @@ create table if not exists public.school_registrations (
   approved_date bigint default 0
 );
 
+alter table public.school_registrations add column if not exists address text not null default '';
 create index if not exists idx_school_reg_code on public.school_registrations (generated_school_code);
 
 -- 7. TABEL SESI PUASA SISWA (fasting_sessions)

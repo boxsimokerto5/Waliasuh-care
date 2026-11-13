@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
@@ -90,7 +89,6 @@ fun ProfileScreen(
     onToggleTheme: () -> Unit,
     records: List<MedicalRecord>,
     onLogout: () -> Unit = {},
-    onNavigateToAdmin: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -289,20 +287,6 @@ fun ProfileScreen(
             // GROUP 3: Lainnya
             item {
                 SectionHeader(title = "Lainnya")
-            }
-
-            if (role == UserRole.ADMIN && onNavigateToAdmin != null) {
-                item {
-                    MenuSettingCard(
-                        title = "Portal Administrator",
-                        subtitle = "Kelola akun & kartu akses login wali asuh",
-                        icon = Icons.Default.AdminPanelSettings,
-                        iconBg = Color(0xFFE0F2FE),
-                        iconColor = Color(0xFF0288D1),
-                        onClick = onNavigateToAdmin,
-                        testTag = "menu_portal_admin"
-                    )
-                }
             }
 
             item {

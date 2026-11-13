@@ -45,7 +45,8 @@ object StudentCardPdfGenerator {
         context: Context,
         students: List<ChildStudent>,
         schoolName: String,
-        filterLabel: String
+        filterLabel: String,
+        schoolAddress: String = ""
     ): File? {
         if (students.isEmpty()) return null
         val document = PdfDocument()
@@ -145,18 +146,26 @@ object StudentCardPdfGenerator {
 
                 val fullTitle = "KARTU ANAK ASUH — ${cleanSchool.uppercase()}"
                 val ellipsizedTitle = TextUtils.ellipsize(fullTitle, titlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
-                canvas.drawText(ellipsizedTitle, A4_WIDTH_PT / 2f, 29f, titlePaint)
-
-                val subtitleText = "Kategori: $filterLabel • Total: ${students.size} Siswa • Dicetak: $datePrint"
-                val ellipsizedSub = TextUtils.ellipsize(subtitleText, subTitlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
-                canvas.drawText(ellipsizedSub, A4_WIDTH_PT / 2f, 41f, subTitlePaint)
-
-                canvas.drawText(
-                    "Hal. ${pageIndex + 1} / $totalPages",
-                    A4_WIDTH_PT / 2f,
-                    52f,
-                    pageCountPaint
-                )
+                val cleanAddr = schoolAddress.trim()
+                if (cleanAddr.isNotBlank()) {
+                    canvas.drawText(ellipsizedTitle, A4_WIDTH_PT / 2f, 28f, titlePaint)
+                    val ellipsizedAddr = TextUtils.ellipsize(cleanAddr, subTitlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(ellipsizedAddr, A4_WIDTH_PT / 2f, 39f, subTitlePaint)
+                    val metaLine = "Kategori: $filterLabel • Total: ${students.size} Siswa • Dicetak: $datePrint • Hal. ${pageIndex + 1} / $totalPages"
+                    val ellipsizedMeta = TextUtils.ellipsize(metaLine, TextPaint(pageCountPaint), maxKopTextWidth, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(ellipsizedMeta, A4_WIDTH_PT / 2f, 50f, pageCountPaint)
+                } else {
+                    canvas.drawText(ellipsizedTitle, A4_WIDTH_PT / 2f, 29f, titlePaint)
+                    val subtitleText = "Kategori: $filterLabel • Total: ${students.size} Siswa • Dicetak: $datePrint"
+                    val ellipsizedSub = TextUtils.ellipsize(subtitleText, subTitlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(ellipsizedSub, A4_WIDTH_PT / 2f, 41f, subTitlePaint)
+                    canvas.drawText(
+                        "Hal. ${pageIndex + 1} / $totalPages",
+                        A4_WIDTH_PT / 2f,
+                        52f,
+                        pageCountPaint
+                    )
+                }
                 canvas.drawLine(startX, 58f, A4_WIDTH_PT - startX, 58f, cutGuidePaint)
 
                 val pageStart = pageIndex * CARDS_PER_PAGE

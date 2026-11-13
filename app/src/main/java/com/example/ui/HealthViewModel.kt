@@ -112,6 +112,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 savedShortName = schoolPrefs.getString("short_name", "SRT 1 Kediri")
             ),
             adminName = schoolPrefs.getString("admin_name", "Admin Utama") ?: "Admin Utama",
+            address = schoolPrefs.getString("school_address", "") ?: "",
             city = schoolPrefs.getString("city", "Kabupaten Kediri") ?: "Kabupaten Kediri",
             tenantCode = schoolPrefs.getString("tenant_code", "SRT1-KDR") ?: "SRT1-KDR",
             primaryFaskesName = schoolPrefs.getString("primary_faskes", "UKS Sekolah") ?: "UKS Sekolah",
@@ -148,6 +149,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             putString("school_name", profile.schoolName)
             putString("short_name", profile.shortName)
             putString("admin_name", profile.adminName)
+            putString("school_address", profile.address)
             putString("city", profile.city)
             putString("tenant_code", profile.tenantCode)
             putString("primary_faskes", profile.primaryFaskesName)
@@ -175,6 +177,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 schoolName = resolvedFullName,
                 shortName = SchoolProfile.sanitizeShortName(resolvedFullName, current.shortName),
                 adminName = current.adminName.ifBlank { reg.picName },
+                address = current.address.ifBlank { reg.address.trim() },
                 city = current.city.ifBlank { cleanCity },
                 tenantCode = cleanCode
             )
@@ -184,6 +187,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 schoolName = cleanSchoolName,
                 shortName = cleanSchoolName,
                 adminName = reg.picName.trim().ifBlank { "Admin Sekolah" },
+                address = reg.address.trim(),
                 city = cleanCity,
                 tenantCode = cleanCode,
                 primaryFaskesName = "UKS Sekolah",
@@ -204,6 +208,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             schoolName = profile.schoolName.trim(),
             shortName = SchoolProfile.sanitizeShortName(profile.schoolName, profile.shortName),
             adminName = profile.adminName.trim().ifBlank { "Admin Utama" },
+            address = profile.address.trim(),
             city = profile.city.trim().ifBlank { "Indonesia" }
         )
         persistSchoolProfile(cleanProfile, markCustomized = true)
@@ -213,6 +218,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (existingReg != null) {
                     val updatedReg = existingReg.copy(
                         schoolName = cleanProfile.schoolName,
+                        address = cleanProfile.address.ifBlank { existingReg.address },
                         city = cleanProfile.city,
                         picName = cleanProfile.adminName
                     )
@@ -1740,7 +1746,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 val pilotReg = SchoolRegistration(
                     id = SupabaseSyncManager.generateCloudSafeId(),
                     schoolName = profile.schoolName.ifBlank { "Sekolah Rakyat SRT 1 Kabupaten Kediri" },
-                    address = profile.city.ifBlank { "Kabupaten Kediri" },
+                    address = profile.address.ifBlank { profile.city.ifBlank { "Kabupaten Kediri" } },
                     city = profile.city.ifBlank { "Kabupaten Kediri" },
                     estimatedWaliCount = waliAccounts.value.count {
                         it.schoolId.equals("SRT1-KDR", ignoreCase = true)

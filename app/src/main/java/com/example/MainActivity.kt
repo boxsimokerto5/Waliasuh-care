@@ -100,7 +100,6 @@ class MainActivity : ComponentActivity() {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
             val viewModel: HealthViewModel = viewModel()
             val userRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
-            var adminWantsAppView by rememberSaveable { mutableStateOf(false) }
             var showSplashScreen by rememberSaveable { mutableStateOf(true) }
 
             MyApplicationTheme(darkTheme = isDarkTheme) {
@@ -113,15 +112,9 @@ class MainActivity : ComponentActivity() {
                         userRole == UserRole.NOT_LOGGED_IN -> {
                             LoginScreen(
                                 viewModel = viewModel,
-                                onLoginSuccessAdmin = {
-                                    adminWantsAppView = false
-                                },
-                                onLoginSuccessWali = { _ ->
-                                    adminWantsAppView = false
-                                },
-                                onLoginSuccessSuperAdmin = {
-                                    adminWantsAppView = false
-                                }
+                                onLoginSuccessAdmin = {},
+                                onLoginSuccessWali = { _ -> },
+                                onLoginSuccessSuperAdmin = {}
                             )
                         }
                         userRole == UserRole.SUPERADMIN -> {
@@ -130,10 +123,9 @@ class MainActivity : ComponentActivity() {
                                 onLogout = { viewModel.logout() }
                             )
                         }
-                        userRole == UserRole.ADMIN && !adminWantsAppView -> {
+                        userRole == UserRole.ADMIN -> {
                             AdminScreen(
                                 viewModel = viewModel,
-                                onNavigateToApp = { adminWantsAppView = true },
                                 onLogout = { viewModel.logout() }
                             )
                         }
@@ -145,11 +137,7 @@ class MainActivity : ComponentActivity() {
                                 viewModel = viewModel,
                                 onLogout = {
                                     viewModel.logout()
-                                    adminWantsAppView = false
-                                },
-                                onNavigateToAdmin = if (userRole == UserRole.ADMIN) {
-                                    { adminWantsAppView = false }
-                                } else null
+                                }
                             )
                         }
                     }
@@ -166,8 +154,7 @@ fun WaliAsuhCareApp(
     onToggleTheme: () -> Unit,
     initialScreen: WaliNavScreen = WaliNavScreen.DASHBOARD,
     viewModel: HealthViewModel = viewModel(),
-    onLogout: () -> Unit = {},
-    onNavigateToAdmin: (() -> Unit)? = null
+    onLogout: () -> Unit = {}
 ) {
     var currentScreen by rememberSaveable { mutableStateOf(initialScreen) }
     var showNotifModal by remember { mutableStateOf(false) }
@@ -202,14 +189,10 @@ fun WaliAsuhCareApp(
     val historySearchQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
     val studentSearchQuery by viewModel.studentSearchQuery.collectAsStateWithLifecycle()
 
-    // Handle back button for secondary screens -> return to Dashboard, or return to Admin Portal if role is Admin
+    // Handle back button for secondary screens -> return to Dashboard
     if (currentScreen != WaliNavScreen.DASHBOARD) {
         BackHandler {
             currentScreen = WaliNavScreen.DASHBOARD
-        }
-    } else if (onNavigateToAdmin != null) {
-        BackHandler {
-            onNavigateToAdmin()
         }
     }
 
@@ -469,8 +452,7 @@ fun WaliAsuhCareApp(
                         isDarkTheme = isDarkTheme,
                         onToggleTheme = onToggleTheme,
                         records = allRecords,
-                        onLogout = onLogout,
-                        onNavigateToAdmin = onNavigateToAdmin
+                        onLogout = onLogout
                     )
                 }
             }
