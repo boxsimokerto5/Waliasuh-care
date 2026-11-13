@@ -384,6 +384,12 @@ class ExampleRobolectricTest {
       changeSuccess = success
       resultMsg = msg
     }
+    var attempts = 0
+    while (!changeSuccess && attempts < 20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      attempts++
+    }
     org.robolectric.shadows.ShadowLooper.idleMainLooper()
 
     org.junit.Assert.assertTrue(changeSuccess)
@@ -448,6 +454,126 @@ class ExampleRobolectricTest {
 
     val messagesAfterDelete = db.shiftMessageDao().getAllMessages().first()
     org.junit.Assert.assertNull(messagesAfterDelete.firstOrNull { it.id == msgId })
+  }
+
+  @Test
+  fun `verify StudentClassifier handles varied female formats and strict matching without fallback`() {
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("Perempuan", "104", ""))
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("Wanita", "", ""))
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("Female", "", ""))
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("Pr", "", ""))
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("P", "", ""))
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("", "PP_104", ""))
+    assertEquals("P", com.example.util.StudentClassifier.detectGenderCode("", "", "Asrama Putri"))
+
+    assertEquals("L", com.example.util.StudentClassifier.detectGenderCode("L", "", ""))
+    assertEquals("L", com.example.util.StudentClassifier.detectGenderCode("Laki-laki", "PL_101", "Asrama Putra"))
+
+    val femaleA = com.example.data.model.ChildStudent(
+      id = 101L,
+      name = "Azzura Fauziah",
+      nis = "SRT1-001",
+      nik = "3506111122220001",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "VII-A",
+      schoolId = "SRT1-KDR"
+    )
+    val femaleB = com.example.data.model.ChildStudent(
+      id = 102L,
+      name = "Siti Nurhaliza",
+      nis = "SRT1-002",
+      nik = "3506111122220002",
+      gender = "Wanita",
+      age = 14,
+      dormitory = "Kamar PP_104",
+      classGrade = "VIII-A",
+      schoolId = "SRT1-KDR"
+    )
+    val maleC = com.example.data.model.ChildStudent(
+      id = 103L,
+      name = "Ahmad Syaiful",
+      nis = "SRT1-003",
+      nik = "3506111122220003",
+      gender = "Laki-laki",
+      age = 14,
+      dormitory = "Asrama Putra",
+      classGrade = "VIII-B",
+      roomNumber = "PL_101",
+      schoolId = "SRT1-KDR"
+    )
+
+    org.junit.Assert.assertTrue(com.example.util.StudentClassifier.isFemaleStudent(femaleA))
+    org.junit.Assert.assertTrue(com.example.util.StudentClassifier.isFemaleStudent(femaleB))
+    org.junit.Assert.assertFalse(com.example.util.StudentClassifier.isFemaleStudent(maleC))
+    org.junit.Assert.assertTrue(com.example.util.StudentClassifier.isMaleStudent(maleC))
+
+    val femaleList = listOf(femaleA, femaleB)
+
+    // Unknown code MUST return null (never silently fall back to femaleA)
+    org.junit.Assert.assertNull(
+      com.example.util.StudentClassifier.findMatchingFemaleStudent(femaleList, "999999")
+    )
+    org.junit.Assert.assertNull(
+      com.example.util.StudentClassifier.findMatchingFemaleStudent(femaleList, "   ")
+    )
+
+    // Exact NIK, NIS, ID, and partial name matching
+    assertEquals(
+      femaleB,
+      com.example.util.StudentClassifier.findMatchingFemaleStudent(femaleList, "3506111122220002")
+    )
+    assertEquals(
+      femaleB,
+      com.example.util.StudentClassifier.findMatchingFemaleStudent(femaleList, "SRT1-002")
+    )
+    assertEquals(
+      femaleA,
+      com.example.util.StudentClassifier.findMatchingFemaleStudent(femaleList, "azzura")
+    )
+  }
+
+  @Test
+  fun `verify SupabaseStudentDto preserves schoolId and SupabaseSchemaProvider includes all 6 tables`() {
+    val student = com.example.data.model.ChildStudent(
+      id = 55001L,
+      name = "Nadia Putri",
+      nis = "KED05-11",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "VII-B",
+      nik = "3506000011112222",
+      roomNumber = "PP_102",
+      schoolId = "SRT-KED05"
+    )
+
+    val dto = com.example.data.remote.supabase.SupabaseStudentDto.fromDomain(student)
+    assertEquals("SRT-KED05", dto.schoolId)
+    assertEquals(55001L, dto.id)
+
+    val restored = dto.toDomainModel()
+    assertEquals("SRT-KED05", restored.schoolId)
+    assertEquals("PP_102", restored.roomNumber)
+    assertEquals("Nadia Putri", restored.name)
+
+    val schema = com.example.data.remote.supabase.SupabaseSchemaProvider.FULL_SQL_SCHEMA
+    val expectedTables = listOf(
+      "child_students",
+      "medical_records",
+      "haid_records",
+      "wali_accounts",
+      "shift_messages",
+      "school_registrations"
+    )
+    expectedTables.forEach { table ->
+      org.junit.Assert.assertTrue("Missing table $table in SQL schema", schema.contains("public.$table"))
+      org.junit.Assert.assertTrue("Missing RLS enable for $table", schema.contains("alter table public.$table enable row level security"))
+      org.junit.Assert.assertTrue("Missing RLS policy for $table", schema.contains("create policy \"Akses Penuh $table\""))
+    }
+    org.junit.Assert.assertTrue(schema.contains("school_id"))
+    assertEquals(6, com.example.data.remote.supabase.SupabaseSchemaProvider.TABLES.size)
   }
 }
 

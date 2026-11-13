@@ -144,13 +144,23 @@ fun AddStudentDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     FilterChip(
                         selected = gender == "L",
-                        onClick = { gender = "L" },
+                        onClick = {
+                            gender = "L"
+                            if (dormitory.contains("Putri", ignoreCase = true)) {
+                                dormitory = dormitory.replace("Putri", "Putra", ignoreCase = true)
+                            }
+                        },
                         label = { Text("Putra (L)", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
                         selected = gender == "P",
-                        onClick = { gender = "P" },
+                        onClick = {
+                            gender = "P"
+                            if (dormitory.contains("Putra", ignoreCase = true)) {
+                                dormitory = dormitory.replace("Putra", "Putri", ignoreCase = true)
+                            }
+                        },
                         label = { Text("Putri (P)", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )

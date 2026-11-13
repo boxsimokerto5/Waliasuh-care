@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.ui.theme.WaliPrimary
+import com.example.util.StudentClassifier
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -170,14 +171,15 @@ fun ImportStudentsCsvDialog(
 
         // Deteksi apakah baris pertama adalah baris nama kolom (Header)
         val hasHeader = firstLineTokens.any { token ->
-            val t = token.lowercase()
-            t.contains("nama") || t.contains("kelas") || t.contains("nik") || t.contains("kamar") || t.contains("kelamin")
+            val t = token.lowercase().trim()
+            t.contains("nama") || t.contains("kelas") || t.contains("nik") || t.contains("kamar") || t.contains("kelamin") || t.contains("gender") || t.contains("asrama") || t == "jk" || t == "l/p"
         }
 
         var idxNo = -1
         var idxName = -1
         var idxClass = -1
         var idxRoom = -1
+        var idxDorm = -1
         var idxGender = -1
         var idxNik = -1
         var idxNoKk = -1
@@ -196,7 +198,8 @@ fun ImportStudentsCsvDialog(
                     col.contains("nama lengkap") || col.contains("nama siswa") || col == "nama" -> if (idxName == -1) idxName = idx
                     col.contains("kelas") || col.contains("tingkat") -> if (idxClass == -1) idxClass = idx
                     col.contains("kamar") || col.contains("ruang") -> if (idxRoom == -1) idxRoom = idx
-                    col.contains("kelamin") || col.contains("gender") || col == "jk" -> if (idxGender == -1) idxGender = idx
+                    col.contains("asrama") || col.contains("dorm") -> if (idxDorm == -1) idxDorm = idx
+                    col.contains("kelamin") || col.contains("gender") || col == "jk" || col == "l/p" || col == "lp" || col == "sex" -> if (idxGender == -1) idxGender = idx
                     col == "nik" || col.contains("no nik") || col.contains("nomor nik") -> if (idxNik == -1) idxNik = idx
                     col.contains("kk") -> if (idxNoKk == -1) idxNoKk = idx
                     col.contains("tempat lahir") || col.contains("tmp lahir") || col == "tempat" -> if (idxBirthPlace == -1) idxBirthPlace = idx
@@ -238,18 +241,16 @@ fun ImportStudentsCsvDialog(
                 val classGrade = rawClass.ifBlank { "Kelas -" }
 
                 val rawRoom = (if (idxRoom in tokens.indices) tokens[idxRoom] else "").trim().removeSurrounding("\"")
+                val rawDorm = (if (idxDorm in tokens.indices) tokens[idxDorm] else "").trim().removeSurrounding("\"")
                 val rawGender = (if (idxGender in tokens.indices) tokens[idxGender] else "").trim().removeSurrounding("\"")
 
-                // Deteksi jenis kelamin: periksa nilai kolom, atau inferensikan dari kode kamar (PL = Putra, PP = Putri)
-                val isFemale = rawGender.contains("Perempuan", ignoreCase = true) ||
-                        rawGender.equals("P", ignoreCase = true) ||
-                        rawGender.contains("Putri", ignoreCase = true) ||
-                        rawRoom.startsWith("PP", ignoreCase = true) ||
-                        rawRoom.startsWith("AP", ignoreCase = true)
-                val gender = if (isFemale) "P" else "L"
+                // Deteksi jenis kelamin: dukung beragam format (P, Pr, Wanita, Female, PP_, Asrama Putri, dll)
+                val gender = StudentClassifier.detectGenderCode(rawGender, rawRoom, rawDorm)
+                val isFemale = gender == "P"
 
-                // Deteksi otomatis asrama: dari prefix kamar (PL = Putra, PP = Putri) atau jenis kelamin
+                // Deteksi otomatis asrama: pakai kolom asrama jika ada, atau dari kode kamar/gender
                 val dormitory = when {
+                    rawDorm.isNotBlank() -> rawDorm
                     rawRoom.startsWith("PP", ignoreCase = true) || rawRoom.startsWith("AP", ignoreCase = true) -> "Asrama Putri"
                     rawRoom.startsWith("PL", ignoreCase = true) || rawRoom.startsWith("AL", ignoreCase = true) -> "Asrama Putra"
                     isFemale -> "Asrama Putri"
@@ -665,8 +666,8 @@ fun ImportStudentsCsvDialog(
                 }
 
                 if (parsedStudents.isNotEmpty()) {
-                    val countPutra = parsedStudents.count { it.dormitory.contains("Putra") }
-                    val countPutri = parsedStudents.count { it.dormitory.contains("Putri") }
+                    val countPutra = parsedStudents.count { StudentClassifier.isMaleStudent(it) }
+                    val countPutri = parsedStudents.count { StudentClassifier.isFemaleStudent(it) }
 
                     Column(
                         modifier = Modifier
@@ -739,17 +740,18 @@ fun ImportStudentsCsvDialog(
                                             fontSize = 12.sp,
                                             color = Color(0xFF1E293B)
                                         )
+                                        val isFemaleSample = StudentClassifier.isFemaleStudent(sample)
                                         Box(
                                             modifier = Modifier
                                                 .clip(RoundedCornerShape(4.dp))
-                                                .background(if (sample.gender == "P") Color(0xFFFCE7F3) else Color(0xFFDBEAFE))
+                                                .background(if (isFemaleSample) Color(0xFFFCE7F3) else Color(0xFFDBEAFE))
                                                 .padding(horizontal = 6.dp, vertical = 1.dp)
                                         ) {
                                             Text(
                                                 text = "${sample.dormitory} • ${sample.roomNumber.ifBlank { "-" }}",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = if (sample.gender == "P") Color(0xFF9D174D) else Color(0xFF1E40AF)
+                                                color = if (isFemaleSample) Color(0xFF9D174D) else Color(0xFF1E40AF)
                                             )
                                         }
                                     }

@@ -61,9 +61,16 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -111,6 +118,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
+import com.example.data.remote.supabase.SupabaseSchemaProvider
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -141,8 +149,9 @@ fun SuperAdminScreen(
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
-    var selectedMainTab by remember { mutableStateOf(0) } // 0: Pengajuan Sekolah, 1: Laporan & Rekapitulasi
+    var selectedMainTab by remember { mutableStateOf(0) } // 0: Pengajuan Sekolah, 1: Laporan & Rekapitulasi, 2: SQL Editor
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedStatusFilter by remember { mutableStateOf("Semua") } // "Semua", "PENDING", "APPROVED", "SUSPENDED", "REJECTED"
@@ -153,10 +162,6 @@ fun SuperAdminScreen(
     var schoolToSuspend by remember { mutableStateOf<SchoolRegistration?>(null) }
     var schoolToDelete by remember { mutableStateOf<SchoolRegistration?>(null) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        viewModel.cleanLegacyPilotData()
-    }
 
     // Intercept back button
     BackHandler {
@@ -302,7 +307,8 @@ fun SuperAdminScreen(
                             Text(
                                 text = "Pengajuan (${registrations.size})",
                                 fontWeight = if (selectedMainTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 13.sp
+                                fontSize = 12.sp,
+                                maxLines = 1
                             )
                         },
                         icon = {
@@ -319,9 +325,10 @@ fun SuperAdminScreen(
                         onClick = { selectedMainTab = 1 },
                         text = {
                             Text(
-                                text = "Laporan & Rekapitulasi",
+                                text = "Laporan",
                                 fontWeight = if (selectedMainTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 13.sp
+                                fontSize = 12.sp,
+                                maxLines = 1
                             )
                         },
                         icon = {
@@ -332,6 +339,26 @@ fun SuperAdminScreen(
                             )
                         },
                         modifier = Modifier.testTag("tab_superadmin_laporan")
+                    )
+                    Tab(
+                        selected = selectedMainTab == 2,
+                        onClick = { selectedMainTab = 2 },
+                        text = {
+                            Text(
+                                text = "SQL Editor",
+                                fontWeight = if (selectedMainTab == 2) FontWeight.Bold else FontWeight.Normal,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
+                        },
+                        icon = {
+                            Icon(
+                                Icons.Default.Code,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        },
+                        modifier = Modifier.testTag("tab_superadmin_sql")
                     )
                 }
             }
@@ -544,7 +571,7 @@ fun SuperAdminScreen(
                     }
                 }
             }
-        } else {
+        } else if (selectedMainTab == 1) {
             SuperadminReportsView(
                 schoolProfile = schoolProfile,
                 registrations = registrations,
@@ -552,6 +579,13 @@ fun SuperAdminScreen(
                 students = students,
                 onDeleteRegistration = { reg ->
                     schoolToDelete = reg
+                }
+            )
+        } else {
+            SuperAdminSqlEditorView(
+                isSyncing = isSyncing,
+                onTestConnection = { onResult ->
+                    viewModel.testSupabaseConnection(onResult)
                 }
             )
         }
@@ -1940,6 +1974,270 @@ fun SuperadminReportSchoolCard(
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(13.dp))
                         Spacer(modifier = Modifier.width(3.dp))
                         Text("Hapus", fontSize = 11.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun SuperAdminSqlEditorView(
+    isSyncing: Boolean,
+    onTestConnection: (onResult: (Boolean, String) -> Unit) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    var testResultMsg by remember { mutableStateOf<String?>(null) }
+    var testResultSuccess by remember { mutableStateOf(true) }
+
+    fun copyFullSql() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("Supabase SQL Editor Schema", SupabaseSchemaProvider.FULL_SQL_SCHEMA))
+        Toast.makeText(context, "Skrip SQL lengkap berhasil disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+    }
+
+    fun shareFullSql() {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_SUBJECT, "SQL Editor Supabase - Wali Asuh Care (${SupabaseSchemaProvider.SCHEMA_VERSION})")
+            putExtra(Intent.EXTRA_TEXT, SupabaseSchemaProvider.FULL_SQL_SCHEMA)
+        }
+        try {
+            context.startActivity(Intent.createChooser(intent, "Bagikan Skrip SQL Supabase"))
+        } catch (_: Exception) {
+            copyFullSql()
+        }
+    }
+
+    LazyColumn(
+        modifier = modifier
+            .fillMaxSize()
+            .widthIn(max = 768.dp)
+            .padding(horizontal = 16.dp),
+        contentPadding = PaddingValues(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(WaliPrimary.copy(alpha = 0.12f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Storage,
+                                contentDescription = "Skema Database Supabase",
+                                tint = WaliPrimary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "SQL Editor Supabase Terbaru",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "Versi: ${SupabaseSchemaProvider.SCHEMA_VERSION}",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = WaliPrimary
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Skrip ini selalu diperbarui mengikuti seluruh fitur aplikasi. Jalankan di menu SQL Editor pada dashboard Supabase Anda (aman dijalankan ulang tanpa menghapus data).",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { copyFullSql() },
+                            modifier = Modifier
+                                .weight(1.3f)
+                                .height(48.dp)
+                                .testTag("btn_copy_sql_superadmin"),
+                            colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp)
+                        ) {
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Salin SQL", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Salin Skrip SQL Lengkap", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { shareFullSql() },
+                            modifier = Modifier
+                                .weight(0.8f)
+                                .height(48.dp)
+                                .testTag("btn_share_sql_superadmin"),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Share, contentDescription = "Bagikan SQL", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Bagikan SQL", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onTestConnection { success, msg ->
+                                testResultSuccess = success
+                                testResultMsg = msg
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                            }
+                        },
+                        enabled = !isSyncing,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_test_supabase_superadmin"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Menguji Koneksi Supabase...", fontSize = 12.sp)
+                        } else {
+                            Icon(Icons.Default.CloudDone, contentDescription = "Uji Koneksi Supabase", modifier = Modifier.size(16.dp), tint = Color(0xFF16A34A))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Uji Koneksi Supabase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+
+                    if (testResultMsg != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (testResultSuccess) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                            ),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text(
+                                text = testResultMsg ?: "",
+                                fontSize = 11.5.sp,
+                                color = if (testResultSuccess) Color(0xFF166534) else Color(0xFF991B1B),
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Text(
+                text = "Daftar Tabel Tersinkron (${SupabaseSchemaProvider.TABLES.size} Tabel):",
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+
+        items(SupabaseSchemaProvider.TABLES, key = { it.tableName }) { tableMeta ->
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = "Aktif",
+                            tint = Color(0xFF16A34A),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = tableMeta.tableName,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = tableMeta.description,
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(WaliPrimary.copy(alpha = 0.12f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = tableMeta.multiTenantColumn,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold,
+                            color = WaliPrimary
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "Kode SQL Editor Lengkap (Siap Copy-Paste):",
+                    fontSize = 13.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF0F172A))
+                        .border(1.dp, Color(0xFF334155), RoundedCornerShape(12.dp))
+                        .padding(12.dp)
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    SelectionContainer {
+                        Text(
+                            text = SupabaseSchemaProvider.FULL_SQL_SCHEMA,
+                            color = Color(0xFFE2E8F0),
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
             }

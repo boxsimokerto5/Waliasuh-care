@@ -32,6 +32,15 @@ interface HaidRecordDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(record: HaidRecord): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(records: List<HaidRecord>)
+
+    @Query("SELECT * FROM haid_records WHERE schoolId = :schoolId ORDER BY startDate DESC")
+    suspend fun getRecordsBySchoolList(schoolId: String): List<HaidRecord>
+
+    @Query("SELECT * FROM haid_records WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): HaidRecord?
+
     @Update
     suspend fun update(record: HaidRecord)
 

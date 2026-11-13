@@ -20,6 +20,15 @@ interface ShiftMessageDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(message: ShiftMessage): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(messages: List<ShiftMessage>)
+
+    @Query("SELECT * FROM shift_messages WHERE schoolId = :schoolId ORDER BY isCompleted ASC, followUpDate ASC, createdAt DESC")
+    suspend fun getMessagesBySchoolList(schoolId: String): List<ShiftMessage>
+
+    @Query("SELECT * FROM shift_messages WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): ShiftMessage?
+
     @Update
     suspend fun update(message: ShiftMessage)
 

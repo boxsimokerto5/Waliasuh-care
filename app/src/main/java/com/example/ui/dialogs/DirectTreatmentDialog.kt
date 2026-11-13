@@ -41,6 +41,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -78,6 +79,11 @@ fun DirectTreatmentDialog(
     ) -> Unit
 ) {
     var selectedStudent by remember { mutableStateOf(students.firstOrNull()) }
+    LaunchedEffect(students) {
+        if (selectedStudent == null && students.isNotEmpty()) {
+            selectedStudent = students.firstOrNull()
+        }
+    }
     var showStudentSearchDialog by remember { mutableStateOf(false) }
 
     val faskesOptions = remember(primaryFaskesName, secondaryFaskesName, allFaskesList) {

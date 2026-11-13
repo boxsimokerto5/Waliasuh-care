@@ -102,6 +102,19 @@ class HealthRepository(
     suspend fun deleteStudentsBySchool(schoolId: String) =
         studentDao.deleteBySchoolId(schoolId)
 
+    suspend fun getStudentsBySchoolList(schoolId: String): List<ChildStudent> =
+        studentDao.getStudentsBySchoolList(schoolId)
+
+    suspend fun deleteStudentsByIds(ids: List<Long>) {
+        if (ids.isNotEmpty()) studentDao.deleteByIds(ids)
+    }
+
+    suspend fun getAllRecordsList(): List<MedicalRecord> =
+        recordDao.getAllRecordsList()
+
+    suspend fun getWaliAccountsBySchoolList(schoolId: String): List<WaliAccount> =
+        waliAccountDao.getAccountsBySchoolList(schoolId)
+
     suspend fun deleteAllWaliAccounts() =
         waliAccountDao.deleteAll()
 
@@ -114,6 +127,12 @@ class HealthRepository(
     // --- School Registration Operations ---
     suspend fun insertSchoolRegistration(registration: SchoolRegistration): Long =
         registrationDao.insert(registration)
+
+    suspend fun insertAllSchoolRegistrations(registrations: List<SchoolRegistration>) =
+        registrationDao.insertAll(registrations)
+
+    suspend fun getAllSchoolRegistrationsList(): List<SchoolRegistration> =
+        registrationDao.getAllRegistrationsList()
 
     suspend fun updateSchoolRegistration(registration: SchoolRegistration) =
         registrationDao.update(registration)
@@ -134,6 +153,16 @@ class HealthRepository(
     suspend fun insertShiftMessage(message: ShiftMessage): Long =
         shiftMessageDao?.insert(message) ?: 0L
 
+    suspend fun insertAllShiftMessages(messages: List<ShiftMessage>) {
+        shiftMessageDao?.insertAll(messages)
+    }
+
+    suspend fun getShiftMessagesBySchoolList(schoolId: String): List<ShiftMessage> =
+        shiftMessageDao?.getMessagesBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getShiftMessageById(id: Long): ShiftMessage? =
+        shiftMessageDao?.getById(id)
+
     suspend fun updateShiftMessage(message: ShiftMessage) {
         shiftMessageDao?.update(message)
     }
@@ -153,6 +182,16 @@ class HealthRepository(
     // --- Haid Tracking Operations ---
     suspend fun insertHaidRecord(record: HaidRecord): Long =
         haidRecordDao?.insert(record) ?: 0L
+
+    suspend fun insertAllHaidRecords(records: List<HaidRecord>) {
+        haidRecordDao?.insertAll(records)
+    }
+
+    suspend fun getHaidRecordsBySchoolList(schoolId: String): List<HaidRecord> =
+        haidRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getHaidRecordById(id: Long): HaidRecord? =
+        haidRecordDao?.getById(id)
 
     suspend fun updateHaidRecord(record: HaidRecord) {
         haidRecordDao?.update(record)

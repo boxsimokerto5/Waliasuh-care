@@ -92,9 +92,11 @@ import com.example.util.DateUtils
 import com.example.util.PasswordGenerator
 
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material3.CircularProgressIndicator
 import com.example.data.model.ChildStudent
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
@@ -102,6 +104,7 @@ import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
 import com.example.ui.dialogs.StudentDetailDialog
+import com.example.util.StudentClassifier
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -116,6 +119,7 @@ fun AdminScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
@@ -171,18 +175,20 @@ fun AdminScreen(
         val matchSearch = studentSearchQuery.isBlank() ||
                 student.name.contains(studentSearchQuery, ignoreCase = true) ||
                 student.nis.contains(studentSearchQuery, ignoreCase = true) ||
+                student.nik.contains(studentSearchQuery, ignoreCase = true) ||
+                student.roomNumber.contains(studentSearchQuery, ignoreCase = true) ||
                 student.classGrade.contains(studentSearchQuery, ignoreCase = true) ||
                 student.dormitory.contains(studentSearchQuery, ignoreCase = true)
         val matchGender = when (selectedStudentGenderFilter) {
-            "Putra" -> student.gender.equals("L", ignoreCase = true)
-            "Putri" -> student.gender.equals("P", ignoreCase = true)
+            "Putra" -> StudentClassifier.isMaleStudent(student)
+            "Putri" -> StudentClassifier.isFemaleStudent(student)
             else -> true
         }
         matchSearch && matchGender
     }
 
-    val studentPutraCount = schoolStudents.count { it.gender.equals("L", ignoreCase = true) }
-    val studentPutriCount = schoolStudents.count { it.gender.equals("P", ignoreCase = true) }
+    val studentPutraCount = schoolStudents.count { StudentClassifier.isMaleStudent(it) }
+    val studentPutriCount = schoolStudents.count { StudentClassifier.isFemaleStudent(it) }
 
     fun shareAllAccountsSummary() {
         if (schoolAccounts.isEmpty()) {
@@ -438,6 +444,36 @@ fun AdminScreen(
                                         Text("Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
                                         Text("${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
                                     }
+                                }
+                            }
+
+                            // Tombol Sinkronkan Data Sekolah ke Cloud (Supabase)
+                            Button(
+                                onClick = {
+                                    viewModel.syncAllWithSupabase { success, msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                    }
+                                },
+                                enabled = !isSyncing,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_admin_sync_cloud"),
+                                colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        color = Color.White,
+                                        modifier = Modifier.size(16.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Menyinkronkan ke Cloud Supabase...", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                } else {
+                                    Icon(Icons.Default.CloudSync, contentDescription = "Sinkron Cloud", modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Sinkronkan Semua Data Sekolah ke Cloud", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
 
@@ -1416,7 +1452,7 @@ fun AdminStudentCardItem(
     onViewDetail: () -> Unit,
     onDelete: () -> Unit
 ) {
-    val isPutri = student.gender.equals("P", ignoreCase = true)
+    val isPutri = StudentClassifier.isFemaleStudent(student)
     val accentColor = if (isPutri) Color(0xFFBE185D) else Color(0xFF0369A1)
 
     ElevatedCard(

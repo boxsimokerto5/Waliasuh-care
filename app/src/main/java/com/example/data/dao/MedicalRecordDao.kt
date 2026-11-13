@@ -50,6 +50,9 @@ interface MedicalRecordDao {
     @Query("UPDATE medical_records SET isControlCompleted = :isCompleted WHERE id = :id")
     suspend fun updateControlCompleted(id: Long, isCompleted: Boolean)
 
+    @Query("SELECT * FROM medical_records ORDER BY planDate DESC, createdAt DESC")
+    suspend fun getAllRecordsList(): List<MedicalRecord>
+
     @Query("SELECT COUNT(*) FROM medical_records")
     suspend fun count(): Int
 

@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ChildStudent
 import com.example.data.model.HaidRecord
+import com.example.util.StudentClassifier
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -74,9 +75,9 @@ fun InputHaidDialog(
     onSaveHaid: (HaidRecord) -> Unit,
     onDismiss: () -> Unit
 ) {
-    // Siswi putri saja yang relevan
+    // Siswi putri saja yang relevan (mendukung variasi gender "P", "Perempuan", "Wanita", "Asrama Putri", "PP_")
     val femaleStudents = remember(students) {
-        students.filter { it.gender.equals("P", ignoreCase = true) || it.dormitory.contains("Putri", ignoreCase = true) }
+        students.filter { StudentClassifier.isFemaleStudent(it) }
     }
 
     var selectedStudent by remember { mutableStateOf<ChildStudent?>(null) }
@@ -211,6 +212,11 @@ fun InputHaidDialog(
 
                 // Card Siswi Terpilih
                 if (selectedStudent == null) {
+                    val emptyPromptText = when {
+                        students.isEmpty() -> "Belum ada data siswa di sekolah ini. Admin perlu mengunggah CSV atau menambah siswa terlebih dahulu."
+                        femaleStudents.isEmpty() -> "Belum ada data siswi putri di sekolah ini. Pastikan kolom Jenis Kelamin bernilai 'P / Perempuan' atau Asrama Putri."
+                        else -> "Silakan Scan Barcode Kartu Siswa atau Pilih Siswi terlebih dahulu (${femaleStudents.size} siswi tersedia)"
+                    }
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -220,7 +226,7 @@ fun InputHaidDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Silakan Scan Barcode Kartu Siswa atau Pilih Siswi terlebih dahulu",
+                            text = emptyPromptText,
                             fontSize = 11.5.sp,
                             color = Color(0xFF9D174D),
                             fontWeight = FontWeight.Medium
@@ -459,7 +465,7 @@ fun InputHaidDialog(
                             symptoms = selectedSymptom,
                             notes = notesCombined.trim(),
                             waliName = waliName,
-                            schoolId = schoolId
+                            schoolId = schoolId.ifBlank { "SRT1-KDR" }
                         )
 
                         onSaveHaid(record)
@@ -485,18 +491,13 @@ fun InputHaidDialog(
         BarcodeScannerDialog(
             femaleStudents = femaleStudents,
             onScanned = { code ->
-                val q = code.trim().lowercase()
-                val matched = femaleStudents.firstOrNull {
-                    it.nik.trim().equals(q, ignoreCase = true) ||
-                    it.nis.trim().equals(q, ignoreCase = true) ||
-                    it.id.toString() == q ||
-                    it.name.lowercase().contains(q)
-                } ?: femaleStudents.firstOrNull()
+                val matched = StudentClassifier.findMatchingFemaleStudent(femaleStudents, code)
 
                 if (matched != null) {
                     selectedStudent = matched
                     errorMessage = ""
                 } else {
+                    selectedStudent = null
                     errorMessage = "Kartu NIK/NIS '$code' tidak ditemukan di database siswi putri."
                 }
                 showScannerDialog = false

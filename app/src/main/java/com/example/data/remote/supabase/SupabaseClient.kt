@@ -19,15 +19,29 @@ import retrofit2.http.Query
 import java.util.concurrent.TimeUnit
 
 interface SupabaseService {
-    @GET("rest/v1/child_students?select=*&order=id.asc")
+    // --- Child Students ---
+    @GET("rest/v1/child_students?select=*&order=name.asc")
     suspend fun getStudents(): Response<List<SupabaseStudentDto>>
+
+    @GET("rest/v1/child_students?select=*&order=name.asc")
+    suspend fun getStudentsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseStudentDto>>
 
     @POST("rest/v1/child_students")
     @Headers("Prefer: resolution=merge-duplicates")
     suspend fun upsertStudents(@Body students: List<SupabaseStudentDto>): Response<ResponseBody>
 
+    @DELETE("rest/v1/child_students")
+    suspend fun deleteStudent(@Query("id") idFilter: String): Response<ResponseBody>
+
+    @DELETE("rest/v1/child_students")
+    suspend fun deleteStudentsBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
+
+    // --- Medical Records ---
     @GET("rest/v1/medical_records?select=*&order=id.desc")
     suspend fun getMedicalRecords(): Response<List<SupabaseMedicalRecordDto>>
+
+    @GET("rest/v1/medical_records?select=*&order=id.desc")
+    suspend fun getMedicalRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseMedicalRecordDto>>
 
     @POST("rest/v1/medical_records")
     @Headers("Prefer: resolution=merge-duplicates")
@@ -35,6 +49,62 @@ interface SupabaseService {
 
     @DELETE("rest/v1/medical_records")
     suspend fun deleteMedicalRecord(@Query("id") idFilter: String): Response<ResponseBody>
+
+    // --- Haid Records ---
+    @GET("rest/v1/haid_records?select=*&order=start_date.desc")
+    suspend fun getHaidRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseHaidRecordDto>>
+
+    @POST("rest/v1/haid_records")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertHaidRecords(@Body records: List<SupabaseHaidRecordDto>): Response<ResponseBody>
+
+    @DELETE("rest/v1/haid_records")
+    suspend fun deleteHaidRecord(@Query("id") idFilter: String): Response<ResponseBody>
+
+    @DELETE("rest/v1/haid_records")
+    suspend fun deleteHaidRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
+
+    // --- Wali Accounts ---
+    @GET("rest/v1/wali_accounts?select=*&order=name.asc")
+    suspend fun getAllWaliAccounts(): Response<List<SupabaseWaliAccountDto>>
+
+    @GET("rest/v1/wali_accounts?select=*&order=name.asc")
+    suspend fun getWaliAccountsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseWaliAccountDto>>
+
+    @POST("rest/v1/wali_accounts")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertWaliAccounts(@Body accounts: List<SupabaseWaliAccountDto>): Response<ResponseBody>
+
+    @DELETE("rest/v1/wali_accounts")
+    suspend fun deleteWaliAccount(@Query("id") idFilter: String): Response<ResponseBody>
+
+    @DELETE("rest/v1/wali_accounts")
+    suspend fun deleteWaliAccountsBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
+
+    // --- Shift Messages ---
+    @GET("rest/v1/shift_messages?select=*&order=created_at.desc")
+    suspend fun getShiftMessagesBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseShiftMessageDto>>
+
+    @POST("rest/v1/shift_messages")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertShiftMessages(@Body messages: List<SupabaseShiftMessageDto>): Response<ResponseBody>
+
+    @DELETE("rest/v1/shift_messages")
+    suspend fun deleteShiftMessage(@Query("id") idFilter: String): Response<ResponseBody>
+
+    @DELETE("rest/v1/shift_messages")
+    suspend fun deleteShiftMessagesBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
+
+    // --- School Registrations ---
+    @GET("rest/v1/school_registrations?select=*&order=submission_date.desc")
+    suspend fun getAllSchoolRegistrations(): Response<List<SupabaseSchoolRegistrationDto>>
+
+    @POST("rest/v1/school_registrations")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertSchoolRegistrations(@Body registrations: List<SupabaseSchoolRegistrationDto>): Response<ResponseBody>
+
+    @DELETE("rest/v1/school_registrations")
+    suspend fun deleteSchoolRegistration(@Query("id") idFilter: String): Response<ResponseBody>
 }
 
 object SupabaseClient {

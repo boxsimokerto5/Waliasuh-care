@@ -101,7 +101,24 @@ fun BarcodeScannerDialog(
     }
 
     var manualNikInput by remember { mutableStateOf("") }
+    var quickSearchQuery by remember { mutableStateOf("") }
     var isFlashOn by remember { mutableStateOf(false) }
+
+    val filteredFemaleStudents = remember(femaleStudents, quickSearchQuery) {
+        val q = quickSearchQuery.trim().lowercase()
+        if (q.isEmpty()) {
+            femaleStudents
+        } else {
+            femaleStudents.filter { s ->
+                s.name.lowercase().contains(q) ||
+                    s.classGrade.lowercase().contains(q) ||
+                    s.dormitory.lowercase().contains(q) ||
+                    s.roomNumber.lowercase().contains(q) ||
+                    s.nik.lowercase().contains(q) ||
+                    s.nis.lowercase().contains(q)
+            }
+        }
+    }
 
     // Laser Animation Effect
     val infiniteTransition = rememberInfiniteTransition(label = "laser")
@@ -327,9 +344,9 @@ fun BarcodeScannerDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Quick Pick: Daftar Kartu Siswi Terdaftar (Untuk kemudahan 1-klik di asrama)
+                // Quick Pick: Daftar Kartu Siswi Terdaftar (Menampilkan seluruh siswi tanpa batas + filter cepat)
                 Text(
-                    text = "Pilih Cepat Kartu Siswi Asrama Putri:",
+                    text = "Pilih Cepat Kartu Siswi Asrama Putri (${filteredFemaleStudents.size} Siswi):",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -337,7 +354,28 @@ fun BarcodeScannerDialog(
                 )
                 Spacer(modifier = Modifier.height(6.dp))
 
-                if (femaleStudents.isEmpty()) {
+                if (femaleStudents.isNotEmpty()) {
+                    OutlinedTextField(
+                        value = quickSearchQuery,
+                        onValueChange = { quickSearchQuery = it },
+                        placeholder = { Text("Cari nama, kelas, kamar, atau NIK siswi...", fontSize = 11.5.sp) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Cari Siswi",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_quick_pick_haid_search")
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                }
+
+                if (filteredFemaleStudents.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -345,7 +383,11 @@ fun BarcodeScannerDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Belum ada data siswi putri terdaftar.",
+                            text = if (femaleStudents.isEmpty()) {
+                                "Belum ada data siswi putri terdaftar."
+                            } else {
+                                "Tidak ada siswi yang cocok dengan pencarian \"$quickSearchQuery\"."
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -354,10 +396,10 @@ fun BarcodeScannerDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 180.dp),
+                            .heightIn(max = 200.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        items(femaleStudents.take(15), key = { it.id }) { student ->
+                        items(filteredFemaleStudents, key = { it.id }) { student ->
                             Card(
                                 onClick = {
                                     val codeToUse = if (student.nik.isNotBlank()) student.nik else if (student.nis.isNotBlank()) student.nis else student.id.toString()

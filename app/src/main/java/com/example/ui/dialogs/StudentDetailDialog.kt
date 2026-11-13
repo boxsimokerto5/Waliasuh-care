@@ -52,6 +52,7 @@ import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
+import com.example.util.StudentClassifier
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -153,7 +154,7 @@ fun StudentDetailDialog(
                             color = MaterialTheme.colorScheme.primary
                         )
                         Text(text = "🏠 Asrama: ${student.dormitory}", fontSize = 11.sp)
-                        Text(text = "🎂 Usia/Gender: ${student.age} Th • ${if (student.gender == "L") "Putra" else "Putri"} • Gol: ${student.bloodType}", fontSize = 11.sp)
+                        Text(text = "🎂 Usia/Gender: ${student.age} Th • ${if (StudentClassifier.isMaleStudent(student)) "Putra" else "Putri"} • Gol: ${student.bloodType}", fontSize = 11.sp)
                         if (student.birthDate.isNotBlank()) {
                             Text(text = "📍 TTL: ${student.birthPlace}, ${student.birthDate}", fontSize = 11.sp)
                         }

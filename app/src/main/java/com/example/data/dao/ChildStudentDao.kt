@@ -35,6 +35,12 @@ interface ChildStudentDao {
     @Query("SELECT * FROM child_students WHERE schoolId = :schoolId ORDER BY name ASC")
     fun getStudentsBySchool(schoolId: String): Flow<List<ChildStudent>>
 
+    @Query("SELECT * FROM child_students WHERE schoolId = :schoolId ORDER BY name ASC")
+    suspend fun getStudentsBySchoolList(schoolId: String): List<ChildStudent>
+
+    @Query("DELETE FROM child_students WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
     @Query("DELETE FROM child_students WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
 

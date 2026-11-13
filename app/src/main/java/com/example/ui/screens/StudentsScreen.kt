@@ -57,6 +57,7 @@ import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.StudentDetailDialog
+import com.example.util.StudentClassifier
 
 @Composable
 fun StudentsScreen(
@@ -286,19 +287,20 @@ fun CompactStudentCardItem(
                         modifier = Modifier.weight(1f, fill = false)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
+                    val isMale = StudentClassifier.isMaleStudent(student)
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(4.dp))
                             .background(
-                                if (student.gender.equals("L", ignoreCase = true)) Color(0xFFE0F2FE) else Color(0xFFFCE7F3)
+                                if (isMale) Color(0xFFE0F2FE) else Color(0xFFFCE7F3)
                             )
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (student.gender.equals("L", ignoreCase = true)) "Putra" else "Putri",
+                            text = if (isMale) "Putra" else "Putri",
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.SemiBold,
-                            color = if (student.gender.equals("L", ignoreCase = true)) Color(0xFF0284C7) else Color(0xFFDB2777),
+                            color = if (isMale) Color(0xFF0284C7) else Color(0xFFDB2777),
                             maxLines = 1,
                             softWrap = false
                         )

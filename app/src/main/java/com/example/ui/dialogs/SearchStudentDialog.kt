@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ChildStudent
+import com.example.util.StudentClassifier
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -65,8 +66,8 @@ fun SearchStudentDialog(
     val filteredStudents = remember(searchQuery, selectedDormitoryFilter, students) {
         students.filter { student ->
             val matchesDorm = when (selectedDormitoryFilter) {
-                "Putra" -> student.dormitory.contains("Putra", ignoreCase = true)
-                "Putri" -> student.dormitory.contains("Putri", ignoreCase = true)
+                "Putra" -> StudentClassifier.isMaleStudent(student)
+                "Putri" -> StudentClassifier.isFemaleStudent(student)
                 else -> true
             }
             val matchesQuery = if (searchQuery.isBlank()) {
@@ -77,6 +78,8 @@ fun SearchStudentDialog(
                         student.dormitory.lowercase().contains(q) ||
                         student.classGrade.lowercase().contains(q) ||
                         student.nis.lowercase().contains(q) ||
+                        student.nik.lowercase().contains(q) ||
+                        student.roomNumber.lowercase().contains(q) ||
                         student.allergies.lowercase().contains(q)
             }
             matchesDorm && matchesQuery
@@ -282,12 +285,13 @@ fun SearchStudentDialog(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     // Avatar circle with initial
+                                    val isFemale = StudentClassifier.isFemaleStudent(student)
                                     Box(
                                         modifier = Modifier
                                             .size(36.dp)
                                             .clip(CircleShape)
                                             .background(
-                                                if (student.dormitory.contains("Putri", ignoreCase = true)) {
+                                                if (isFemale) {
                                                     Color(0xFFE91E63).copy(alpha = 0.15f)
                                                 } else {
                                                     MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
@@ -299,7 +303,7 @@ fun SearchStudentDialog(
                                             text = student.name.take(1).uppercase(),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 14.sp,
-                                            color = if (student.dormitory.contains("Putri", ignoreCase = true)) {
+                                            color = if (isFemale) {
                                                 Color(0xFFC2185B)
                                             } else {
                                                 MaterialTheme.colorScheme.primary

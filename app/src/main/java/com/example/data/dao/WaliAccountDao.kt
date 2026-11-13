@@ -45,6 +45,9 @@ interface WaliAccountDao {
     @Query("SELECT * FROM wali_accounts WHERE schoolId = :schoolId ORDER BY name ASC")
     fun getAccountsBySchool(schoolId: String): Flow<List<WaliAccount>>
 
+    @Query("SELECT * FROM wali_accounts WHERE schoolId = :schoolId ORDER BY name ASC")
+    suspend fun getAccountsBySchoolList(schoolId: String): List<WaliAccount>
+
     @Query("DELETE FROM wali_accounts WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
 
