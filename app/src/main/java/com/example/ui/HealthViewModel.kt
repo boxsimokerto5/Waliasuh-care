@@ -672,6 +672,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val activeWali = _waliName.value.ifBlank { escortName.ifBlank { "Wali Asuh" } }
             val record = MedicalRecord(
                 id = SupabaseSyncManager.generateCloudSafeId(),
                 studentId = student.id,
@@ -684,7 +685,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 departureTime = departureTime,
                 status = "PLANNED",
                 escortName = if (escortName.isBlank()) _waliName.value else escortName,
-                notes = notes
+                notes = notes,
+                createdBy = activeWali
             )
             val newId = repository.insertRecord(record)
             val recordWithId = record.copy(id = newId)
@@ -782,6 +784,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 isInpatient = isInpatient,
                 inpatientRoom = if (isInpatient) inpatientRoom.trim() else "",
                 dischargeDate = if (isInpatient) null else record.dischargeDate,
+                createdBy = record.createdBy.ifBlank { _waliName.value.ifBlank { record.escortName } },
                 notes = if (additionalNotes.isNotBlank()) "${record.notes}\n$additionalNotes".trim() else record.notes
             )
             repository.updateRecord(updated)
@@ -811,6 +814,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val activeWali = _waliName.value.ifBlank { escortName.ifBlank { "Wali Asuh" } }
             val record = MedicalRecord(
                 id = SupabaseSyncManager.generateCloudSafeId(),
                 studentId = student.id,
@@ -833,7 +837,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 notes = notes,
                 isInpatient = isInpatient,
                 inpatientRoom = if (isInpatient) inpatientRoom.trim() else "",
-                dischargeDate = null
+                dischargeDate = null,
+                createdBy = activeWali
             )
             val newId = repository.insertRecord(record)
             val recordWithId = record.copy(id = newId)
@@ -857,6 +862,87 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // Edit Rencana Berobat (Terbuka untuk siapapun wali asuh/admin, mencatat editor terakhir)
+    fun editTreatmentPlan(
+        existingRecord: MedicalRecord,
+        student: ChildStudent,
+        faskes: String,
+        complaint: String,
+        planDate: Long,
+        departureTime: String,
+        escortName: String,
+        notes: String
+    ) {
+        viewModelScope.launch {
+            val editor = _waliName.value.ifBlank { escortName.ifBlank { "Wali Asuh" } }
+            val updated = existingRecord.copy(
+                studentId = student.id,
+                studentName = student.name,
+                studentDormitory = student.dormitory,
+                faskes = faskes,
+                complaint = complaint,
+                planDate = planDate,
+                departureTime = departureTime,
+                escortName = escortName,
+                notes = notes,
+                createdBy = existingRecord.createdBy.ifBlank { existingRecord.escortName },
+                editedBy = editor,
+                editedAt = System.currentTimeMillis()
+            )
+            repository.updateRecord(updated)
+            if (!isUnitTestEnvironment()) {
+                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+            }
+        }
+    }
+
+    // Edit Rekam Tindakan / Pengobatan (Terbuka untuk siapapun wali asuh/admin, mencatat editor terakhir)
+    fun editCompletedTreatment(
+        existingRecord: MedicalRecord,
+        student: ChildStudent,
+        faskes: String,
+        complaint: String,
+        diagnosis: String,
+        actionsTaken: String,
+        prescription: String,
+        needsControl: Boolean,
+        controlDate: Long?,
+        escortName: String,
+        notes: String,
+        isInpatient: Boolean,
+        inpatientRoom: String
+    ) {
+        viewModelScope.launch {
+            val editor = _waliName.value.ifBlank { escortName.ifBlank { "Wali Asuh" } }
+            val updated = existingRecord.copy(
+                studentId = student.id,
+                studentName = student.name,
+                studentDormitory = student.dormitory,
+                faskes = faskes,
+                complaint = complaint,
+                diagnosis = diagnosis,
+                actionsTaken = actionsTaken,
+                prescription = prescription,
+                needsControl = needsControl,
+                controlDate = if (needsControl) controlDate else null,
+                escortName = if (escortName.isBlank()) existingRecord.escortName else escortName,
+                notes = notes,
+                isInpatient = isInpatient,
+                inpatientRoom = if (isInpatient) inpatientRoom.trim() else "",
+                dischargeDate = if (isInpatient) null else existingRecord.dischargeDate,
+                createdBy = existingRecord.createdBy.ifBlank { existingRecord.escortName },
+                editedBy = editor,
+                editedAt = System.currentTimeMillis()
+            )
+            repository.updateRecord(updated)
+            if (!isUnitTestEnvironment()) {
+                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+            }
+        }
+    }
+
     // Tandai anak asuh sudah pulang / selesai rawat inap
     fun dischargeInpatient(
         record: MedicalRecord,
@@ -868,6 +954,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             val now = System.currentTimeMillis()
+            val editor = _waliName.value.ifBlank { record.escortName.ifBlank { "Wali Asuh" } }
             val mergedNotes = listOf(record.notes.trim(), dischargeNotes.trim())
                 .filter { it.isNotBlank() }
                 .joinToString("\n")
@@ -878,7 +965,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 prescription = updatedPrescription.trim().ifBlank { record.prescription },
                 needsControl = needsControl,
                 controlDate = if (needsControl) controlDate else null,
-                notes = mergedNotes
+                notes = mergedNotes,
+                createdBy = record.createdBy.ifBlank { record.escortName },
+                editedBy = editor,
+                editedAt = now
             )
             repository.updateRecord(updated)
             if (!isUnitTestEnvironment()) {

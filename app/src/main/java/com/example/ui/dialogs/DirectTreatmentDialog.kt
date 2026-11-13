@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Person
@@ -57,6 +58,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
+import com.example.data.model.MedicalRecord
 import com.example.util.DateUtils
 import java.util.Calendar
 
@@ -67,6 +69,7 @@ fun DirectTreatmentDialog(
     primaryFaskesName: String = "UKS Sekolah",
     secondaryFaskesName: String = "Puskesmas Wates",
     allFaskesList: List<String> = emptyList(),
+    existingRecord: MedicalRecord? = null,
     onDismiss: () -> Unit,
     onConfirm: (
         student: ChildStudent,
@@ -83,9 +86,20 @@ fun DirectTreatmentDialog(
         inpatientRoom: String
     ) -> Unit
 ) {
-    var selectedStudent by remember { mutableStateOf(students.firstOrNull()) }
-    LaunchedEffect(students) {
-        if (selectedStudent == null && students.isNotEmpty()) {
+    val isEditMode = existingRecord != null
+    var selectedStudent by remember(existingRecord?.id) {
+        mutableStateOf(
+            if (existingRecord != null) {
+                students.firstOrNull { it.id == existingRecord.studentId } ?: students.firstOrNull()
+            } else {
+                students.firstOrNull()
+            }
+        )
+    }
+    LaunchedEffect(students, existingRecord?.id) {
+        if (existingRecord != null) {
+            students.firstOrNull { it.id == existingRecord.studentId }?.let { selectedStudent = it }
+        } else if (selectedStudent == null && students.isNotEmpty()) {
             selectedStudent = students.firstOrNull()
         }
     }
@@ -98,20 +112,36 @@ fun DirectTreatmentDialog(
             listOf(primaryFaskesName, secondaryFaskesName).filter { it.isNotBlank() }
         }
     }
-    var selectedFaskes by remember { mutableStateOf(faskesOptions.firstOrNull() ?: primaryFaskesName) }
-    var customFaskes by remember { mutableStateOf("") }
+    val matchedExistingFaskes = remember(existingRecord?.id, faskesOptions) {
+        val raw = existingRecord?.faskes?.trim().orEmpty()
+        if (raw.isBlank()) null else faskesOptions.firstOrNull { it.equals(raw, ignoreCase = true) }
+    }
+    var selectedFaskes by remember(existingRecord?.id) {
+        mutableStateOf(
+            when {
+                existingRecord == null -> faskesOptions.firstOrNull() ?: primaryFaskesName
+                matchedExistingFaskes != null -> matchedExistingFaskes
+                else -> "Lainnya"
+            }
+        )
+    }
+    var customFaskes by remember(existingRecord?.id) {
+        mutableStateOf(
+            if (existingRecord != null && matchedExistingFaskes == null) existingRecord.faskes else ""
+        )
+    }
 
-    var complaint by remember { mutableStateOf("") }
-    var diagnosis by remember { mutableStateOf("") }
-    var actionsTaken by remember { mutableStateOf("") }
-    var prescription by remember { mutableStateOf("") }
-    var escortName by remember { mutableStateOf("") }
+    var complaint by remember(existingRecord?.id) { mutableStateOf(existingRecord?.complaint ?: "") }
+    var diagnosis by remember(existingRecord?.id) { mutableStateOf(existingRecord?.diagnosis ?: "") }
+    var actionsTaken by remember(existingRecord?.id) { mutableStateOf(existingRecord?.actionsTaken ?: "") }
+    var prescription by remember(existingRecord?.id) { mutableStateOf(existingRecord?.prescription ?: "") }
+    var escortName by remember(existingRecord?.id) { mutableStateOf(existingRecord?.escortName ?: "") }
     var expandedEscortDropdown by remember { mutableStateOf(false) }
-    var notes by remember { mutableStateOf("") }
+    var notes by remember(existingRecord?.id) { mutableStateOf(existingRecord?.notes ?: "") }
 
-    var isInpatient by remember { mutableStateOf(false) }
-    var inpatientRoom by remember { mutableStateOf("") }
-    var needsControl by remember { mutableStateOf(false) }
+    var isInpatient by remember(existingRecord?.id) { mutableStateOf(existingRecord?.isInpatient ?: false) }
+    var inpatientRoom by remember(existingRecord?.id) { mutableStateOf(existingRecord?.inpatientRoom ?: "") }
+    var needsControl by remember(existingRecord?.id) { mutableStateOf(existingRecord?.needsControl ?: false) }
 
     val calIn3Days = remember {
         Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 3) }.timeInMillis
@@ -123,7 +153,9 @@ fun DirectTreatmentDialog(
         Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 7) }.timeInMillis
     }
 
-    var selectedControlDateMillis by remember { mutableLongStateOf(calIn3Days) }
+    var selectedControlDateMillis by remember(existingRecord?.id) {
+        mutableLongStateOf(existingRecord?.controlDate ?: calIn3Days)
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -149,18 +181,52 @@ fun DirectTreatmentDialog(
                 // Header
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.FlashOn,
+                        imageVector = if (isEditMode) Icons.Default.Edit else Icons.Default.FlashOn,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.tertiary,
+                        tint = if (isEditMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Input Tindakan Langsung",
+                        text = if (isEditMode) "Edit Rekam Tindakan" else "Input Tindakan Langsung",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+
+                // Riwayat Diinput / Diedit oleh (tampil di dalam pop-up)
+                existingRecord?.let { rec ->
+                    val inputBy = rec.createdBy.ifBlank { rec.escortName.ifBlank { "-" } }
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = "Diinput oleh: $inputBy",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (rec.editedBy.isNotBlank()) {
+                                Text(
+                                    text = buildString {
+                                        append("Diedit oleh: ${rec.editedBy}")
+                                        rec.editedAt?.let { append(" (${DateUtils.formatShortDate(it)})") }
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
                 }
 
                 Text(
@@ -690,7 +756,14 @@ fun DirectTreatmentDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("confirm_direct_treatment_button")
                     ) {
-                        Text(if (isInpatient) "Simpan Rawat Inap" else "Simpan Pengobatan", fontSize = 12.sp)
+                        Text(
+                            text = when {
+                                isEditMode -> "Simpan Perubahan"
+                                isInpatient -> "Simpan Rawat Inap"
+                                else -> "Simpan Pengobatan"
+                            },
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }

@@ -40,5 +40,8 @@ data class MedicalRecord(
     val isInpatient: Boolean = false, // True jika anak sedang rawat inap / opname
     val inpatientRoom: String = "", // Nama ruang / kamar rawat inap (opsional)
     val dischargeDate: Long? = null, // Tanggal keluar / pulang dari rawat inap
+    val createdBy: String = "", // Nama wali asuh yang pertama kali menginput
+    val editedBy: String = "", // Nama wali asuh terakhir yang mengedit
+    val editedAt: Long? = null, // Waktu edit terakhir (timestamp millis)
     val createdAt: Long = System.currentTimeMillis()
 )

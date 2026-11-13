@@ -24,6 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AssignmentTurnedIn
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.Search
@@ -53,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
@@ -75,6 +77,7 @@ fun CompletedHistoryScreen(
 ) {
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
+    var recordToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
 
     Scaffold(
@@ -204,6 +207,7 @@ fun CompletedHistoryScreen(
                         items(completedRecords, key = { it.id }) { record ->
                             CompactCompletedRecordCard(
                                 record = record,
+                                onEdit = { recordToEdit = record },
                                 onShare = { recordToShare = record },
                                 onDelete = { viewModel.deleteRecord(record) }
                             )
@@ -241,6 +245,35 @@ fun CompletedHistoryScreen(
         )
     }
 
+    recordToEdit?.let { editingRecord ->
+        DirectTreatmentDialog(
+            students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            existingRecord = editingRecord,
+            onDismiss = { recordToEdit = null },
+            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
+                viewModel.editCompletedTreatment(
+                    existingRecord = editingRecord,
+                    student = student,
+                    faskes = faskes,
+                    complaint = complaint,
+                    diagnosis = diagnosis,
+                    actionsTaken = actions,
+                    prescription = prescription,
+                    needsControl = needsCtrl,
+                    controlDate = ctrlDate,
+                    escortName = escort,
+                    notes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
+                )
+                recordToEdit = null
+            }
+        )
+    }
+
     recordToShare?.let { record ->
         ShareWhatsAppDialog(
             record = record,
@@ -253,6 +286,7 @@ fun CompletedHistoryScreen(
 @Composable
 fun CompactCompletedRecordCard(
     record: MedicalRecord,
+    onEdit: () -> Unit = {},
     onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -406,6 +440,20 @@ fun CompactCompletedRecordCard(
 
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag("btn_edit_record_${record.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Riwayat",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
+                        IconButton(
                             onClick = onDelete,
                             modifier = Modifier.size(28.dp)
                         ) {
@@ -436,6 +484,15 @@ fun CompactCompletedRecordCard(
                         }
                     }
                 }
+
+                val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
+                Text(
+                    text = "Diinput oleh: $creatorLabel",
+                    fontSize = 9.5.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

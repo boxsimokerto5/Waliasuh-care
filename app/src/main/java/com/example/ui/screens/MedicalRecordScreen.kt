@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.FlashOn
 import androidx.compose.material.icons.filled.LocalHospital
@@ -144,6 +145,7 @@ fun MedicalRecordScreen(
     val context = LocalContext.current
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
+    var recordToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
     var selectedRecordForDetail by remember { mutableStateOf<MedicalRecord?>(null) }
     var selectedStudentForPassport by remember { mutableStateOf<ChildStudent?>(null) }
@@ -562,6 +564,10 @@ fun MedicalRecordScreen(
                                         TopOnAdManager.onUserActionClick(context)
                                         selectedRecordForDetail = record
                                     },
+                                    onEdit = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        recordToEdit = record
+                                    },
                                     onShare = {
                                         TopOnAdManager.onUserActionClick(context)
                                         recordToShare = record
@@ -635,6 +641,11 @@ fun MedicalRecordScreen(
                 TopOnAdManager.onUserActionClick(context)
                 selectedRecordForDetail = null
                 recordToShare = record
+            },
+            onEdit = {
+                TopOnAdManager.onUserActionClick(context)
+                selectedRecordForDetail = null
+                recordToEdit = record
             },
             onDelete = {
                 TopOnAdManager.onUserActionClick(context)
@@ -719,6 +730,36 @@ fun MedicalRecordScreen(
         )
     }
 
+    recordToEdit?.let { editingRecord ->
+        DirectTreatmentDialog(
+            students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            existingRecord = editingRecord,
+            onDismiss = { recordToEdit = null },
+            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.editCompletedTreatment(
+                    existingRecord = editingRecord,
+                    student = student,
+                    faskes = faskes,
+                    complaint = complaint,
+                    diagnosis = diagnosis,
+                    actionsTaken = actions,
+                    prescription = prescription,
+                    needsControl = needsCtrl,
+                    controlDate = ctrlDate,
+                    escortName = escort,
+                    notes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
+                )
+                recordToEdit = null
+            }
+        )
+    }
+
     recordToShare?.let { record ->
         ShareWhatsAppDialog(
             record = record,
@@ -741,6 +782,7 @@ fun SlimMedicalRecordCardItem(
     thisMonthCount: Int,
     totalScreeningCount: Int,
     onClick: () -> Unit,
+    onEdit: () -> Unit = {},
     onShare: () -> Unit
 ) {
     val dateStr = record.treatmentDate?.let { DateUtils.formatShortDate(it) }
@@ -807,22 +849,36 @@ fun SlimMedicalRecordCardItem(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
-                // Tombol Bagikan WhatsApp & Indikator Detail
+                // Tombol Edit, Bagikan WhatsApp & Indikator Detail
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag("btn_edit_record_${record.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Rekam Tindakan",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+
+                    IconButton(
                         onClick = onShare,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(32.dp)
                             .testTag("btn_share_wa_${record.id}")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
                             contentDescription = "Laporan WhatsApp",
                             tint = Color(0xFF25D366),
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(17.dp)
                         )
                     }
 
@@ -950,6 +1006,15 @@ fun SlimMedicalRecordCardItem(
                     }
                 }
             }
+
+            val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
+            Text(
+                text = "Diinput oleh: $creatorLabel",
+                fontSize = 9.5.sp,
+                color = MaterialTheme.colorScheme.outline,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -1121,6 +1186,7 @@ fun MedicalRecordDetailSheet(
     onDismiss: () -> Unit,
     onPrintPdf: () -> Unit = {},
     onShare: () -> Unit,
+    onEdit: (() -> Unit)? = null,
     onDelete: () -> Unit,
     onDischargeInpatient: ((diagnosis: String, prescription: String, needsControl: Boolean, controlDate: Long?, notes: String) -> Unit)? = null
 ) {
@@ -1186,11 +1252,28 @@ fun MedicalRecordDetailSheet(
                             )
                         }
                     }
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup", modifier = Modifier.size(18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (onEdit != null) {
+                            IconButton(
+                                onClick = onEdit,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .testTag("btn_detail_edit_record")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Rekam Tindakan",
+                                    tint = WaliPrimary,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup", modifier = Modifier.size(18.dp))
+                        }
                     }
                 }
 
@@ -1365,6 +1448,21 @@ fun MedicalRecordDetailSheet(
                         Text(text = "📅 Tanggal: $treatmentDateStr", fontSize = 11.5.sp)
                         Text(text = "⏰ Jam Keberangkatan: ${record.departureTime} WIB", fontSize = 11.5.sp)
                         Text(text = "👤 Pendamping: ${record.escortName.ifBlank { "Wali Asuh SRT 1" }}", fontSize = 11.5.sp)
+                        val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
+                        Text(
+                            text = "✍️ Diinput oleh: $creatorLabel",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (record.editedBy.isNotBlank()) {
+                            val editedTimeLabel = record.editedAt?.let { " (${DateUtils.formatShortDate(it)})" }.orEmpty()
+                            Text(
+                                text = "✏️ Diedit oleh: ${record.editedBy}$editedTimeLabel",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
                     }
                 }
 

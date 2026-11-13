@@ -109,7 +109,10 @@ data class SupabaseMedicalRecordDto(
     @Json(name = "notes") val notes: String? = null,
     @Json(name = "is_inpatient") val isInpatient: Boolean = false,
     @Json(name = "inpatient_room") val inpatientRoom: String? = null,
-    @Json(name = "discharge_date") val dischargeDate: Long? = null
+    @Json(name = "discharge_date") val dischargeDate: Long? = null,
+    @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "edited_by") val editedBy: String? = null,
+    @Json(name = "edited_at") val editedAt: Long? = null
 ) {
     fun toDomainModel(): MedicalRecord {
         return MedicalRecord(
@@ -134,7 +137,10 @@ data class SupabaseMedicalRecordDto(
             notes = notes ?: "",
             isInpatient = isInpatient,
             inpatientRoom = inpatientRoom ?: "",
-            dischargeDate = dischargeDate
+            dischargeDate = dischargeDate,
+            createdBy = createdBy ?: "",
+            editedBy = editedBy ?: "",
+            editedAt = editedAt
         )
     }
 
@@ -163,7 +169,10 @@ data class SupabaseMedicalRecordDto(
                 notes = model.notes,
                 isInpatient = model.isInpatient,
                 inpatientRoom = model.inpatientRoom,
-                dischargeDate = model.dischargeDate
+                dischargeDate = model.dischargeDate,
+                createdBy = model.createdBy,
+                editedBy = model.editedBy,
+                editedAt = model.editedAt
             )
         }
     }

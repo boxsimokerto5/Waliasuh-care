@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.MedicalServices
@@ -134,6 +135,8 @@ fun DashboardScreen(
     var showFiqihHaidDialog by remember { mutableStateOf(false) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
+    var recordPlanToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
+    var recordTreatmentToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
     var selectedInpatientRecordForDetail by remember { mutableStateOf<MedicalRecord?>(null) }
     var inpatientPickerForFaskes by remember { mutableStateOf<Pair<String, List<MedicalRecord>>?>(null) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -605,6 +608,10 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 recordToDiagnose = record
                             },
+                            onEdit = {
+                                TopOnAdManager.onUserActionClick(context)
+                                recordPlanToEdit = record
+                            },
                             onDelete = {
                                 TopOnAdManager.onUserActionClick(context)
                                 viewModel.deleteRecord(record)
@@ -627,6 +634,31 @@ fun DashboardScreen(
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
                 showCreateDialog = false
+            }
+        )
+    }
+
+    recordPlanToEdit?.let { editingRecord ->
+        CreatePlanDialog(
+            students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            existingRecord = editingRecord,
+            onDismiss = { recordPlanToEdit = null },
+            onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.editTreatmentPlan(
+                    existingRecord = editingRecord,
+                    student = student,
+                    faskes = faskes,
+                    complaint = complaint,
+                    planDate = planDate,
+                    departureTime = time,
+                    escortName = escort,
+                    notes = notes
+                )
+                recordPlanToEdit = null
             }
         )
     }
@@ -697,6 +729,36 @@ fun DashboardScreen(
                     inpatientRoom = inpatientRoom
                 )
                 showDirectTreatmentDialog = false
+            }
+        )
+    }
+
+    recordTreatmentToEdit?.let { editingRecord ->
+        DirectTreatmentDialog(
+            students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            existingRecord = editingRecord,
+            onDismiss = { recordTreatmentToEdit = null },
+            onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.editCompletedTreatment(
+                    existingRecord = editingRecord,
+                    student = student,
+                    faskes = faskes,
+                    complaint = complaint,
+                    diagnosis = diagnosis,
+                    actionsTaken = actions,
+                    prescription = prescription,
+                    needsControl = needsCtrl,
+                    controlDate = ctrlDate,
+                    escortName = escort,
+                    notes = notes,
+                    isInpatient = isInpatient,
+                    inpatientRoom = inpatientRoom
+                )
+                recordTreatmentToEdit = null
             }
         )
     }
@@ -815,6 +877,11 @@ fun DashboardScreen(
                 TopOnAdManager.onUserActionClick(context)
                 selectedInpatientRecordForDetail = null
                 recordToShare = record
+            },
+            onEdit = {
+                TopOnAdManager.onUserActionClick(context)
+                selectedInpatientRecordForDetail = null
+                recordTreatmentToEdit = record
             },
             onDelete = {
                 TopOnAdManager.onUserActionClick(context)
@@ -991,6 +1058,7 @@ fun DashboardSickChildItem(
     onTreatHere: () -> Unit,
     onDepart: () -> Unit,
     onDiagnose: () -> Unit,
+    onEdit: () -> Unit = {},
     onDelete: () -> Unit
 ) {
     val accentColor = if (record.faskes.contains("Wates", ignoreCase = true)) Color(0xFF00695C) else Color(0xFF2E7D32)
@@ -1138,8 +1206,22 @@ fun DashboardSickChildItem(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .testTag("btn_edit_plan_${record.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Rencana",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
                         IconButton(
                             onClick = onDelete,
                             modifier = Modifier.size(30.dp)
@@ -1208,6 +1290,15 @@ fun DashboardSickChildItem(
                         }
                     }
                 }
+
+                val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
+                Text(
+                    text = "Diinput oleh: $creatorLabel",
+                    fontSize = 9.5.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

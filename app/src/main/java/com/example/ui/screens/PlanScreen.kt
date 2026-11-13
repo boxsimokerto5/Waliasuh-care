@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.EventRepeat
 import androidx.compose.material.icons.filled.Healing
@@ -93,6 +94,7 @@ fun PlanScreen(
     var selectedFaskesFilter by remember { mutableStateOf("Semua") }
 
     var showCreatePlanDialog by remember { mutableStateOf(false) }
+    var recordToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
 
@@ -360,6 +362,10 @@ fun PlanScreen(
                                         TopOnAdManager.onUserActionClick(context)
                                         recordToDiagnose = record
                                     },
+                                    onEdit = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        recordToEdit = record
+                                    },
                                     onDelete = {
                                         TopOnAdManager.onUserActionClick(context)
                                         viewModel.deleteRecord(record)
@@ -384,6 +390,31 @@ fun PlanScreen(
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
                 showCreatePlanDialog = false
+            }
+        )
+    }
+
+    recordToEdit?.let { editingRecord ->
+        CreatePlanDialog(
+            students = students,
+            primaryFaskesName = schoolProfile.primaryFaskesName,
+            secondaryFaskesName = schoolProfile.secondaryFaskesName,
+            allFaskesList = schoolProfile.getAllFaskes(),
+            existingRecord = editingRecord,
+            onDismiss = { recordToEdit = null },
+            onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.editTreatmentPlan(
+                    existingRecord = editingRecord,
+                    student = student,
+                    faskes = faskes,
+                    complaint = complaint,
+                    planDate = planDate,
+                    departureTime = time,
+                    escortName = escort,
+                    notes = notes
+                )
+                recordToEdit = null
             }
         )
     }
@@ -437,6 +468,7 @@ fun CompactPlanCardItem(
     onTreatHere: () -> Unit,
     onDepart: () -> Unit,
     onDiagnose: () -> Unit,
+    onEdit: () -> Unit = {},
     onDelete: () -> Unit
 ) {
     val accentColor = if (record.faskes.contains("Wates", ignoreCase = true)) Color(0xFF00695C) else Color(0xFF2E7D32)
@@ -584,8 +616,22 @@ fun CompactPlanCardItem(
 
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        horizontalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .testTag("btn_edit_plan_${record.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Edit,
+                                contentDescription = "Edit Rencana",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+
                         IconButton(
                             onClick = onDelete,
                             modifier = Modifier.size(30.dp)
@@ -654,6 +700,15 @@ fun CompactPlanCardItem(
                         }
                     }
                 }
+
+                val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
+                Text(
+                    text = "Diinput oleh: $creatorLabel",
+                    fontSize = 9.5.sp,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
