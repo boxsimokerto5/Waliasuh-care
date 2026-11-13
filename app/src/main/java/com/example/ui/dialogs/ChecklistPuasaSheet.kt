@@ -72,6 +72,7 @@ import com.example.data.model.FastingSession
 import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
+import com.example.util.TopOnAdManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,6 +104,7 @@ fun ChecklistPuasaSheet(
     var selectedCategoryTab by remember { mutableIntStateOf(0) }
     var statusFilter by remember { mutableStateOf("Semua") }
     var searchQuery by remember { mutableStateOf("") }
+    var pendingPdfSession by remember { mutableStateOf<FastingSession?>(null) }
 
     val sessionRecords = remember(fastingRecords, selectedSession) {
         if (selectedSession == null) emptyList()
@@ -275,23 +277,7 @@ fun ChecklistPuasaSheet(
                         ) {
                             Button(
                                 onClick = {
-                                    val pdf = PdfReportGenerator.generateFastingChecklistPdf(
-                                        context = context,
-                                        session = sess,
-                                        records = sessionRecords,
-                                        waliName = waliName,
-                                        schoolProfile = schoolProfile
-                                    )
-                                    if (pdf != null) {
-                                        PdfReportGenerator.shareFastingPdf(
-                                            context = context,
-                                            pdfFile = pdf,
-                                            subject = "Laporan Checklist Sahur & Berbuka - ${sess.title}",
-                                            text = "Terlampir Laporan Checklist Sahur ($sahurDoneCount/${sessionRecords.size}) & Berbuka ($bukaDoneCount/${sessionRecords.size}) untuk ${sess.title}."
-                                        )
-                                    } else {
-                                        Toast.makeText(context, "Gagal membuat PDF checklist puasa.", Toast.LENGTH_SHORT).show()
-                                    }
+                                    pendingPdfSession = sess
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = amberDark),
@@ -331,6 +317,42 @@ fun ChecklistPuasaSheet(
                                 Text("Share WA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                             }
                         }
+
+                        RewardAdDeclarationHint(
+                            text = "Tonton iklan video singkat untuk mengunduh Laporan Checklist PDF",
+                            accentColor = amberDark
+                        )
+                    }
+
+                    pendingPdfSession?.let { sessToExport ->
+                        RewardAdDeclarationDialog(
+                            title = "Unduh Laporan Checklist PDF",
+                            actionDescription = "mengunduh dan membagikan Laporan Checklist ${sessToExport.title}",
+                            confirmButtonText = "Tonton & Unduh PDF",
+                            onConfirmWatchAd = {
+                                pendingPdfSession = null
+                                TopOnAdManager.showRewardAdForPdfReport(context) {
+                                    val pdf = PdfReportGenerator.generateFastingChecklistPdf(
+                                        context = context,
+                                        session = sessToExport,
+                                        records = sessionRecords,
+                                        waliName = waliName,
+                                        schoolProfile = schoolProfile
+                                    )
+                                    if (pdf != null) {
+                                        PdfReportGenerator.shareFastingPdf(
+                                            context = context,
+                                            pdfFile = pdf,
+                                            subject = "Laporan Checklist Sahur & Berbuka - ${sessToExport.title}",
+                                            text = "Terlampir Laporan Checklist Sahur ($sahurDoneCount/${sessionRecords.size}) & Berbuka ($bukaDoneCount/${sessionRecords.size}) untuk ${sessToExport.title}."
+                                        )
+                                    } else {
+                                        Toast.makeText(context, "Gagal membuat PDF checklist puasa.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onDismiss = { pendingPdfSession = null }
+                        )
                     }
 
                     // Filter & Search

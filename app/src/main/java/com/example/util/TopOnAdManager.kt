@@ -30,9 +30,9 @@ object TopOnAdManager {
     private var interstitialAd: ATInterstitial? = null
     private var rewardVideoAd: ATRewardVideoAd? = null
 
-    // Callback dinamis untuk Reward Video saat ini
+    // Callback dinamis untuk Reward Video saat ini (dijamin hanya dipanggil maksimal 1 kali)
     private var currentRewardCallback: (() -> Unit)? = null
-    private var currentDismissCallback: (() -> Unit)? = null
+    private var currentActionLabel: String = "membuka laporan"
     private var rewardEarnedForCurrentSession = false
 
     private fun getPrefs(context: Context): SharedPreferences {
@@ -136,8 +136,9 @@ object TopOnAdManager {
     }
 
     private fun setupRewardVideo(context: Context) {
+        val appContext = context.applicationContext
         val placementId = getRewardPlacementId()
-        rewardVideoAd = ATRewardVideoAd(context, placementId)
+        rewardVideoAd = ATRewardVideoAd(appContext, placementId)
         rewardVideoAd?.setAdListener(object : ATRewardVideoListener {
             override fun onRewardedVideoAdLoaded() {
                 Log.d(TAG, "TopOn Rewarded Video loaded successfully")
@@ -149,6 +150,11 @@ object TopOnAdManager {
 
             override fun onRewardedVideoAdPlayFailed(adError: AdError?, entity: ATAdInfo?) {
                 Log.w(TAG, "TopOn Rewarded Video play failed: ${adError?.fullErrorInfo}")
+                val callback = currentRewardCallback
+                currentRewardCallback = null
+                rewardEarnedForCurrentSession = false
+                rewardVideoAd?.load()
+                callback?.invoke()
             }
 
             override fun onRewardedVideoAdPlayStart(entity: ATAdInfo?) {
@@ -161,16 +167,25 @@ object TopOnAdManager {
             }
 
             override fun onRewardedVideoAdClosed(entity: ATAdInfo?) {
-                Log.d(TAG, "TopOn Rewarded Video closed")
-                if (rewardEarnedForCurrentSession) {
-                    currentRewardCallback?.invoke()
-                }
-                currentDismissCallback?.invoke()
+                Log.d(TAG, "TopOn Rewarded Video closed (rewardEarned=$rewardEarnedForCurrentSession)")
+                val callback = currentRewardCallback
+                val earned = rewardEarnedForCurrentSession
+                val actionLabel = currentActionLabel
                 currentRewardCallback = null
-                currentDismissCallback = null
+                rewardEarnedForCurrentSession = false
 
                 // Reload untuk persiapan penggunaan berikutnya
                 rewardVideoAd?.load()
+
+                if (earned) {
+                    callback?.invoke()
+                } else if (callback != null) {
+                    Toast.makeText(
+                        appContext,
+                        "Tonton video iklan hingga selesai untuk $actionLabel.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
             }
 
             override fun onReward(entity: ATAdInfo?) {
@@ -183,6 +198,10 @@ object TopOnAdManager {
             }
         })
         rewardVideoAd?.load()
+    }
+
+    fun isRewardAdReady(): Boolean {
+        return rewardVideoAd?.isAdReady() == true
     }
 
     /**
@@ -233,30 +252,58 @@ object TopOnAdManager {
     }
 
     /**
+     * Menampilkan Iklan Reward untuk fitur Laporan Bulanan atau Unduh/Buka Laporan PDF.
+     * Jika iklan siap, memutar video berhadiah dan memanggil [onProceed] tepat 1 kali setelah reward didapat.
+     * Jika iklan belum siap/gagal dimuat, langsung menjalankan [onProceed] agar pengguna tidak terhambat.
+     */
+    fun showRewardAdForAction(
+        context: Context,
+        actionLabel: String = "mengunduh laporan",
+        fallbackToast: String = "Memproses laporan...",
+        onProceed: () -> Unit
+    ) {
+        val activity = context.findActivity()
+        if (activity != null && rewardVideoAd?.isAdReady() == true) {
+            Log.d(TAG, "Showing Rewarded Video for: $actionLabel")
+            rewardEarnedForCurrentSession = false
+            currentActionLabel = actionLabel
+            currentRewardCallback = onProceed
+            rewardVideoAd?.show(activity)
+        } else {
+            Log.d(TAG, "Rewarded video not ready for $actionLabel, reloading and running fallback")
+            rewardVideoAd?.load()
+            Toast.makeText(context, fallbackToast, Toast.LENGTH_SHORT).show()
+            onProceed()
+        }
+    }
+
+    /**
      * Menampilkan Iklan Reward pada menu Laporan Bulanan (di halaman profil).
-     * Jika iklan siap, tampilkan video berhadiah. Setelah reward didapat/iklan selesai, buka dialog laporan.
-     * Jika iklan belum siap/gagal dimuat, fallback membuka dialog agar pengguna tidak terhambat.
      */
     fun showRewardAdForMonthlyReport(
         context: Context,
         onProceedToReport: () -> Unit
     ) {
-        val activity = context.findActivity()
-        if (activity != null && rewardVideoAd?.isAdReady() == true) {
-            Log.d(TAG, "Showing Rewarded Video for Monthly Report")
-            rewardEarnedForCurrentSession = false
-            currentRewardCallback = {
-                onProceedToReport()
-            }
-            currentDismissCallback = {
-                onProceedToReport()
-            }
-            rewardVideoAd?.show(activity)
-        } else {
-            Log.d(TAG, "Rewarded video not ready, reloading and allowing fallback to report")
-            rewardVideoAd?.load()
-            Toast.makeText(context, "Membuka Laporan Bulanan...", Toast.LENGTH_SHORT).show()
-            onProceedToReport()
-        }
+        showRewardAdForAction(
+            context = context,
+            actionLabel = "membuka Laporan Bulanan",
+            fallbackToast = "Membuka Laporan Bulanan...",
+            onProceed = onProceedToReport
+        )
+    }
+
+    /**
+     * Menampilkan Iklan Reward sebelum membuat/mengunduh Laporan PDF.
+     */
+    fun showRewardAdForPdfReport(
+        context: Context,
+        onProceedToPdf: () -> Unit
+    ) {
+        showRewardAdForAction(
+            context = context,
+            actionLabel = "mengunduh Laporan PDF",
+            fallbackToast = "Menyiapkan Laporan PDF...",
+            onProceed = onProceedToPdf
+        )
     }
 }

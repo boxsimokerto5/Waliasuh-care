@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,6 +71,7 @@ import com.example.ui.components.StudentAvatar
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
+import com.example.util.TopOnAdManager
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,6 +98,7 @@ fun PrintPdfDialog(
 
     var expandedMonthDropdown by remember { mutableStateOf(false) }
     var expandedYearDropdown by remember { mutableStateOf(false) }
+    var pendingPdfAction by remember { mutableStateOf<String?>(null) } // "OPEN" or "SHARE"
 
     val monthNames = listOf(
         "Januari", "Februari", "Maret", "April", "Mei", "Juni",
@@ -440,32 +443,12 @@ fun PrintPdfDialog(
                 ) {
                     OutlinedButton(
                         onClick = {
-                            val pdfFile = PdfReportGenerator.generateHealthReportPdf(
-                                context = context,
-                                student = student,
-                                records = filteredRecords,
-                                periodType = when (selectedFilterMode) {
-                                    0 -> PdfReportGenerator.ReportPeriodType.MONTHLY
-                                    1 -> PdfReportGenerator.ReportPeriodType.YEARLY
-                                    else -> PdfReportGenerator.ReportPeriodType.ALL
-                                },
-                                periodLabel = periodLabel,
-                                waliName = waliName,
-                                schoolProfile = schoolProfile
-                            )
-                            if (pdfFile != null) {
-                                PdfReportGenerator.sharePdfFile(
-                                    context = context,
-                                    pdfFile = pdfFile,
-                                    studentName = student.name,
-                                    schoolName = schoolProfile.schoolName
-                                )
-                            } else {
-                                Toast.makeText(context, "Gagal membuat dokumen PDF.", Toast.LENGTH_SHORT).show()
-                            }
+                            pendingPdfAction = "SHARE"
                         },
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier
+                            .weight(1f)
+                            .heightIn(min = 48.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -475,28 +458,12 @@ fun PrintPdfDialog(
 
                     Button(
                         onClick = {
-                            val pdfFile = PdfReportGenerator.generateHealthReportPdf(
-                                context = context,
-                                student = student,
-                                records = filteredRecords,
-                                periodType = when (selectedFilterMode) {
-                                    0 -> PdfReportGenerator.ReportPeriodType.MONTHLY
-                                    1 -> PdfReportGenerator.ReportPeriodType.YEARLY
-                                    else -> PdfReportGenerator.ReportPeriodType.ALL
-                                },
-                                periodLabel = periodLabel,
-                                waliName = waliName,
-                                schoolProfile = schoolProfile
-                            )
-                            if (pdfFile != null) {
-                                PdfReportGenerator.openPdfFile(context, pdfFile)
-                            } else {
-                                Toast.makeText(context, "Gagal membuat dokumen PDF.", Toast.LENGTH_SHORT).show()
-                            }
+                            pendingPdfAction = "OPEN"
                         },
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .weight(1.3f)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_print_pdf"),
                         colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary, contentColor = Color.White),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
@@ -506,7 +473,57 @@ fun PrintPdfDialog(
                         Text("Cetak / Buka PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+
+                RewardAdDeclarationHint(
+                    text = "Tonton iklan video singkat untuk mencetak atau membagikan Laporan PDF",
+                    accentColor = WaliPrimary
+                )
             }
         }
+    }
+
+    pendingPdfAction?.let { actionType ->
+        RewardAdDeclarationDialog(
+            title = if (actionType == "OPEN") "Cetak / Buka Laporan PDF" else "Bagikan Laporan PDF",
+            actionDescription = if (actionType == "OPEN") {
+                "membuat dan membuka Laporan PDF Rekam Medis (${student.name})"
+            } else {
+                "membuat dan membagikan Laporan PDF Rekam Medis (${student.name})"
+            },
+            confirmButtonText = "Tonton & Unduh PDF",
+            onConfirmWatchAd = {
+                pendingPdfAction = null
+                TopOnAdManager.showRewardAdForPdfReport(context) {
+                    val pdfFile = PdfReportGenerator.generateHealthReportPdf(
+                        context = context,
+                        student = student,
+                        records = filteredRecords,
+                        periodType = when (selectedFilterMode) {
+                            0 -> PdfReportGenerator.ReportPeriodType.MONTHLY
+                            1 -> PdfReportGenerator.ReportPeriodType.YEARLY
+                            else -> PdfReportGenerator.ReportPeriodType.ALL
+                        },
+                        periodLabel = periodLabel,
+                        waliName = waliName,
+                        schoolProfile = schoolProfile
+                    )
+                    if (pdfFile != null) {
+                        if (actionType == "OPEN") {
+                            PdfReportGenerator.openPdfFile(context, pdfFile)
+                        } else {
+                            PdfReportGenerator.sharePdfFile(
+                                context = context,
+                                pdfFile = pdfFile,
+                                studentName = student.name,
+                                schoolName = schoolProfile.schoolName
+                            )
+                        }
+                    } else {
+                        Toast.makeText(context, "Gagal membuat dokumen PDF.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDismiss = { pendingPdfAction = null }
+        )
     }
 }

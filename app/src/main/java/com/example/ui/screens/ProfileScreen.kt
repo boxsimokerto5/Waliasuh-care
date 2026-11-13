@@ -36,12 +36,14 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.MonthlyReportDialog
+import com.example.ui.dialogs.RewardAdDeclarationDialog
 import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.util.TopOnAdManager
 import androidx.compose.material3.BottomSheetDefaults
@@ -101,6 +103,7 @@ fun ProfileScreen(
     var showNotifDialog by remember { mutableStateOf(false) }
     var showSupabaseDialog by remember { mutableStateOf(false) }
     var showMonthlyReportDialog by remember { mutableStateOf(false) }
+    var showMonthlyReportAdConfirm by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
 
@@ -271,14 +274,13 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = "Laporan Bulanan",
-                    subtitle = "Rekapitulasi lengkap, statistik sakit & ekspor PDF/WA",
+                    subtitle = "Rekapitulasi lengkap, statistik sakit & ekspor PDF/WA • Tonton iklan video singkat",
                     icon = Icons.Default.Assessment,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
+                    badgeText = "Iklan Video",
                     onClick = {
-                        TopOnAdManager.showRewardAdForMonthlyReport(context) {
-                            showMonthlyReportDialog = true
-                        }
+                        showMonthlyReportAdConfirm = true
                     },
                     testTag = "menu_laporan_bulanan"
                 )
@@ -633,6 +635,21 @@ fun ProfileScreen(
             }
         }
     }
+
+    if (showMonthlyReportAdConfirm) {
+        RewardAdDeclarationDialog(
+            title = "Buka Laporan Bulanan",
+            actionDescription = "membuka Laporan Bulanan lengkap & ekspor PDF",
+            confirmButtonText = "Tonton & Buka Laporan",
+            onConfirmWatchAd = {
+                showMonthlyReportAdConfirm = false
+                TopOnAdManager.showRewardAdForMonthlyReport(context) {
+                    showMonthlyReportDialog = true
+                }
+            },
+            onDismiss = { showMonthlyReportAdConfirm = false }
+        )
+    }
 }
 
 @Composable
@@ -654,7 +671,8 @@ fun MenuSettingCard(
     iconBg: Color,
     iconColor: Color,
     onClick: () -> Unit,
-    testTag: String
+    testTag: String,
+    badgeText: String? = null
 ) {
     ElevatedCard(
         modifier = Modifier
@@ -688,13 +706,41 @@ fun MenuSettingCard(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            Column {
-                Text(
-                    text = title,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = title,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    if (!badgeText.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(iconColor.copy(alpha = 0.12f))
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.OndemandVideo,
+                                contentDescription = null,
+                                tint = iconColor,
+                                modifier = Modifier.size(11.dp)
+                            )
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(
+                                text = badgeText,
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = iconColor
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = subtitle,
                     fontSize = 11.sp,

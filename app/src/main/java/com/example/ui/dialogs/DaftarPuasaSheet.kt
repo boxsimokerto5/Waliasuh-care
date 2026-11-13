@@ -67,6 +67,7 @@ import com.example.data.model.FastingSession
 import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
+import com.example.util.TopOnAdManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,6 +96,7 @@ fun DaftarPuasaSheet(
 
     var selectedJenjangFilter by remember { mutableStateOf("Semua") }
     var searchQuery by remember { mutableStateOf("") }
+    var pendingPdfSession by remember { mutableStateOf<FastingSession?>(null) }
 
     val sessionRecords = remember(fastingRecords, selectedSession) {
         if (selectedSession == null) emptyList()
@@ -273,23 +275,7 @@ fun DaftarPuasaSheet(
                         ) {
                             Button(
                                 onClick = {
-                                    val pdf = PdfReportGenerator.generateFastingListPdf(
-                                        context = context,
-                                        session = sess,
-                                        records = sessionRecords,
-                                        waliName = waliName,
-                                        schoolProfile = schoolProfile
-                                    )
-                                    if (pdf != null) {
-                                        PdfReportGenerator.shareFastingPdf(
-                                            context = context,
-                                            pdfFile = pdf,
-                                            subject = "Laporan Daftar Puasa - ${sess.title}",
-                                            text = "Terlampir Laporan Daftar Siswa Puasa (${sess.title}, Total ${sessionRecords.size} Anak: $smaCount SMA, $smpCount SMP, $sdCount SD)."
-                                        )
-                                    } else {
-                                        Toast.makeText(context, "Gagal membuat PDF laporan puasa.", Toast.LENGTH_SHORT).show()
-                                    }
+                                    pendingPdfSession = sess
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
@@ -330,6 +316,42 @@ fun DaftarPuasaSheet(
                                 Text("Bagikan WA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                             }
                         }
+
+                        RewardAdDeclarationHint(
+                            text = "Tonton iklan video singkat untuk mengunduh Laporan PDF",
+                            accentColor = Color(0xFFDC2626)
+                        )
+                    }
+
+                    pendingPdfSession?.let { sessToExport ->
+                        RewardAdDeclarationDialog(
+                            title = "Unduh Laporan PDF Puasa",
+                            actionDescription = "mengunduh dan membagikan Laporan PDF ${sessToExport.title}",
+                            confirmButtonText = "Tonton & Unduh PDF",
+                            onConfirmWatchAd = {
+                                pendingPdfSession = null
+                                TopOnAdManager.showRewardAdForPdfReport(context) {
+                                    val pdf = PdfReportGenerator.generateFastingListPdf(
+                                        context = context,
+                                        session = sessToExport,
+                                        records = sessionRecords,
+                                        waliName = waliName,
+                                        schoolProfile = schoolProfile
+                                    )
+                                    if (pdf != null) {
+                                        PdfReportGenerator.shareFastingPdf(
+                                            context = context,
+                                            pdfFile = pdf,
+                                            subject = "Laporan Daftar Puasa - ${sessToExport.title}",
+                                            text = "Terlampir Laporan Daftar Siswa Puasa (${sessToExport.title}, Total ${sessionRecords.size} Anak: $smaCount SMA, $smpCount SMP, $sdCount SD)."
+                                        )
+                                    } else {
+                                        Toast.makeText(context, "Gagal membuat PDF laporan puasa.", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
+                            },
+                            onDismiss = { pendingPdfSession = null }
+                        )
                     }
 
                     // Filter Jenjang + Search Bar
