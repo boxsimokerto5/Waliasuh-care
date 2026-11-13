@@ -184,19 +184,21 @@ fun ProfileScreen(
                 )
             }
 
-            item {
-                MenuSettingCard(
-                    title = "Sinkronisasi Cloud & Supabase",
-                    subtitle = "Tarik / unggah data siswa, haid, wali & rekam medis antar perangkat",
-                    icon = Icons.Default.CloudSync,
-                    iconBg = Color(0xFFDCFCE7),
-                    iconColor = Color(0xFF16A34A),
-                    onClick = {
-                        TopOnAdManager.onUserActionClick(context)
-                        showSupabaseDialog = true
-                    },
-                    testTag = "menu_supabase_sync"
-                )
+            if (role == UserRole.SUPERADMIN) {
+                item {
+                    MenuSettingCard(
+                        title = "Sinkronisasi Cloud & Supabase",
+                        subtitle = "Tarik / unggah data siswa, haid, wali & rekam medis antar perangkat",
+                        icon = Icons.Default.CloudSync,
+                        iconBg = Color(0xFFDCFCE7),
+                        iconColor = Color(0xFF16A34A),
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showSupabaseDialog = true
+                        },
+                        testTag = "menu_supabase_sync"
+                    )
+                }
             }
 
             item {
@@ -471,8 +473,8 @@ fun ProfileScreen(
         }
     }
 
-    // Modal Bottom Sheet: Konfigurasi & Sinkronisasi Supabase
-    if (showSupabaseDialog) {
+    // Modal Bottom Sheet: Konfigurasi & Sinkronisasi Supabase (Khusus Superadmin)
+    if (showSupabaseDialog && role == UserRole.SUPERADMIN) {
         SupabaseConfigDialog(
             viewModel = viewModel,
             onDismiss = { showSupabaseDialog = false }

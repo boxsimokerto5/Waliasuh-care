@@ -67,6 +67,7 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
@@ -120,6 +121,7 @@ import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
 import com.example.data.remote.supabase.SupabaseSchemaProvider
 import com.example.ui.HealthViewModel
+import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 
@@ -605,6 +607,7 @@ fun SuperAdminScreen(
             )
         } else {
             SuperAdminSqlEditorView(
+                viewModel = viewModel,
                 isSyncing = isSyncing,
                 onTestConnection = { onResult ->
                     viewModel.testSupabaseConnection(onResult)
@@ -2005,6 +2008,7 @@ fun SuperadminReportSchoolCard(
 
 @Composable
 fun SuperAdminSqlEditorView(
+    viewModel: HealthViewModel,
     isSyncing: Boolean,
     onTestConnection: (onResult: (Boolean, String) -> Unit) -> Unit,
     modifier: Modifier = Modifier
@@ -2012,6 +2016,7 @@ fun SuperAdminSqlEditorView(
     val context = LocalContext.current
     var testResultMsg by remember { mutableStateOf<String?>(null) }
     var testResultSuccess by remember { mutableStateOf(true) }
+    var showSupabaseConfigDialog by remember { mutableStateOf(false) }
 
     fun copyFullSql() {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -2148,6 +2153,24 @@ fun SuperAdminSqlEditorView(
                         }
                     }
 
+                    OutlinedButton(
+                        onClick = { showSupabaseConfigDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_open_supabase_sync_superadmin"),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudSync,
+                            contentDescription = "Kelola Sinkronisasi & Cloud Supabase",
+                            modifier = Modifier.size(16.dp),
+                            tint = Color(0xFF16A34A)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Kelola Sinkronisasi & Cloud Supabase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
                     if (testResultMsg != null) {
                         Card(
                             colors = CardDefaults.cardColors(
@@ -2264,5 +2287,12 @@ fun SuperAdminSqlEditorView(
                 }
             }
         }
+    }
+
+    if (showSupabaseConfigDialog) {
+        SupabaseConfigDialog(
+            viewModel = viewModel,
+            onDismiss = { showSupabaseConfigDialog = false }
+        )
     }
 }
