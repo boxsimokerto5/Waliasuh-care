@@ -362,6 +362,23 @@ object SupabaseSyncManager {
         }
 
     /**
+     * Menghapus seluruh data satu tenant sekolah dari Supabase saat akun sekolah dihapus permanen.
+     */
+    suspend fun deleteAllSchoolData(context: Context, schoolId: String) =
+        withContext(Dispatchers.IO) {
+            if (!SupabaseConfig.isConfigured(context) || schoolId.isBlank()) return@withContext
+            val filter = "eq.$schoolId"
+            val service = SupabaseClient.getService(context) ?: return@withContext
+            runCatching { service.deleteFastingRecordsBySchool(filter) }
+            runCatching { service.deleteFastingSessionsBySchool(filter) }
+            runCatching { service.deleteMedicalRecordsBySchool(filter) }
+            runCatching { service.deleteHaidRecordsBySchool(filter) }
+            runCatching { service.deleteShiftMessagesBySchool(filter) }
+            runCatching { service.deleteStudentsBySchool(filter) }
+            runCatching { service.deleteWaliAccountsBySchool(filter) }
+        }
+
+    /**
      * Menarik daftar pendaftaran sekolah & akun wali dari Supabase saat login lintas perangkat.
      */
     suspend fun syncAuthCatalogFromCloud(

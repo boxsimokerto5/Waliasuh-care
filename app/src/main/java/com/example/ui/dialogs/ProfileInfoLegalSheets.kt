@@ -315,8 +315,10 @@ private fun PrivacyPolicyContent() {
         )
 
         LegalSectionCard(
-            title = "5. Retensi & Penghapusan Data",
-            body = "Administrator Sekolah dapat mengedit atau menghapus data siswa dan akun wali asuh kapan saja melalui menu Admin. Untuk permintaan penghapusan data tingkat sekolah atau pertanyaan privasi, hubungi kami di $SUPPORT_EMAIL."
+            title = "5. Retensi & Penghapusan Akun / Data",
+            body = "• Wali Asuh dapat menghapus akun pribadinya secara mandiri kapan saja langsung di dalam aplikasi melalui menu Profil -> Hapus Akun Saya.\n" +
+                "• Administrator Sekolah dapat mengedit/menghapus data siswa & wali asuh, atau menghapus akun Admin beserta seluruh data sekolah secara permanen melalui Portal Admin -> Hapus Akun Admin & Data Sekolah Permanen.\n" +
+                "• Untuk permintaan penghapusan data manual atau pertanyaan privasi, hubungi kami di $SUPPORT_EMAIL."
         )
     }
 }

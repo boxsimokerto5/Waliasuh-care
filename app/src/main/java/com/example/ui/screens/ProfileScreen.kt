@@ -26,11 +26,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
@@ -45,6 +47,7 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
+import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.ProfileLegalBottomSheet
@@ -112,6 +115,9 @@ fun ProfileScreen(
     var showMonthlyReportAdConfirm by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountSheet by remember { mutableStateOf(false) }
+    var isDeletingAccount by remember { mutableStateOf(false) }
+    var deleteAccountError by remember { mutableStateOf<String?>(null) }
     var activeLegalSheet by remember { mutableStateOf<ProfileLegalSheetType?>(null) }
 
     Box(
@@ -364,6 +370,23 @@ fun ProfileScreen(
                     onClick = { activeLegalSheet = ProfileLegalSheetType.CONTACT_US },
                     testTag = "menu_contact_us"
                 )
+            }
+
+            if (role == UserRole.WALI) {
+                item {
+                    MenuSettingCard(
+                        title = "Hapus Akun Saya",
+                        subtitle = "Hapus permanen akun login Wali Asuh ini",
+                        icon = Icons.Default.DeleteForever,
+                        iconBg = Color(0xFFFEE2E2),
+                        iconColor = Color(0xFFB91C1C),
+                        onClick = {
+                            deleteAccountError = null
+                            showDeleteAccountSheet = true
+                        },
+                        testTag = "menu_hapus_akun_wali"
+                    )
+                }
             }
 
             item {
@@ -715,6 +738,39 @@ fun ProfileScreen(
         ProfileLegalBottomSheet(
             type = sheetType,
             onDismiss = { activeLegalSheet = null }
+        )
+    }
+
+    if (showDeleteAccountSheet) {
+        val waliLabel = currentWaliAccount?.let { acc ->
+            "${acc.name} (@${acc.username.ifBlank { waliName }}) • ${schoolProfile.shortName}"
+        } ?: "$waliName • ${schoolProfile.shortName}"
+
+        DeleteAccountBottomSheet(
+            isSchoolAdmin = false,
+            accountLabel = waliLabel,
+            isProcessing = isDeletingAccount,
+            errorMessage = deleteAccountError,
+            onConfirmDelete = { password ->
+                isDeletingAccount = true
+                deleteAccountError = null
+                viewModel.deleteCurrentWaliAccount(password) { success, message ->
+                    isDeletingAccount = false
+                    if (success) {
+                        showDeleteAccountSheet = false
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        onLogout()
+                    } else {
+                        deleteAccountError = message
+                    }
+                }
+            },
+            onDismiss = {
+                if (!isDeletingAccount) {
+                    showDeleteAccountSheet = false
+                    deleteAccountError = null
+                }
+            }
         )
     }
 }

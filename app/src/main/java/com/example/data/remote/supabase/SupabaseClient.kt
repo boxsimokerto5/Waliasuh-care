@@ -54,6 +54,9 @@ interface SupabaseService {
     @DELETE("rest/v1/medical_records")
     suspend fun deleteMedicalRecord(@Query("id") idFilter: String): Response<ResponseBody>
 
+    @DELETE("rest/v1/medical_records")
+    suspend fun deleteMedicalRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
+
     // --- Haid Records ---
     @GET("rest/v1/haid_records?select=*&order=start_date.desc")
     suspend fun getHaidRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseHaidRecordDto>>
@@ -121,6 +124,9 @@ interface SupabaseService {
     @DELETE("rest/v1/fasting_sessions")
     suspend fun deleteFastingSession(@Query("id") idFilter: String): Response<ResponseBody>
 
+    @DELETE("rest/v1/fasting_sessions")
+    suspend fun deleteFastingSessionsBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
+
     @GET("rest/v1/fasting_records?select=*&order=created_at.desc")
     suspend fun getFastingRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseFastingRecordDto>>
 
@@ -133,6 +139,9 @@ interface SupabaseService {
 
     @DELETE("rest/v1/fasting_records")
     suspend fun deleteFastingRecordsBySession(@Query("session_id") sessionIdFilter: String): Response<ResponseBody>
+
+    @DELETE("rest/v1/fasting_records")
+    suspend fun deleteFastingRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<ResponseBody>
 }
 
 object SupabaseClient {

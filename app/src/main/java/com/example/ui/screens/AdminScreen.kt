@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Key
@@ -117,6 +118,7 @@ import com.example.data.model.FastingSession
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
+import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
@@ -151,6 +153,9 @@ fun AdminScreen(
     var showImportStudentsDialog by remember { mutableStateOf(false) }
     var showImportWaliDialog by remember { mutableStateOf(false) }
     var showClearDataConfirmDialog by remember { mutableStateOf(false) }
+    var showDeleteSchoolAccountSheet by remember { mutableStateOf(false) }
+    var isDeletingSchoolAccount by remember { mutableStateOf(false) }
+    var deleteSchoolAccountError by remember { mutableStateOf<String?>(null) }
 
     // State untuk Kelola Sesi Puasa (khusus Admin Sekolah)
     var showCreateFastingSessionDialog by remember { mutableStateOf(false) }
@@ -654,6 +659,37 @@ fun AdminScreen(
                                 Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text("Bersihkan Data Siswa & Wali Sekolah Ini (Reset ke 0)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                            }
+
+                            // Tombol Hapus Akun Admin & Seluruh Data Sekolah Permanen (Kebijakan Google Play)
+                            Button(
+                                onClick = {
+                                    deleteSchoolAccountError = null
+                                    showDeleteSchoolAccountSheet = true
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_delete_admin_school_account"),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+                                    contentColor = MaterialTheme.colorScheme.error
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteForever,
+                                    contentDescription = "Hapus Akun Admin Sekolah Permanen",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Hapus Akun Admin & Data Sekolah Permanen",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
                         }
                     }
@@ -1492,6 +1528,36 @@ fun AdminScreen(
             schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
             schoolCode = activeSchoolCode,
             onDismiss = { showChangePasswordDialog = false }
+        )
+    }
+
+    if (showDeleteSchoolAccountSheet) {
+        val adminLabel = "${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }} ($activeSchoolCode)"
+        DeleteAccountBottomSheet(
+            isSchoolAdmin = true,
+            accountLabel = adminLabel,
+            isProcessing = isDeletingSchoolAccount,
+            errorMessage = deleteSchoolAccountError,
+            onConfirmDelete = { password ->
+                isDeletingSchoolAccount = true
+                deleteSchoolAccountError = null
+                viewModel.deleteCurrentSchoolAdminAccount(password) { success, message ->
+                    isDeletingSchoolAccount = false
+                    if (success) {
+                        showDeleteSchoolAccountSheet = false
+                        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+                        onLogout()
+                    } else {
+                        deleteSchoolAccountError = message
+                    }
+                }
+            },
+            onDismiss = {
+                if (!isDeletingSchoolAccount) {
+                    showDeleteSchoolAccountSheet = false
+                    deleteSchoolAccountError = null
+                }
+            }
         )
     }
 

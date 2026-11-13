@@ -1945,6 +1945,136 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Hapus akun pribadi Wali Asuh yang sedang login (lokal Room + Supabase).
+     * Data siswa & catatan sekolah tetap aman terjaga untuk Admin & Wali lain.
+     */
+    fun deleteCurrentWaliAccount(
+        passwordConfirmation: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val cleanPass = passwordConfirmation.trim()
+            if (cleanPass.isBlank()) {
+                onResult(false, "Masukkan password akun Anda untuk konfirmasi.")
+                return@launch
+            }
+
+            val username = _currentUsername.value?.trim().orEmpty()
+            var account: WaliAccount? = currentWaliAccount.value
+            if (account == null && username.isNotBlank()) {
+                account = repository.getWaliAccountByUsername(username)
+            }
+            if (account == null) {
+                val all = repository.getAllWaliAccountsList()
+                account = all.firstOrNull {
+                    (username.isNotBlank() && it.username.equals(username, ignoreCase = true)) ||
+                        it.name.equals(_waliName.value, ignoreCase = true) ||
+                        it.username.equals(_waliName.value, ignoreCase = true)
+                }
+            }
+
+            if (account != null) {
+                if (account.password.trim() != cleanPass) {
+                    onResult(false, "Password tidak sesuai. Penghapusan akun dibatalkan.")
+                    return@launch
+                }
+                repository.deleteWaliAccount(account)
+                if (!isUnitTestEnvironment()) {
+                    SupabaseSyncManager.deleteRemoteWaliAccount(getApplication(), account.id)
+                }
+            }
+
+            _waliName.value = "Wali Asuh"
+            logout()
+            onResult(true, "Akun Wali Asuh Anda telah dihapus permanen.")
+        }
+    }
+
+    /**
+     * Hapus akun Admin Sekolah & seluruh data tenant sekolah yang sedang aktif (lokal Room + Supabase).
+     */
+    fun deleteCurrentSchoolAdminAccount(
+        passwordConfirmation: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val cleanPass = passwordConfirmation.trim()
+            if (cleanPass.isBlank()) {
+                onResult(false, "Masukkan password Admin Sekolah untuk konfirmasi.")
+                return@launch
+            }
+
+            val activeUsername = _currentUsername.value?.trim().orEmpty()
+            val activeTenantCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+
+            val allRegistrations = repository.getAllSchoolRegistrationsList()
+            val existingReg = when {
+                activeUsername.isNotBlank() -> {
+                    repository.getSchoolByAdminUsername(activeUsername)
+                        ?: allRegistrations.firstOrNull {
+                            it.generatedAdminUsername.equals(activeUsername, ignoreCase = true)
+                        }
+                }
+                else -> null
+            } ?: repository.getSchoolByCode(activeTenantCode)
+                ?: allRegistrations.firstOrNull {
+                    it.generatedSchoolCode.equals(activeTenantCode, ignoreCase = true)
+                }
+
+            val isPilotAdmin = activeUsername.equals("ekowahyudiadmin", ignoreCase = true) ||
+                activeTenantCode.equals("SRT1-KDR", ignoreCase = true)
+
+            if (existingReg == null && !isPilotAdmin) {
+                onResult(false, "Data akun admin sekolah tidak ditemukan.")
+                return@launch
+            }
+
+            val expectedPassword = existingReg?.generatedAdminPassword?.takeIf { it.isNotBlank() }
+                ?: if (isPilotAdmin) "Woyowoyo12@" else ""
+
+            if (expectedPassword.isNotBlank() && cleanPass != expectedPassword) {
+                onResult(false, "Password Admin Sekolah salah. Penghapusan akun dibatalkan.")
+                return@launch
+            }
+
+            val targetSchoolId = existingReg?.generatedSchoolCode?.takeIf { it.isNotBlank() }
+                ?: activeTenantCode
+
+            // 1. Bersihkan seluruh data sekolah di Room lokal (students cascade ke medical_records)
+            if (targetSchoolId.isNotBlank()) {
+                repository.deleteFastingRecordsBySchool(targetSchoolId)
+                repository.deleteFastingSessionsBySchool(targetSchoolId)
+                repository.deleteHaidRecordsBySchool(targetSchoolId)
+                repository.deleteShiftMessagesBySchool(targetSchoolId)
+                repository.deleteStudentsBySchool(targetSchoolId)
+                repository.deleteWaliAccountsBySchool(targetSchoolId)
+            }
+
+            // 2. Bersihkan seluruh data sekolah + registrasi akun admin di Supabase
+            if (!isUnitTestEnvironment()) {
+                if (targetSchoolId.isNotBlank()) {
+                    SupabaseSyncManager.deleteAllSchoolData(getApplication(), targetSchoolId)
+                }
+                if (existingReg != null) {
+                    SupabaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), existingReg.id)
+                }
+            }
+
+            // 3. Hapus entri pendaftaran sekolah dari Room lokal
+            if (existingReg != null) {
+                repository.deleteSchoolRegistration(existingReg)
+            }
+
+            // 4. Reset preferensi profil sekolah & sesi login
+            schoolPrefs.edit().clear().apply()
+            _schoolProfile.value = SchoolProfile()
+            _waliName.value = "Wali Asuh"
+            logout()
+            onResult(true, "Akun Admin Sekolah dan seluruh data sekolah berhasil dihapus permanen.")
+        }
+    }
+
     // --- Layanan Pesan Shift Berikutnya (Handover Jaga Asrama) ---
 
     fun addShiftMessage(
