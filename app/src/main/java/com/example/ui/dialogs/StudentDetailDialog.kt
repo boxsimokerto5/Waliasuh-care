@@ -32,11 +32,13 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HistoryEdu
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Print
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -84,6 +86,7 @@ fun StudentDetailDialog(
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPrintPdfDialog by remember { mutableStateOf(false) }
+    var showCardGeneratorForStudent by remember { mutableStateOf(false) }
 
     val calNow = Calendar.getInstance()
     val curMonth = calNow.get(Calendar.MONTH)
@@ -551,16 +554,24 @@ fun StudentDetailDialog(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    FilledTonalButton(
+                        onClick = { showCardGeneratorForStudent = true },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.testTag("btn_open_student_card_qr")
+                    ) {
+                        Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text("Kartu & QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                     if (onEditStudent != null) {
                         OutlinedButton(
                             onClick = { onEditStudent(student) },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.padding(end = 8.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
@@ -584,6 +595,15 @@ fun StudentDetailDialog(
             allRecords = studentRecords,
             schoolProfile = schoolProfile,
             onDismiss = { showPrintPdfDialog = false }
+        )
+    }
+
+    if (showCardGeneratorForStudent) {
+        StudentCardGeneratorSheet(
+            students = listOf(student),
+            schoolProfile = schoolProfile,
+            initialStudent = student,
+            onDismiss = { showCardGeneratorForStudent = false }
         )
     }
 }

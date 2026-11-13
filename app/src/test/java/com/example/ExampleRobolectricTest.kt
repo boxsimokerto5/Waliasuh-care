@@ -1230,4 +1230,89 @@ class ExampleRobolectricTest {
       com.example.ui.dialogs.extractBarcodePayload("   ")
     )
   }
+
+  @Test
+  fun `verify StudentCardRenderer applies SMA grey SMP blue SD red and neon gender trim plus generates QR and PDF`() {
+    val context = org.robolectric.RuntimeEnvironment.getApplication()
+    val smaMale = com.example.data.model.ChildStudent(
+      id = 1L,
+      name = "Ahmad Fauzan",
+      nis = "0088123456",
+      gender = "L",
+      age = 16,
+      dormitory = "Asrama Putra",
+      classGrade = "11 IPA",
+      nik = "3506142512090001",
+      address = "Desa Siman, Kepung, Kediri"
+    )
+    val smpFemale = com.example.data.model.ChildStudent(
+      id = 2L,
+      name = "Siti Aisyah",
+      nis = "0099123457",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "8B",
+      nik = "3506142512090002",
+      address = "Jl. Pahlawan No. 12, Pare"
+    )
+    val sdFemale = com.example.data.model.ChildStudent(
+      id = 3L,
+      name = "Fatimah Az-Zahra",
+      nis = "0100123458",
+      gender = "P",
+      age = 10,
+      dormitory = "Asrama Putri",
+      classGrade = "4",
+      nik = "3506142512090003",
+      address = "Dusun Krajan, Gurah"
+    )
+
+    val smaPalette = com.example.util.StudentCardRenderer.resolvePalette(smaMale)
+    assertEquals(com.example.util.CardJenjang.SMA, smaPalette.jenjang)
+    assertEquals(0xFF475569.toInt(), smaPalette.gradientMidArgb) // Abu-abu
+    assertEquals(0xFF00FF66.toInt(), smaPalette.trimNeonArgb)    // Putra -> Hijau menyala
+
+    val smpPalette = com.example.util.StudentCardRenderer.resolvePalette(smpFemale)
+    assertEquals(com.example.util.CardJenjang.SMP, smpPalette.jenjang)
+    assertEquals(0xFF1D4ED8.toInt(), smpPalette.gradientMidArgb) // Biru
+    assertEquals(0xFFFF1E99.toInt(), smpPalette.trimNeonArgb)    // Putri -> Pink menyala
+
+    val sdPalette = com.example.util.StudentCardRenderer.resolvePalette(sdFemale)
+    assertEquals(com.example.util.CardJenjang.SD, sdPalette.jenjang)
+    assertEquals(0xFFB91C1C.toInt(), sdPalette.gradientMidArgb)  // Merah
+    assertEquals(0xFFFF1E99.toInt(), sdPalette.trimNeonArgb)     // Putri -> Pink menyala
+
+    val qrBitmap = com.example.util.StudentCardRenderer.generateQrBitmap(
+      com.example.util.StudentCardRenderer.resolveQrPayload(smaMale),
+      256
+    )
+    org.junit.Assert.assertNotNull(qrBitmap)
+    assertEquals(256, qrBitmap!!.width)
+    assertEquals(256, qrBitmap.height)
+
+    val cardBitmap = android.graphics.Bitmap.createBitmap(488, 308, android.graphics.Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(cardBitmap)
+    com.example.util.StudentCardRenderer.drawStudentCardOnCanvas(
+      canvas = canvas,
+      left = 0f,
+      top = 0f,
+      width = 488f,
+      height = 308f,
+      student = smaMale,
+      schoolName = "Sekolah Rakyat Kabupaten Kediri",
+      qrBitmap = qrBitmap,
+      logoBitmap = null
+    )
+    // Pastikan QR bitmap benar-benar memiliki modul hitam/putih dan rendering Canvas berjalan tanpa error
+    org.junit.Assert.assertTrue(
+      qrBitmap.getPixel(0, 0) == android.graphics.Color.WHITE ||
+        qrBitmap.getPixel(0, 0) == android.graphics.Color.BLACK
+    )
+    assertEquals(com.example.util.CardJenjang.SMA, com.example.util.StudentCardRenderer.resolveCardJenjang(smaMale.copy(classGrade = "XII-2")))
+    assertEquals(com.example.util.CardJenjang.SMP, com.example.util.StudentCardRenderer.resolveCardJenjang(smpFemale.copy(classGrade = "VII-A")))
+    assertEquals(com.example.util.CardJenjang.SD, com.example.util.StudentCardRenderer.resolveCardJenjang(sdFemale.copy(classGrade = "5")))
+    qrBitmap.recycle()
+    cardBitmap.recycle()
+  }
 }

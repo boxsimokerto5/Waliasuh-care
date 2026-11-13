@@ -24,10 +24,12 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -56,6 +58,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.AddStudentDialog
+import com.example.ui.dialogs.StudentCardGeneratorSheet
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.util.StudentClassifier
 
@@ -70,6 +73,7 @@ fun StudentsScreen(
     val context = LocalContext.current
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
+    var showCardGeneratorSheet by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
 
     val filteredStudents = students.filter { student ->
@@ -146,28 +150,53 @@ fun StudentsScreen(
                         .testTag("input_student_search")
                 )
 
-                // Info Count Row
+                // Info Count & Cetak Kartu QR Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 10.dp, vertical = 2.dp),
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Total: ${filteredStudents.size} Anak Asuh",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = schoolProfile.shortName.ifBlank { "Sekolah" },
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Total: ${filteredStudents.size} Anak Asuh",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = schoolProfile.shortName.ifBlank { "Sekolah" },
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showCardGeneratorSheet = true
+                        },
+                        enabled = students.isNotEmpty(),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier.testTag("btn_open_card_generator")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.QrCode2,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "Cetak Kartu",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
 
                 if (filteredStudents.isEmpty()) {
@@ -257,6 +286,14 @@ fun StudentsScreen(
             studentRecords = studentHistory,
             schoolProfile = schoolProfile,
             onDismiss = { selectedStudentForDetail = null }
+        )
+    }
+
+    if (showCardGeneratorSheet) {
+        StudentCardGeneratorSheet(
+            students = students,
+            schoolProfile = schoolProfile,
+            onDismiss = { showCardGeneratorSheet = false }
         )
     }
 }
