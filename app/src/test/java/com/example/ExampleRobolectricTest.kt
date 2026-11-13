@@ -1210,4 +1210,24 @@ class ExampleRobolectricTest {
     assertEquals(15, suciDay15Record.suciDayCount)
     org.junit.Assert.assertFalse(suciDay15Record.isInMinimumSuciPeriod)
   }
+
+  @Test
+  fun `verify extractBarcodePayload handles plain NIK NIS and labeled QR student card strings`() {
+    assertEquals(
+      "3506123456780001",
+      com.example.ui.dialogs.extractBarcodePayload("  3506123456780001  ")
+    )
+    assertEquals(
+      "3506123456780001",
+      com.example.ui.dialogs.extractBarcodePayload("NIK: 3506123456780001\nNama: Aisyah")
+    )
+    assertEquals(
+      "SRT1-002",
+      com.example.ui.dialogs.extractBarcodePayload("nis=SRT1-002")
+    )
+    assertEquals(
+      "",
+      com.example.ui.dialogs.extractBarcodePayload("   ")
+    )
+  }
 }

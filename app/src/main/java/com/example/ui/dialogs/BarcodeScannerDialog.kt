@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -64,10 +65,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -100,9 +104,12 @@ fun BarcodeScannerDialog(
         }
     }
 
+    val hapticFeedback = LocalHapticFeedback.current
     var manualNikInput by remember { mutableStateOf("") }
     var quickSearchQuery by remember { mutableStateOf("") }
     var isFlashOn by remember { mutableStateOf(false) }
+    var hasFlashUnit by remember { mutableStateOf(false) }
+    var cameraError by remember { mutableStateOf<String?>(null) }
 
     val filteredFemaleStudents = remember(femaleStudents, quickSearchQuery) {
         val q = quickSearchQuery.trim().lowercase()
@@ -123,8 +130,8 @@ fun BarcodeScannerDialog(
     // Laser Animation Effect
     val infiniteTransition = rememberInfiniteTransition(label = "laser")
     val laserOffset by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 160f,
+        initialValue = 4f,
+        targetValue = 132f,
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse
@@ -207,38 +214,71 @@ fun BarcodeScannerDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Scanner Viewfinder Card
+                // Scanner Viewfinder Card (CameraX + ML Kit Live Preview)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(190.dp),
+                        .height(210.dp),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF1E293B))
                 ) {
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(190.dp),
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(16.dp)),
                         contentAlignment = Alignment.Center
                     ) {
-                        // Background Camera Simulation / Dark Viewfinder
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CreditCard,
-                                contentDescription = null,
-                                tint = Color.White.copy(alpha = 0.25f),
-                                modifier = Modifier.size(64.dp)
+                        if (hasCameraPermission && cameraError == null) {
+                            CameraBarcodePreview(
+                                isFlashOn = isFlashOn,
+                                onBarcodeDetected = { detectedCode ->
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    onScanned(detectedCode)
+                                    onDismiss()
+                                },
+                                onFlashAvailabilityChanged = { available ->
+                                    hasFlashUnit = available
+                                    if (!available) isFlashOn = false
+                                },
+                                onCameraError = { msg ->
+                                    cameraError = msg
+                                },
+                                modifier = Modifier.fillMaxSize()
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (hasCameraPermission) "Arahkan Barcode / QR Kartu Siswa ke Sini" else "Izin Kamera Dibutuhkan",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Medium
+
+                            // Subtle scrim to keep reticle & hint readable
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(Color.Black.copy(alpha = 0.16f))
                             )
+                        } else {
+                            // Fallback Viewfinder when permission denied or camera unavailable
+                            Column(
+                                modifier = Modifier.padding(horizontal = 20.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CreditCard,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.25f),
+                                    modifier = Modifier.size(56.dp)
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = cameraError
+                                        ?: if (hasCameraPermission) {
+                                            "Menyiapkan kamera scanner..."
+                                        } else {
+                                            "Izin Kamera Dibutuhkan untuk Scan Otomatis"
+                                        },
+                                    color = Color.White.copy(alpha = 0.85f),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
                         }
 
                         // Framing Guide Rect
@@ -273,26 +313,46 @@ fun BarcodeScannerDialog(
                             )
                         }
 
-                        // Flashlight Toggle Button Top Right
-                        IconButton(
-                            onClick = { isFlashOn = !isFlashOn },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(6.dp)
-                                .size(48.dp)
-                        ) {
+                        if (hasCameraPermission && cameraError == null) {
                             Box(
                                 modifier = Modifier
-                                    .size(36.dp)
-                                    .background(Color.Black.copy(alpha = 0.4f), CircleShape),
-                                contentAlignment = Alignment.Center
+                                    .align(Alignment.BottomCenter)
+                                    .padding(bottom = 8.dp)
+                                    .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
                             ) {
-                                Icon(
-                                    imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                                    contentDescription = "Flashlight",
-                                    tint = if (isFlashOn) Color(0xFFFACC15) else Color.White,
-                                    modifier = Modifier.size(18.dp)
+                                Text(
+                                    text = "Arahkan Barcode / QR Kartu Siswa ke Kotak",
+                                    color = Color.White,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Medium
                                 )
+                            }
+                        }
+
+                        // Flashlight Toggle Button Top Right
+                        if (hasCameraPermission && cameraError == null && hasFlashUnit) {
+                            IconButton(
+                                onClick = { isFlashOn = !isFlashOn },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(6.dp)
+                                    .size(48.dp)
+                                    .testTag("btn_toggle_scanner_flash")
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
+                                        contentDescription = if (isFlashOn) "Matikan Lampu Kilat" else "Nyalakan Lampu Kilat",
+                                        tint = if (isFlashOn) Color(0xFFFACC15) else Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
                             }
                         }
                     }
@@ -301,7 +361,10 @@ fun BarcodeScannerDialog(
                 if (!hasCameraPermission) {
                     Spacer(modifier = Modifier.height(8.dp))
                     TextButton(
-                        onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) },
+                        onClick = {
+                            cameraError = null
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .heightIn(min = 48.dp)
