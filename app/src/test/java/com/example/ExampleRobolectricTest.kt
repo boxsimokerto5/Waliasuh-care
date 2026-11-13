@@ -440,17 +440,24 @@ class ExampleRobolectricTest {
 
     // 2. Tandai selesai ditindaklanjuti
     vm.toggleShiftMessageCompleted(createdMessage!!)
-    org.robolectric.shadows.ShadowLooper.idleMainLooper()
-
-    val messages = db.shiftMessageDao().getAllMessages().first()
-    val updated = messages.firstOrNull { it.id == msgId }
+    var updated: com.example.data.model.ShiftMessage? = null
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      updated = db.shiftMessageDao().getAllMessages().first().firstOrNull { it.id == msgId }
+      if (updated?.isCompleted == true) break
+      kotlinx.coroutines.delay(50)
+    }
     org.junit.Assert.assertNotNull(updated)
     org.junit.Assert.assertTrue(updated!!.isCompleted)
     assertEquals("Ustadz Fauzi", updated.completedBy)
 
     // 3. Hapus pesan shift
     vm.deleteShiftMessage(updated)
-    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (db.shiftMessageDao().getAllMessages().first().none { it.id == msgId }) break
+      kotlinx.coroutines.delay(50)
+    }
 
     val messagesAfterDelete = db.shiftMessageDao().getAllMessages().first()
     org.junit.Assert.assertNull(messagesAfterDelete.firstOrNull { it.id == msgId })
@@ -575,6 +582,164 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertTrue(schema.contains("school_id"))
     assertEquals(6, com.example.data.remote.supabase.SupabaseSchemaProvider.TABLES.size)
   }
+
+  @Test
+  fun `verify StudentCsvParser parses 12-column CSV with banner rows, ZWNJ, scientific notation, and quotes`() {
+    val sampleCsv = """
+      ${'\uFEFF'}DATA SISWA SRT 1 KABUPATEN KEDIRI,,,,,,,,,,,
+      ,,,,,,,,,,,
+      No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN
+      2,AHMAD ALI NUR ARIFIN,SD 1-2,SD,"Nyawangan, Kras, Kab. Kediri",L,${'\u200C'}3506032804190001,3506031907210004,KEDIRI,28-04-2019,NURIKAH,3199469205
+      38,MISBAHUL MUNIR,VII-1,SMP,"Kaliboto, Tarokan, Kab. Kediri",L,3506200703140002,3.5062E+15,KEDIRI,07-03-2014,ST. KHOIRIYATUL BADRIYAH,141038929
+      169,HIMAWAN TOMY FADILLAH,X-2,SMA X,"Puhsarang, Semen, Kab. Kediri",L,3506010503090002,3506010312100437,KEDIRI,05-03-2010,LUSIATI,102866222'0
+      201,MOH. ADILA IHSAN,X-3,SMA X,"Susuhbango, Ringinrejo, Kab. Kediri",L,â€Œ3506231910100001,3506230301120002,KEDIRI,19-10-2010,KOYUL KOYUM,3105 420177
+      310,ACHMAD DEVA ADIANSA,XI-3 (IPS),SMA,"Masjid, RT 001/RW 001, Dusun Jambangan, Desa/Kelurahan Jambangan, Kecamatan Papar, Kabupaten Kediri",L,3506142512090002,3506141405120009,KEDIRI,25-12-2009,DWI MASRUROH,95427948
+      311,AGUSTINE PRASTIKA PUTRI RAMADHANI,XI-3 (IPS),SMA,"Dsn. Gunung Butak, RT 002/RW 006, Bulusari, Tarokan, Kediri",P,3506205408090003,3506201509150001,KEDIRI,14-08-2009,PUJI SUMARIYANTI,93169259
+    """.trimIndent()
+
+    val parsed = com.example.util.StudentCsvParser.parseCsv(sampleCsv, "SRT-KED00")
+    assertEquals(6, parsed.size)
+
+    // Row 2: ZWNJ stripped cleanly
+    val ali = parsed[0]
+    assertEquals("AHMAD ALI NUR ARIFIN", ali.name)
+    assertEquals("3506032804190001", ali.nik)
+    assertEquals("3506031907210004", ali.noKk)
+    assertEquals("SD", ali.jenjang)
+    assertEquals("SD 1-2", ali.classGrade)
+    assertEquals("L", ali.gender)
+    assertEquals("Nyawangan, Kras, Kab. Kediri", ali.address)
+    assertEquals("3199469205", ali.nis)
+
+    // Row 38: Scientific notation KK converted cleanly
+    val munir = parsed[1]
+    assertEquals("3506200000000000", munir.noKk)
+
+    // Row 169: Stray apostrophe removed from NISN
+    val himawan = parsed[2]
+    assertEquals("1028662220", himawan.nis)
+    assertEquals("SMA X", himawan.jenjang)
+
+    // Row 201: Mojibake ZWNJ removed from NIK & space removed from NISN
+    val ihsan = parsed[3]
+    assertEquals("3506231910100001", ihsan.nik)
+    assertEquals("3105420177", ihsan.nis)
+
+    // Row 310: ACHMAD DEVA ADIANSA complete profile
+    val deva = parsed[4]
+    assertEquals("ACHMAD DEVA ADIANSA", deva.name)
+    assertEquals("XI-3 (IPS)", deva.classGrade)
+    assertEquals("SMA", deva.jenjang)
+    assertEquals("L", deva.gender)
+    assertEquals("Asrama Putra", deva.dormitory)
+    assertEquals("3506142512090002", deva.nik)
+    assertEquals("3506141405120009", deva.noKk)
+    assertEquals("KEDIRI", deva.birthPlace)
+    assertEquals("25-12-2009", deva.birthDate)
+    assertEquals("DWI MASRUROH", deva.motherName)
+    assertEquals("95427948", deva.nis)
+    assertEquals("Masjid, RT 001/RW 001, Dusun Jambangan, Desa/Kelurahan Jambangan, Kecamatan Papar, Kabupaten Kediri", deva.address)
+    org.junit.Assert.assertTrue(deva.age >= 16)
+    assertEquals("SRT-KED00", deva.schoolId)
+
+    // Row 311: Female student classified into Asrama Putri
+    val agustine = parsed[5]
+    assertEquals("P", agustine.gender)
+    assertEquals("Asrama Putri", agustine.dormitory)
+    org.junit.Assert.assertTrue(com.example.util.StudentClassifier.isFemaleStudent(agustine))
+  }
+
+  @Test
+  fun `verify StudentCsvParser template round-trip and upsert preserves existing student id`() = kotlinx.coroutines.runBlocking {
+    val templateStudents = com.example.util.StudentCsvParser.parseCsv(
+      com.example.util.StudentCsvParser.STANDARD_TEMPLATE_CSV,
+      "SRT-NEW01"
+    )
+    assertEquals(4, templateStudents.size)
+    org.junit.Assert.assertTrue(templateStudents.all { it.nik.isNotBlank() && it.noKk.isNotBlank() && it.schoolId == "SRT-NEW01" })
+
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.childStudentDao().deleteAll()
+
+    // Insert incomplete student first (simulating earlier partial import)
+    val existingId = 777001L
+    db.childStudentDao().insert(
+      com.example.data.model.ChildStudent(
+        id = existingId,
+        name = "ACHMAD DEVA ADIANSA",
+        nis = "SRT-KED00-313",
+        gender = "L",
+        age = 12,
+        dormitory = "Asrama Putra",
+        classGrade = "XI-3 (IPS)",
+        allergies = "Alergi Debu",
+        bloodType = "A",
+        schoolId = "SRT-KED00"
+      )
+    )
+
+    val completeCsv = """
+      No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN
+      310,ACHMAD DEVA ADIANSA,XI-3 (IPS),SMA,"Desa Jambangan, Kec. Papar, Kab. Kediri",L,3506142512090002,3506141405120009,KEDIRI,25-12-2009,DWI MASRUROH,95427948
+    """.trimIndent()
+    val parsedComplete = com.example.util.StudentCsvParser.parseCsv(completeCsv, "SRT-KED00")
+
+    var importedCount = 0
+    vm.saveImportedStudents(parsedComplete, replace = false, schoolId = "SRT-KED00") { count ->
+      importedCount = count
+    }
+    var ticks = 0
+    while (importedCount == 0 && ticks < 20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val saved = db.childStudentDao().getStudentsBySchool("SRT-KED00").first()
+    assertEquals(1, saved.size)
+    // Existing ID and custom health fields preserved while demographic fields enriched!
+    assertEquals(existingId, saved[0].id)
+    assertEquals("3506142512090002", saved[0].nik)
+    assertEquals("3506141405120009", saved[0].noKk)
+    assertEquals("95427948", saved[0].nis)
+    assertEquals("DWI MASRUROH", saved[0].motherName)
+    assertEquals("SMA", saved[0].jenjang)
+    assertEquals("Alergi Debu", saved[0].allergies)
+    assertEquals("A", saved[0].bloodType)
+  }
+
+  @Test
+  fun `verify full attached 342-student CSV file parses completely without missing NIK or fields`() {
+    val candidates = listOf(
+      java.io.File("public/assets/aistudio/database_siswa_2026_d0d38b1d.csv"),
+      java.io.File("../public/assets/aistudio/database_siswa_2026_d0d38b1d.csv")
+    )
+    val csvFile = candidates.firstOrNull { it.exists() } ?: return
+    val text = com.example.util.StudentCsvParser.decodeCsvBytes(csvFile.readBytes())
+    val students = com.example.util.StudentCsvParser.parseCsv(text, "SRT-KED00")
+
+    assertEquals(342, students.size)
+    org.junit.Assert.assertTrue("Every student should have NIK", students.all { it.nik.isNotBlank() })
+    org.junit.Assert.assertTrue("Every student should have NO KK", students.all { it.noKk.isNotBlank() })
+    org.junit.Assert.assertTrue("Every student should have NISN", students.all { it.nis.isNotBlank() })
+    org.junit.Assert.assertTrue("Every student should have Mother Name", students.all { it.motherName.isNotBlank() })
+    org.junit.Assert.assertTrue("Every student should have Address", students.all { it.address.isNotBlank() })
+    org.junit.Assert.assertTrue("Every student should have BirthDate", students.all { it.birthDate.isNotBlank() })
+
+    val deva = students.first { it.name == "ACHMAD DEVA ADIANSA" }
+    assertEquals("3506142512090002", deva.nik)
+    assertEquals("3506141405120009", deva.noKk)
+    assertEquals("95427948", deva.nis)
+    assertEquals("SMA", deva.jenjang)
+    assertEquals("XI-3 (IPS)", deva.classGrade)
+    assertEquals("DWI MASRUROH", deva.motherName)
+    assertEquals("KEDIRI", deva.birthPlace)
+    assertEquals("25-12-2009", deva.birthDate)
+  }
 }
+
 
 

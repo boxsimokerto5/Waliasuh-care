@@ -1,9 +1,16 @@
 package com.example.ui.dialogs
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -15,10 +22,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HistoryEdu
+import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.BottomSheetDefaults
@@ -42,6 +54,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,15 +68,18 @@ import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
+import com.example.util.StudentCsvParser
 import java.util.Calendar
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun StudentDetailDialog(
     student: ChildStudent,
     studentRecords: List<MedicalRecord>,
+    onEditStudent: ((ChildStudent) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPrintPdfDialog by remember { mutableStateOf(false) }
 
@@ -73,6 +91,18 @@ fun StudentDetailDialog(
         val time = record.treatmentDate ?: record.planDate
         calItem.timeInMillis = time
         calItem.get(Calendar.MONTH) == curMonth && calItem.get(Calendar.YEAR) == curYear
+    }
+
+    val isMale = StudentClassifier.isMaleStudent(student)
+    val resolvedJenjang = student.jenjang.ifBlank {
+        StudentCsvParser.deriveJenjang(student.classGrade)
+    }
+
+    fun copyValue(label: String, value: String) {
+        if (value.isBlank() || value == "-") return
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
+        Toast.makeText(context, "$label disalin: $value", Toast.LENGTH_SHORT).show()
     }
 
     ModalBottomSheet(
@@ -89,11 +119,12 @@ fun StudentDetailDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 600.dp)
+                    .widthIn(max = 620.dp)
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .verticalScroll(rememberScrollState())
+                    .testTag("student_detail_sheet"),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 // Header
                 Row(
@@ -104,26 +135,52 @@ fun StudentDetailDialog(
                     Row(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(end = 8.dp),
+                            .padding(end = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         StudentAvatar(
                             name = student.name,
                             gender = student.gender,
-                            size = 44.dp
+                            size = 50.dp
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f, fill = false)) {
                             Text(
                                 text = student.name,
-                                fontSize = 15.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                StudentChipBadge(
+                                    text = if (isMale) "Putra (L)" else "Putri (P)",
+                                    bgColor = if (isMale) Color(0xFFDBEAFE) else Color(0xFFFCE7F3),
+                                    textColor = if (isMale) Color(0xFF1E40AF) else Color(0xFF9D174D)
+                                )
+                                if (resolvedJenjang.isNotBlank()) {
+                                    StudentChipBadge(
+                                        text = resolvedJenjang,
+                                        bgColor = Color(0xFFDCFCE7),
+                                        textColor = Color(0xFF166534)
+                                    )
+                                }
+                                if (student.classGrade.isNotBlank()) {
+                                    StudentChipBadge(
+                                        text = student.classGrade,
+                                        bgColor = MaterialTheme.colorScheme.secondaryContainer,
+                                        textColor = MaterialTheme.colorScheme.onSecondaryContainer
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "NIS: ${student.nis} • ${student.classGrade}",
+                                text = "NIS / NISN: ${student.nis.ifBlank { "-" }} • ID Sekolah: ${student.schoolId}",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -131,99 +188,252 @@ fun StudentDetailDialog(
                             )
                         }
                     }
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup", modifier = Modifier.size(18.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (onEditStudent != null) {
+                            IconButton(
+                                onClick = { onEditStudent(student) },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("btn_edit_student_detail")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Profil Siswa",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_close_student_detail")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Tutup"
+                            )
+                        }
                     }
                 }
 
-                // Info Asrama (Compact)
-                Card(
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                    ),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                // Peringatan frekuensi sakit / alergi
+                if (thisMonthCount >= 2) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFFEE2E2))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "Profil Asrama & Kesehatan:",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.primary
+                            text = "⚠️ Perhatian: Anak ini $thisMonthCount kali sakit bulan ini",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFFDC2626),
+                            fontWeight = FontWeight.Bold
                         )
-                        Text(text = "🏠 Asrama: ${student.dormitory}", fontSize = 11.sp)
-                        Text(text = "🎂 Usia/Gender: ${student.age} Th • ${if (StudentClassifier.isMaleStudent(student)) "Putra" else "Putri"} • Gol: ${student.bloodType}", fontSize = 11.sp)
-                        if (student.birthDate.isNotBlank()) {
-                            Text(text = "📍 TTL: ${student.birthPlace}, ${student.birthDate}", fontSize = 11.sp)
-                        }
-                        if (student.nik.isNotBlank()) {
-                            Text(text = "🆔 NIK: ${student.nik} • KK: ${student.noKk}", fontSize = 11.sp)
-                        }
-                        if (student.motherName.isNotBlank()) {
-                            Text(text = "👩 Nama Ibu: ${student.motherName}", fontSize = 11.sp)
-                        }
-                        if (student.address.isNotBlank()) {
-                            Text(text = "🏡 Alamat Asal: ${student.address}", fontSize = 11.sp)
-                        }
-                        Text(text = "📞 Kontak: ${student.emergencyContact}", fontSize = 11.sp)
+                    }
+                } else if (thisMonthCount == 1) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFE0F2FE))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "🩺 1 kali berobat bulan ini",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF0369A1),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
 
-                        if (thisMonthCount >= 2) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFFEE2E2))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = "⚠️ Perhatian: Anak ini $thisMonthCount kali sakit bulan ini",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFFDC2626),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        } else if (thisMonthCount == 1) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFE0F2FE))
-                                    .padding(horizontal = 7.dp, vertical = 3.dp)
-                            ) {
-                                Text(
-                                    text = "🩺 1 kali berobat bulan ini",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF0369A1),
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-                        }
+                if (student.allergies.isNotBlank() && !student.allergies.equals("Tidak ada", ignoreCase = true) && student.allergies != "-") {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Alergi: ${student.allergies}",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
 
-                        if (student.allergies.isNotBlank() && !student.allergies.equals("Tidak ada", ignoreCase = true)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.35f))
-                                    .padding(horizontal = 6.dp, vertical = 3.dp)
-                            ) {
+                // Kartu 1: Identitas Kependudukan & Akademik Lengkap
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            RoundedCornerShape(12.dp)
+                        )
+                ) {
+                    SelectionContainer {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = Icons.Default.Warning,
+                                    imageVector = Icons.Default.Badge,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.error,
-                                    modifier = Modifier.size(12.dp)
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Alergi: ${student.allergies}",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.error,
-                                    fontWeight = FontWeight.Bold
+                                    text = "Identitas Kependudukan & Sekolah",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 12.5.sp,
+                                    color = MaterialTheme.colorScheme.primary
                                 )
                             }
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+
+                            ProfileDetailRow(
+                                label = "NIK",
+                                value = student.nik.ifBlank { "-" },
+                                isMonospace = true,
+                                onCopy = if (student.nik.isNotBlank()) {
+                                    { copyValue("NIK", student.nik) }
+                                } else null
+                            )
+                            ProfileDetailRow(
+                                label = "No. KK",
+                                value = student.noKk.ifBlank { "-" },
+                                isMonospace = true,
+                                onCopy = if (student.noKk.isNotBlank()) {
+                                    { copyValue("No. KK", student.noKk) }
+                                } else null
+                            )
+                            ProfileDetailRow(
+                                label = "NIS / NISN",
+                                value = student.nis.ifBlank { "-" },
+                                isMonospace = true,
+                                onCopy = if (student.nis.isNotBlank()) {
+                                    { copyValue("NIS/NISN", student.nis) }
+                                } else null
+                            )
+                            ProfileDetailRow(
+                                label = "Jenjang / Kelas",
+                                value = "${resolvedJenjang.ifBlank { "-" }} • ${student.classGrade.ifBlank { "-" }}"
+                            )
+                            ProfileDetailRow(
+                                label = "Jenis Kelamin",
+                                value = if (isMale) "Laki-laki (Putra)" else "Perempuan (Putri)"
+                            )
+                            val ttlFormatted = listOf(student.birthPlace, student.birthDate)
+                                .filter { it.isNotBlank() }
+                                .joinToString(", ")
+                                .ifBlank { "-" }
+                            ProfileDetailRow(
+                                label = "Tempat, Tgl Lahir",
+                                value = ttlFormatted
+                            )
+                            ProfileDetailRow(
+                                label = "Usia",
+                                value = "${student.age} Tahun"
+                            )
+                            ProfileDetailRow(
+                                label = "Nama Ibu Kandung",
+                                value = student.motherName.ifBlank { "-" }
+                            )
+                            ProfileDetailRow(
+                                label = "Alamat Lengkap",
+                                value = student.address.ifBlank { "-" }
+                            )
+                        }
+                    }
+                }
+
+                // Kartu 2: Profil Asrama, Kontak & Kesehatan
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            RoundedCornerShape(12.dp)
+                        )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.LocalHospital,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Asrama, Kontak & Kesehatan",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.5.sp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+
+                        ProfileDetailRow(
+                            label = "Asrama",
+                            value = student.dormitory.ifBlank { "-" }
+                        )
+                        ProfileDetailRow(
+                            label = "Kamar",
+                            value = student.roomNumber.ifBlank { "-" }
+                        )
+                        ProfileDetailRow(
+                            label = "Kontak Wali / Ibu",
+                            value = student.emergencyContact.ifBlank { "-" }
+                        )
+                        ProfileDetailRow(
+                            label = "Golongan Darah",
+                            value = student.bloodType.ifBlank { "-" }
+                        )
+                        ProfileDetailRow(
+                            label = "Riwayat Alergi",
+                            value = student.allergies.ifBlank { "Tidak ada" }
+                        )
+                        val cleanNotes = student.specialNotes.trim()
+                        if (cleanNotes.isNotBlank() && !cleanNotes.equals("Alamat Asal: ${student.address}", ignoreCase = true)) {
+                            ProfileDetailRow(
+                                label = "Catatan Khusus",
+                                value = cleanNotes
+                            )
                         }
                     }
                 }
@@ -241,24 +451,24 @@ fun StudentDetailDialog(
                             imageVector = Icons.Default.HistoryEdu,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(17.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
                         Text(
                             text = "Riwayat Berobat (${studentRecords.size} Kali):",
                             fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp
+                            fontSize = 13.sp
                         )
                     }
 
                     OutlinedButton(
                         onClick = { showPrintPdfDialog = true },
                         shape = RoundedCornerShape(8.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(28.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier.height(34.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(13.dp))
-                        Spacer(modifier = Modifier.width(3.dp))
+                        Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text("Cetak PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
@@ -272,7 +482,7 @@ fun StudentDetailDialog(
                     ) {
                         Text(
                             text = "Belum ada riwayat pengobatan untuk siswa ini.",
-                            fontSize = 11.sp,
+                            fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -285,7 +495,7 @@ fun StudentDetailDialog(
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
-                                modifier = Modifier.padding(8.dp),
+                                modifier = Modifier.padding(10.dp),
                                 verticalArrangement = Arrangement.spacedBy(3.dp)
                             ) {
                                 Row(
@@ -298,7 +508,7 @@ fun StudentDetailDialog(
                                         ?: DateUtils.formatShortDate(record.planDate)
                                     Text(
                                         text = dateStr,
-                                        fontSize = 10.sp,
+                                        fontSize = 10.5.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -306,14 +516,14 @@ fun StudentDetailDialog(
 
                                 Text(
                                     text = "Keluhan: ${record.complaint}",
-                                    fontSize = 11.sp,
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
 
                                 if (record.diagnosis.isNotBlank()) {
                                     Text(
                                         text = "Diagnosa: ${record.diagnosis}",
-                                        fontSize = 11.sp,
+                                        fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.SemiBold
                                     )
@@ -322,7 +532,7 @@ fun StudentDetailDialog(
                                 if (record.prescription.isNotBlank()) {
                                     Text(
                                         text = "Obat: ${record.prescription}",
-                                        fontSize = 10.sp,
+                                        fontSize = 10.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -341,8 +551,20 @@ fun StudentDetailDialog(
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (onEditStudent != null) {
+                        OutlinedButton(
+                            onClick = { onEditStudent(student) },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Edit Profil", fontSize = 12.sp)
+                        }
+                    }
                     OutlinedButton(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
@@ -360,5 +582,74 @@ fun StudentDetailDialog(
             allRecords = studentRecords,
             onDismiss = { showPrintPdfDialog = false }
         )
+    }
+}
+
+@Composable
+private fun StudentChipBadge(
+    text: String,
+    bgColor: Color,
+    textColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(5.dp))
+            .background(bgColor)
+            .padding(horizontal = 6.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = text,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = textColor,
+            maxLines = 1
+        )
+    }
+}
+
+@Composable
+private fun ProfileDetailRow(
+    label: String,
+    value: String,
+    isMonospace: Boolean = false,
+    onCopy: (() -> Unit)? = null
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(114.dp)
+        )
+        Text(
+            text = ":",
+            fontSize = 11.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+        Text(
+            text = value,
+            fontSize = 11.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = if (isMonospace && value != "-") FontFamily.Monospace else FontFamily.Default,
+            color = if (value == "-") MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        if (onCopy != null) {
+            IconButton(
+                onClick = onCopy,
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ContentCopy,
+                    contentDescription = "Salin $label",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+        }
     }
 }

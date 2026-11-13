@@ -72,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.ui.theme.WaliPrimary
 import com.example.util.StudentClassifier
+import com.example.util.StudentCsvParser
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,239 +89,19 @@ fun ImportStudentsCsvDialog(
     var parsedStudents by remember { mutableStateOf<List<ChildStudent>>(emptyList()) }
     var parseError by remember { mutableStateOf<String?>(null) }
 
-    val studentTemplateCsv = """
-        No,Nama,Kelas,Kamar,Jenis Kelamin,NIK,Tempat Lahir,Tanggal Lahir,Nama Ibu,Alamat
-        1,Adam Julian Shano,SD 1-2,PL_103,Laki-laki,3508220907180002,KEDIRI,09-07-2018,RUMIYATI,"DSN. MANUKAN RT 02 RW 08 DS. JABON KEC. BANYAKAN KAB. KEDIRI"
-        2,Azzura Fauziah,SD 1-2,PP_103,Perempuan,1771063004190001,BENGKULU,30-04-2019,AULIA HANIFAH,"Karangtalun, Kras, KAB. KEDIRI"
-        3,Ahmad Syaiful Arsyad,VII-1,PL_104,Laki-laki,3506012001140003,KEDIRI,20-01-2014,SITI MUNJIAH,"Pagung, Semen, KAB. KEDIRI"
-        4,Siti Nurhaliza,VIII-1,PP_104,Perempuan,3506011408130004,KEDIRI,14-08-2013,SITI MASRUROH,"Bulu, Semen, KAB. KEDIRI"
-    """.trimIndent()
+    val studentTemplateCsv = StudentCsvParser.STANDARD_TEMPLATE_CSV
 
-    // Helper untuk memecah baris CSV dengan aturan RFC-4180 (aman terhadap koma di dalam tanda petik ganda)
-    fun parseCsvLine(line: String): List<String> {
-        val tokens = mutableListOf<String>()
-        val sb = StringBuilder()
-        var inQuotes = false
-        var i = 0
-        while (i < line.length) {
-            val c = line[i]
-            if (c == '"') {
-                if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
-                    sb.append('"')
-                    i++
-                } else {
-                    inQuotes = !inQuotes
-                }
-            } else if (c == ',' && !inQuotes) {
-                tokens.add(sb.toString().trim())
-                sb.clear()
-            } else {
-                sb.append(c)
-            }
-            i++
-        }
-        tokens.add(sb.toString().trim())
-        return tokens
-    }
-
-    // Helper untuk membersihkan NIK / KK dari notasi eksponensial (misal: 3.50822E+15)
-    fun cleanNumericId(raw: String?): String {
-        if (raw.isNullOrBlank()) return ""
-        val trimmed = raw.trim().removeSurrounding("\"").trim()
-        if (trimmed.contains("E+", ignoreCase = true) || trimmed.contains("E-", ignoreCase = true)) {
-            try {
-                return java.math.BigDecimal(trimmed).toBigInteger().toString()
-            } catch (_: Exception) {
-                return trimmed
-            }
-        }
-        return trimmed
-    }
-
-    // Estimasi usia siswa dari string tanggal lahir (misal: 9/7/2018, 28-04-2019, 2011-05-12)
-    fun estimateAge(birthDate: String): Int {
-        if (birthDate.isBlank()) return 12
-        val yearMatch = Regex("\\b(19\\d\\d|20\\d\\d)\\b").find(birthDate)
-        val birthYear = yearMatch?.value?.toIntOrNull()
-        if (birthYear != null) {
-            val calculated = 2026 - birthYear
-            if (calculated in 5..25) return calculated
-        }
-        return 12
-    }
-
-    // Ekstraksi otomatis jenjang pendidikan (SD / SMP / SMA) dari kolom kelas
-    fun deriveJenjang(classGrade: String): String {
-        val upper = classGrade.uppercase()
-        return when {
-            upper.contains("SD") || upper.contains("MI") -> "SD"
-            upper.contains("VII") || upper.contains("VIII") || upper.contains("IX") || upper.contains("SMP") || upper.contains("MTS") -> "SMP"
-            upper.contains("X") || upper.contains("XI") || upper.contains("XII") || upper.contains("SMA") || upper.contains("SMK") || upper.contains("MA") -> "SMA"
-            else -> "SMP"
-        }
-    }
-
-    fun parseCsv(text: String): List<ChildStudent> {
-        // Bersihkan UTF-8 Byte Order Mark (BOM) jika ada
-        val cleanText = text.removePrefix("\uFEFF").trim()
-        val lines = cleanText.lines().map { it.trim() }.filter { it.isNotBlank() }
-        if (lines.isEmpty()) return emptyList()
-
-        val result = mutableListOf<ChildStudent>()
-        val firstLineTokens = parseCsvLine(lines.first())
-
-        // Deteksi apakah baris pertama adalah baris nama kolom (Header)
-        val hasHeader = firstLineTokens.any { token ->
-            val t = token.lowercase().trim()
-            t.contains("nama") || t.contains("kelas") || t.contains("nik") || t.contains("kamar") || t.contains("kelamin") || t.contains("gender") || t.contains("asrama") || t == "jk" || t == "l/p"
-        }
-
-        var idxNo = -1
-        var idxName = -1
-        var idxClass = -1
-        var idxRoom = -1
-        var idxDorm = -1
-        var idxGender = -1
-        var idxNik = -1
-        var idxNoKk = -1
-        var idxBirthPlace = -1
-        var idxBirthDate = -1
-        var idxMother = -1
-        var idxAddress = -1
-        var idxJenjang = -1
-        var idxNis = -1
-
-        if (hasHeader) {
-            firstLineTokens.forEachIndexed { idx, rawToken ->
-                val col = rawToken.lowercase().replace("_", " ").replace("-", " ").trim()
-                when {
-                    col == "no" || col == "nomor" -> if (idxNo == -1) idxNo = idx
-                    col.contains("nama lengkap") || col.contains("nama siswa") || col == "nama" -> if (idxName == -1) idxName = idx
-                    col.contains("kelas") || col.contains("tingkat") -> if (idxClass == -1) idxClass = idx
-                    col.contains("kamar") || col.contains("ruang") -> if (idxRoom == -1) idxRoom = idx
-                    col.contains("asrama") || col.contains("dorm") -> if (idxDorm == -1) idxDorm = idx
-                    col.contains("kelamin") || col.contains("gender") || col == "jk" || col == "l/p" || col == "lp" || col == "sex" -> if (idxGender == -1) idxGender = idx
-                    col == "nik" || col.contains("no nik") || col.contains("nomor nik") -> if (idxNik == -1) idxNik = idx
-                    col.contains("kk") -> if (idxNoKk == -1) idxNoKk = idx
-                    col.contains("tempat lahir") || col.contains("tmp lahir") || col == "tempat" -> if (idxBirthPlace == -1) idxBirthPlace = idx
-                    col.contains("tanggal lahir") || col.contains("tgl lahir") || col == "tanggal" || col == "tgl" -> if (idxBirthDate == -1) idxBirthDate = idx
-                    col.contains("ibu") || col.contains("wali") || col.contains("orang tua") -> if (idxMother == -1) idxMother = idx
-                    col.contains("alamat") || col.contains("domisili") || col.contains("asal") -> if (idxAddress == -1) idxAddress = idx
-                    col.contains("jenjang") -> if (idxJenjang == -1) idxJenjang = idx
-                    col.contains("nis") || col.contains("nisn") -> if (idxNis == -1) idxNis = idx
-                }
-            }
-        }
-
-        // Fallback dinamis jika header tidak ada atau format 10 kolom sekolah langsung
-        val isStandard10ColFormat = firstLineTokens.size in 9..11
-        if (idxName == -1) idxName = if (firstLineTokens.size > 1) 1 else 0
-        if (idxClass == -1) idxClass = 2
-
-        if (isStandard10ColFormat && (!hasHeader || idxRoom == -1 || idxGender == -1)) {
-            if (idxRoom == -1) idxRoom = 3
-            if (idxGender == -1) idxGender = 4
-            if (idxNik == -1) idxNik = 5
-            if (idxBirthPlace == -1) idxBirthPlace = 6
-            if (idxBirthDate == -1) idxBirthDate = 7
-            if (idxMother == -1) idxMother = 8
-            if (idxAddress == -1) idxAddress = 9
-        }
-
-        val startIdx = if (hasHeader) 1 else 0
-
-        for (i in startIdx until lines.size) {
-            val line = lines[i]
-            val tokens = parseCsvLine(line)
-            if (tokens.size >= 2) {
-                val rawName = if (idxName in tokens.indices) tokens[idxName] else tokens.getOrNull(1) ?: tokens.getOrNull(0) ?: ""
-                val name = rawName.trim().removeSurrounding("\"")
-                if (name.isBlank() || name.equals("Nama", ignoreCase = true) || name.equals("Nama Lengkap", ignoreCase = true)) continue
-
-                val rawClass = (if (idxClass in tokens.indices) tokens[idxClass] else "").trim().removeSurrounding("\"")
-                val classGrade = rawClass.ifBlank { "Kelas -" }
-
-                val rawRoom = (if (idxRoom in tokens.indices) tokens[idxRoom] else "").trim().removeSurrounding("\"")
-                val rawDorm = (if (idxDorm in tokens.indices) tokens[idxDorm] else "").trim().removeSurrounding("\"")
-                val rawGender = (if (idxGender in tokens.indices) tokens[idxGender] else "").trim().removeSurrounding("\"")
-
-                // Deteksi jenis kelamin: dukung beragam format (P, Pr, Wanita, Female, PP_, Asrama Putri, dll)
-                val gender = StudentClassifier.detectGenderCode(rawGender, rawRoom, rawDorm)
-                val isFemale = gender == "P"
-
-                // Deteksi otomatis asrama: pakai kolom asrama jika ada, atau dari kode kamar/gender
-                val dormitory = when {
-                    rawDorm.isNotBlank() -> rawDorm
-                    rawRoom.startsWith("PP", ignoreCase = true) || rawRoom.startsWith("AP", ignoreCase = true) -> "Asrama Putri"
-                    rawRoom.startsWith("PL", ignoreCase = true) || rawRoom.startsWith("AL", ignoreCase = true) -> "Asrama Putra"
-                    isFemale -> "Asrama Putri"
-                    else -> "Asrama Putra"
-                }
-
-                val nik = cleanNumericId(if (idxNik in tokens.indices) tokens[idxNik] else "")
-                val noKk = cleanNumericId(if (idxNoKk in tokens.indices) tokens[idxNoKk] else "")
-                val birthPlace = (if (idxBirthPlace in tokens.indices) tokens[idxBirthPlace] else "").trim().removeSurrounding("\"")
-                val birthDate = (if (idxBirthDate in tokens.indices) tokens[idxBirthDate] else "").trim().removeSurrounding("\"")
-                val motherName = (if (idxMother in tokens.indices) tokens[idxMother] else "").trim().removeSurrounding("\"")
-                val address = (if (idxAddress in tokens.indices) tokens[idxAddress] else "").trim().removeSurrounding("\"")
-
-                val jenjangVal = if (idxJenjang in tokens.indices && tokens[idxJenjang].isNotBlank()) {
-                    tokens[idxJenjang].trim().removeSurrounding("\"")
-                } else {
-                    deriveJenjang(classGrade)
-                }
-
-                val rawNo = if (idxNo in tokens.indices) tokens[idxNo].trim() else ""
-                val nis = if (idxNis in tokens.indices && tokens[idxNis].isNotBlank()) {
-                    tokens[idxNis].trim().removeSurrounding("\"")
-                } else if (rawNo.toIntOrNull() != null) {
-                    "${currentSchoolId}-${rawNo}"
-                } else {
-                    "${currentSchoolId}-${i + 1}"
-                }
-
-                val age = estimateAge(birthDate)
-                val emergency = if (motherName.isNotBlank()) "Ibu: $motherName" else "Pengasuh $dormitory"
-
-                result.add(
-                    ChildStudent(
-                        id = 0L,
-                        name = name,
-                        nis = nis,
-                        gender = gender,
-                        age = age,
-                        dormitory = dormitory,
-                        classGrade = classGrade,
-                        allergies = "Tidak ada",
-                        bloodType = "-",
-                        emergencyContact = emergency,
-                        specialNotes = if (address.isNotBlank()) "Alamat Asal: $address" else "",
-                        nik = nik,
-                        noKk = noKk,
-                        birthPlace = birthPlace,
-                        birthDate = birthDate,
-                        motherName = motherName,
-                        address = address,
-                        roomNumber = rawRoom,
-                        jenjang = jenjangVal,
-                        schoolId = currentSchoolId
-                    )
-                )
-            }
-        }
-        return result
-    }
-
-    // Launcher untuk download / simpan file CSV template ke perangkat
+    // Launcher untuk download / simpan file CSV template ke perangkat (UTF-8 + BOM agar rapi di Excel)
     val createTemplateLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("text/csv")
     ) { uri: Uri? ->
         if (uri != null) {
             try {
                 context.contentResolver.openOutputStream(uri)?.use { os ->
-                    os.write(studentTemplateCsv.toByteArray(Charsets.UTF_8))
+                    val contentWithBom = "\uFEFF$studentTemplateCsv"
+                    os.write(contentWithBom.toByteArray(Charsets.UTF_8))
                 }
-                Toast.makeText(context, "Template CSV Siswa berhasil diunduh!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Template CSV Siswa standar berhasil diunduh!", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Gagal mengunduh template: ${e.message}", Toast.LENGTH_SHORT).show()
             }
@@ -333,13 +114,18 @@ fun ImportStudentsCsvDialog(
     ) { uri: Uri? ->
         if (uri != null) {
             try {
-                val content = context.contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
+                val rawBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val content = rawBytes?.let { StudentCsvParser.decodeCsvBytes(it) }
                 if (!content.isNullOrBlank()) {
                     csvText = content
                     uploadedFileName = uri.lastPathSegment ?: "file_siswa.csv"
-                    parsedStudents = parseCsv(content)
+                    parsedStudents = StudentCsvParser.parseCsv(content, currentSchoolId)
                     parseError = null
-                    Toast.makeText(context, "File CSV berhasil dimuat: ${parsedStudents.size} siswa terdeteksi!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        "File CSV berhasil dimuat: ${parsedStudents.size} siswa terdeteksi!",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 } else {
                     Toast.makeText(context, "File CSV kosong.", Toast.LENGTH_SHORT).show()
                 }
@@ -497,14 +283,14 @@ fun ImportStudentsCsvDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Template CSV Siswa Standar",
+                                text = "Template CSV Siswa Standar (12 Kolom Lengkap)",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Text(
-                            text = "Unduh template 10 kolom standar Sekolah Rakyat (No, Nama, Kelas, Kamar, Jenis Kelamin, NIK, Tempat Lahir, Tanggal Lahir, Nama Ibu, Alamat). Mendukung tanda koma pada alamat & format Excel.",
+                            text = "Format resmi 12 kolom: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN. Otomatis membersihkan karakter tersembunyi, baris judul Excel, & koma pada alamat.",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -649,14 +435,14 @@ fun ImportStudentsCsvDialog(
                         onValueChange = {
                             csvText = it
                             try {
-                                parsedStudents = parseCsv(it)
+                                parsedStudents = StudentCsvParser.parseCsv(it, currentSchoolId)
                                 parseError = null
                             } catch (e: Exception) {
                                 parseError = e.message
                             }
                         },
                         label = { Text("Isi Teks CSV") },
-                        placeholder = { Text("No,Nama Lengkap,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,No KK...") },
+                        placeholder = { Text(StudentCsvParser.STANDARD_HEADER) },
                         minLines = 3,
                         maxLines = 6,
                         modifier = Modifier
@@ -668,6 +454,8 @@ fun ImportStudentsCsvDialog(
                 if (parsedStudents.isNotEmpty()) {
                     val countPutra = parsedStudents.count { StudentClassifier.isMaleStudent(it) }
                     val countPutri = parsedStudents.count { StudentClassifier.isFemaleStudent(it) }
+                    val countWithNik = parsedStudents.count { it.nik.isNotBlank() }
+                    val countWithKk = parsedStudents.count { it.noKk.isNotBlank() }
 
                     Column(
                         modifier = Modifier
@@ -710,7 +498,7 @@ fun ImportStudentsCsvDialog(
                         }
 
                         Text(
-                            text = "Contoh Hasil Pemetaan Kolom:",
+                            text = "Kelengkapan Terbaca: NIK ($countWithNik/${parsedStudents.size}) • No. KK ($countWithKk/${parsedStudents.size})",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF166534)
@@ -738,7 +526,8 @@ fun ImportStudentsCsvDialog(
                                             text = sample.name,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.sp,
-                                            color = Color(0xFF1E293B)
+                                            color = Color(0xFF1E293B),
+                                            modifier = Modifier.weight(1f)
                                         )
                                         val isFemaleSample = StudentClassifier.isFemaleStudent(sample)
                                         Box(
@@ -748,7 +537,7 @@ fun ImportStudentsCsvDialog(
                                                 .padding(horizontal = 6.dp, vertical = 1.dp)
                                         ) {
                                             Text(
-                                                text = "${sample.dormitory} • ${sample.roomNumber.ifBlank { "-" }}",
+                                                text = "${sample.jenjang.ifBlank { "-" }} • ${sample.classGrade}",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = if (isFemaleSample) Color(0xFF9D174D) else Color(0xFF1E40AF)
@@ -756,16 +545,29 @@ fun ImportStudentsCsvDialog(
                                         }
                                     }
                                     Text(
-                                        text = "Kelas: ${sample.classGrade} (${sample.jenjang}) • NIK: ${sample.nik.ifBlank { "-" }} • Usia: ${sample.age} thn",
+                                        text = "NIK: ${sample.nik.ifBlank { "-" }} • KK: ${sample.noKk.ifBlank { "-" }}",
                                         fontSize = 10.5.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = Color(0xFF334155)
+                                    )
+                                    Text(
+                                        text = "NISN: ${sample.nis.ifBlank { "-" }} • TTL: ${sample.birthPlace.ifBlank { "-" }}, ${sample.birthDate.ifBlank { "-" }} (${sample.age} thn)",
+                                        fontSize = 10.sp,
                                         color = Color(0xFF475569)
                                     )
+                                    if (sample.motherName.isNotBlank()) {
+                                        Text(
+                                            text = "Ibu: ${sample.motherName}",
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF475569)
+                                        )
+                                    }
                                     if (sample.address.isNotBlank()) {
                                         Text(
                                             text = "Alamat: ${sample.address}",
                                             fontSize = 10.sp,
                                             color = Color(0xFF64748B),
-                                            maxLines = 1
+                                            maxLines = 2
                                         )
                                     }
                                 }

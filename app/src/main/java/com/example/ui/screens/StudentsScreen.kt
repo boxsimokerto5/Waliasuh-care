@@ -80,7 +80,10 @@ fun StudentsScreen(
                     student.dormitory.contains(searchQuery, ignoreCase = true) ||
                     student.nis.contains(searchQuery, ignoreCase = true) ||
                     student.address.contains(searchQuery, ignoreCase = true) ||
-                    student.nik.contains(searchQuery, ignoreCase = true)
+                    student.nik.contains(searchQuery, ignoreCase = true) ||
+                    student.noKk.contains(searchQuery, ignoreCase = true) ||
+                    student.motherName.contains(searchQuery, ignoreCase = true) ||
+                    student.jenjang.contains(searchQuery, ignoreCase = true)
         }
     }
 
@@ -123,7 +126,7 @@ fun StudentsScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setStudentSearchQuery(it) },
-                    placeholder = { Text("Cari nama siswa, asrama, NIS...", fontSize = 11.5.sp) },
+                    placeholder = { Text("Cari nama, NIK, NISN, kelas, alamat...", fontSize = 11.5.sp) },
                     leadingIcon = {
                         Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(16.dp))
                     },
@@ -216,11 +219,32 @@ fun StudentsScreen(
     }
 
     if (showAddStudentDialog) {
+        val activeSchoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
         AddStudentDialog(
+            activeSchoolId = activeSchoolCode,
             onDismiss = { showAddStudentDialog = false },
-            onConfirm = { name, nis, gender, age, dorm, grade, allergies, blood, contact, notes ->
+            onConfirmStudent = { newStudent ->
                 TopOnAdManager.onUserActionClick(context)
-                viewModel.addStudent(name, nis, gender, age, dorm, grade, allergies, blood, contact, notes)
+                viewModel.addStudent(
+                    name = newStudent.name,
+                    nis = newStudent.nis,
+                    gender = newStudent.gender,
+                    age = newStudent.age,
+                    dormitory = newStudent.dormitory,
+                    classGrade = newStudent.classGrade,
+                    allergies = newStudent.allergies,
+                    bloodType = newStudent.bloodType,
+                    emergencyContact = newStudent.emergencyContact,
+                    specialNotes = newStudent.specialNotes,
+                    nik = newStudent.nik,
+                    noKk = newStudent.noKk,
+                    birthPlace = newStudent.birthPlace,
+                    birthDate = newStudent.birthDate,
+                    motherName = newStudent.motherName,
+                    address = newStudent.address,
+                    roomNumber = newStudent.roomNumber,
+                    jenjang = newStudent.jenjang
+                )
                 showAddStudentDialog = false
             }
         )
@@ -310,12 +334,31 @@ fun CompactStudentCardItem(
                 Spacer(modifier = Modifier.height(2.dp))
 
                 Text(
-                    text = "${student.dormitory} • ${student.classGrade}",
+                    text = buildString {
+                        if (student.jenjang.isNotBlank()) append("${student.jenjang} • ")
+                        append("${student.classGrade} • ${student.dormitory}")
+                        if (student.roomNumber.isNotBlank()) append(" (${student.roomNumber})")
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+
+                if (student.nik.isNotBlank() || student.nis.isNotBlank()) {
+                    Text(
+                        text = buildString {
+                            if (student.nik.isNotBlank()) append("NIK: ${student.nik}")
+                            if (student.nik.isNotBlank() && student.nis.isNotBlank()) append(" • ")
+                            if (student.nis.isNotBlank()) append("NISN: ${student.nis}")
+                        },
+                        fontSize = 10.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
                 if (student.allergies.isNotBlank() && !student.allergies.equals("Tidak ada", ignoreCase = true)) {
                     Row(

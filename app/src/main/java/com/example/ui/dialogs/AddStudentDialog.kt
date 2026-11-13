@@ -3,6 +3,8 @@ package com.example.ui.dialogs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,17 +17,22 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -38,34 +45,55 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.ChildStudent
+import com.example.util.StudentClassifier
+import com.example.util.StudentCsvParser
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddStudentDialog(
+    initialStudent: ChildStudent? = null,
+    activeSchoolId: String = "SRT1-KDR",
     onDismiss: () -> Unit,
-    onConfirm: (
-        name: String,
-        nis: String,
-        gender: String,
-        age: Int,
-        dormitory: String,
-        classGrade: String,
-        allergies: String,
-        bloodType: String,
-        emergencyContact: String,
-        specialNotes: String
-    ) -> Unit
+    onConfirmStudent: (ChildStudent) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var nis by remember { mutableStateOf("") }
-    var gender by remember { mutableStateOf("L") }
-    var ageText by remember { mutableStateOf("12") }
-    var dormitory by remember { mutableStateOf("Asrama Putra Wates") }
-    var classGrade by remember { mutableStateOf("Kelas 7 SMP") }
-    var allergies by remember { mutableStateOf("") }
-    var bloodType by remember { mutableStateOf("O") }
-    var emergencyContact by remember { mutableStateOf("Ust. Ilham") }
-    var specialNotes by remember { mutableStateOf("") }
+    val isEditMode = initialStudent != null
+    var name by remember { mutableStateOf(initialStudent?.name ?: "") }
+    var nis by remember { mutableStateOf(initialStudent?.nis ?: "") }
+    var gender by remember {
+        mutableStateOf(
+            if (initialStudent != null) {
+                if (StudentClassifier.isFemaleStudent(initialStudent)) "P" else "L"
+            } else "L"
+        )
+    }
+    var ageText by remember { mutableStateOf(initialStudent?.age?.toString() ?: "12") }
+    var jenjang by remember {
+        mutableStateOf(
+            initialStudent?.jenjang?.ifBlank {
+                StudentCsvParser.deriveJenjang(initialStudent.classGrade)
+            } ?: "SMP"
+        )
+    }
+    var classGrade by remember { mutableStateOf(initialStudent?.classGrade ?: "VII-1") }
+    var dormitory by remember { mutableStateOf(initialStudent?.dormitory ?: "Asrama Putra") }
+    var roomNumber by remember { mutableStateOf(initialStudent?.roomNumber ?: "") }
+
+    // Data Kependudukan Lengkap
+    var nik by remember { mutableStateOf(initialStudent?.nik ?: "") }
+    var noKk by remember { mutableStateOf(initialStudent?.noKk ?: "") }
+    var birthPlace by remember { mutableStateOf(initialStudent?.birthPlace ?: "") }
+    var birthDate by remember { mutableStateOf(initialStudent?.birthDate ?: "") }
+    var motherName by remember { mutableStateOf(initialStudent?.motherName ?: "") }
+    var address by remember { mutableStateOf(initialStudent?.address ?: "") }
+
+    // Kesehatan & Kontak
+    var bloodType by remember { mutableStateOf(initialStudent?.bloodType ?: "-") }
+    var allergies by remember { mutableStateOf(initialStudent?.allergies?.takeIf { !it.equals("Tidak ada", ignoreCase = true) } ?: "") }
+    var emergencyContact by remember { mutableStateOf(initialStudent?.emergencyContact ?: "Pengasuh Asrama") }
+    var specialNotes by remember { mutableStateOf(initialStudent?.specialNotes ?: "") }
+
+    var showHealthSection by remember { mutableStateOf(isEditMode) }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -83,7 +111,7 @@ fun AddStudentDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .widthIn(max = 600.dp)
+                    .widthIn(max = 620.dp)
                     .padding(horizontal = 16.dp)
                     .padding(bottom = 24.dp)
                     .verticalScroll(rememberScrollState()),
@@ -91,14 +119,14 @@ fun AddStudentDialog(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        imageVector = Icons.Default.PersonAdd,
+                        imageVector = if (isEditMode) Icons.Default.Edit else Icons.Default.PersonAdd,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Tambah Anak Asuh",
+                        text = if (isEditMode) "Edit Profil Siswa" else "Tambah Anak Asuh",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -109,7 +137,7 @@ fun AddStudentDialog(
                     value = name,
                     onValueChange = { name = it },
                     label = { Text("Nama Lengkap Siswa *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Fauzan Abdullah", fontSize = 12.sp) },
+                    placeholder = { Text("misal: ACHMAD DEVA ADIANSA", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -124,11 +152,11 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = nis,
                         onValueChange = { nis = it },
-                        label = { Text("NIS", fontSize = 12.sp) },
-                        placeholder = { Text("SRT1-2024-xx", fontSize = 12.sp) },
+                        label = { Text("NISN / NIS", fontSize = 12.sp) },
+                        placeholder = { Text("95427948", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1.2f)
                     )
                     OutlinedTextField(
                         value = ageText,
@@ -140,8 +168,11 @@ fun AddStudentDialog(
                     )
                 }
 
-                Text("Jenis Kelamin:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Jenis Kelamin & Jenjang:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     FilterChip(
                         selected = gender == "L",
                         onClick = {
@@ -151,7 +182,7 @@ fun AddStudentDialog(
                             }
                         },
                         label = { Text("Putra (L)", fontSize = 11.sp) },
-                        modifier = Modifier.height(28.dp)
+                        modifier = Modifier.height(32.dp)
                     )
                     FilterChip(
                         selected = gender == "P",
@@ -162,49 +193,199 @@ fun AddStudentDialog(
                             }
                         },
                         label = { Text("Putri (P)", fontSize = 11.sp) },
-                        modifier = Modifier.height(28.dp)
+                        modifier = Modifier.height(32.dp)
+                    )
+                    listOf("SD", "SMP", "SMA").forEach { j ->
+                        FilterChip(
+                            selected = jenjang.equals(j, ignoreCase = true) || jenjang.uppercase().startsWith(j),
+                            onClick = { jenjang = j },
+                            label = { Text(j, fontSize = 11.sp) },
+                            modifier = Modifier.height(32.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = classGrade,
+                        onValueChange = { classGrade = it },
+                        label = { Text("Kelas", fontSize = 12.sp) },
+                        placeholder = { Text("XI-3 (IPS) / VII-1", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = roomNumber,
+                        onValueChange = { roomNumber = it },
+                        label = { Text("Kamar", fontSize = 12.sp) },
+                        placeholder = { Text("PL_103 / PP_101", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(0.8f)
                     )
                 }
 
                 OutlinedTextField(
                     value = dormitory,
                     onValueChange = { dormitory = it },
-                    label = { Text("Asrama / Kamar *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Asrama Putra Al-Fatih", fontSize = 12.sp) },
+                    label = { Text("Asrama *", fontSize = 12.sp) },
+                    placeholder = { Text("misal: Asrama Putra", fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+                Text(
+                    text = "Identitas Kependudukan (Sesuai KK/CSV)",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = nik,
+                        onValueChange = { nik = it },
+                        label = { Text("NIK (16 Digit)", fontSize = 12.sp) },
+                        placeholder = { Text("3506xxxxxxxxxxxx", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = noKk,
+                        onValueChange = { noKk = it },
+                        label = { Text("No. KK", fontSize = 12.sp) },
+                        placeholder = { Text("3506xxxxxxxxxxxx", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    OutlinedTextField(
+                        value = birthPlace,
+                        onValueChange = { birthPlace = it },
+                        label = { Text("Tempat Lahir", fontSize = 12.sp) },
+                        placeholder = { Text("KEDIRI", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = birthDate,
+                        onValueChange = { newVal ->
+                            birthDate = newVal
+                            if (newVal.length >= 8) {
+                                ageText = StudentCsvParser.estimateAge(newVal).toString()
+                            }
+                        },
+                        label = { Text("Tgl Lahir (DD-MM-YYYY)", fontSize = 12.sp) },
+                        placeholder = { Text("25-12-2009", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                OutlinedTextField(
+                    value = motherName,
+                    onValueChange = { motherName = it },
+                    label = { Text("Nama Ibu Kandung", fontSize = 12.sp) },
+                    placeholder = { Text("misal: DWI MASRUROH", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
                 OutlinedTextField(
-                    value = classGrade,
-                    onValueChange = { classGrade = it },
-                    label = { Text("Tingkat Kelas", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Kelas 7 SMP", fontSize = 12.sp) },
-                    singleLine = true,
+                    value = address,
+                    onValueChange = { address = it },
+                    label = { Text("Alamat Lengkap", fontSize = 12.sp) },
+                    placeholder = { Text("Dusun, RT/RW, Desa, Kec, Kab", fontSize = 12.sp) },
+                    minLines = 2,
+                    maxLines = 3,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                OutlinedTextField(
-                    value = allergies,
-                    onValueChange = { allergies = it },
-                    label = { Text("Riwayat Alergi (jika ada)", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Alergi dingin, amoxicillin", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
+                TextButton(
+                    onClick = { showHealthSection = !showHealthSection },
                     modifier = Modifier.fillMaxWidth()
-                )
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Kesehatan, Golongan Darah & Kontak Wali",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(
+                            imageVector = if (showHealthSection) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                            contentDescription = null
+                        )
+                    }
+                }
 
-                OutlinedTextField(
-                    value = emergencyContact,
-                    onValueChange = { emergencyContact = it },
-                    label = { Text("Kontak Pengasuh", fontSize = 12.sp) },
-                    placeholder = { Text("0812-xxxx-xxxx (Ust. Ilham)", fontSize = 12.sp) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                if (showHealthSection) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = bloodType,
+                            onValueChange = { bloodType = it },
+                            label = { Text("Gol. Darah", fontSize = 12.sp) },
+                            placeholder = { Text("A / B / AB / O / -", fontSize = 12.sp) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(0.7f)
+                        )
+                        OutlinedTextField(
+                            value = emergencyContact,
+                            onValueChange = { emergencyContact = it },
+                            label = { Text("Kontak Pengasuh / Wali", fontSize = 12.sp) },
+                            placeholder = { Text("0812-xxxx-xxxx", fontSize = 12.sp) },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1.3f)
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = allergies,
+                        onValueChange = { allergies = it },
+                        label = { Text("Riwayat Alergi (jika ada)", fontSize = 12.sp) },
+                        placeholder = { Text("misal: Alergi dingin, amoxicillin", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    OutlinedTextField(
+                        value = specialNotes,
+                        onValueChange = { specialNotes = it },
+                        label = { Text("Catatan Khusus", fontSize = 12.sp) },
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(6.dp))
 
@@ -224,27 +405,53 @@ fun AddStudentDialog(
 
                     Button(
                         onClick = {
-                            val age = ageText.toIntOrNull() ?: 12
+                            val age = ageText.toIntOrNull()
+                                ?: StudentCsvParser.estimateAge(birthDate)
                             if (name.isNotBlank() && dormitory.isNotBlank()) {
-                                onConfirm(
-                                    name.trim(),
-                                    if (nis.isBlank()) "SRT1-${System.currentTimeMillis() % 1000}" else nis.trim(),
-                                    gender,
-                                    age,
-                                    dormitory.trim(),
-                                    classGrade.trim(),
-                                    allergies.trim(),
-                                    bloodType,
-                                    emergencyContact.trim(),
-                                    specialNotes.trim()
+                                val resolvedNis = nis.trim().ifBlank {
+                                    "${activeSchoolId}-${System.currentTimeMillis() % 10000}"
+                                }
+                                val resolvedContact = emergencyContact.trim().ifBlank {
+                                    if (motherName.isNotBlank()) "Ibu: ${motherName.trim()}" else "Pengasuh ${dormitory.trim()}"
+                                }
+                                val updated = (initialStudent ?: ChildStudent(
+                                    id = 0L,
+                                    name = "",
+                                    nis = "",
+                                    gender = gender,
+                                    age = age,
+                                    dormitory = dormitory.trim(),
+                                    classGrade = classGrade.trim(),
+                                    schoolId = activeSchoolId
+                                )).copy(
+                                    name = name.trim(),
+                                    nis = resolvedNis,
+                                    gender = gender,
+                                    age = age,
+                                    dormitory = dormitory.trim(),
+                                    classGrade = classGrade.trim(),
+                                    allergies = if (allergies.isBlank()) "Tidak ada" else allergies.trim(),
+                                    bloodType = if (bloodType.isBlank()) "-" else bloodType.trim(),
+                                    emergencyContact = resolvedContact,
+                                    specialNotes = specialNotes.trim(),
+                                    nik = StudentCsvParser.cleanNumericId(nik),
+                                    noKk = StudentCsvParser.cleanNumericId(noKk),
+                                    birthPlace = birthPlace.trim(),
+                                    birthDate = birthDate.trim(),
+                                    motherName = motherName.trim(),
+                                    address = address.trim(),
+                                    roomNumber = roomNumber.trim(),
+                                    jenjang = jenjang.trim().ifBlank { StudentCsvParser.deriveJenjang(classGrade) },
+                                    schoolId = initialStudent?.schoolId?.ifBlank { activeSchoolId } ?: activeSchoolId
                                 )
+                                onConfirmStudent(updated)
                             }
                         },
                         enabled = name.isNotBlank() && dormitory.isNotBlank(),
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("confirm_add_student_button")
                     ) {
-                        Text("Tambah Siswa", fontSize = 12.sp)
+                        Text(if (isEditMode) "Simpan Perubahan" else "Tambah Siswa", fontSize = 12.sp)
                     }
                 }
             }

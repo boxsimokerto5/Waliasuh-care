@@ -132,6 +132,7 @@ fun AdminScreen(
     var selectedStudentGenderFilter by remember { mutableStateOf("Semua") }
     var studentToDelete by remember { mutableStateOf<ChildStudent?>(null) }
     var selectedDetailStudent by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentToEdit by remember { mutableStateOf<ChildStudent?>(null) }
     var showAddStudentDialog by remember { mutableStateOf(false) }
 
     // State untuk Kelola Akun Wali Asuh
@@ -176,6 +177,10 @@ fun AdminScreen(
                 student.name.contains(studentSearchQuery, ignoreCase = true) ||
                 student.nis.contains(studentSearchQuery, ignoreCase = true) ||
                 student.nik.contains(studentSearchQuery, ignoreCase = true) ||
+                student.noKk.contains(studentSearchQuery, ignoreCase = true) ||
+                student.motherName.contains(studentSearchQuery, ignoreCase = true) ||
+                student.address.contains(studentSearchQuery, ignoreCase = true) ||
+                student.jenjang.contains(studentSearchQuery, ignoreCase = true) ||
                 student.roomNumber.contains(studentSearchQuery, ignoreCase = true) ||
                 student.classGrade.contains(studentSearchQuery, ignoreCase = true) ||
                 student.dormitory.contains(studentSearchQuery, ignoreCase = true)
@@ -632,7 +637,7 @@ fun AdminScreen(
                             OutlinedTextField(
                                 value = studentSearchQuery,
                                 onValueChange = { studentSearchQuery = it },
-                                placeholder = { Text("Cari nama, NIS, kelas, atau kamar/asrama...", fontSize = 12.sp) },
+                                placeholder = { Text("Cari nama, NIK, KK, NISN, kelas, ibu...", fontSize = 12.sp) },
                                 leadingIcon = {
                                     Icon(Icons.Default.Search, contentDescription = null, tint = WaliPrimary, modifier = Modifier.size(18.dp))
                                 },
@@ -899,11 +904,45 @@ fun AdminScreen(
 
     if (showAddStudentDialog) {
         AddStudentDialog(
+            activeSchoolId = activeSchoolCode,
             onDismiss = { showAddStudentDialog = false },
-            onConfirm = { name, nis, gender, age, dorm, cls, allergy, blood, emergency, notes ->
-                viewModel.addStudent(name, nis, gender, age, dorm, cls, allergy, blood, emergency, notes)
-                Toast.makeText(context, "Siswa $name berhasil didaftarkan ke ${schoolProfile.shortName}!", Toast.LENGTH_SHORT).show()
+            onConfirmStudent = { newStudent ->
+                viewModel.addStudent(
+                    name = newStudent.name,
+                    nis = newStudent.nis,
+                    gender = newStudent.gender,
+                    age = newStudent.age,
+                    dormitory = newStudent.dormitory,
+                    classGrade = newStudent.classGrade,
+                    allergies = newStudent.allergies,
+                    bloodType = newStudent.bloodType,
+                    emergencyContact = newStudent.emergencyContact,
+                    specialNotes = newStudent.specialNotes,
+                    nik = newStudent.nik,
+                    noKk = newStudent.noKk,
+                    birthPlace = newStudent.birthPlace,
+                    birthDate = newStudent.birthDate,
+                    motherName = newStudent.motherName,
+                    address = newStudent.address,
+                    roomNumber = newStudent.roomNumber,
+                    jenjang = newStudent.jenjang
+                )
+                Toast.makeText(context, "Siswa ${newStudent.name} berhasil didaftarkan ke ${schoolProfile.shortName}!", Toast.LENGTH_SHORT).show()
                 showAddStudentDialog = false
+            }
+        )
+    }
+
+    studentToEdit?.let { editingStudent ->
+        AddStudentDialog(
+            initialStudent = editingStudent,
+            activeSchoolId = activeSchoolCode,
+            onDismiss = { studentToEdit = null },
+            onConfirmStudent = { updated ->
+                viewModel.updateStudent(updated) {
+                    Toast.makeText(context, "Profil ${updated.name} berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                }
+                studentToEdit = null
             }
         )
     }
@@ -912,6 +951,10 @@ fun AdminScreen(
         StudentDetailDialog(
             student = student,
             studentRecords = allRecords.filter { it.studentId == student.id },
+            onEditStudent = { toEdit ->
+                selectedDetailStudent = null
+                studentToEdit = toEdit
+            },
             onDismiss = { selectedDetailStudent = null }
         )
     }
@@ -1498,6 +1541,21 @@ fun AdminStudentCardItem(
                                 color = accentColor
                             )
                         }
+                        if (student.jenjang.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color(0xFFDCFCE7))
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp)
+                            ) {
+                                Text(
+                                    text = student.jenjang,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF166534)
+                                )
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(2.dp))
@@ -1508,7 +1566,7 @@ fun AdminStudentCardItem(
                     ) {
                         if (student.nis.isNotBlank()) {
                             Text(
-                                text = "NIS: ${student.nis}",
+                                text = "NISN/NIS: ${student.nis}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1525,9 +1583,43 @@ fun AdminStudentCardItem(
                         }
                     }
 
+                    Text(
+                        text = "NIK: ${student.nik.ifBlank { "-" }} • KK: ${student.noKk.ifBlank { "-" }}",
+                        fontSize = 10.5.sp,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                        color = if (student.nik.isNotBlank()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    val ttlSummary = listOf(student.birthPlace, student.birthDate)
+                        .filter { it.isNotBlank() }
+                        .joinToString(", ")
+                    if (ttlSummary.isNotBlank() || student.motherName.isNotBlank()) {
+                        Text(
+                            text = buildString {
+                                if (ttlSummary.isNotBlank()) append("TTL: $ttlSummary (${student.age} Th)")
+                                if (ttlSummary.isNotBlank() && student.motherName.isNotBlank()) append(" • ")
+                                if (student.motherName.isNotBlank()) append("Ibu: ${student.motherName}")
+                            },
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (student.address.isNotBlank()) {
+                        Text(
+                            text = "Alamat: ${student.address}",
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+
                     if (student.dormitory.isNotBlank()) {
                         Text(
-                            text = "🏠 ${student.dormitory}",
+                            text = "🏠 ${student.dormitory}${if (student.roomNumber.isNotBlank()) " • Kamar ${student.roomNumber}" else ""}",
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

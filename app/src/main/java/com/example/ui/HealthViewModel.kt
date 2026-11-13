@@ -382,12 +382,53 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val targetSchoolId = schoolId?.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
                 ?: _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-            if (replace) {
+            val existingList = if (replace) {
                 repository.deleteStudentsBySchool(targetSchoolId)
+                emptyList()
+            } else {
+                repository.getStudentsBySchoolList(targetSchoolId)
             }
-            val stampedStudents = studentList.map { student ->
-                val assignedId = if (student.id > 0L) student.id else SupabaseSyncManager.generateCloudSafeId()
-                student.copy(id = assignedId, schoolId = targetSchoolId)
+
+            val existingByNik = existingList.filter { it.nik.isNotBlank() }.associateBy { it.nik.trim() }
+            val existingByNis = existingList.filter { it.nis.isNotBlank() }.associateBy { it.nis.trim() }
+            val existingByName = existingList.groupBy { it.name.trim().lowercase() }
+
+            val stampedStudents = studentList.map { imported ->
+                val matchedExisting = if (!replace) {
+                    (imported.nik.takeIf { it.isNotBlank() }?.let { existingByNik[it.trim()] })
+                        ?: (imported.nis.takeIf { it.isNotBlank() }?.let { existingByNis[it.trim()] })
+                        ?: existingByName[imported.name.trim().lowercase()]?.firstOrNull()
+                } else null
+
+                if (matchedExisting != null) {
+                    imported.copy(
+                        id = matchedExisting.id,
+                        schoolId = targetSchoolId,
+                        nis = imported.nis.ifBlank { matchedExisting.nis },
+                        nik = imported.nik.ifBlank { matchedExisting.nik },
+                        noKk = imported.noKk.ifBlank { matchedExisting.noKk },
+                        birthPlace = imported.birthPlace.ifBlank { matchedExisting.birthPlace },
+                        birthDate = imported.birthDate.ifBlank { matchedExisting.birthDate },
+                        motherName = imported.motherName.ifBlank { matchedExisting.motherName },
+                        address = imported.address.ifBlank { matchedExisting.address },
+                        roomNumber = imported.roomNumber.ifBlank { matchedExisting.roomNumber },
+                        jenjang = imported.jenjang.ifBlank { matchedExisting.jenjang },
+                        allergies = if (imported.allergies == "Tidak ada" && matchedExisting.allergies != "Tidak ada" && matchedExisting.allergies.isNotBlank()) {
+                            matchedExisting.allergies
+                        } else {
+                            imported.allergies
+                        },
+                        bloodType = if (imported.bloodType == "-" && matchedExisting.bloodType != "-" && matchedExisting.bloodType.isNotBlank()) {
+                            matchedExisting.bloodType
+                        } else {
+                            imported.bloodType
+                        },
+                        specialNotes = imported.specialNotes.ifBlank { matchedExisting.specialNotes }
+                    )
+                } else {
+                    val assignedId = if (imported.id > 0L) imported.id else SupabaseSyncManager.generateCloudSafeId()
+                    imported.copy(id = assignedId, schoolId = targetSchoolId)
+                }
             }
             repository.insertAllStudents(stampedStudents)
             onComplete(stampedStudents.size)
@@ -738,10 +779,21 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         allergies: String,
         bloodType: String,
         emergencyContact: String,
-        specialNotes: String
+        specialNotes: String,
+        nik: String = "",
+        noKk: String = "",
+        birthPlace: String = "",
+        birthDate: String = "",
+        motherName: String = "",
+        address: String = "",
+        roomNumber: String = "",
+        jenjang: String = ""
     ) {
         viewModelScope.launch {
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val resolvedJenjang = jenjang.trim().ifBlank {
+                com.example.util.StudentCsvParser.deriveJenjang(classGrade)
+            }
             val student = ChildStudent(
                 id = SupabaseSyncManager.generateCloudSafeId(),
                 name = name.trim(),
@@ -754,11 +806,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 bloodType = if (bloodType.isBlank()) "-" else bloodType.trim(),
                 emergencyContact = emergencyContact.trim(),
                 specialNotes = specialNotes.trim(),
+                nik = nik.trim(),
+                noKk = noKk.trim(),
+                birthPlace = birthPlace.trim(),
+                birthDate = birthDate.trim(),
+                motherName = motherName.trim(),
+                address = address.trim(),
+                roomNumber = roomNumber.trim(),
+                jenjang = resolvedJenjang,
                 schoolId = activeSchool
             )
             val newId = repository.insertStudent(student)
             if (!isUnitTestEnvironment()) {
                 SupabaseSyncManager.uploadSingleStudent(getApplication(), student.copy(id = newId))
+            }
+        }
+    }
+
+    fun updateStudent(student: ChildStudent, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.updateStudent(student)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleStudent(getApplication(), student)
             }
         }
     }
