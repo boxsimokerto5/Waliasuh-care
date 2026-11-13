@@ -32,17 +32,23 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.ExitToApp
+import androidx.compose.material.icons.filled.Gavel
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OndemandVideo
+import androidx.compose.material.icons.filled.PrivacyTip
+import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.MonthlyReportDialog
+import com.example.ui.dialogs.ProfileLegalBottomSheet
+import com.example.ui.dialogs.ProfileLegalSheetType
 import com.example.ui.dialogs.RewardAdDeclarationDialog
 import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.util.TopOnAdManager
@@ -106,6 +112,7 @@ fun ProfileScreen(
     var showMonthlyReportAdConfirm by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
     var showExitDialog by remember { mutableStateOf(false) }
+    var activeLegalSheet by remember { mutableStateOf<ProfileLegalSheetType?>(null) }
 
     Box(
         modifier = modifier.fillMaxSize(),
@@ -303,6 +310,59 @@ fun ProfileScreen(
                         showGuideDialog = true
                     },
                     testTag = "menu_panduan"
+                )
+            }
+
+            // GROUP 4: Informasi & Legal
+            item {
+                SectionHeader(title = "Informasi & Legal")
+            }
+
+            item {
+                MenuSettingCard(
+                    title = "Tentang Aplikasi",
+                    subtitle = "Versi aplikasi, fungsi & status independensi",
+                    icon = Icons.Default.Info,
+                    iconBg = Color(0xFFE0F2FE),
+                    iconColor = WaliPrimary,
+                    onClick = { activeLegalSheet = ProfileLegalSheetType.ABOUT },
+                    testTag = "menu_tentang_aplikasi"
+                )
+            }
+
+            item {
+                MenuSettingCard(
+                    title = "Privacy Policy",
+                    subtitle = "Kebijakan privasi, data siswa & izin perangkat",
+                    icon = Icons.Default.PrivacyTip,
+                    iconBg = Color(0xFFCCFBF1),
+                    iconColor = Color(0xFF0F766E),
+                    onClick = { activeLegalSheet = ProfileLegalSheetType.PRIVACY_POLICY },
+                    testTag = "menu_privacy_policy"
+                )
+            }
+
+            item {
+                MenuSettingCard(
+                    title = "Terms & Service",
+                    subtitle = "Syarat, ketentuan & disclaimer penggunaan",
+                    icon = Icons.Default.Gavel,
+                    iconBg = Color(0xFFF3E8FF),
+                    iconColor = Color(0xFF7C3AED),
+                    onClick = { activeLegalSheet = ProfileLegalSheetType.TERMS_OF_SERVICE },
+                    testTag = "menu_terms_service"
+                )
+            }
+
+            item {
+                MenuSettingCard(
+                    title = "Contact Us",
+                    subtitle = "Hubungi pengembang (Email & WhatsApp dukungan)",
+                    icon = Icons.Default.SupportAgent,
+                    iconBg = Color(0xFFDCFCE7),
+                    iconColor = Color(0xFF16A34A),
+                    onClick = { activeLegalSheet = ProfileLegalSheetType.CONTACT_US },
+                    testTag = "menu_contact_us"
                 )
             }
 
@@ -648,6 +708,13 @@ fun ProfileScreen(
                 }
             },
             onDismiss = { showMonthlyReportAdConfirm = false }
+        )
+    }
+
+    activeLegalSheet?.let { sheetType ->
+        ProfileLegalBottomSheet(
+            type = sheetType,
+            onDismiss = { activeLegalSheet = null }
         )
     }
 }
