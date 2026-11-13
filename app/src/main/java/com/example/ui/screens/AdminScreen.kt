@@ -96,11 +96,13 @@ import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.GroupAdd
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.CircularProgressIndicator
 import com.example.data.model.ChildStudent
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
+import com.example.ui.dialogs.ChangeAdminPasswordDialog
 import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
@@ -120,10 +122,13 @@ fun AdminScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val schoolRegistrations by viewModel.schoolRegistrations.collectAsStateWithLifecycle()
+    val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showImportStudentsDialog by remember { mutableStateOf(false) }
     var showImportWaliDialog by remember { mutableStateOf(false) }
     var showClearDataConfirmDialog by remember { mutableStateOf(false) }
@@ -453,6 +458,20 @@ fun AdminScreen(
                                         Text("${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
                                     }
                                 }
+                            }
+
+                            // Tombol Ganti Password Admin Sekolah (Username dikunci, sinkron ke Superadmin)
+                            OutlinedButton(
+                                onClick = { showChangePasswordDialog = true },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_admin_change_password"),
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
+                            ) {
+                                Icon(Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(16.dp), tint = WaliPrimary)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Ganti Password Admin Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = WaliPrimary)
                             }
 
                             // Tombol Sinkronkan Data Sekolah ke Cloud (Supabase)
@@ -1117,6 +1136,27 @@ fun AdminScreen(
                 }
                 showEditSchoolDialog = false
             }
+        )
+    }
+
+    if (showChangePasswordDialog) {
+        val activeReg = schoolRegistrations.firstOrNull { reg ->
+            (!currentUsername.isNullOrBlank() && reg.generatedAdminUsername.equals(currentUsername, ignoreCase = true)) ||
+                reg.generatedSchoolCode.equals(activeSchoolCode, ignoreCase = true)
+        }
+        val lockedUsername = activeReg?.generatedAdminUsername?.takeIf { it.isNotBlank() }
+            ?: currentUsername?.takeIf { it.isNotBlank() }
+            ?: if (activeSchoolCode.equals("SRT1-KDR", ignoreCase = true)) "ekowahyudiadmin" else "admin_${activeSchoolCode.lowercase()}"
+        val currentPass = activeReg?.generatedAdminPassword?.takeIf { it.isNotBlank() }
+            ?: if (lockedUsername.equals("ekowahyudiadmin", ignoreCase = true)) "Woyowoyo12@" else ""
+
+        ChangeAdminPasswordDialog(
+            viewModel = viewModel,
+            adminUsername = lockedUsername,
+            currentPassword = currentPass,
+            schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+            schoolCode = activeSchoolCode,
+            onDismiss = { showChangePasswordDialog = false }
         )
     }
 

@@ -282,6 +282,28 @@ fun SuperAdminScreen(
                     },
                     actions = {
                         IconButton(
+                            onClick = {
+                                viewModel.refreshSuperadminCloudData { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            enabled = !isSyncing,
+                            modifier = Modifier.testTag("btn_superadmin_refresh_cloud")
+                        ) {
+                            if (isSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.Default.Refresh,
+                                    contentDescription = "Sinkronkan Data dari Cloud",
+                                    tint = WaliPrimary
+                                )
+                            }
+                        }
+                        IconButton(
                             onClick = { showLogoutConfirmDialog = true },
                             modifier = Modifier.testTag("btn_superadmin_logout")
                         ) {

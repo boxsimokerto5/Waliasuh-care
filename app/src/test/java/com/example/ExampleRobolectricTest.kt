@@ -1016,8 +1016,109 @@ class ExampleRobolectricTest {
     org.robolectric.shadows.ShadowLooper.idleMainLooper()
     Unit
   }
+
+  @Test
+  fun `verify school admin self password change keeps username locked and syncs to Superadmin record`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val schoolCode = "SRT-PW-TEST"
+    val adminUser = "admin_pw_test_01"
+    val oldPass = "OldPass#123"
+    val newPass = "NewPass#999"
+
+    val reg = com.example.data.model.SchoolRegistration(
+      schoolName = "Sekolah Uji Ganti Password",
+      address = "Jl. Merdeka No. 9",
+      city = "Kota Blitar",
+      estimatedWaliCount = 4,
+      picName = "Pak Budi",
+      picEmail = "budi@sekolah.id",
+      picPhone = "081299998888",
+      status = "APPROVED",
+      generatedSchoolCode = schoolCode,
+      generatedAdminUsername = adminUser,
+      generatedAdminPassword = oldPass
+    )
+    db.schoolRegistrationDao().insert(reg)
+
+    // 1. Login dengan password lama
+    val loginOld = vm.executeLogin(adminUser, oldPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginOld is com.example.ui.LoginResult.SuccessAdmin)
+    assertEquals(adminUser, vm.currentUsername.value)
+
+    // 2. Ganti password admin sekolah
+    var updateSuccess = false
+    vm.updateAdminSelfPassword(newPass) { ok, _ ->
+      updateSuccess = ok
+    }
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (updateSuccess) break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertTrue(updateSuccess)
+
+    // 3. Verifikasi data di SchoolRegistration (yang tampil di Superadmin) terupdate dan username tidak berubah
+    val updatedReg = db.schoolRegistrationDao().getBySchoolCode(schoolCode)
+    assertEquals(adminUser, updatedReg?.generatedAdminUsername)
+    assertEquals(newPass, updatedReg?.generatedAdminPassword)
+
+    // 4. Logout lalu pastikan password lama ditolak dan password baru diterima
+    vm.logout()
+    val loginWithOldAfterChange = vm.executeLogin(adminUser, oldPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginWithOldAfterChange is com.example.ui.LoginResult.Error)
+
+    val loginWithNew = vm.executeLogin(adminUser, newPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginWithNew is com.example.ui.LoginResult.SuccessAdmin)
+
+    updatedReg?.let { vm.deleteSchoolRegistration(it) }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    Unit
+  }
+
+  @Test
+  fun `verify ekowahyudiadmin password change persists to registration and overrides default password`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    // Pastikan bersih dari test sebelumnya
+    db.schoolRegistrationDao().getByAdminUsername("ekowahyudiadmin")?.let {
+      db.schoolRegistrationDao().delete(it)
+    }
+
+    // 1. Login dengan password bawaan awal
+    val initialLogin = vm.executeLogin("ekowahyudiadmin", "Woyowoyo12@", rememberMe = false)
+    org.junit.Assert.assertTrue(initialLogin is com.example.ui.LoginResult.SuccessAdmin)
+
+    // 2. Ubah password
+    val newPilotPass = "EkoBaru#2026"
+    var ok = false
+    vm.updateAdminSelfPassword(newPilotPass) { success, _ -> ok = success }
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (ok) break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertTrue(ok)
+
+    // 3. Password baru tercatat di SchoolRegistration agar terlihat Superadmin
+    val pilotReg = db.schoolRegistrationDao().getByAdminUsername("ekowahyudiadmin")
+    assertEquals("SRT1-KDR", pilotReg?.generatedSchoolCode)
+    assertEquals("ekowahyudiadmin", pilotReg?.generatedAdminUsername)
+    assertEquals(newPilotPass, pilotReg?.generatedAdminPassword)
+
+    // 4. Password lama tidak lagi berlaku, password baru berhasil login
+    vm.logout()
+    val oldAttempt = vm.executeLogin("ekowahyudiadmin", "Woyowoyo12@", rememberMe = false)
+    org.junit.Assert.assertTrue(oldAttempt is com.example.ui.LoginResult.Error)
+
+    val newAttempt = vm.executeLogin("ekowahyudiadmin", newPilotPass, rememberMe = false)
+    org.junit.Assert.assertTrue(newAttempt is com.example.ui.LoginResult.SuccessAdmin)
+
+    pilotReg?.let { db.schoolRegistrationDao().delete(it) }
+    Unit
+  }
 }
-
-
-
-

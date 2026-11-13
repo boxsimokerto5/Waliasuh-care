@@ -978,6 +978,24 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun refreshSuperadminCloudData(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        viewModelScope.launch {
+            if (!SupabaseConfig.isConfigured(getApplication())) {
+                onResult(false, "Supabase belum terkonfigurasi.")
+                return@launch
+            }
+            _isSyncing.value = true
+            try {
+                SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                _isSyncing.value = false
+                onResult(true, "Data sekolah, akun admin, & wali terbaru berhasil dimuat dari Supabase.")
+            } catch (e: Exception) {
+                _isSyncing.value = false
+                onResult(false, "Gagal memuat data dari Supabase: ${e.localizedMessage}")
+            }
+        }
+    }
+
     fun uploadAllStudentsToSupabase(onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             _isSyncing.value = true
@@ -1027,26 +1045,49 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return LoginResult.SuccessSuperAdmin
         }
 
-        // 1. Cek Kredensial Administrator Resmi
-        if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true) && cleanPass == "Woyowoyo12@") {
-            _currentUserRole.value = UserRole.ADMIN
-            _currentUsername.value = "ekowahyudiadmin"
-            if (!_schoolProfile.value.tenantCode.equals("SRT1-KDR", ignoreCase = true)) {
-                persistSchoolProfile(SchoolProfile(), markCustomized = false)
-            }
-            if (rememberMe) {
-                authPrefs.edit()
-                    .putString("saved_role", "ADMIN")
-                    .putString("saved_username", "ekowahyudiadmin")
-                    .apply()
-            }
+        // 1. Cek Kredensial Administrator Resmi (ekowahyudiadmin / SRT1-KDR)
+        if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true)) {
             if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
-                val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                viewModelScope.launch {
-                    SupabaseSyncManager.syncAllSchoolData(getApplication(), activeCode, repository)
+                val existingPilotLocal = repository.getSchoolByAdminUsername("ekowahyudiadmin")
+                    ?: repository.getSchoolByCode("SRT1-KDR")
+                if (existingPilotLocal == null) {
+                    SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                 }
             }
-            return LoginResult.SuccessAdmin
+            val pilotOverride = repository.getSchoolByAdminUsername("ekowahyudiadmin")
+                ?: repository.getAllSchoolRegistrationsList().firstOrNull {
+                    it.generatedAdminUsername.equals("ekowahyudiadmin", ignoreCase = true) ||
+                        it.generatedSchoolCode.equals("SRT1-KDR", ignoreCase = true)
+                }
+
+            val expectedPilotPassword = pilotOverride?.generatedAdminPassword?.takeIf { it.isNotBlank() }
+                ?: "Woyowoyo12@"
+
+            if (pilotOverride?.status == "SUSPENDED") {
+                return LoginResult.Error("Maaf akun sedang disuspend oleh admin")
+            }
+
+            if (cleanPass == expectedPilotPassword) {
+                _currentUserRole.value = UserRole.ADMIN
+                _currentUsername.value = "ekowahyudiadmin"
+                if (!_schoolProfile.value.tenantCode.equals("SRT1-KDR", ignoreCase = true)) {
+                    persistSchoolProfile(SchoolProfile(), markCustomized = false)
+                }
+                if (rememberMe) {
+                    authPrefs.edit()
+                        .putString("saved_role", "ADMIN")
+                        .putString("saved_username", "ekowahyudiadmin")
+                        .apply()
+                }
+                if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+                    val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                    viewModelScope.launch {
+                        SupabaseSyncManager.syncAllSchoolData(getApplication(), activeCode, repository)
+                    }
+                }
+                return LoginResult.SuccessAdmin
+            }
+            return LoginResult.Error("Password untuk Admin 'ekowahyudiadmin' salah. Silakan periksa kembali.")
         }
 
         // Helper mencari admin sekolah & akun wali di database lokal
@@ -1292,6 +1333,86 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onComplete()
             if (!isUnitTestEnvironment()) {
                 SupabaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), registration.id)
+            }
+        }
+    }
+
+    // --- Ganti Password Mandiri oleh Admin Sekolah (Username Dikunci, Tersinkron ke Superadmin) ---
+    fun updateAdminSelfPassword(
+        newPassword: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val cleanPass = newPassword.trim()
+            if (cleanPass.length < 6) {
+                onResult(false, "Password baru minimal 6 karakter.")
+                return@launch
+            }
+
+            val activeUsername = _currentUsername.value?.trim().orEmpty()
+            val activeTenantCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+
+            val allRegistrations = repository.getAllSchoolRegistrationsList()
+            val existingReg = when {
+                activeUsername.isNotBlank() -> {
+                    repository.getSchoolByAdminUsername(activeUsername)
+                        ?: allRegistrations.firstOrNull {
+                            it.generatedAdminUsername.equals(activeUsername, ignoreCase = true)
+                        }
+                }
+                else -> null
+            } ?: repository.getSchoolByCode(activeTenantCode)
+                ?: allRegistrations.firstOrNull {
+                    it.generatedSchoolCode.equals(activeTenantCode, ignoreCase = true)
+                }
+
+            if (existingReg != null) {
+                val lockedUsername = existingReg.generatedAdminUsername.ifBlank {
+                    activeUsername.ifBlank { "admin_${activeTenantCode.lowercase()}" }
+                }
+                val updated = existingReg.copy(
+                    generatedAdminUsername = lockedUsername,
+                    generatedAdminPassword = cleanPass
+                )
+                repository.updateSchoolRegistration(updated)
+                _currentUsername.value = lockedUsername
+                if (!isUnitTestEnvironment()) {
+                    SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
+                }
+                onResult(true, "Password admin berhasil diperbarui & tersinkron ke Superadmin!")
+            } else if (activeUsername.equals("ekowahyudiadmin", ignoreCase = true) ||
+                activeTenantCode.equals("SRT1-KDR", ignoreCase = true)
+            ) {
+                val profile = _schoolProfile.value
+                val lockedUsername = "ekowahyudiadmin"
+                val pilotReg = SchoolRegistration(
+                    id = SupabaseSyncManager.generateCloudSafeId(),
+                    schoolName = profile.schoolName.ifBlank { "Sekolah Rakyat SRT 1 Kabupaten Kediri" },
+                    address = profile.city.ifBlank { "Kabupaten Kediri" },
+                    city = profile.city.ifBlank { "Kabupaten Kediri" },
+                    estimatedWaliCount = waliAccounts.value.count {
+                        it.schoolId.equals("SRT1-KDR", ignoreCase = true)
+                    },
+                    picName = profile.adminName.ifBlank { "Admin Utama" },
+                    picEmail = "",
+                    picPhone = "-",
+                    submissionDate = System.currentTimeMillis(),
+                    status = "APPROVED",
+                    rejectionReason = "",
+                    generatedSchoolCode = "SRT1-KDR",
+                    generatedAdminUsername = lockedUsername,
+                    generatedAdminPassword = cleanPass,
+                    approvedDate = System.currentTimeMillis()
+                )
+                val insertedId = repository.insertSchoolRegistration(pilotReg)
+                val saved = pilotReg.copy(id = insertedId)
+                _currentUsername.value = lockedUsername
+                if (!isUnitTestEnvironment()) {
+                    SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
+                }
+                onResult(true, "Password admin berhasil diperbarui & tersinkron ke Superadmin!")
+            } else {
+                onResult(false, "Data akun admin sekolah tidak ditemukan. Silakan sinkronkan data terlebih dahulu.")
             }
         }
     }
