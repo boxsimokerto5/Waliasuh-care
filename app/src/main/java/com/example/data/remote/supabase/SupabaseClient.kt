@@ -109,6 +109,30 @@ interface SupabaseService {
 
     @DELETE("rest/v1/school_registrations")
     suspend fun deleteSchoolRegistration(@Query("id") idFilter: String): Response<ResponseBody>
+
+    // --- Fasting Sessions & Records ---
+    @GET("rest/v1/fasting_sessions?select=*&order=session_date.desc")
+    suspend fun getFastingSessionsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseFastingSessionDto>>
+
+    @POST("rest/v1/fasting_sessions")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertFastingSessions(@Body sessions: List<SupabaseFastingSessionDto>): Response<ResponseBody>
+
+    @DELETE("rest/v1/fasting_sessions")
+    suspend fun deleteFastingSession(@Query("id") idFilter: String): Response<ResponseBody>
+
+    @GET("rest/v1/fasting_records?select=*&order=created_at.desc")
+    suspend fun getFastingRecordsBySchool(@Query("school_id") schoolIdFilter: String): Response<List<SupabaseFastingRecordDto>>
+
+    @POST("rest/v1/fasting_records")
+    @Headers("Prefer: resolution=merge-duplicates")
+    suspend fun upsertFastingRecords(@Body records: List<SupabaseFastingRecordDto>): Response<ResponseBody>
+
+    @DELETE("rest/v1/fasting_records")
+    suspend fun deleteFastingRecord(@Query("id") idFilter: String): Response<ResponseBody>
+
+    @DELETE("rest/v1/fasting_records")
+    suspend fun deleteFastingRecordsBySession(@Query("session_id") sessionIdFilter: String): Response<ResponseBody>
 }
 
 object SupabaseClient {

@@ -13,7 +13,11 @@ import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
+import com.example.data.dao.FastingRecordDao
+import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
+import com.example.data.model.FastingRecord
+import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 
 class HealthRepository(
@@ -22,7 +26,9 @@ class HealthRepository(
     private val waliAccountDao: WaliAccountDao,
     private val registrationDao: SchoolRegistrationDao,
     private val shiftMessageDao: ShiftMessageDao? = null,
-    private val haidRecordDao: HaidRecordDao? = null
+    private val haidRecordDao: HaidRecordDao? = null,
+    private val fastingSessionDao: FastingSessionDao? = null,
+    private val fastingRecordDao: FastingRecordDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -35,6 +41,8 @@ class HealthRepository(
     val allHaidRecords: Flow<List<HaidRecord>> = haidRecordDao?.getAllRecords() ?: emptyFlow()
     val activeHaidRecords: Flow<List<HaidRecord>> = haidRecordDao?.getActiveHaidRecords() ?: emptyFlow()
     val suciRecords: Flow<List<HaidRecord>> = haidRecordDao?.getSuciRecords() ?: emptyFlow()
+    val allFastingSessions: Flow<List<FastingSession>> = fastingSessionDao?.getAllSessions() ?: emptyFlow()
+    val allFastingRecords: Flow<List<FastingRecord>> = fastingRecordDao?.getAllRecords() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -217,5 +225,57 @@ class HealthRepository(
 
     suspend fun deleteHaidRecordsBySchool(schoolId: String) {
         haidRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Fasting Session & Record Operations ---
+    suspend fun insertFastingSession(session: FastingSession): Long =
+        fastingSessionDao?.insert(session) ?: 0L
+
+    suspend fun insertAllFastingSessions(sessions: List<FastingSession>) {
+        fastingSessionDao?.insertAll(sessions)
+    }
+
+    suspend fun getFastingSessionsBySchoolList(schoolId: String): List<FastingSession> =
+        fastingSessionDao?.getSessionsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun updateFastingSession(session: FastingSession) {
+        fastingSessionDao?.update(session)
+    }
+
+    suspend fun deleteFastingSession(session: FastingSession) {
+        fastingRecordDao?.deleteBySessionId(session.id)
+        fastingSessionDao?.delete(session)
+    }
+
+    suspend fun deleteFastingSessionsBySchool(schoolId: String) {
+        fastingSessionDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertFastingRecord(record: FastingRecord): Long =
+        fastingRecordDao?.insert(record) ?: 0L
+
+    suspend fun insertAllFastingRecords(records: List<FastingRecord>) {
+        fastingRecordDao?.insertAll(records)
+    }
+
+    suspend fun getFastingRecordsBySchoolList(schoolId: String): List<FastingRecord> =
+        fastingRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getFastingRecordsBySessionList(sessionId: Long): List<FastingRecord> =
+        fastingRecordDao?.getRecordsBySessionList(sessionId) ?: emptyList()
+
+    suspend fun getFastingRecordInSessionForStudent(sessionId: Long, studentId: Long): FastingRecord? =
+        fastingRecordDao?.getRecordInSessionForStudent(sessionId, studentId)
+
+    suspend fun updateFastingRecord(record: FastingRecord) {
+        fastingRecordDao?.update(record)
+    }
+
+    suspend fun deleteFastingRecord(record: FastingRecord) {
+        fastingRecordDao?.delete(record)
+    }
+
+    suspend fun deleteFastingRecordsBySchool(schoolId: String) {
+        fastingRecordDao?.deleteBySchoolId(schoolId)
     }
 }

@@ -3,6 +3,8 @@ package com.example.data.remote.supabase
 import android.content.Context
 import android.util.Log
 import com.example.data.model.ChildStudent
+import com.example.data.model.FastingRecord
+import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolRegistration
@@ -217,6 +219,52 @@ object SupabaseSyncManager {
                 service.deleteHaidRecord("eq.$recordId")
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteHaidRecord ke Supabase", e)
+            }
+        }
+
+    // --- Fasting Sessions & Records ---
+    suspend fun uploadSingleFastingSession(context: Context, session: FastingSession) =
+        withContext(Dispatchers.IO) {
+            if (!SupabaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = SupabaseClient.getService(context) ?: return@withContext
+                service.upsertFastingSessions(listOf(SupabaseFastingSessionDto.fromDomain(session)))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleFastingSession ke Supabase", e)
+            }
+        }
+
+    suspend fun deleteRemoteFastingSession(context: Context, sessionId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!SupabaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = SupabaseClient.getService(context) ?: return@withContext
+                service.deleteFastingRecordsBySession("eq.$sessionId")
+                service.deleteFastingSession("eq.$sessionId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteFastingSession ke Supabase", e)
+            }
+        }
+
+    suspend fun uploadSingleFastingRecord(context: Context, record: FastingRecord) =
+        withContext(Dispatchers.IO) {
+            if (!SupabaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = SupabaseClient.getService(context) ?: return@withContext
+                service.upsertFastingRecords(listOf(SupabaseFastingRecordDto.fromDomain(record)))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleFastingRecord ke Supabase", e)
+            }
+        }
+
+    suspend fun deleteRemoteFastingRecord(context: Context, recordId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!SupabaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = SupabaseClient.getService(context) ?: return@withContext
+                service.deleteFastingRecord("eq.$recordId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteFastingRecord ke Supabase", e)
             }
         }
 
@@ -476,6 +524,45 @@ object SupabaseSyncManager {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Skip sync shift_messages: ${e.message}")
+            }
+
+            // 6. Sinkronkan Sesi & Data Puasa (fasting_sessions & fasting_records)
+            try {
+                val localFastingSessions = repository.getFastingSessionsBySchoolList(cleanSchoolId)
+                if (localFastingSessions.isNotEmpty()) {
+                    localFastingSessions.chunked(50).forEach { batch ->
+                        service.upsertFastingSessions(batch.map { SupabaseFastingSessionDto.fromDomain(it) })
+                    }
+                }
+                val remoteFSResp = service.getFastingSessionsBySchool("eq.$cleanSchoolId")
+                if (remoteFSResp.isSuccessful) {
+                    val remoteFS = (remoteFSResp.body() ?: emptyList())
+                        .map { it.toDomainModel(cleanSchoolId) }
+                    if (remoteFS.isNotEmpty()) {
+                        repository.insertAllFastingSessions(remoteFS)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Skip sync fasting_sessions: ${e.message}")
+            }
+
+            try {
+                val localFastingRecords = repository.getFastingRecordsBySchoolList(cleanSchoolId)
+                if (localFastingRecords.isNotEmpty()) {
+                    localFastingRecords.chunked(50).forEach { batch ->
+                        service.upsertFastingRecords(batch.map { SupabaseFastingRecordDto.fromDomain(it) })
+                    }
+                }
+                val remoteFRResp = service.getFastingRecordsBySchool("eq.$cleanSchoolId")
+                if (remoteFRResp.isSuccessful) {
+                    val remoteFR = (remoteFRResp.body() ?: emptyList())
+                        .map { it.toDomainModel(cleanSchoolId) }
+                    if (remoteFR.isNotEmpty()) {
+                        repository.insertAllFastingRecords(remoteFR)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Skip sync fasting_records: ${e.message}")
             }
 
             SupabaseConfig.setLastSyncTime(context, System.currentTimeMillis())

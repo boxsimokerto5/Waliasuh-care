@@ -74,19 +74,23 @@ import com.example.ui.components.FaskesBadge
 import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
+import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.CreateShiftMessageDialog
 import com.example.ui.dialogs.DaftarHaidSheet
+import com.example.ui.dialogs.DaftarPuasaSheet
 import com.example.ui.dialogs.DaftarSuciSheet
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.InputHaidDialog
+import com.example.ui.dialogs.InputPuasaDialog
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocalHospital
 import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.dialogs.PrintPdfDialog
+import com.example.ui.dialogs.RankingPuasaSheet
 import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.ui.dialogs.ShiftHistorySheet
 import com.example.ui.dialogs.ShiftMessagesSheet
@@ -123,6 +127,8 @@ fun DashboardScreen(
     val activeHaidRecords by viewModel.activeHaidRecords.collectAsStateWithLifecycle()
     val suciRecords by viewModel.suciRecords.collectAsStateWithLifecycle()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
+    val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
@@ -133,6 +139,10 @@ fun DashboardScreen(
     var showDaftarHaidSheet by remember { mutableStateOf(false) }
     var showDaftarSuciSheet by remember { mutableStateOf(false) }
     var showFiqihHaidDialog by remember { mutableStateOf(false) }
+    var showInputPuasaDialog by remember { mutableStateOf(false) }
+    var showDaftarPuasaSheet by remember { mutableStateOf(false) }
+    var showChecklistPuasaSheet by remember { mutableStateOf(false) }
+    var showRankingPuasaSheet by remember { mutableStateOf(false) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordPlanToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -469,6 +479,22 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 showFiqihHaidDialog = true
                             },
+                            onOpenInputPuasa = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showInputPuasaDialog = true
+                            },
+                            onOpenDaftarPuasa = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showDaftarPuasaSheet = true
+                            },
+                            onOpenChecklistPuasa = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showChecklistPuasaSheet = true
+                            },
+                            onOpenRankingPuasa = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showRankingPuasaSheet = true
+                            },
                             studentsCount = students.size,
                             activeShiftMessagesCount = shiftMessages.count { !it.isCompleted && DateUtils.isToday(it.followUpDate) },
                             urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted && DateUtils.isToday(it.followUpDate) },
@@ -477,6 +503,11 @@ fun DashboardScreen(
                             activeHaidCount = activeHaidRecords.size,
                             suciCount = suciRecords.size,
                             istihadhahCount = activeHaidRecords.count { it.isIstihadhahWarning },
+                            fastingSessionsCount = fastingSessions.size,
+                            todayFastingCount = run {
+                                val latestSession = fastingSessions.firstOrNull { it.isActive } ?: fastingSessions.firstOrNull()
+                                if (latestSession == null) 0 else fastingRecords.count { it.sessionId == latestSession.id }
+                            },
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
                         )
@@ -1047,6 +1078,59 @@ fun DashboardScreen(
     if (showFiqihHaidDialog) {
         FiqihHaidDialog(
             onDismiss = { showFiqihHaidDialog = false }
+        )
+    }
+
+    // Modal Bottom Sheet 1 (Puasa): Input Puasa (Sesi, Scan Barcode & Cari Siswa)
+    if (showInputPuasaDialog) {
+        InputPuasaDialog(
+            sessions = fastingSessions,
+            students = students,
+            fastingRecords = fastingRecords,
+            onRegisterStudent = { session, student, onResult ->
+                viewModel.registerStudentForFasting(session, student, onResult)
+            },
+            onDismiss = { showInputPuasaDialog = false }
+        )
+    }
+
+    // Modal Bottom Sheet 2 (Puasa): Daftar Siswa Puasa (SD/SMP/SMA + Total & PDF)
+    if (showDaftarPuasaSheet) {
+        DaftarPuasaSheet(
+            sessions = fastingSessions,
+            fastingRecords = fastingRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            onDeleteRecord = { rec ->
+                viewModel.deleteFastingRecord(rec)
+            },
+            onDismiss = { showDaftarPuasaSheet = false }
+        )
+    }
+
+    // Modal Bottom Sheet 3 (Puasa): Checklist Sahur & Berbuka + PDF
+    if (showChecklistPuasaSheet) {
+        ChecklistPuasaSheet(
+            sessions = fastingSessions,
+            fastingRecords = fastingRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            onToggleSahur = { rec ->
+                viewModel.toggleFastingSahur(rec)
+            },
+            onToggleBuka = { rec ->
+                viewModel.toggleFastingBuka(rec)
+            },
+            onDismiss = { showChecklistPuasaSheet = false }
+        )
+    }
+
+    // Modal Bottom Sheet 4 (Puasa): Ranking Siswa & History Sesi Puasa
+    if (showRankingPuasaSheet) {
+        RankingPuasaSheet(
+            sessions = fastingSessions,
+            fastingRecords = fastingRecords,
+            onDismiss = { showRankingPuasaSheet = false }
         )
     }
 }

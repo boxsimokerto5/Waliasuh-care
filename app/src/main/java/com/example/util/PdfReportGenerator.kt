@@ -16,6 +16,9 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.data.model.FastingJenjangHelper
+import com.example.data.model.FastingRecord
+import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
@@ -1028,6 +1031,524 @@ object PdfReportGenerator {
             }
 
             context.startActivity(Intent.createChooser(shareIntent, "Bagikan Laporan Haid PDF"))
+        } catch (e: Exception) {
+            Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Membuat dokumen PDF resmi Laporan Daftar Peserta Puasa per Sesi (beserta rincian SD, SMP, SMA & Total).
+     */
+    fun generateFastingListPdf(
+        context: Context,
+        session: FastingSession,
+        records: List<FastingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+
+            var pageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
+
+            val paint = Paint().apply { isAntiAlias = true }
+            val localeId = Locale("id", "ID")
+            val sessionDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+
+            var currentY = 35f
+
+            // 1. Kop Surat Resmi
+            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+
+            // 2. Judul Laporan & Info Sesi
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 13f
+            paint.color = Color.rgb(15, 118, 110)
+            canvas.drawText("LAPORAN DAFTAR PESERTA PUASA SISWA", pageWidth / 2f, currentY + 12f, paint)
+            currentY += 26f
+
+            paint.textSize = 10.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("${session.title.uppercase(localeId)} — $sessionDateLabel", pageWidth / 2f, currentY, paint)
+            currentY += 16f
+            paint.textAlign = Paint.Align.LEFT
+
+            // 3. Kotak Ringkasan Jumlah Per Jenjang (SD, SMP, SMA & Total)
+            val sdCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SD }
+            val smpCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMP }
+            val smaCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMA }
+            val otherCount = records.size - sdCount - smpCount - smaCount
+
+            val boxLeft = 35f
+            val boxRight = pageWidth - 35f
+            val boxTop = currentY
+            val summaryHeight = 46f
+            paint.color = Color.rgb(240, 253, 250)
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(153, 246, 228)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(15, 118, 110)
+            canvas.drawText("RINGKASAN PESERTA PUASA:", boxLeft + 10f, boxTop + 15f, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9f
+            paint.color = Color.rgb(15, 23, 42)
+            val breakdownText = buildString {
+                append("• SMA: $smaCount Anak   • SMP: $smpCount Anak   • SD: $sdCount Anak")
+                if (otherCount > 0) append("   • Lainnya: $otherCount")
+                append("   |   TOTAL: ${records.size} SISWA")
+            }
+            canvas.drawText(breakdownText, boxLeft + 10f, boxTop + 33f, paint)
+
+            currentY = boxTop + summaryHeight + 14f
+
+            // 4. Tabel Daftar Siswa Berpuasa
+            val sortedRecords = records.sortedWith(
+                compareBy<FastingRecord> {
+                    when (FastingJenjangHelper.resolveJenjang(it)) {
+                        FastingJenjangHelper.JENJANG_SMA -> 0
+                        FastingJenjangHelper.JENJANG_SMP -> 1
+                        FastingJenjangHelper.JENJANG_SD -> 2
+                        else -> 3
+                    }
+                }.thenBy { it.studentClass.lowercase(localeId) }
+                    .thenBy { it.studentName.lowercase(localeId) }
+            )
+
+            fun drawTableHeader(startYPos: Float): Float {
+                val hTop = startYPos
+                val hHeight = 24f
+                paint.color = Color.rgb(204, 251, 241)
+                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(45, 212, 191)
+                paint.strokeWidth = 0.9f
+                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.5f
+                paint.color = Color.rgb(17, 94, 89)
+                val textY = hTop + 15.5f
+                canvas.drawText("No", 42f, textY, paint)
+                canvas.drawText("Nama Siswa", 70f, textY, paint)
+                canvas.drawText("Jenjang", 242f, textY, paint)
+                canvas.drawText("Kelas / Asrama", 300f, textY, paint)
+                canvas.drawText("Penginput", 448f, textY, paint)
+                return hTop + hHeight
+            }
+
+            if (sortedRecords.isEmpty()) {
+                val emptyTop = currentY
+                val emptyH = 44f
+                paint.color = Color.rgb(248, 250, 252)
+                canvas.drawRoundRect(RectF(boxLeft, emptyTop, boxRight, emptyTop + emptyH), 6f, 6f, paint)
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText("Belum ada siswa terdaftar berpuasa pada sesi ini.", pageWidth / 2f, emptyTop + 26f, paint)
+                paint.textAlign = Paint.Align.LEFT
+                currentY = emptyTop + emptyH + 14f
+            } else {
+                currentY = drawTableHeader(currentY)
+                val rowHeight = 22f
+                sortedRecords.forEachIndexed { idx, rec ->
+                    if (currentY > pageHeight - 125f) {
+                        document.finishPage(page)
+                        pageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        page = document.startPage(pageInfo)
+                        canvas = page.canvas
+                        currentY = 40f
+
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        paint.textSize = 9f
+                        paint.color = Color.rgb(100, 116, 139)
+                        canvas.drawText("Lanjutan Daftar Puasa (${session.title}) - Halaman $pageNumber", 35f, currentY, paint)
+                        currentY += 12f
+                        currentY = drawTableHeader(currentY)
+                    }
+
+                    val rTop = currentY
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.6f
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                    paint.style = Paint.Style.FILL
+
+                    val textY = rTop + 14.5f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.textSize = 8.5f
+                    paint.color = Color.rgb(15, 23, 42)
+                    canvas.drawText("${idx + 1}.", 42f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    val nameCell = TextUtils.ellipsize(rec.studentName, TextPaint(paint), 165f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(nameCell, 70f, textY, paint)
+
+                    val jenjang = FastingJenjangHelper.resolveJenjang(rec)
+                    paint.color = when (jenjang) {
+                        FastingJenjangHelper.JENJANG_SMA -> Color.rgb(109, 40, 217)
+                        FastingJenjangHelper.JENJANG_SMP -> Color.rgb(3, 105, 161)
+                        FastingJenjangHelper.JENJANG_SD -> Color.rgb(21, 128, 61)
+                        else -> Color.rgb(71, 85, 105)
+                    }
+                    canvas.drawText(jenjang, 242f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(51, 65, 85)
+                    val classDorm = listOf(rec.studentClass.trim(), rec.studentDorm.trim())
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • ")
+                        .ifBlank { "-" }
+                    val classCell = TextUtils.ellipsize(classDorm, TextPaint(paint), 140f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(classCell, 300f, textY, paint)
+
+                    val waliCell = TextUtils.ellipsize(rec.waliName.ifBlank { "-" }, TextPaint(paint), 105f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(waliCell, 448f, textY, paint)
+
+                    currentY = rTop + rowHeight
+                }
+                currentY += 14f
+            }
+
+            if (currentY > pageHeight - 110f) {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                currentY = 40f
+            }
+
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            document.finishPage(page)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanTitle = session.title.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(session.sessionDate))
+            val file = File(outputDir, "Daftar_Puasa_${cleanTitle}_$dateSlug.pdf")
+
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    /**
+     * Membuat dokumen PDF resmi Laporan Checklist Sahur & Berbuka Puasa Siswa per Sesi.
+     */
+    fun generateFastingChecklistPdf(
+        context: Context,
+        session: FastingSession,
+        records: List<FastingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+
+            var pageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
+
+            val paint = Paint().apply { isAntiAlias = true }
+            val localeId = Locale("id", "ID")
+            val sessionDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+
+            var currentY = 35f
+
+            // 1. Kop Surat Resmi
+            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+
+            // 2. Judul Laporan
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 13f
+            paint.color = Color.rgb(180, 83, 9)
+            canvas.drawText("LAPORAN CHECKLIST SAHUR & BERBUKA PUASA", pageWidth / 2f, currentY + 12f, paint)
+            currentY += 26f
+
+            paint.textSize = 10.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("${session.title.uppercase(localeId)} — $sessionDateLabel", pageWidth / 2f, currentY, paint)
+            currentY += 16f
+            paint.textAlign = Paint.Align.LEFT
+
+            // 3. Kotak Ringkasan Sahur & Berbuka
+            val sahurDone = records.count { it.isSahurChecked }
+            val bukaDone = records.count { it.isBukaChecked }
+            val bothDone = records.count { it.isSahurChecked && it.isBukaChecked }
+
+            val boxLeft = 35f
+            val boxRight = pageWidth - 35f
+            val boxTop = currentY
+            val summaryHeight = 46f
+            paint.color = Color.rgb(255, 251, 235)
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(253, 230, 138)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(146, 64, 14)
+            canvas.drawText("REKAPITULASI CHECKLIST SAHUR & BERBUKA:", boxLeft + 10f, boxTop + 15f, paint)
+
+            paint.textSize = 9f
+            paint.color = Color.rgb(51, 65, 85)
+            canvas.drawText(
+                "• Total Terdaftar: ${records.size} Siswa   • Sudah Sahur: $sahurDone / ${records.size}   • Sudah Berbuka: $bukaDone / ${records.size}   • Lengkap: $bothDone",
+                boxLeft + 10f,
+                boxTop + 33f,
+                paint
+            )
+            currentY = boxTop + summaryHeight + 14f
+
+            val sortedRecords = records.sortedWith(
+                compareBy<FastingRecord> { FastingJenjangHelper.resolveJenjang(it) }
+                    .thenBy { it.studentClass.lowercase(localeId) }
+                    .thenBy { it.studentName.lowercase(localeId) }
+            )
+
+            fun drawChecklistHeader(startYPos: Float): Float {
+                val hTop = startYPos
+                val hHeight = 24f
+                paint.color = Color.rgb(254, 243, 199)
+                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(245, 158, 11)
+                paint.strokeWidth = 0.9f
+                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.5f
+                paint.color = Color.rgb(146, 64, 14)
+                val textY = hTop + 15.5f
+                canvas.drawText("No", 42f, textY, paint)
+                canvas.drawText("Nama Siswa", 70f, textY, paint)
+                canvas.drawText("Jenjang / Kelas", 242f, textY, paint)
+                canvas.drawText("Sahur", 386f, textY, paint)
+                canvas.drawText("Berbuka", 470f, textY, paint)
+                return hTop + hHeight
+            }
+
+            if (sortedRecords.isEmpty()) {
+                val emptyTop = currentY
+                val emptyH = 44f
+                paint.color = Color.rgb(248, 250, 252)
+                canvas.drawRoundRect(RectF(boxLeft, emptyTop, boxRight, emptyTop + emptyH), 6f, 6f, paint)
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText("Belum ada peserta puasa untuk dichecklist pada sesi ini.", pageWidth / 2f, emptyTop + 26f, paint)
+                paint.textAlign = Paint.Align.LEFT
+                currentY = emptyTop + emptyH + 14f
+            } else {
+                currentY = drawChecklistHeader(currentY)
+                val rowHeight = 22f
+                sortedRecords.forEachIndexed { idx, rec ->
+                    if (currentY > pageHeight - 125f) {
+                        document.finishPage(page)
+                        pageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        page = document.startPage(pageInfo)
+                        canvas = page.canvas
+                        currentY = 40f
+
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        paint.textSize = 9f
+                        paint.color = Color.rgb(100, 116, 139)
+                        canvas.drawText("Lanjutan Checklist Sahur & Berbuka (${session.title}) - Halaman $pageNumber", 35f, currentY, paint)
+                        currentY += 12f
+                        currentY = drawChecklistHeader(currentY)
+                    }
+
+                    val rTop = currentY
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.6f
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                    paint.style = Paint.Style.FILL
+
+                    val textY = rTop + 14.5f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.textSize = 8.5f
+                    paint.color = Color.rgb(15, 23, 42)
+                    canvas.drawText("${idx + 1}.", 42f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    val nameCell = TextUtils.ellipsize(rec.studentName, TextPaint(paint), 165f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(nameCell, 70f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(51, 65, 85)
+                    val jenjang = FastingJenjangHelper.resolveJenjang(rec)
+                    val classLabel = listOf(jenjang, rec.studentClass.trim())
+                        .filter { it.isNotBlank() }
+                        .joinToString(" • ")
+                    val classCell = TextUtils.ellipsize(classLabel, TextPaint(paint), 134f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(classCell, 242f, textY, paint)
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = if (rec.isSahurChecked) Color.rgb(21, 128, 61) else Color.rgb(148, 163, 184)
+                    canvas.drawText(if (rec.isSahurChecked) "✓ Sudah" else "Belum", 386f, textY, paint)
+
+                    paint.color = if (rec.isBukaChecked) Color.rgb(21, 128, 61) else Color.rgb(148, 163, 184)
+                    canvas.drawText(if (rec.isBukaChecked) "✓ Sudah" else "Belum", 470f, textY, paint)
+
+                    currentY = rTop + rowHeight
+                }
+                currentY += 14f
+            }
+
+            if (currentY > pageHeight - 110f) {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                currentY = 40f
+            }
+
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            document.finishPage(page)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanTitle = session.title.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(session.sessionDate))
+            val file = File(outputDir, "Checklist_Puasa_${cleanTitle}_$dateSlug.pdf")
+
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    fun buildFastingListWaSummary(
+        session: FastingSession,
+        records: List<FastingRecord>,
+        waliName: String,
+        schoolProfile: SchoolProfile
+    ): String {
+        val localeId = Locale("id", "ID")
+        val dateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+        val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Wali Asuh Care" } }
+        val sdCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SD }
+        val smpCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMP }
+        val smaCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMA }
+
+        return buildString {
+            appendLine("*DAFTAR PESERTA PUASA SISWA*")
+            appendLine("*$schoolTitle*")
+            appendLine("Sesi: *${session.title}*")
+            appendLine("Tanggal: $dateLabel")
+            appendLine()
+            appendLine("*Rekap Jenjang:*")
+            appendLine("• SMA: $smaCount Anak")
+            appendLine("• SMP: $smpCount Anak")
+            appendLine("• SD : $sdCount Anak")
+            appendLine("*Total Berpuasa: ${records.size} Siswa*")
+            appendLine()
+            if (records.isNotEmpty()) {
+                records.sortedBy { it.studentName }.forEachIndexed { idx, rec ->
+                    val jenjang = FastingJenjangHelper.resolveJenjang(rec)
+                    val kelas = rec.studentClass.ifBlank { rec.studentDorm }
+                    appendLine("${idx + 1}. ${rec.studentName} ($jenjang${if (kelas.isNotBlank()) " - $kelas" else ""})")
+                }
+                appendLine()
+            }
+            append("Dilaporkan oleh: $waliName")
+        }
+    }
+
+    fun buildFastingChecklistWaSummary(
+        session: FastingSession,
+        records: List<FastingRecord>,
+        waliName: String,
+        schoolProfile: SchoolProfile
+    ): String {
+        val localeId = Locale("id", "ID")
+        val dateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+        val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Wali Asuh Care" } }
+        val sahurCount = records.count { it.isSahurChecked }
+        val bukaCount = records.count { it.isBukaChecked }
+
+        return buildString {
+            appendLine("*CHECKLIST SAHUR & BERBUKA PUASA*")
+            appendLine("*$schoolTitle*")
+            appendLine("Sesi: *${session.title}*")
+            appendLine("Tanggal: $dateLabel")
+            appendLine("• Terdaftar: ${records.size} Siswa")
+            appendLine("• Sudah Sahur: $sahurCount/${records.size}")
+            appendLine("• Sudah Berbuka: $bukaCount/${records.size}")
+            appendLine()
+            records.sortedBy { it.studentName }.forEachIndexed { idx, rec ->
+                val sMark = if (rec.isSahurChecked) "✅" else "⬜"
+                val bMark = if (rec.isBukaChecked) "✅" else "⬜"
+                appendLine("${idx + 1}. ${rec.studentName} — Sahur: $sMark | Buka: $bMark")
+            }
+            appendLine()
+            append("Dilaporkan oleh: $waliName")
+        }
+    }
+
+    fun shareFastingPdf(
+        context: Context,
+        pdfFile: File,
+        subject: String,
+        text: String
+    ) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                pdfFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(Intent.createChooser(shareIntent, "Bagikan Laporan Puasa PDF"))
         } catch (e: Exception) {
             Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
         }

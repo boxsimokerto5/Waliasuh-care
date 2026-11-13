@@ -1,6 +1,8 @@
 package com.example.data.remote.supabase
 
 import com.example.data.model.ChildStudent
+import com.example.data.model.FastingRecord
+import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolRegistration
@@ -444,6 +446,131 @@ data class SupabaseSchoolRegistrationDto(
                 generatedAdminUsername = model.generatedAdminUsername,
                 generatedAdminPassword = model.generatedAdminPassword,
                 approvedDate = model.approvedDate
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class SupabaseFastingSessionDto(
+    @Json(name = "id") val id: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "title") val title: String,
+    @Json(name = "session_date") val sessionDate: Long,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "is_active") val isActive: Boolean = true,
+    @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): FastingSession {
+        return FastingSession(
+            id = id ?: 0L,
+            title = title,
+            sessionDate = sessionDate,
+            description = description ?: "",
+            isActive = isActive,
+            createdBy = createdBy ?: "Admin Sekolah",
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt ?: sessionDate,
+            updatedAt = updatedAt ?: sessionDate
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: FastingSession): SupabaseFastingSessionDto {
+            return SupabaseFastingSessionDto(
+                id = if (model.id > 0) model.id else null,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                title = model.title,
+                sessionDate = model.sessionDate,
+                description = model.description,
+                isActive = model.isActive,
+                createdBy = model.createdBy,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class SupabaseFastingRecordDto(
+    @Json(name = "id") val id: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "session_id") val sessionId: Long,
+    @Json(name = "session_title") val sessionTitle: String? = null,
+    @Json(name = "session_date") val sessionDate: Long? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String,
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "student_jenjang") val studentJenjang: String? = null,
+    @Json(name = "is_sahur_checked") val isSahurChecked: Boolean = false,
+    @Json(name = "sahur_checked_at") val sahurCheckedAt: Long? = null,
+    @Json(name = "sahur_checked_by") val sahurCheckedBy: String? = null,
+    @Json(name = "is_buka_checked") val isBukaChecked: Boolean = false,
+    @Json(name = "buka_checked_at") val bukaCheckedAt: Long? = null,
+    @Json(name = "buka_checked_by") val bukaCheckedBy: String? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): FastingRecord {
+        return FastingRecord(
+            id = id ?: 0L,
+            sessionId = sessionId,
+            sessionTitle = sessionTitle ?: "",
+            sessionDate = sessionDate ?: 0L,
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = studentNik ?: "",
+            studentNis = studentNis ?: "",
+            studentClass = studentClass ?: "",
+            studentDorm = studentDorm ?: "",
+            studentJenjang = studentJenjang ?: "",
+            isSahurChecked = isSahurChecked,
+            sahurCheckedAt = sahurCheckedAt,
+            sahurCheckedBy = sahurCheckedBy ?: "",
+            isBukaChecked = isBukaChecked,
+            bukaCheckedAt = bukaCheckedAt,
+            bukaCheckedBy = bukaCheckedBy ?: "",
+            waliName = waliName ?: "Wali Asuh",
+            notes = notes ?: "",
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt ?: System.currentTimeMillis(),
+            updatedAt = updatedAt ?: System.currentTimeMillis()
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: FastingRecord): SupabaseFastingRecordDto {
+            return SupabaseFastingRecordDto(
+                id = if (model.id > 0) model.id else null,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                sessionId = model.sessionId,
+                sessionTitle = model.sessionTitle,
+                sessionDate = model.sessionDate,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = model.studentNik,
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                studentJenjang = model.studentJenjang,
+                isSahurChecked = model.isSahurChecked,
+                sahurCheckedAt = model.sahurCheckedAt,
+                sahurCheckedBy = model.sahurCheckedBy,
+                isBukaChecked = model.isBukaChecked,
+                bukaCheckedAt = model.bukaCheckedAt,
+                bukaCheckedBy = model.bukaCheckedBy,
+                waliName = model.waliName,
+                notes = model.notes,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
             )
         }
     }

@@ -62,6 +62,10 @@ fun QuickMenuTiles(
     onOpenDaftarHaid: () -> Unit = {},
     onOpenDaftarSuci: () -> Unit = {},
     onOpenFiqihHaid: () -> Unit = {},
+    onOpenInputPuasa: () -> Unit = {},
+    onOpenDaftarPuasa: () -> Unit = {},
+    onOpenChecklistPuasa: () -> Unit = {},
+    onOpenRankingPuasa: () -> Unit = {},
     studentsCount: Int = 0,
     activeShiftMessagesCount: Int = 0,
     urgentShiftMessagesCount: Int = 0,
@@ -70,11 +74,13 @@ fun QuickMenuTiles(
     activeHaidCount: Int = 0,
     suciCount: Int = 0,
     istihadhahCount: Int = 0,
+    fastingSessionsCount: Int = 0,
+    todayFastingCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     modifier: Modifier = Modifier
 ) {
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
 
     Column(
@@ -269,7 +275,7 @@ fun QuickMenuTiles(
                             )
                         }
                     }
-                    else -> {
+                    2 -> {
                         // ==========================================
                         // HALAMAN 3: PENDATAAN & FIQIH HAID (4 IKON BESAR)
                         // ==========================================
@@ -347,6 +353,80 @@ fun QuickMenuTiles(
                             )
                         }
                     }
+                    else -> {
+                        // ==========================================
+                        // HALAMAN 4: PENDATAAN PUASA (4 IKON BESAR)
+                        // ==========================================
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Ikon 1: Input Puasa (Sesi, Scan Barcode & Cari Siswa)
+                            CartoonMenuCard(
+                                title = "Input Puasa",
+                                subtitle = "Scan Kartu / Cari Siswa",
+                                imageRes = R.drawable.img_menu_input_puasa,
+                                badgeText = "Scan & Cari",
+                                badgeBg = Color(0xFFCCFBF1),
+                                badgeColor = Color(0xFF0F766E),
+                                bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFF99F6E4),
+                                onClick = onOpenInputPuasa,
+                                testTag = "tile_input_puasa",
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // Ikon 2: Daftar Puasa (SD, SMP, SMA, Total & PDF)
+                            CartoonMenuCard(
+                                title = "Daftar Puasa",
+                                subtitle = "SD • SMP • SMA & PDF",
+                                imageRes = R.drawable.img_menu_daftar_puasa,
+                                badgeText = if (todayFastingCount > 0) "$todayFastingCount Puasa" else "Rekap & PDF",
+                                badgeBg = Color(0xFFE0F2FE),
+                                badgeColor = Color(0xFF0369A1),
+                                bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFFBAE6FD),
+                                onClick = onOpenDaftarPuasa,
+                                testTag = "tile_daftar_puasa",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Ikon 3: Checklist Puasa (Sahur & Berbuka + PDF)
+                            CartoonMenuCard(
+                                title = "Checklist Puasa",
+                                subtitle = "Sahur & Berbuka + PDF",
+                                imageRes = R.drawable.img_menu_checklist_puasa,
+                                badgeText = "Sahur & Buka",
+                                badgeBg = Color(0xFFFEF3C7),
+                                badgeColor = Color(0xFFB45309),
+                                bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFFFDE68A),
+                                onClick = onOpenChecklistPuasa,
+                                testTag = "tile_checklist_puasa",
+                                modifier = Modifier.weight(1f)
+                            )
+
+                            // Ikon 4: Ranking & History Sesi Puasa
+                            CartoonMenuCard(
+                                title = "Ranking & History",
+                                subtitle = "Siswa Rajin & Sesi",
+                                imageRes = R.drawable.img_menu_ranking_puasa,
+                                badgeText = if (fastingSessionsCount > 0) "$fastingSessionsCount Sesi" else "Peringkat",
+                                badgeBg = Color(0xFFF3E8FF),
+                                badgeColor = Color(0xFF7E22CE),
+                                bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.6f)),
+                                borderColor = Color(0xFFE9D5FF),
+                                onClick = onOpenRankingPuasa,
+                                testTag = "tile_ranking_puasa",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -362,9 +442,10 @@ fun QuickMenuTiles(
             // Label Halaman Aktif
             Text(
                 text = when (pagerState.currentPage) {
-                    0 -> "Layanan Kesehatan (1/3)"
-                    1 -> "Pesan Shift & Jaga (2/3)"
-                    else -> "Pendataan & Fiqih Haid (3/3)"
+                    0 -> "Layanan Kesehatan (1/4)"
+                    1 -> "Pesan Shift & Jaga (2/4)"
+                    2 -> "Pendataan & Fiqih Haid (3/4)"
+                    else -> "Pendataan Puasa (4/4)"
                 },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -376,7 +457,7 @@ fun QuickMenuTiles(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(5.dp)
             ) {
-                repeat(3) { index ->
+                repeat(4) { index ->
                     val isSelected = pagerState.currentPage == index
                     val dotWidth by animateDpAsState(targetValue = if (isSelected) 18.dp else 6.dp, label = "dotWidth")
                     Box(
@@ -386,7 +467,11 @@ fun QuickMenuTiles(
                             .clip(CircleShape)
                             .background(
                                 if (isSelected) {
-                                    if (index == 2) Color(0xFFDB2777) else WaliPrimary
+                                    when (index) {
+                                        2 -> Color(0xFFDB2777)
+                                        3 -> Color(0xFF0F766E)
+                                        else -> WaliPrimary
+                                    }
                                 } else {
                                     MaterialTheme.colorScheme.surfaceVariant
                                 }
@@ -405,16 +490,20 @@ fun QuickMenuTiles(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.clickable {
                     coroutineScope.launch {
-                        val next = (pagerState.currentPage + 1) % 3
+                        val next = (pagerState.currentPage + 1) % 4
                         pagerState.animateScrollToPage(next)
                     }
                 }
             ) {
                 Text(
-                    text = if (pagerState.currentPage < 2) "Geser ❯" else "Kembali ↺",
+                    text = if (pagerState.currentPage < 3) "Geser ❯" else "Kembali ↺",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (pagerState.currentPage == 2) Color(0xFFDB2777) else WaliPrimary
+                    color = when (pagerState.currentPage) {
+                        2 -> Color(0xFFDB2777)
+                        3 -> Color(0xFF0F766E)
+                        else -> WaliPrimary
+                    }
                 )
             }
         }

@@ -83,7 +83,18 @@ import com.example.data.model.ChildStudent
 fun BarcodeScannerDialog(
     femaleStudents: List<ChildStudent>,
     onScanned: (String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    dialogTitle: String = "Scan Barcode Kartu Siswa",
+    dialogSubtitle: String = "Membaca NIK / NIS Kartu Siswa Otomatis",
+    quickPickTitle: String? = null,
+    searchPlaceholder: String = "Cari nama, kelas, kamar, atau NIK siswi...",
+    emptyListMessage: String = "Belum ada data siswi putri terdaftar.",
+    accentColor: Color = Color(0xFFDB2777),
+    accentBgColor: Color = Color(0xFFFCE7F3),
+    cardBgColor: Color = Color(0xFFFDF2F8),
+    avatarBgColor: Color = Color(0xFFFBCFE8),
+    avatarTextColor: Color = Color(0xFF9D174D),
+    titleTextColor: Color = Color(0xFF831843)
 ) {
     val context = LocalContext.current
     var hasCameraPermission by remember {
@@ -174,25 +185,25 @@ fun BarcodeScannerDialog(
                             modifier = Modifier
                                 .size(40.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFFCE7F3)),
+                                .background(accentBgColor),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.QrCodeScanner,
                                 contentDescription = null,
-                                tint = Color(0xFFDB2777),
+                                tint = accentColor,
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                         Column {
                             Text(
-                                text = "Scan Barcode Kartu Siswa",
+                                text = dialogTitle,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Membaca NIK / NIS Kartu Siswa Otomatis",
+                                text = dialogSubtitle,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -288,7 +299,7 @@ fun BarcodeScannerDialog(
                                 .border(
                                     width = 2.dp,
                                     brush = Brush.horizontalGradient(
-                                        listOf(Color(0xFFEC4899), Color(0xFFF472B6), Color(0xFFEC4899))
+                                        listOf(accentColor, accentColor.copy(alpha = 0.65f), accentColor)
                                     ),
                                     shape = RoundedCornerShape(12.dp)
                                 )
@@ -412,7 +423,7 @@ fun BarcodeScannerDialog(
                         },
                         enabled = manualNikInput.isNotBlank(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                        colors = ButtonDefaults.buttonColors(containerColor = accentColor),
                         modifier = Modifier
                             .heightIn(min = 48.dp)
                             .testTag("btn_confirm_manual_nik")
@@ -423,9 +434,9 @@ fun BarcodeScannerDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Quick Pick: Daftar Kartu Siswi Terdaftar (Menampilkan seluruh siswi tanpa batas + filter cepat)
+                // Quick Pick: Daftar Kartu Siswa Terdaftar (Menampilkan seluruh siswa tanpa batas + filter cepat)
                 Text(
-                    text = "Pilih Cepat Kartu Siswi Asrama Putri (${filteredFemaleStudents.size} Siswi):",
+                    text = quickPickTitle ?: "Pilih Cepat Kartu Siswi Asrama Putri (${filteredFemaleStudents.size} Siswi):",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -437,11 +448,11 @@ fun BarcodeScannerDialog(
                     OutlinedTextField(
                         value = quickSearchQuery,
                         onValueChange = { quickSearchQuery = it },
-                        placeholder = { Text("Cari nama, kelas, kamar, atau NIK siswi...", fontSize = 11.5.sp) },
+                        placeholder = { Text(searchPlaceholder, fontSize = 11.5.sp) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Cari Siswi",
+                                contentDescription = "Cari Siswa",
                                 modifier = Modifier.size(16.dp)
                             )
                         },
@@ -463,9 +474,9 @@ fun BarcodeScannerDialog(
                     ) {
                         Text(
                             text = if (femaleStudents.isEmpty()) {
-                                "Belum ada data siswi putri terdaftar."
+                                emptyListMessage
                             } else {
-                                "Tidak ada siswi yang cocok dengan pencarian \"$quickSearchQuery\"."
+                                "Tidak ada siswa yang cocok dengan pencarian \"$quickSearchQuery\"."
                             },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -486,7 +497,7 @@ fun BarcodeScannerDialog(
                                     onDismiss()
                                 },
                                 shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF2F8))
+                                colors = CardDefaults.cardColors(containerColor = cardBgColor)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -498,14 +509,14 @@ fun BarcodeScannerDialog(
                                         modifier = Modifier
                                             .size(32.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFFFBCFE8)),
+                                            .background(avatarBgColor),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = student.name.take(1).uppercase(),
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 13.sp,
-                                            color = Color(0xFF9D174D)
+                                            color = avatarTextColor
                                         )
                                     }
 
@@ -516,13 +527,13 @@ fun BarcodeScannerDialog(
                                             text = student.name,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.5.sp,
-                                            color = Color(0xFF831843)
+                                            color = titleTextColor
                                         )
                                         Text(
                                             text = "${student.classGrade} • ${student.dormitory} • NIK: ${if (student.nik.isNotBlank()) student.nik else student.nis.ifBlank { student.id.toString() }}",
                                             fontSize = 10.5.sp,
                                             fontFamily = FontFamily.Monospace,
-                                            color = Color(0xFF9D174D).copy(alpha = 0.8f)
+                                            color = avatarTextColor.copy(alpha = 0.85f)
                                         )
                                     }
 
@@ -530,7 +541,7 @@ fun BarcodeScannerDialog(
                                         text = "Scan",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFDB2777)
+                                        color = accentColor
                                     )
                                 }
                             }

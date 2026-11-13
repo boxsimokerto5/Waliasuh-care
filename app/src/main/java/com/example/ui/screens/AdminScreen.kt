@@ -93,13 +93,25 @@ import com.example.util.DateUtils
 import com.example.util.PasswordGenerator
 
 import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.School
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.Switch
+import androidx.compose.material3.rememberDatePickerState
 import com.example.data.model.ChildStudent
+import com.example.data.model.FastingJenjangHelper
+import com.example.data.model.FastingSession
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
@@ -125,6 +137,8 @@ fun AdminScreen(
     val schoolRegistrations by viewModel.schoolRegistrations.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
+    val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
 
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
@@ -132,6 +146,10 @@ fun AdminScreen(
     var showImportStudentsDialog by remember { mutableStateOf(false) }
     var showImportWaliDialog by remember { mutableStateOf(false) }
     var showClearDataConfirmDialog by remember { mutableStateOf(false) }
+
+    // State untuk Kelola Sesi Puasa (khusus Admin Sekolah)
+    var showCreateFastingSessionDialog by remember { mutableStateOf(false) }
+    var fastingSessionToDelete by remember { mutableStateOf<FastingSession?>(null) }
 
     // State untuk Kelola Data Siswa
     var studentSearchQuery by remember { mutableStateOf("") }
@@ -161,6 +179,11 @@ fun AdminScreen(
     }
     val schoolStudents = students.filter {
         it.schoolId.equals(activeSchoolCode, ignoreCase = true)
+    }
+    val schoolFastingSessions = remember(fastingSessions, activeSchoolCode) {
+        fastingSessions
+            .filter { it.schoolId.equals(activeSchoolCode, ignoreCase = true) }
+            .sortedByDescending { it.sessionDate }
     }
 
     val filteredAccounts = schoolAccounts.filter { account ->
@@ -312,10 +335,10 @@ fun AdminScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
-                    if (selectedAdminTab == 0) {
-                        showAddStudentDialog = true
-                    } else {
-                        showAddDialog = true
+                    when (selectedAdminTab) {
+                        0 -> showAddStudentDialog = true
+                        1 -> showAddDialog = true
+                        else -> showCreateFastingSessionDialog = true
                     }
                 },
                 containerColor = WaliPrimary,
@@ -328,13 +351,25 @@ fun AdminScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = if (selectedAdminTab == 0) Icons.Default.PersonAdd else Icons.Default.Add,
-                        contentDescription = if (selectedAdminTab == 0) "Tambah Siswa" else "Tambah Wali Asuh",
+                        imageVector = when (selectedAdminTab) {
+                            0 -> Icons.Default.PersonAdd
+                            2 -> Icons.Default.EventNote
+                            else -> Icons.Default.Add
+                        },
+                        contentDescription = when (selectedAdminTab) {
+                            0 -> "Tambah Siswa"
+                            2 -> "Buat Sesi Puasa"
+                            else -> "Tambah Wali Asuh"
+                        },
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (selectedAdminTab == 0) "Tambah Siswa" else "Tambah Wali Asuh",
+                        text = when (selectedAdminTab) {
+                            0 -> "Tambah Siswa"
+                            2 -> "Buat Sesi Puasa"
+                            else -> "Tambah Wali Asuh"
+                        },
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
                     )
@@ -523,7 +558,7 @@ fun AdminScreen(
                     }
                 }
 
-                // Tab Navigasi: Kelola Data Siswa vs Kelola Akun Wali Asuh
+                // Tab Navigasi: Kelola Data Siswa vs Akun Wali vs Sesi Puasa
                 item {
                     TabRow(
                         selectedTabIndex = selectedAdminTab,
@@ -540,12 +575,14 @@ fun AdminScreen(
                                     Icon(
                                         imageVector = Icons.Default.People,
                                         contentDescription = null,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Data Siswa (${schoolStudents.size})",
-                                        fontSize = 12.5.sp,
+                                        text = "Siswa (${schoolStudents.size})",
+                                        fontSize = 11.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         fontWeight = if (selectedAdminTab == 0) FontWeight.Bold else FontWeight.Medium
                                     )
                                 }
@@ -560,17 +597,41 @@ fun AdminScreen(
                                     Icon(
                                         imageVector = Icons.Default.Key,
                                         contentDescription = null,
-                                        modifier = Modifier.size(15.dp)
+                                        modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Akun Wali (${schoolAccounts.size})",
-                                        fontSize = 12.5.sp,
+                                        text = "Wali (${schoolAccounts.size})",
+                                        fontSize = 11.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
                                         fontWeight = if (selectedAdminTab == 1) FontWeight.Bold else FontWeight.Medium
                                     )
                                 }
                             },
                             modifier = Modifier.testTag("tab_admin_wali")
+                        )
+                        Tab(
+                            selected = selectedAdminTab == 2,
+                            onClick = { selectedAdminTab = 2 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.RestaurantMenu,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Sesi Puasa (${schoolFastingSessions.size})",
+                                        fontSize = 11.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = if (selectedAdminTab == 2) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testTag("tab_admin_sesi_puasa")
                         )
                     }
                 }
@@ -727,9 +788,9 @@ fun AdminScreen(
                             )
                         }
                     }
-                } else {
+                } else if (selectedAdminTab == 1) {
                     // ==========================================
-                    // TAB 1: KELOLA AKUN WALI ASUh
+                    // TAB 1: KELOLA AKUN WALI ASUH
                     // ==========================================
                     // Summary Card Admin
                 item {
@@ -908,7 +969,185 @@ fun AdminScreen(
                         )
                     }
                 }
-            }
+                } else {
+                    // ==========================================
+                    // TAB 2: KELOLA SESI PUASA (KHUSUS ADMIN)
+                // ==========================================
+                item {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Manajemen Sesi Puasa Siswa",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFCCFBF1))
+                                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = "${schoolFastingSessions.count { it.isActive }} Sesi Aktif",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF0F766E)
+                                    )
+                                }
+                            }
+
+                            Text(
+                                text = "Hanya Admin Sekolah yang dapat membuat sesi puasa (contoh: Puasa Senin Kamis, 27 Oktober 2026). Wali Asuh akan menggunakan sesi aktif ini untuk scan kartu siswa dan checklist sahur/buka.",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+
+                            Button(
+                                onClick = { showCreateFastingSessionDialog = true },
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_admin_create_fasting_session")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Buat Sesi Puasa Baru", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
+                if (schoolFastingSessions.isEmpty()) {
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(28.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "Belum ada sesi puasa. Tekan '+ Buat Sesi Puasa Baru' untuk membuka sesi pendataan puasa siswa.",
+                                    fontSize = 12.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    items(schoolFastingSessions, key = { "admin_fasting_${it.id}" }) { session ->
+                        val recs = fastingRecords.filter { it.sessionId == session.id }
+                        val sma = recs.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMA }
+                        val smp = recs.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMP }
+                        val sd = recs.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SD }
+
+                        ElevatedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("admin_fasting_session_${session.id}"),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = session.title,
+                                            fontSize = 14.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = DateUtils.formatFullDate(session.sessionDate),
+                                            fontSize = 11.5.sp,
+                                            color = Color(0xFF0F766E),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            text = if (session.isActive) "Aktif" else "Selesai",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (session.isActive) Color(0xFF15803D) else Color(0xFF64748B)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Switch(
+                                            checked = session.isActive,
+                                            onCheckedChange = {
+                                                viewModel.toggleFastingSessionActive(session)
+                                            }
+                                        )
+                                    }
+                                }
+
+                                if (session.description.isNotBlank()) {
+                                    Text(
+                                        text = session.description,
+                                        fontSize = 11.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Peserta: ${recs.size} Siswa ($sma SMA • $smp SMP • $sd SD)",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+
+                                    IconButton(
+                                        onClick = { fastingSessionToDelete = session },
+                                        modifier = Modifier.size(36.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = "Hapus Sesi Puasa",
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                }
             }
         }
     }
@@ -1199,6 +1438,55 @@ fun AdminScreen(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { showClearDataConfirmDialog = false }) {
+                    Text("Batal")
+                }
+            }
+        )
+    }
+
+    if (showCreateFastingSessionDialog) {
+        CreateFastingSessionDialog(
+            onDismiss = { showCreateFastingSessionDialog = false },
+            onConfirm = { title, dateMillis, description ->
+                viewModel.createFastingSession(
+                    title = title,
+                    sessionDate = dateMillis,
+                    description = description
+                ) { created ->
+                    if (created != null) {
+                        Toast.makeText(context, "Sesi puasa \"${created.title}\" berhasil dibuat!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(context, "Hanya Admin Sekolah yang dapat membuat sesi puasa.", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                showCreateFastingSessionDialog = false
+            }
+        )
+    }
+
+    fastingSessionToDelete?.let { session ->
+        AlertDialog(
+            onDismissRequest = { fastingSessionToDelete = null },
+            icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text("Hapus Sesi Puasa?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text("Sesi \"${session.title}\" beserta data peserta puasa di dalamnya akan dihapus.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteFastingSession(session) {
+                            Toast.makeText(context, "Sesi \"${session.title}\" dihapus.", Toast.LENGTH_SHORT).show()
+                        }
+                        fastingSessionToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Hapus")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { fastingSessionToDelete = null }) {
                     Text("Batal")
                 }
             }
@@ -1767,4 +2055,140 @@ fun AdminStudentCardItem(
         }
     }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CreateFastingSessionDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (title: String, dateMillis: Long, description: String) -> Unit
+) {
+    var title by remember { mutableStateOf("Puasa Senin Kamis") }
+    var description by remember { mutableStateOf("") }
+    var selectedDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    val quickTitles = listOf(
+        "Puasa Senin Kamis",
+        "Puasa Ayyamul Bidh",
+        "Puasa Ramadhan",
+        "Puasa Daud",
+        "Puasa Sunnah"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.RestaurantMenu, contentDescription = null, tint = Color(0xFF0F766E))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Buat Sesi Puasa Baru", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "Pilih cepat jenis puasa:",
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    quickTitles.forEach { qt ->
+                        FilterChip(
+                            selected = title.equals(qt, ignoreCase = true),
+                            onClick = { title = qt },
+                            label = { Text(qt, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Nama Sesi Puasa *") },
+                    placeholder = { Text("Contoh: Puasa Senin Kamis") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_fasting_session_title")
+                )
+
+                OutlinedButton(
+                    onClick = { showDatePicker = true },
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_pick_fasting_session_date")
+                ) {
+                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F766E))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Tanggal: ${DateUtils.formatFullDate(selectedDateMillis)}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Keterangan (Opsional)") },
+                    placeholder = { Text("Contoh: Sahur pukul 03.30 WIB di dapur umum") },
+                    maxLines = 2,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (title.isNotBlank()) {
+                        onConfirm(title.trim(), selectedDateMillis, description.trim())
+                    }
+                },
+                enabled = title.isNotBlank(),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                modifier = Modifier.testTag("btn_save_fasting_session")
+            ) {
+                Text("Buat Sesi", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            OutlinedButton(onClick = onDismiss) {
+                Text("Batal")
+            }
+        }
+    )
+
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(initialSelectedDateMillis = selectedDateMillis)
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { selectedDateMillis = it }
+                    showDatePicker = false
+                }) {
+                    Text("Pilih")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Batal")
+                }
+            }
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
+}
+
 

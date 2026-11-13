@@ -20,12 +20,25 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
+import com.example.data.dao.FastingRecordDao
+import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
+import com.example.data.model.FastingRecord
+import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 
 @Database(
-    entities = [ChildStudent::class, MedicalRecord::class, WaliAccount::class, SchoolRegistration::class, ShiftMessage::class, HaidRecord::class],
-    version = 13,
+    entities = [
+        ChildStudent::class,
+        MedicalRecord::class,
+        WaliAccount::class,
+        SchoolRegistration::class,
+        ShiftMessage::class,
+        HaidRecord::class,
+        FastingSession::class,
+        FastingRecord::class
+    ],
+    version = 14,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -35,6 +48,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun schoolRegistrationDao(): SchoolRegistrationDao
     abstract fun shiftMessageDao(): ShiftMessageDao
     abstract fun haidRecordDao(): HaidRecordDao
+    abstract fun fastingSessionDao(): FastingSessionDao
+    abstract fun fastingRecordDao(): FastingRecordDao
 
     companion object {
         @Volatile
@@ -116,6 +131,54 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_13_14 = object : androidx.room.migration.Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS fasting_sessions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title TEXT NOT NULL,
+                        sessionDate INTEGER NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        isActive INTEGER NOT NULL DEFAULT 1,
+                        createdBy TEXT NOT NULL DEFAULT 'Admin Sekolah',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS fasting_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        sessionId INTEGER NOT NULL,
+                        sessionTitle TEXT NOT NULL DEFAULT '',
+                        sessionDate INTEGER NOT NULL DEFAULT 0,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentNik TEXT NOT NULL DEFAULT '',
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        studentJenjang TEXT NOT NULL DEFAULT '',
+                        isSahurChecked INTEGER NOT NULL DEFAULT 0,
+                        sahurCheckedAt INTEGER,
+                        sahurCheckedBy TEXT NOT NULL DEFAULT '',
+                        isBukaChecked INTEGER NOT NULL DEFAULT 0,
+                        bukaCheckedAt INTEGER,
+                        bukaCheckedBy TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        notes TEXT NOT NULL DEFAULT '',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -124,7 +187,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "waliasuh_care.db"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_11_12, MIGRATION_12_13)
+                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
                     .build()

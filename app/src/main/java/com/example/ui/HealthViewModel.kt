@@ -6,6 +6,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
+import com.example.data.model.FastingJenjangHelper
+import com.example.data.model.FastingRecord
+import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
@@ -53,7 +56,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.waliAccountDao(),
             db.schoolRegistrationDao(),
             db.shiftMessageDao(),
-            db.haidRecordDao()
+            db.haidRecordDao(),
+            db.fastingSessionDao(),
+            db.fastingRecordDao()
         )
     }
 
@@ -430,6 +435,188 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onComplete()
             if (!isUnitTestEnvironment()) {
                 SupabaseSyncManager.deleteRemoteHaidRecord(getApplication(), record.id)
+            }
+        }
+    }
+
+    // Multi-tenant isolated fasting sessions & records (Pendataan Puasa Siswa Asrama):
+    val fastingSessions: StateFlow<List<FastingSession>> = combine(
+        repository.allFastingSessions,
+        _schoolProfile,
+        _currentUserRole
+    ) { sessions, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            sessions
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            sessions.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val fastingRecords: StateFlow<List<FastingRecord>> = combine(
+        repository.allFastingRecords,
+        _schoolProfile,
+        _currentUserRole
+    ) { records, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun createFastingSession(
+        title: String,
+        sessionDate: Long,
+        description: String = "",
+        onComplete: (FastingSession?) -> Unit = {}
+    ) {
+        if (_currentUserRole.value != UserRole.ADMIN && _currentUserRole.value != UserRole.SUPERADMIN) {
+            onComplete(null)
+            return
+        }
+        viewModelScope.launch {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val now = System.currentTimeMillis()
+            val creator = _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
+            val newSession = FastingSession(
+                id = SupabaseSyncManager.generateCloudSafeId(),
+                title = title.trim(),
+                sessionDate = sessionDate,
+                description = description.trim(),
+                isActive = true,
+                createdBy = creator,
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertFastingSession(newSession)
+            onComplete(newSession)
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleFastingSession(getApplication(), newSession)
+            }
+        }
+    }
+
+    fun toggleFastingSessionActive(session: FastingSession, onComplete: () -> Unit = {}) {
+        if (_currentUserRole.value != UserRole.ADMIN && _currentUserRole.value != UserRole.SUPERADMIN) {
+            onComplete()
+            return
+        }
+        viewModelScope.launch {
+            val updated = session.copy(
+                isActive = !session.isActive,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateFastingSession(updated)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleFastingSession(getApplication(), updated)
+            }
+        }
+    }
+
+    fun deleteFastingSession(session: FastingSession, onComplete: () -> Unit = {}) {
+        if (_currentUserRole.value != UserRole.ADMIN && _currentUserRole.value != UserRole.SUPERADMIN) {
+            onComplete()
+            return
+        }
+        viewModelScope.launch {
+            repository.deleteFastingSession(session)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.deleteRemoteFastingSession(getApplication(), session.id)
+            }
+        }
+    }
+
+    fun registerStudentForFasting(
+        session: FastingSession,
+        student: ChildStudent,
+        onResult: (added: Boolean, message: String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val existingInSession = repository.getFastingRecordsBySessionList(session.id)
+            val alreadyRegistered = existingInSession.any { rec ->
+                (student.id > 0L && rec.studentId == student.id) ||
+                    (student.nik.isNotBlank() && rec.studentNik.equals(student.nik, ignoreCase = true)) ||
+                    (student.nis.isNotBlank() && rec.studentNis.equals(student.nis, ignoreCase = true))
+            }
+            if (alreadyRegistered) {
+                onResult(false, "${student.name} sudah terdaftar pada sesi ${session.title}.")
+                return@launch
+            }
+
+            val activeSchool = session.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val now = System.currentTimeMillis()
+            val resolvedJenjang = FastingJenjangHelper.resolveJenjang(student)
+            val record = FastingRecord(
+                id = SupabaseSyncManager.generateCloudSafeId(),
+                sessionId = session.id,
+                sessionTitle = session.title,
+                sessionDate = session.sessionDate,
+                studentId = student.id,
+                studentName = student.name,
+                studentNik = student.nik,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                studentJenjang = resolvedJenjang,
+                isSahurChecked = false,
+                isBukaChecked = false,
+                waliName = _waliName.value.ifBlank { "Wali Asuh" },
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertFastingRecord(record)
+            onResult(true, "${student.name} ($resolvedJenjang) berhasil didaftarkan berpuasa.")
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleFastingRecord(getApplication(), record)
+            }
+        }
+    }
+
+    fun toggleFastingSahur(record: FastingRecord) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val newState = !record.isSahurChecked
+            val updated = record.copy(
+                isSahurChecked = newState,
+                sahurCheckedAt = if (newState) now else null,
+                sahurCheckedBy = if (newState) _waliName.value.ifBlank { "Wali Asuh" } else "",
+                updatedAt = now
+            )
+            repository.updateFastingRecord(updated)
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleFastingRecord(getApplication(), updated)
+            }
+        }
+    }
+
+    fun toggleFastingBuka(record: FastingRecord) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val newState = !record.isBukaChecked
+            val updated = record.copy(
+                isBukaChecked = newState,
+                bukaCheckedAt = if (newState) now else null,
+                bukaCheckedBy = if (newState) _waliName.value.ifBlank { "Wali Asuh" } else "",
+                updatedAt = now
+            )
+            repository.updateFastingRecord(updated)
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.uploadSingleFastingRecord(getApplication(), updated)
+            }
+        }
+    }
+
+    fun deleteFastingRecord(record: FastingRecord) {
+        viewModelScope.launch {
+            repository.deleteFastingRecord(record)
+            if (!isUnitTestEnvironment()) {
+                SupabaseSyncManager.deleteRemoteFastingRecord(getApplication(), record.id)
             }
         }
     }

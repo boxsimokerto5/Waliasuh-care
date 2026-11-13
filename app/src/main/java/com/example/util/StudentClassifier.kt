@@ -78,16 +78,21 @@ object StudentClassifier {
     fun findMatchingFemaleStudent(
         femaleStudents: List<ChildStudent>,
         rawCode: String
+    ): ChildStudent? = findMatchingStudent(femaleStudents, rawCode)
+
+    fun findMatchingStudent(
+        students: List<ChildStudent>,
+        rawCode: String
     ): ChildStudent? {
         val q = rawCode.trim()
         if (q.isEmpty()) return null
 
         // Prioritaskan kecocokan eksak NIK / NIS / ID sebelum pencarian nama parsial
-        return femaleStudents.firstOrNull {
+        return students.firstOrNull {
             (it.nik.isNotBlank() && it.nik.trim().equals(q, ignoreCase = true)) ||
                 (it.nis.isNotBlank() && it.nis.trim().equals(q, ignoreCase = true)) ||
                 it.id.toString() == q
-        } ?: femaleStudents.firstOrNull {
+        } ?: students.firstOrNull {
             it.name.trim().contains(q, ignoreCase = true)
         }
     }
