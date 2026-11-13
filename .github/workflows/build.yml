@@ -44,10 +44,21 @@ jobs:
           ls -la my-upload-key.jks
 
       - name: Prepare Environment File
+        env:
+          SECRET_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SECRET_SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
           if [ ! -f ".env" ]; then
             cp .env.example .env
           fi
+          if [ -n "$SECRET_SUPABASE_URL" ]; then
+            grep -q "^SUPABASE_URL=" .env && sed -i "s|^SUPABASE_URL=.*|SUPABASE_URL=$SECRET_SUPABASE_URL|" .env || echo "SUPABASE_URL=$SECRET_SUPABASE_URL" >> .env
+          fi
+          if [ -n "$SECRET_SUPABASE_KEY" ]; then
+            grep -q "^SUPABASE_KEY=" .env && sed -i "s|^SUPABASE_KEY=.*|SUPABASE_KEY=$SECRET_SUPABASE_KEY|" .env || echo "SUPABASE_KEY=$SECRET_SUPABASE_KEY" >> .env
+          fi
+          sed -i 's/^SUPABASE_URL=$/SUPABASE_URL=https:\/\/your-project.supabase.co/' .env
+          sed -i 's/^SUPABASE_KEY=$/SUPABASE_KEY=your_supabase_anon_key/' .env
 
       - name: Make Gradle Wrapper Executable
         run: |
