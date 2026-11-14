@@ -22,6 +22,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.QrCode2
@@ -83,6 +84,7 @@ fun StudentsScreen(
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var showCardGeneratorSheet by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentToEdit by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForMengajiInput by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForKartuMengaji by remember { mutableStateOf<ChildStudent?>(null) }
 
@@ -94,6 +96,7 @@ fun StudentsScreen(
                     student.dormitory.contains(searchQuery, ignoreCase = true) ||
                     student.nis.contains(searchQuery, ignoreCase = true) ||
                     student.address.contains(searchQuery, ignoreCase = true) ||
+                    student.district.contains(searchQuery, ignoreCase = true) ||
                     student.nik.contains(searchQuery, ignoreCase = true) ||
                     student.noKk.contains(searchQuery, ignoreCase = true) ||
                     student.motherName.contains(searchQuery, ignoreCase = true) ||
@@ -253,6 +256,10 @@ fun StudentsScreen(
                                 student = student,
                                 treatmentCount = studentRecordsCount,
                                 latestMengajiLabel = latestMengaji?.let { MengajiHelper.formatCompactPosition(it) },
+                                onEditClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    studentToEdit = student
+                                },
                                 onClick = {
                                     TopOnAdManager.onUserActionClick(context)
                                     selectedStudentForDetail = student
@@ -289,10 +296,31 @@ fun StudentsScreen(
                     birthDate = newStudent.birthDate,
                     motherName = newStudent.motherName,
                     address = newStudent.address,
+                    district = newStudent.district,
                     roomNumber = newStudent.roomNumber,
                     jenjang = newStudent.jenjang
                 )
                 showAddStudentDialog = false
+            }
+        )
+    }
+
+    studentToEdit?.let { editingStudent ->
+        val activeSchoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
+        AddStudentDialog(
+            initialStudent = editingStudent,
+            activeSchoolId = activeSchoolCode,
+            onDismiss = { studentToEdit = null },
+            onConfirmStudent = { updated ->
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.updateStudent(updated) {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Profile for ${updated.name} updated!" else "Data ${updated.name} berhasil diperbarui!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                studentToEdit = null
             }
         )
     }
@@ -313,6 +341,10 @@ fun StudentsScreen(
             onPrintKartuMengaji = { target ->
                 selectedStudentForDetail = null
                 studentForKartuMengaji = target
+            },
+            onEditStudent = { toEdit ->
+                selectedStudentForDetail = null
+                studentToEdit = toEdit
             },
             onDismiss = { selectedStudentForDetail = null }
         )
@@ -379,6 +411,7 @@ fun CompactStudentCardItem(
     student: ChildStudent,
     treatmentCount: Int,
     latestMengajiLabel: String? = null,
+    onEditClick: (() -> Unit)? = null,
     onClick: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
@@ -476,6 +509,18 @@ fun CompactStudentCardItem(
                     )
                 }
 
+                if (student.district.isNotBlank()) {
+                    Text(
+                        text = if (isEn) "District: Kec. ${student.district}" else "Kecamatan: ${student.district}",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 1.dp)
+                    )
+                }
+
                 if (!latestMengajiLabel.isNullOrBlank()) {
                     Text(
                         text = if (isEn) "Mengaji: $latestMengajiLabel" else "Mengaji: $latestMengajiLabel",
@@ -509,6 +554,22 @@ fun CompactStudentCardItem(
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+            }
+
+            if (onEditClick != null) {
+                IconButton(
+                    onClick = onEditClick,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .testTag("btn_edit_student_${student.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Edit,
+                        contentDescription = if (isEn) "Edit Student Data" else "Edit Data Anak Asuh",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp)
+                    )
                 }
             }
 

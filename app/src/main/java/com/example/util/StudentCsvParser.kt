@@ -9,14 +9,14 @@ import java.util.Calendar
 object StudentCsvParser {
 
     const val STANDARD_HEADER =
-        "No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN"
+        "No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN,KECAMATAN"
 
     val STANDARD_TEMPLATE_CSV: String = """
         $STANDARD_HEADER
-        1,ADAM JULIAN SHANO,SD 1-2,SD,"Dsn. Manukan Rt 02 Rw 08 Ds. Jabon, Kec. Banyakan, Kab. Kediri",L,3508220907180002,3506220301180009,KEDIRI,09-07-2018,RUMIYATI,3185428544
-        2,AZZURA FAUZIAH,SD 1-2,SD,"Karangtalun, Kec. Kras, Kab. Kediri",P,1771057004190001,3173010601096079,BENGKULU,30-04-2019,AULIA HANIFAH,3196328403
-        3,AHMAD SYAIFUL ARSYAD,VII-1,SMP,"Pagung, Kec. Semen, Kab. Kediri",L,3506012001140002,3506013107120001,KEDIRI,20-01-2014,SITI MUNJIAH,0141204471
-        4,ADELIA SUKMAWATI,XI-1 (IPA),SMA,"Dusun Gambiran, Desa Kedak, Kec. Semen, Kab. Kediri",P,3506015105090001,3506010412103889,KEDIRI,11-05-2009,ARI SATUJU,0099412567
+        1,ADAM JULIAN SHANO,SD 1-2,SD,"Dsn. Manukan Rt 02 Rw 08 Ds. Jabon, Kec. Banyakan, Kab. Kediri",L,3508220907180002,3506220301180009,KEDIRI,09-07-2018,RUMIYATI,3185428544,Banyakan
+        2,AZZURA FAUZIAH,SD 1-2,SD,"Karangtalun, Kec. Kras, Kab. Kediri",P,1771057004190001,3173010601096079,BENGKULU,30-04-2019,AULIA HANIFAH,3196328403,Kras
+        3,AHMAD SYAIFUL ARSYAD,VII-1,SMP,"Pagung, Kec. Semen, Kab. Kediri",L,3506012001140002,3506013107120001,KEDIRI,20-01-2014,SITI MUNJIAH,0141204471,Semen
+        4,ADELIA SUKMAWATI,XI-1 (IPA),SMA,"Dusun Gambiran, Desa Kedak, Kec. Semen, Kab. Kediri",P,3506015105090001,3506010412103889,KEDIRI,11-05-2009,ARI SATUJU,0099412567,Semen
     """.trimIndent()
 
     /**
@@ -221,6 +221,7 @@ object StudentCsvParser {
                 col == "kelas" || col.contains("kelas") || col.contains("rombel") -> true
                 col.contains("jenjang") -> true
                 col.contains("alamat") || col.contains("domisili") -> true
+                col == "kecamatan" || col == "kec" || col == "kec." || col.contains("kecamatan") || col == "district" -> true
                 col.contains("kelamin") || col.contains("gender") || col == "jk" || col == "l/p" -> true
                 col == "nik" || col.contains("no nik") || col.contains("nomor nik") -> {
                     hasStrongColumn = true
@@ -240,6 +241,18 @@ object StudentCsvParser {
             if (matched) score++
         }
         return if (hasStrongColumn && score >= 3) score else 0
+    }
+
+    /**
+     * Mengekstrak nama kecamatan dari teks alamat (mis. "Kec. Banyakan, Kab. Kediri" -> "Banyakan")
+     * untuk membantu pengisian otomatis bila diminta oleh Wali Asuh.
+     */
+    fun extractDistrictFromAddress(address: String): String {
+        val cleaned = cleanText(address)
+        if (cleaned.isBlank()) return ""
+        val match = Regex("(?i)\\b(?:kecamatan|kec)\\.?\\s+([A-Za-z0-9\\s'-]{2,35}?)(?=,|\\b(?:kab|kabupaten|kota|prov|jawa|jatim)\\b|$)")
+            .find(cleaned)
+        return match?.groupValues?.getOrNull(1)?.trim().orEmpty()
     }
 
     /**
@@ -281,6 +294,7 @@ object StudentCsvParser {
         var idxClass = -1
         var idxJenjang = -1
         var idxAddress = -1
+        var idxDistrict = -1
         var idxGender = -1
         var idxNik = -1
         var idxNoKk = -1
@@ -314,6 +328,8 @@ object StudentCsvParser {
                         if (idxClass == -1) idxClass = idx
                     col.contains("jenjang") ->
                         if (idxJenjang == -1) idxJenjang = idx
+                    col == "kecamatan" || col == "kec" || col == "kec." || col.contains("kecamatan") || col == "district" ->
+                        if (idxDistrict == -1) idxDistrict = idx
                     col.contains("alamat") || col.contains("domisili") || col.contains("asal") ->
                         if (idxAddress == -1) idxAddress = idx
                     col.contains("kelamin") || col.contains("gender") || col == "jk" || col == "l/p" || col == "lp" || col == "sex" ->
@@ -343,11 +359,11 @@ object StudentCsvParser {
                 }
             }
         } else {
-            // Tidak ada baris header: tentukan posisi kolom berdasarkan struktur standar 12 kolom vs 10 kolom lama
+            // Tidak ada baris header: tentukan posisi kolom berdasarkan struktur standar 12-13 kolom vs 10 kolom lama
             val sampleRow = tokenizedLines.firstOrNull { it.size >= 6 } ?: tokenizedLines.first()
             if (sampleRow.size >= 12) {
-                // Format Standar Lengkap 12 Kolom:
-                // No, Nama, Kelas, Jenjang, Alamat, JK, NIK, NO KK, Tempat Lahir, Tanggal Lahir, Nama Ibu, NISN
+                // Format Standar Lengkap 12-13 Kolom:
+                // No, Nama, Kelas, Jenjang, Alamat, JK, NIK, NO KK, Tempat Lahir, Tanggal Lahir, Nama Ibu, NISN, [KECAMATAN]
                 idxNo = 0
                 idxName = 1
                 idxClass = 2
@@ -360,8 +376,21 @@ object StudentCsvParser {
                 idxBirthDate = 9
                 idxMother = 10
                 idxNis = 11
-                if (sampleRow.size >= 13) idxRoom = 12
-                if (sampleRow.size >= 14) idxDorm = 13
+                if (sampleRow.size >= 13) {
+                    val col12 = cleanText(sampleRow.getOrNull(12))
+                    val looksLikeRoomCode = col12.startsWith("PL", ignoreCase = true) ||
+                        col12.startsWith("PP", ignoreCase = true) ||
+                        col12.startsWith("AL", ignoreCase = true) ||
+                        col12.startsWith("AP", ignoreCase = true)
+                    if (looksLikeRoomCode) {
+                        idxRoom = 12
+                        if (sampleRow.size >= 14) idxDorm = 13
+                    } else {
+                        idxDistrict = 12
+                        if (sampleRow.size >= 14) idxRoom = 13
+                        if (sampleRow.size >= 15) idxDorm = 14
+                    }
+                }
             } else if (sampleRow.size in 9..11) {
                 val col3Upper = sampleRow.getOrNull(3)?.uppercase().orEmpty()
                 val looksLikeJenjang = col3Upper in setOf("SD", "SMP", "SMA", "SMK", "MI", "MTS", "MA") ||
@@ -445,6 +474,7 @@ object StudentCsvParser {
             val birthDate = cleanText(tokens.getOrNull(idxBirthDate))
             val motherName = cleanText(tokens.getOrNull(idxMother))
             val address = cleanText(tokens.getOrNull(idxAddress))
+            val district = cleanText(tokens.getOrNull(idxDistrict))
             val rawNis = cleanNumericId(tokens.getOrNull(idxNis))
             val rawNo = cleanText(tokens.getOrNull(idxNo))
 
@@ -484,6 +514,7 @@ object StudentCsvParser {
                     birthDate = birthDate,
                     motherName = motherName,
                     address = address,
+                    district = district,
                     roomNumber = rawRoom,
                     jenjang = jenjangVal,
                     schoolId = currentSchoolId
@@ -523,7 +554,8 @@ object StudentCsvParser {
                 escapeCsvField(student.birthPlace),
                 escapeCsvField(student.birthDate),
                 escapeCsvField(student.motherName),
-                escapeCsvField(student.nis)
+                escapeCsvField(student.nis),
+                escapeCsvField(student.district)
             ).joinToString(",")
             sb.appendLine(row)
         }

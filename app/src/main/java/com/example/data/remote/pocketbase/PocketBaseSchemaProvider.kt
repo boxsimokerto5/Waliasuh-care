@@ -43,6 +43,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("birth_date", "text"),
                 PbFieldDef("mother_name", "text"),
                 PbFieldDef("address", "text"),
+                PbFieldDef("district", "text"),
                 PbFieldDef("room_number", "text"),
                 PbFieldDef("jenjang", "text")
             ),

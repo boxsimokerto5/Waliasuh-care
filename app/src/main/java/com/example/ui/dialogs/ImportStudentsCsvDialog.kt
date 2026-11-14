@@ -323,9 +323,9 @@ fun ImportStudentsCsvDialog(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
                                 text = if (isEn) {
-                                    "Standard Student CSV Template (12 Complete Columns)"
+                                    "Standard Student CSV Template (13 Complete Columns)"
                                 } else {
-                                    "Template CSV Siswa Standar (12 Kolom Lengkap)"
+                                    "Template CSV Siswa Standar (13 Kolom Lengkap)"
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
@@ -334,9 +334,9 @@ fun ImportStudentsCsvDialog(
                         }
                         Text(
                             text = if (isEn) {
-                                "Official 12-column format: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN. Automatically cleans hidden characters, Excel title rows, & commas in addresses."
+                                "Official 13-column format: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN, KECAMATAN. Fully compatible with older 10/12-column files."
                             } else {
-                                "Format resmi 12 kolom: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN. Otomatis membersihkan karakter tersembunyi, baris judul Excel, & koma pada alamat."
+                                "Format resmi 13 kolom: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN, KECAMATAN. Tetap kompatibel dengan file lama 10/12 kolom."
                             },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -660,6 +660,14 @@ fun ImportStudentsCsvDialog(
                                             fontSize = 10.sp,
                                             color = Color(0xFF64748B),
                                             maxLines = 2
+                                        )
+                                    }
+                                    if (sample.district.isNotBlank()) {
+                                        Text(
+                                            text = if (isEn) "District: Kec. ${sample.district}" else "Kecamatan: ${sample.district}",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = WaliPrimary
                                         )
                                     }
                                 }

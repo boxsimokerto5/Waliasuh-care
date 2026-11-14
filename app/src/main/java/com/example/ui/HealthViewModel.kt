@@ -947,6 +947,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         birthDate = imported.birthDate.ifBlank { matchedExisting.birthDate },
                         motherName = imported.motherName.ifBlank { matchedExisting.motherName },
                         address = imported.address.ifBlank { matchedExisting.address },
+                        district = imported.district.ifBlank { matchedExisting.district },
                         roomNumber = imported.roomNumber.ifBlank { matchedExisting.roomNumber },
                         jenjang = imported.jenjang.ifBlank { matchedExisting.jenjang },
                         allergies = if (imported.allergies == "Tidak ada" && matchedExisting.allergies != "Tidak ada" && matchedExisting.allergies.isNotBlank()) {
@@ -1480,6 +1481,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         birthDate: String = "",
         motherName: String = "",
         address: String = "",
+        district: String = "",
         roomNumber: String = "",
         jenjang: String = ""
     ) {
@@ -1506,6 +1508,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 birthDate = birthDate.trim(),
                 motherName = motherName.trim(),
                 address = address.trim(),
+                district = district.trim(),
                 roomNumber = roomNumber.trim(),
                 jenjang = resolvedJenjang,
                 schoolId = activeSchool
@@ -1520,6 +1523,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun updateStudent(student: ChildStudent, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val sanitizedStudent = student.copy(
+                name = student.name.trim(),
+                nis = student.nis.trim(),
+                dormitory = student.dormitory.trim(),
+                classGrade = student.classGrade.trim(),
+                birthPlace = student.birthPlace.trim(),
+                birthDate = student.birthDate.trim(),
+                motherName = student.motherName.trim(),
+                address = student.address.trim(),
+                district = student.district.trim(),
+                roomNumber = student.roomNumber.trim(),
+                jenjang = student.jenjang.trim(),
                 nik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
                 noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk)
             )

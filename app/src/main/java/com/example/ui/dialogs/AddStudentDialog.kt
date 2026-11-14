@@ -91,6 +91,7 @@ fun AddStudentDialog(
     var birthDate by remember { mutableStateOf(initialStudent?.birthDate ?: "") }
     var motherName by remember { mutableStateOf(initialStudent?.motherName ?: "") }
     var address by remember { mutableStateOf(initialStudent?.address ?: "") }
+    var district by remember { mutableStateOf(initialStudent?.district ?: "") }
 
     // Kesehatan & Kontak
     var bloodType by remember { mutableStateOf(initialStudent?.bloodType ?: "-") }
@@ -340,6 +341,37 @@ fun AddStudentDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                val suggestedDistrict = remember(address, district) {
+                    if (district.isBlank()) StudentCsvParser.extractDistrictFromAddress(address) else ""
+                }
+                OutlinedTextField(
+                    value = district,
+                    onValueChange = { district = it },
+                    label = { Text(if (isEn) "District (Kecamatan)" else "Kecamatan", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g. Banyakan / Kras / Semen" else "misal: Banyakan / Kras / Semen", fontSize = 12.sp) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_student_district")
+                )
+                if (suggestedDistrict.isNotBlank()) {
+                    TextButton(
+                        onClick = { district = suggestedDistrict },
+                        modifier = Modifier.testTag("btn_fill_district_from_address")
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "Use from address: $suggestedDistrict"
+                            } else {
+                                "Isi otomatis dari alamat: Kec. $suggestedDistrict"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
                 TextButton(
                     onClick = { showHealthSection = !showHealthSection },
                     modifier = Modifier.fillMaxWidth()
@@ -459,6 +491,7 @@ fun AddStudentDialog(
                                     birthDate = birthDate.trim(),
                                     motherName = motherName.trim(),
                                     address = address.trim(),
+                                    district = district.trim(),
                                     roomNumber = roomNumber.trim(),
                                     jenjang = jenjang.trim().ifBlank { StudentCsvParser.deriveJenjang(classGrade) },
                                     schoolId = initialStudent?.schoolId?.ifBlank { activeSchoolId } ?: activeSchoolId

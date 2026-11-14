@@ -722,7 +722,12 @@ class ExampleRobolectricTest {
       "SRT-NEW01"
     )
     assertEquals(4, templateStudents.size)
-    org.junit.Assert.assertTrue(templateStudents.all { it.nik.isNotBlank() && it.noKk.isNotBlank() && it.schoolId == "SRT-NEW01" })
+    org.junit.Assert.assertTrue(
+      templateStudents.all {
+        it.nik.isNotBlank() && it.noKk.isNotBlank() && it.district.isNotBlank() && it.schoolId == "SRT-NEW01"
+      }
+    )
+    assertEquals("Banyakan", templateStudents[0].district)
 
     val app = ApplicationProvider.getApplicationContext<android.app.Application>()
     val vm = com.example.ui.HealthViewModel(app)
@@ -2905,5 +2910,69 @@ class ExampleRobolectricTest {
 
     composeTestRule.onNodeWithTag("btn_student_kartu_mengaji").performScrollTo().performClick()
     org.junit.Assert.assertTrue(kartuClicked)
+  }
+
+  @Test
+  fun `verify StudentsScreen edit flow updates student Kecamatan and StudentDetailDialog displays district`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.childStudentDao().deleteAll()
+
+    val initialStudent = com.example.data.model.ChildStudent(
+      id = 808L,
+      name = "Aulia Rahma",
+      nis = "80801",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-1",
+      address = "Desa Jabon, Kab. Kediri",
+      district = "Banyakan",
+      jenjang = "SMP",
+      schoolId = "SRT1-KDR"
+    )
+    db.childStudentDao().insert(initialStudent)
+
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val currentStudents by vm.students.collectAsStateWithLifecycle()
+        val records by vm.allRecords.collectAsStateWithLifecycle()
+        com.example.ui.screens.StudentsScreen(
+          viewModel = vm,
+          students = currentStudents.ifEmpty { listOf(initialStudent) },
+          records = records,
+          searchQuery = ""
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Kecamatan: Banyakan").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_edit_student_808").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("input_student_district").performScrollTo().performTextClearance()
+    composeTestRule.onNodeWithTag("input_student_district").performTextInput("Ngancar")
+    composeTestRule.onNodeWithTag("confirm_add_student_button").performScrollTo().performClick()
+
+    var updatedStudent: com.example.data.model.ChildStudent? = null
+    var ticks = 0
+    while (ticks < 20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      val loaded = db.childStudentDao().getStudentsBySchool("SRT1-KDR").first().firstOrNull { it.id == 808L }
+      if (loaded?.district == "Ngancar") {
+        updatedStudent = loaded
+        break
+      }
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    assertNotNull(updatedStudent)
+    assertEquals("Ngancar", updatedStudent?.district)
   }
 }

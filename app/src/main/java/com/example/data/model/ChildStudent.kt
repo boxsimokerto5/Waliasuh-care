@@ -22,6 +22,7 @@ data class ChildStudent(
     val birthDate: String = "",
     val motherName: String = "",
     val address: String = "",
+    val district: String = "",
     val roomNumber: String = "",
     val jenjang: String = "",
     val schoolId: String = "SRT1-KDR"

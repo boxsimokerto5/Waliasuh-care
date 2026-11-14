@@ -106,6 +106,7 @@ data class PbStudentDto(
     @Json(name = "birth_date") val birthDate: String? = null,
     @Json(name = "mother_name") val motherName: String? = null,
     @Json(name = "address") val address: String? = null,
+    @Json(name = "district") val district: String? = null,
     @Json(name = "room_number") val roomNumber: String? = null,
     @Json(name = "jenjang") val jenjang: String? = null
 ) {
@@ -128,6 +129,7 @@ data class PbStudentDto(
             birthDate = birthDate ?: "",
             motherName = motherName ?: "",
             address = address ?: "",
+            district = district ?: "",
             roomNumber = roomNumber ?: "",
             jenjang = jenjang ?: "",
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
@@ -161,6 +163,7 @@ data class PbStudentDto(
                 birthDate = model.birthDate,
                 motherName = model.motherName,
                 address = model.address,
+                district = model.district,
                 roomNumber = model.roomNumber,
                 jenjang = model.jenjang
             )

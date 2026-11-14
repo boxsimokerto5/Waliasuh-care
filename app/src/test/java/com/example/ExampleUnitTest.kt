@@ -65,6 +65,7 @@ class ExampleUnitTest {
         birthDate = "11-05-2013",
         motherName = "Siti Aminah",
         address = "Dsn. Krajan, Kec. Semen, \"Kab. Kediri\"",
+        district = "Semen",
         jenjang = "SMP",
         schoolId = "SRT1-KDR"
       )
@@ -79,7 +80,24 @@ class ExampleUnitTest {
     assertEquals("3506015105090001", parsed[0].nik)
     assertEquals("3506010412103889", parsed[0].noKk)
     assertEquals("3185428544", parsed[0].nis)
+    assertEquals("Semen", parsed[0].district)
     assertTrue(parsed[0].address.contains("Dsn. Krajan, Kec. Semen"))
+  }
+
+  @Test
+  fun testParseLegacy12ColumnCsv_withoutDistrictDoesNotShiftColumns() {
+    val legacyCsv = """
+      No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN
+      1,BUDI SANTOSO,VIII-2,SMP,"Jl. Melati No. 5, Kec. Papar, Kab. Kediri",L,3506142512090002,3506141405120009,KEDIRI,25-12-2011,SITI FATIMAH,0119988776
+    """.trimIndent()
+    val parsed = com.example.util.StudentCsvParser.parseCsv(legacyCsv, "SRT1-KDR")
+    assertEquals(1, parsed.size)
+    assertEquals("BUDI SANTOSO", parsed[0].name)
+    assertEquals("0119988776", parsed[0].nis)
+    assertEquals("3506142512090002", parsed[0].nik)
+    assertEquals("3506141405120009", parsed[0].noKk)
+    assertEquals("", parsed[0].district)
+    assertEquals("Papar", com.example.util.StudentCsvParser.extractDistrictFromAddress(parsed[0].address))
   }
 
   @Test

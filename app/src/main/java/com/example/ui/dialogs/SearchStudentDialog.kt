@@ -83,6 +83,7 @@ fun SearchStudentDialog(
                     student.classGrade.lowercase().contains(q) ||
                     student.nis.lowercase().contains(q) ||
                     student.nik.lowercase().contains(q) ||
+                    student.district.lowercase().contains(q) ||
                     student.roomNumber.lowercase().contains(q) ||
                     student.allergies.lowercase().contains(q)
             }

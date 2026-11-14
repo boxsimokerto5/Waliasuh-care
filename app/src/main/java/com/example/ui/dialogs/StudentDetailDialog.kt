@@ -405,6 +405,10 @@ fun StudentDetailDialog(
                                 label = if (isEn) "Full Address" else "Alamat Lengkap",
                                 value = student.address.ifBlank { "-" }
                             )
+                            ProfileDetailRow(
+                                label = if (isEn) "District" else "Kecamatan",
+                                value = student.district.ifBlank { "-" }
+                            )
                         }
                     }
                 }
@@ -814,7 +818,8 @@ fun StudentDetailDialog(
                     if (onEditStudent != null) {
                         OutlinedButton(
                             onClick = { onEditStudent(student) },
-                            shape = RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("btn_edit_student_profile")
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))

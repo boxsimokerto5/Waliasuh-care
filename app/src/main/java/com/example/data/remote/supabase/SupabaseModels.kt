@@ -24,6 +24,7 @@ data class SupabaseStudentDto(
     @Json(name = "birth_date") val birthDate: String? = null,
     @Json(name = "mother_name") val motherName: String? = null,
     @Json(name = "address") val address: String? = null,
+    @Json(name = "district") val district: String? = null,
     @Json(name = "room_number") val roomNumber: String? = null,
     @Json(name = "jenjang") val jenjang: String? = null
 ) {
@@ -46,6 +47,7 @@ data class SupabaseStudentDto(
             birthDate = birthDate ?: "",
             motherName = motherName ?: "",
             address = address ?: "",
+            district = district ?: "",
             roomNumber = roomNumber ?: "",
             jenjang = jenjang ?: ""
         )
@@ -71,6 +73,7 @@ data class SupabaseStudentDto(
                 birthDate = model.birthDate,
                 motherName = model.motherName,
                 address = model.address,
+                district = model.district,
                 roomNumber = model.roomNumber,
                 jenjang = model.jenjang
             )

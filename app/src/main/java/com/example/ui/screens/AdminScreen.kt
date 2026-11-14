@@ -287,6 +287,7 @@ fun AdminScreen(
                 student.noKk.contains(studentSearchQuery, ignoreCase = true) ||
                 student.motherName.contains(studentSearchQuery, ignoreCase = true) ||
                 student.address.contains(studentSearchQuery, ignoreCase = true) ||
+                student.district.contains(studentSearchQuery, ignoreCase = true) ||
                 student.jenjang.contains(studentSearchQuery, ignoreCase = true) ||
                 student.roomNumber.contains(studentSearchQuery, ignoreCase = true) ||
                 student.classGrade.contains(studentSearchQuery, ignoreCase = true) ||
@@ -1536,6 +1537,7 @@ fun AdminScreen(
                     birthDate = newStudent.birthDate,
                     motherName = newStudent.motherName,
                     address = newStudent.address,
+                    district = newStudent.district,
                     roomNumber = newStudent.roomNumber,
                     jenjang = newStudent.jenjang
                 )
@@ -2502,6 +2504,17 @@ fun AdminStudentCardItem(
                             text = if (isEn) "Address: ${student.address}" else "Alamat: ${student.address}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+
+                    if (student.district.isNotBlank()) {
+                        Text(
+                            text = if (isEn) "District: Kec. ${student.district}" else "Kecamatan: ${student.district}",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
                             maxLines = 1,
                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                         )
