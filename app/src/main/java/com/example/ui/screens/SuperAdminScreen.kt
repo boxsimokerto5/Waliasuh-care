@@ -2090,25 +2090,34 @@ fun SuperAdminSqlEditorView(
     var testResultMsg by remember { mutableStateOf<String?>(null) }
     var testResultSuccess by remember { mutableStateOf(true) }
     var showCloudConfigDialog by remember { mutableStateOf(false) }
+    var selectedCodeMode by remember { mutableStateOf(0) } // 0 = Skrip SSH VPS (Auto Update), 1 = JSON Import PocketBase
+    var expandedCollectionName by remember { mutableStateOf<String?>(null) }
 
-    fun copySchemaSummary() {
+    val activeSchemaCode = remember(selectedCodeMode) {
+        if (selectedCodeMode == 0) {
+            PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
+        } else {
+            PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON
+        }
+    }
+    val activeCodeLabel = if (selectedCodeMode == 0) "Skrip SSH Update Tabel" else "JSON Import PocketBase"
+
+    fun copyActiveCode() {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(
-            ClipData.newPlainText("PocketBase Cloud Schema", PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY)
-        )
-        Toast.makeText(context, "Ringkasan skema PocketBase berhasil disalin!", Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(ClipData.newPlainText(activeCodeLabel, activeSchemaCode))
+        Toast.makeText(context, "$activeCodeLabel berhasil disalin ke clipboard!", Toast.LENGTH_SHORT).show()
     }
 
-    fun shareSchemaSummary() {
+    fun shareActiveCode() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Skema PocketBase - Wali Asuh Care (${PocketBaseSchemaProvider.SCHEMA_VERSION})")
-            putExtra(Intent.EXTRA_TEXT, PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY)
+            putExtra(Intent.EXTRA_SUBJECT, "$activeCodeLabel - Wali Asuh Care (${PocketBaseSchemaProvider.SCHEMA_VERSION})")
+            putExtra(Intent.EXTRA_TEXT, activeSchemaCode)
         }
         try {
-            context.startActivity(Intent.createChooser(intent, "Bagikan Ringkasan Skema PocketBase"))
+            context.startActivity(Intent.createChooser(intent, "Bagikan $activeCodeLabel"))
         } catch (_: Exception) {
-            copySchemaSummary()
+            copyActiveCode()
         }
     }
 
@@ -2148,7 +2157,7 @@ fun SuperAdminSqlEditorView(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Database Cloud PocketBase",
+                                text = "Kode Tabel PocketBase Terbaru",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -2163,7 +2172,7 @@ fun SuperAdminSqlEditorView(
                     }
 
                     Text(
-                        text = "Aplikasi terhubung ke server PocketBase VPS (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}) dengan 9 koleksi multi-tenant termasuk checklist sahur/berbuka & pesan shift online.",
+                        text = "Kode skema ini selalu diperbarui otomatis mengikuti seluruh fitur & kolom aplikasi (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}). Aman dijalankan ulang di SSH VPS (menambah tabel/kolom baru tanpa menghapus data lama) atau diimpor via Settings → Import collections.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2172,8 +2181,26 @@ fun SuperAdminSqlEditorView(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        FilterChip(
+                            selected = selectedCodeMode == 0,
+                            onClick = { selectedCodeMode = 0 },
+                            label = { Text("Skrip SSH VPS (Auto Update)", fontSize = 11.5.sp) },
+                            modifier = Modifier.testTag("chip_pb_mode_ssh")
+                        )
+                        FilterChip(
+                            selected = selectedCodeMode == 1,
+                            onClick = { selectedCodeMode = 1 },
+                            label = { Text("JSON Import", fontSize = 11.5.sp) },
+                            modifier = Modifier.testTag("chip_pb_mode_json")
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Button(
-                            onClick = { copySchemaSummary() },
+                            onClick = { copyActiveCode() },
                             modifier = Modifier
                                 .weight(1.3f)
                                 .height(48.dp)
@@ -2182,13 +2209,17 @@ fun SuperAdminSqlEditorView(
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp)
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Salin Skema", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Salin Kode Tabel", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Salin Info Skema DB", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                text = if (selectedCodeMode == 0) "Salin Skrip SSH Lengkap" else "Salin JSON Koleksi",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
 
                         OutlinedButton(
-                            onClick = { shareSchemaSummary() },
+                            onClick = { shareActiveCode() },
                             modifier = Modifier
                                 .weight(0.8f)
                                 .height(48.dp)
@@ -2196,7 +2227,7 @@ fun SuperAdminSqlEditorView(
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "Bagikan Info", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Share, contentDescription = "Bagikan Kode", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("Bagikan", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                         }
@@ -2214,7 +2245,7 @@ fun SuperAdminSqlEditorView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
-                            .testTag("btn_test_supabase_superadmin"),
+                            .testTag("btn_test_pocketbase_superadmin"),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         if (isSyncing) {
@@ -2233,7 +2264,7 @@ fun SuperAdminSqlEditorView(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
-                            .testTag("btn_open_supabase_sync_superadmin"),
+                            .testTag("btn_open_pocketbase_sync_superadmin"),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Icon(
@@ -2267,7 +2298,7 @@ fun SuperAdminSqlEditorView(
 
         item {
             Text(
-                text = "Daftar Koleksi Tersinkron (${PocketBaseSchemaProvider.COLLECTIONS.size} Koleksi):",
+                text = "Daftar Koleksi & Kolom (${PocketBaseSchemaProvider.COLLECTIONS.size} Tabel — Ketuk untuk lihat field):",
                 fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -2275,59 +2306,100 @@ fun SuperAdminSqlEditorView(
         }
 
         items(PocketBaseSchemaProvider.COLLECTIONS, key = { it.collectionName }) { collectionMeta ->
+            val isExpanded = expandedCollectionName == collectionMeta.collectionName
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        expandedCollectionName = if (isExpanded) null else collectionMeta.collectionName
+                    },
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
+                Column(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                     Row(
+                        modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = "Aktif",
-                            tint = Color(0xFF16A34A),
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = collectionMeta.collectionName,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onSurface
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Aktif",
+                                tint = Color(0xFF16A34A),
+                                modifier = Modifier.size(18.dp)
                             )
-                            Text(
-                                text = collectionMeta.description,
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = collectionMeta.collectionName,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = "${collectionMeta.description} (${collectionMeta.fields.size} field)",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(WaliPrimary.copy(alpha = 0.12f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = collectionMeta.multiTenantField,
+                                    fontSize = 10.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    fontWeight = FontWeight.Bold,
+                                    color = WaliPrimary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                                contentDescription = if (isExpanded) "Tutup detail kolom" else "Lihat detail kolom",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(WaliPrimary.copy(alpha = 0.12f))
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = collectionMeta.multiTenantField,
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            color = WaliPrimary
-                        )
+
+                    AnimatedVisibility(visible = isExpanded) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0F172A))
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text = "id (text • 15 char primary key)",
+                                fontSize = 10.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = Color(0xFF93C5FD)
+                            )
+                            collectionMeta.fields.forEach { field ->
+                                Text(
+                                    text = "• ${field.name} (${field.type})",
+                                    fontSize = 10.5.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFFE2E8F0)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -2336,7 +2408,11 @@ fun SuperAdminSqlEditorView(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Ringkasan Arsitektur Koleksi PocketBase:",
+                    text = if (selectedCodeMode == 0) {
+                        "Kode Skrip Update Tabel PocketBase (Copy-Paste ke SSH VPS):"
+                    } else {
+                        "Kode JSON Import Koleksi PocketBase (Settings → Import collections):"
+                    },
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -2352,7 +2428,7 @@ fun SuperAdminSqlEditorView(
                 ) {
                     SelectionContainer {
                         Text(
-                            text = PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY,
+                            text = activeSchemaCode,
                             color = Color(0xFFE2E8F0),
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,

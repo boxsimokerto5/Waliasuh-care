@@ -91,7 +91,7 @@ fun PocketBaseConfigDialog(
     var showSchemaInfo by remember { mutableStateOf(false) }
 
     val lastSync = PocketBaseConfig.getLastSyncTime(context)
-    val schemaSummaryText = PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
+    val schemaJsonText = PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -304,14 +304,14 @@ fun PocketBaseConfigDialog(
                             IconButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("PocketBase Schema", schemaSummaryText)
+                                    val clip = ClipData.newPlainText("PocketBase Collections JSON", schemaJsonText)
                                     clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Info skema PocketBase berhasil disalin!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "JSON skema 9 koleksi PocketBase berhasil disalin!", Toast.LENGTH_SHORT).show()
                                 }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Salin Info Skema",
+                                    contentDescription = "Salin JSON Skema",
                                     tint = WaliPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -325,7 +325,7 @@ fun PocketBaseConfigDialog(
                             Icon(imageVector = Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (showSchemaInfo) "Sembunyikan Detail Koleksi" else "Lihat Detail 9 Koleksi",
+                                text = if (showSchemaInfo) "Sembunyikan JSON Koleksi" else "Lihat JSON Skema 9 Koleksi",
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -342,7 +342,7 @@ fun PocketBaseConfigDialog(
                             ) {
                                 SelectionContainer {
                                     Text(
-                                        text = schemaSummaryText,
+                                        text = schemaJsonText,
                                         color = Color(0xFFE2E8F0),
                                         fontSize = 10.sp,
                                         fontFamily = FontFamily.Monospace,

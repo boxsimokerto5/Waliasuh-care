@@ -601,6 +601,12 @@ class ExampleRobolectricTest {
     assertEquals(77002L, restoredFasting.id)
 
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
+    val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
+    val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
+    assertEquals(9, jsonSchema.length())
+    org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
+    org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
+
     val expectedCollections = listOf(
       "child_students",
       "medical_records",

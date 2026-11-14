@@ -135,7 +135,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                             schoolId = activeCode,
                             repository = repository,
                             localSchoolProfile = _schoolProfile.value,
-                            localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                            localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
                             onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                                 applyRemoteSchoolProfile(remoteProfile, remoteTs)
                             }
@@ -152,6 +152,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun profileUpdatedAtKey(tenantCode: String): String {
+        val clean = tenantCode.trim().uppercase().ifBlank { "SRT1-KDR" }
+        return "profile_updated_at_$clean"
+    }
+
+    private fun getProfileUpdatedAt(tenantCode: String): Long {
+        return schoolPrefs.getLong(profileUpdatedAtKey(tenantCode), 0L)
+    }
+
     private fun applyRemoteSchoolProfile(profile: SchoolProfile, updatedAt: Long) {
         persistSchoolProfile(profile, markCustomized = true, updatedAt = updatedAt)
     }
@@ -159,7 +168,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private fun persistSchoolProfile(
         profile: SchoolProfile,
         markCustomized: Boolean,
-        updatedAt: Long = schoolPrefs.getLong("profile_updated_at", 0L)
+        updatedAt: Long = getProfileUpdatedAt(profile.tenantCode)
     ) {
         _schoolProfile.value = profile
         schoolPrefs.edit().apply {
@@ -174,7 +183,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             putString("additional_faskes", profile.additionalFaskesList.joinToString("|||"))
             putString("faskes_contacts", SchoolProfile.serializeFaskesContacts(profile.faskesContacts))
             if (updatedAt > 0L) {
-                putLong("profile_updated_at", updatedAt)
+                putLong(profileUpdatedAtKey(profile.tenantCode), updatedAt)
             }
             if (markCustomized) {
                 putString("customized_tenant", profile.tenantCode)
@@ -295,9 +304,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
-    // Akun Wali Asuh yang sedang aktif login di sesi aplikasi saat ini
+    // Akun Wali Asuh yang sedang aktif login di sesi aplikasi saat ini (terisolasi per sekolah aktif)
     val currentWaliAccount: StateFlow<WaliAccount?> = combine(
-        repository.allWaliAccounts,
+        waliAccounts,
         _currentUsername,
         _waliName
     ) { accounts, username, name ->
@@ -1385,7 +1394,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 schoolId = activeSchool,
                 repository = repository,
                 localSchoolProfile = _schoolProfile.value,
-                localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                localProfileUpdatedAt = getProfileUpdatedAt(activeSchool),
                 onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                     applyRemoteSchoolProfile(remoteProfile, remoteTs)
                 }
@@ -1433,7 +1442,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 PocketBaseSyncManager.uploadSchoolProfile(
                     getApplication(),
                     _schoolProfile.value,
-                    schoolPrefs.getLong("profile_updated_at", System.currentTimeMillis())
+                    getProfileUpdatedAt(activeSchool).takeIf { it > 0L } ?: System.currentTimeMillis()
                 )
                 val count = result.getOrNull() ?: 0
                 val msg = "Berhasil mengunggah $count data siswa ($activeSchool) ke PocketBase!"
@@ -1518,7 +1527,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                             schoolId = activeCode,
                             repository = repository,
                             localSchoolProfile = _schoolProfile.value,
-                            localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                            localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
                             onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                                 applyRemoteSchoolProfile(remoteProfile, remoteTs)
                             }
@@ -1538,25 +1547,28 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
         }
 
-        suspend fun findLocalWali(username: String): WaliAccount? {
-            return repository.getWaliAccountByUsername(username)
-                ?: repository.getAllWaliAccountsList().firstOrNull {
-                    it.username.trim().equals(username, ignoreCase = true) ||
-                        it.username.trim().replace(" ", "").equals(username.replace(" ", ""), ignoreCase = true) ||
-                        it.name.trim().equals(username, ignoreCase = true) ||
-                        it.name.trim().replace(" ", "").equals(username.replace(" ", ""), ignoreCase = true) ||
-                        (it.phone.isNotBlank() && it.phone.trim().equals(username, ignoreCase = true))
-                }
+        suspend fun findLocalWali(username: String, password: String): WaliAccount? {
+            val all = repository.getAllWaliAccountsList()
+            val candidates = all.filter {
+                it.username.trim().equals(username, ignoreCase = true) ||
+                    it.username.trim().replace(" ", "").equals(username.replace(" ", ""), ignoreCase = true) ||
+                    it.name.trim().equals(username, ignoreCase = true) ||
+                    it.name.trim().replace(" ", "").equals(username.replace(" ", ""), ignoreCase = true) ||
+                    (it.phone.isNotBlank() && it.phone.trim().equals(username, ignoreCase = true))
+            }
+            return candidates.firstOrNull { it.password.trim() == password }
+                ?: candidates.firstOrNull()
+                ?: repository.getWaliAccountByUsername(username)
         }
 
         // Jika belum ditemukan di lokal (misal baru login di perangkat lain), tarik katalog auth dari PocketBase
         var matchedSchool = findLocalSchoolAdmin(cleanUser)
-        var account = if (matchedSchool == null) findLocalWali(cleanUser) else null
+        var account = if (matchedSchool == null) findLocalWali(cleanUser, cleanPass) else null
         if (matchedSchool == null && account == null && !isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
             PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
             matchedSchool = findLocalSchoolAdmin(cleanUser)
             if (matchedSchool == null) {
-                account = findLocalWali(cleanUser)
+                account = findLocalWali(cleanUser, cleanPass)
             }
         }
 
@@ -1584,7 +1596,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         schoolId = matchedSchool.generatedSchoolCode,
                         repository = repository,
                         localSchoolProfile = _schoolProfile.value,
-                        localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                        localProfileUpdatedAt = getProfileUpdatedAt(matchedSchool.generatedSchoolCode),
                         onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                             applyRemoteSchoolProfile(remoteProfile, remoteTs)
                         }
@@ -1620,9 +1632,18 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     matchedSchoolWali.generatedSchoolCode
                 }
                 account.schoolId.isNotBlank() -> {
-                    _schoolProfile.value = _schoolProfile.value.copy(tenantCode = account.schoolId)
-                    schoolPrefs.edit().putString("tenant_code", account.schoolId).apply()
-                    account.schoolId
+                    val cleanCode = account.schoolId.trim()
+                    if (!_schoolProfile.value.tenantCode.equals(cleanCode, ignoreCase = true)) {
+                        persistSchoolProfile(
+                            SchoolProfile(
+                                schoolName = cleanCode,
+                                shortName = cleanCode,
+                                tenantCode = cleanCode
+                            ),
+                            markCustomized = false
+                        )
+                    }
+                    cleanCode
                 }
                 else -> _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             }
@@ -1642,7 +1663,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         schoolId = activeSchoolCode,
                         repository = repository,
                         localSchoolProfile = _schoolProfile.value,
-                        localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                        localProfileUpdatedAt = getProfileUpdatedAt(activeSchoolCode),
                         onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                             applyRemoteSchoolProfile(remoteProfile, remoteTs)
                         }
