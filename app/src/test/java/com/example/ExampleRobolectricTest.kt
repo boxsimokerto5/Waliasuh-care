@@ -647,6 +647,22 @@ class ExampleRobolectricTest {
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
     assertEquals(10, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+
+    // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
+    val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
+    val allIndexNames = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS
+      .flatMap { it.indexes }
+      .mapNotNull { indexNameRegex.find(it)?.groupValues?.getOrNull(1)?.lowercase() }
+    assertEquals(allIndexNames.size, allIndexNames.distinct().size)
+
+    // Pastikan setiap koleksi memiliki sistem id field standar PocketBase v0.40.6 (text3208210256)
+    for (i in 0 until jsonSchema.length()) {
+      val colJson = jsonSchema.getJSONObject(i)
+      val idField = colJson.getJSONArray("fields").getJSONObject(0)
+      assertEquals("id", idField.getString("name"))
+      assertEquals("text3208210256", idField.getString("id"))
+      assertEquals("[a-z0-9]{15}", idField.getString("autogeneratePattern"))
+    }
   }
 
   @Test

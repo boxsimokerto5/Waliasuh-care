@@ -1,7 +1,20 @@
 package com.example.data.remote.pocketbase
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.TimeUnit
+
+data class PocketBaseSchemaSyncResult(
+    val success: Boolean,
+    val summary: String,
+    val logs: List<String>
+)
 
 data class PbFieldDef(
     val name: String,
@@ -17,7 +30,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.40.6 • 9 Koleksi Multi-Tenant + Checklist Online (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.40.6 • 10 Koleksi Multi-Tenant + Mengaji & Kecamatan (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -241,7 +254,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),
-            indexes = listOf("CREATE INDEX idx_mr_school ON mengaji_records (school_id)")
+            indexes = listOf("CREATE INDEX idx_mjr_school ON mengaji_records (school_id)")
         ),
         PocketBaseCollectionMeta(
             collectionName = "school_profiles",
@@ -267,14 +280,18 @@ object PocketBaseSchemaProvider {
 
     private fun buildIdFieldJson(): JSONObject {
         return JSONObject()
+            .put("autogeneratePattern", "[a-z0-9]{15}")
+            .put("hidden", false)
+            .put("id", "text3208210256")
+            .put("max", 15)
+            .put("min", 15)
             .put("name", "id")
-            .put("type", "text")
+            .put("pattern", "^[a-z0-9]+$")
+            .put("presentable", false)
             .put("primaryKey", true)
             .put("required", true)
             .put("system", true)
-            .put("min", 15)
-            .put("max", 15)
-            .put("pattern", "^[a-z0-9]+$")
+            .put("type", "text")
     }
 
     /**
@@ -320,7 +337,7 @@ object PocketBaseSchemaProvider {
         val compactJson = JSONArray(POCKETBASE_COLLECTIONS_JSON).toString()
         """
 cat << 'EOF' > /tmp/sync_pb_waliasuh.py
-import getpass, json, urllib.request, urllib.error
+import getpass, json, re, urllib.request, urllib.error
 
 BASE = "http://127.0.0.1:8092"
 SCHEMA = json.loads(r'''$compactJson''')
@@ -340,12 +357,16 @@ def req(path, body=None, token=None, method="GET"):
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read().decode() or "{}")
 
+def idx_name(sql):
+    m = re.search(r'CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"\']?([A-Za-z0-9_]+)[`"\']?', sql, re.I)
+    return m.group(1).lower() if m else sql.strip().lower()
+
 st, auth = req("/api/collections/_superusers/auth-with-password", {"identity": email, "password": pwd}, method="POST")
 if st != 200 or not auth.get("token"):
     raise SystemExit(f"Login gagal ({st}): {auth}")
 tok = auth["token"]
 
-st, existing_resp = req("/api/collections?perPage=200", token=tok)
+st, existing_resp = req("/api/collections?perPage=500", token=tok)
 existing_map = {c["name"]: c for c in existing_resp.get("items", [])}
 
 for col in SCHEMA:
@@ -359,7 +380,8 @@ for col in SCHEMA:
         cur_names = {f["name"] for f in cur_fields}
         added_fields = [f for f in col["fields"] if f["name"] not in cur_names]
         cur_indexes = list(cur.get("indexes", []))
-        added_indexes = [ix for ix in col.get("indexes", []) if ix not in cur_indexes]
+        cur_idx_names = {idx_name(ix) for ix in cur_indexes}
+        added_indexes = [ix for ix in col.get("indexes", []) if idx_name(ix) not in cur_idx_names]
         rules_changed = any(cur.get(k) != "" for k in ("listRule", "viewRule", "createRule", "updateRule", "deleteRule"))
         if not added_fields and not added_indexes and not rules_changed:
             print(f"[UP-TO-DATE] {name}")
@@ -380,6 +402,224 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
         """.trimIndent()
     }
 
+    private fun extractIndexName(sql: String): String {
+        val regex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
+        return regex.find(sql)?.groupValues?.getOrNull(1)?.lowercase() ?: sql.trim().lowercase()
+    }
+
+    /**
+     * Sinkronisasi skema 10 koleksi langsung ke server PocketBase via HTTPS API menggunakan akun
+     * Superuser PocketBase — aman bagi database yang sudah berisi data dan koleksi lama (tanpa
+     * kendala merge ID pada menu Import Collections di browser).
+     */
+    suspend fun syncSchemaWithSuperuser(
+        baseUrl: String,
+        superuserEmail: String,
+        superuserPassword: String
+    ): PocketBaseSchemaSyncResult = withContext(Dispatchers.IO) {
+        val cleanBase = baseUrl.trim().trimEnd('/')
+        if (!cleanBase.startsWith("http")) {
+            return@withContext PocketBaseSchemaSyncResult(
+                success = false,
+                summary = "URL PocketBase tidak valid: $baseUrl",
+                logs = emptyList()
+            )
+        }
+        val cleanEmail = superuserEmail.trim()
+        if (cleanEmail.isBlank() || superuserPassword.isBlank()) {
+            return@withContext PocketBaseSchemaSyncResult(
+                success = false,
+                summary = "Email dan password Superuser PocketBase wajib diisi.",
+                logs = emptyList()
+            )
+        }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .writeTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val jsonMedia = "application/json; charset=utf-8".toMediaType()
+
+        fun executeRequest(path: String, method: String, bodyObj: JSONObject? = null, token: String? = null): Pair<Int, JSONObject> {
+            val reqBody = bodyObj?.toString()?.toRequestBody(jsonMedia)
+            val builder = Request.Builder().url("$cleanBase$path")
+            if (token != null) builder.header("Authorization", token)
+            when (method) {
+                "GET" -> builder.get()
+                "POST" -> builder.post(reqBody ?: "{}".toRequestBody(jsonMedia))
+                "PATCH" -> builder.patch(reqBody ?: "{}".toRequestBody(jsonMedia))
+                else -> builder.method(method, reqBody)
+            }
+            client.newCall(builder.build()).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                val parsed = runCatching { JSONObject(raw.ifBlank { "{}" }) }.getOrDefault(JSONObject().put("raw", raw))
+                return resp.code to parsed
+            }
+        }
+
+        return@withContext try {
+            val authBody = JSONObject()
+                .put("identity", cleanEmail)
+                .put("password", superuserPassword)
+            val (authCode, authResp) = executeRequest(
+                path = "/api/collections/_superusers/auth-with-password",
+                method = "POST",
+                bodyObj = authBody
+            )
+            val token = authResp.optString("token", "")
+            if (authCode !in 200..299 || token.isBlank()) {
+                val errMsg = authResp.optString("message").ifBlank { "HTTP $authCode" }
+                return@withContext PocketBaseSchemaSyncResult(
+                    success = false,
+                    summary = "Login Superuser gagal: $errMsg",
+                    logs = listOf("[AUTH ERROR] $authResp")
+                )
+            }
+
+            val (listCode, listResp) = executeRequest(
+                path = "/api/collections?perPage=500",
+                method = "GET",
+                token = token
+            )
+            if (listCode !in 200..299) {
+                return@withContext PocketBaseSchemaSyncResult(
+                    success = false,
+                    summary = "Gagal membaca daftar koleksi server (HTTP $listCode).",
+                    logs = listOf("[LIST ERROR] $listResp")
+                )
+            }
+
+            val existingByName = mutableMapOf<String, JSONObject>()
+            val existingItems = listResp.optJSONArray("items") ?: JSONArray()
+            for (i in 0 until existingItems.length()) {
+                val item = existingItems.getJSONObject(i)
+                existingByName[item.optString("name")] = item
+            }
+
+            val schemaArr = JSONArray(POCKETBASE_COLLECTIONS_JSON)
+            val logs = mutableListOf<String>()
+            var createdCount = 0
+            var updatedCount = 0
+            var errorCount = 0
+
+            for (i in 0 until schemaArr.length()) {
+                val colObj = schemaArr.getJSONObject(i)
+                val name = colObj.optString("name")
+                val existing = existingByName[name]
+                if (existing == null) {
+                    val (cCode, cResp) = executeRequest(
+                        path = "/api/collections",
+                        method = "POST",
+                        bodyObj = colObj,
+                        token = token
+                    )
+                    if (cCode in 200..299) {
+                        createdCount++
+                        logs.add("[BARU] $name -> OK (${colObj.optJSONArray("fields")?.length() ?: 0} field)")
+                    } else {
+                        errorCount++
+                        logs.add("[GAGAL BARU] $name ($cCode): ${cResp.optString("message").ifBlank { cResp.toString() }}")
+                    }
+                } else {
+                    val curFieldsArr = existing.optJSONArray("fields") ?: JSONArray()
+                    val existingFieldNames = mutableSetOf<String>()
+                    val mergedFields = JSONArray()
+                    for (j in 0 until curFieldsArr.length()) {
+                        val f = curFieldsArr.getJSONObject(j)
+                        existingFieldNames.add(f.optString("name"))
+                        mergedFields.put(f)
+                    }
+
+                    val targetFieldsArr = colObj.optJSONArray("fields") ?: JSONArray()
+                    val addedFieldNames = mutableListOf<String>()
+                    for (j in 0 until targetFieldsArr.length()) {
+                        val tf = targetFieldsArr.getJSONObject(j)
+                        val fName = tf.optString("name")
+                        if (fName !in existingFieldNames) {
+                            mergedFields.put(tf)
+                            addedFieldNames.add(fName)
+                        }
+                    }
+
+                    val curIndexesArr = existing.optJSONArray("indexes") ?: JSONArray()
+                    val existingIdxNames = mutableSetOf<String>()
+                    val mergedIndexes = JSONArray()
+                    for (j in 0 until curIndexesArr.length()) {
+                        val ix = curIndexesArr.optString(j)
+                        if (ix.isNotBlank()) {
+                            existingIdxNames.add(extractIndexName(ix))
+                            mergedIndexes.put(ix)
+                        }
+                    }
+
+                    val targetIndexesArr = colObj.optJSONArray("indexes") ?: JSONArray()
+                    var addedIdxCount = 0
+                    for (j in 0 until targetIndexesArr.length()) {
+                        val tix = targetIndexesArr.optString(j)
+                        if (tix.isNotBlank() && extractIndexName(tix) !in existingIdxNames) {
+                            mergedIndexes.put(tix)
+                            addedIdxCount++
+                        }
+                    }
+
+                    val ruleKeys = listOf("listRule", "viewRule", "createRule", "updateRule", "deleteRule")
+                    val rulesNeedUpdate = ruleKeys.any { key ->
+                        existing.isNull(key) || existing.optString(key, "null") != ""
+                    }
+
+                    if (addedFieldNames.isEmpty() && addedIdxCount == 0 && !rulesNeedUpdate) {
+                        logs.add("[UP-TO-DATE] $name")
+                        continue
+                    }
+
+                    val patchPayload = JSONObject()
+                        .put("fields", mergedFields)
+                        .put("indexes", mergedIndexes)
+                        .put("listRule", "")
+                        .put("viewRule", "")
+                        .put("createRule", "")
+                        .put("updateRule", "")
+                        .put("deleteRule", "")
+
+                    val colId = existing.optString("id")
+                    val (uCode, uResp) = executeRequest(
+                        path = "/api/collections/$colId",
+                        method = "PATCH",
+                        bodyObj = patchPayload,
+                        token = token
+                    )
+                    if (uCode in 200..299) {
+                        updatedCount++
+                        val addedDesc = if (addedFieldNames.isNotEmpty()) {
+                            "+${addedFieldNames.size} field (${addedFieldNames.joinToString(", ")})"
+                        } else {
+                            "index/rules"
+                        }
+                        logs.add("[UPDATE $addedDesc] $name -> OK")
+                    } else {
+                        errorCount++
+                        logs.add("[GAGAL UPDATE] $name ($uCode): ${uResp.optString("message").ifBlank { uResp.toString() }}")
+                    }
+                }
+            }
+
+            val allOk = errorCount == 0
+            val summaryText = if (allOk) {
+                "Sinkronisasi selesai: $createdCount tabel baru, $updatedCount tabel diperbarui, ${schemaArr.length() - createdCount - updatedCount} sudah mutakhir."
+            } else {
+                "Selesai dengan $errorCount kendala ($createdCount baru, $updatedCount diperbarui)."
+            }
+            PocketBaseSchemaSyncResult(success = allOk, summary = summaryText, logs = logs)
+        } catch (e: Exception) {
+            PocketBaseSchemaSyncResult(
+                success = false,
+                summary = "Koneksi gagal: ${e.message ?: e.javaClass.simpleName}",
+                logs = listOf("[EXCEPTION] ${e.message}")
+            )
+        }
+    }
+
     val POCKETBASE_SCHEMA_SUMMARY: String by lazy {
         buildString {
             appendLine("Endpoint Server: ${PocketBaseConfig.EMBEDDED_URL}")
@@ -392,8 +632,8 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
             }
             appendLine()
             appendLine("Catatan Sinkronisasi Skema:")
-            appendLine("• Gunakan tab 'Skrip SSH VPS' untuk buat/tambah kolom baru tanpa menghapus data lama.")
-            appendLine("• Atau gunakan 'JSON Import' melalui Dashboard PocketBase -> Settings -> Import collections.")
+            appendLine("• Gunakan 'Sync Skema ke Server Sekarang' (Superuser) atau 'Skrip SSH VPS' untuk update aman tanpa kendala ID.")
+            appendLine("• Atau gunakan 'JSON Import' melalui Dashboard PocketBase -> Settings -> Import collections (Merge ON).")
         }.trimEnd()
     }
 }

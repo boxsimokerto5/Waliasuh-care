@@ -66,6 +66,7 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Assignment
@@ -119,12 +120,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
+import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.data.remote.pocketbase.PocketBaseSchemaProvider
+import com.example.data.remote.pocketbase.PocketBaseSchemaSyncResult
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.PocketBaseConfigDialog
 import com.example.ui.dialogs.SuperadminSchoolDetailSheet
@@ -132,6 +140,7 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
+import kotlinx.coroutines.launch
 
 data class SchoolReportItem(
     val schoolCode: String,
@@ -2430,9 +2439,11 @@ fun SuperAdminSqlEditorView(
 ) {
     val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
+    val coroutineScope = rememberCoroutineScope()
     var testResultMsg by remember { mutableStateOf<String?>(null) }
     var testResultSuccess by remember { mutableStateOf(true) }
     var showCloudConfigDialog by remember { mutableStateOf(false) }
+    var showAutoSyncSchemaDialog by remember { mutableStateOf(false) }
     var selectedCodeMode by remember { mutableStateOf(0) } // 0 = Skrip SSH VPS (Auto Update), 1 = JSON Import PocketBase
     var expandedCollectionName by remember { mutableStateOf<String?>(null) }
 
@@ -2612,6 +2623,32 @@ fun SuperAdminSqlEditorView(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(if (isEn) "Share" else "Bagikan", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                         }
+                    }
+
+                    Button(
+                        onClick = { showAutoSyncSchemaDialog = true },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("btn_auto_sync_schema_pocketbase"),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudSync,
+                            contentDescription = if (isEn) "Auto Sync Schema to Server" else "Sync Skema ke Server Sekarang",
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (isEn) {
+                                "Sync Schema to Server Now (Recommended)"
+                            } else {
+                                "Sync Skema ke Server Sekarang (Anti Gagal)"
+                            },
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     OutlinedButton(
@@ -2854,6 +2891,166 @@ fun SuperAdminSqlEditorView(
         PocketBaseConfigDialog(
             viewModel = viewModel,
             onDismiss = { showCloudConfigDialog = false }
+        )
+    }
+
+    if (showAutoSyncSchemaDialog) {
+        var superuserEmail by remember { mutableStateOf("") }
+        var superuserPassword by remember { mutableStateOf("") }
+        var showPassword by remember { mutableStateOf(false) }
+        var isRunningSchemaSync by remember { mutableStateOf(false) }
+        var schemaSyncResult by remember { mutableStateOf<PocketBaseSchemaSyncResult?>(null) }
+        val activeBaseUrl = remember { PocketBaseConfig.getBaseUrl(context) }
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!isRunningSchemaSync) showAutoSyncSchemaDialog = false
+            },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.CloudSync,
+                        contentDescription = null,
+                        tint = Color(0xFF0F766E)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (isEn) "Auto-Sync PocketBase Schema" else "Sync Skema PocketBase Otomatis",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = if (isEn) {
+                            "Directly creates missing collections and appends new columns (such as district & mengaji_records) on $activeBaseUrl without overwriting existing field IDs or data."
+                        } else {
+                            "Membuat tabel baru & menambah kolom terbaru (seperti district & mengaji_records) langsung ke $activeBaseUrl tanpa merusak data atau ID field lama."
+                        },
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    OutlinedTextField(
+                        value = superuserEmail,
+                        onValueChange = { superuserEmail = it },
+                        label = { Text(if (isEn) "PocketBase Superuser Email" else "Email Superuser PocketBase") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_pb_superuser_email")
+                    )
+
+                    OutlinedTextField(
+                        value = superuserPassword,
+                        onValueChange = { superuserPassword = it },
+                        label = { Text(if (isEn) "PocketBase Superuser Password" else "Password Superuser PocketBase") },
+                        singleLine = true,
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (showPassword) "Hide password" else "Show password"
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_pb_superuser_password")
+                    )
+
+                    schemaSyncResult?.let { res ->
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (res.success) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = res.summary,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (res.success) Color(0xFF166534) else Color(0xFF991B1B)
+                                )
+                                if (res.logs.isNotEmpty()) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 170.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF0F172A))
+                                            .verticalScroll(rememberScrollState())
+                                            .padding(8.dp)
+                                    ) {
+                                        Text(
+                                            text = res.logs.joinToString("\n"),
+                                            color = Color(0xFFE2E8F0),
+                                            fontSize = 10.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            lineHeight = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        isRunningSchemaSync = true
+                        schemaSyncResult = null
+                        coroutineScope.launch {
+                            val res = PocketBaseSchemaProvider.syncSchemaWithSuperuser(
+                                baseUrl = activeBaseUrl,
+                                superuserEmail = superuserEmail,
+                                superuserPassword = superuserPassword
+                            )
+                            schemaSyncResult = res
+                            isRunningSchemaSync = false
+                        }
+                    },
+                    enabled = !isRunningSchemaSync && superuserEmail.isNotBlank() && superuserPassword.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_confirm_auto_sync_schema")
+                ) {
+                    if (isRunningSchemaSync) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isEn) "Syncing..." else "Menyinkronkan...")
+                    } else {
+                        Text(if (isEn) "Run Sync" else "Jalankan Sync", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showAutoSyncSchemaDialog = false },
+                    enabled = !isRunningSchemaSync,
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(if (isEn) "Close" else "Tutup")
+                }
+            }
         )
     }
 }

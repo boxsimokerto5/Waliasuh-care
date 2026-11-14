@@ -349,9 +349,9 @@ fun PocketBaseConfigDialog(
                                     Toast.makeText(
                                         context,
                                         if (isEn) {
-                                            "9 PocketBase collections schema JSON copied!"
+                                            "${PocketBaseSchemaProvider.COLLECTIONS.size} PocketBase collections schema JSON copied!"
                                         } else {
-                                            "JSON skema 9 koleksi PocketBase berhasil disalin!"
+                                            "JSON skema ${PocketBaseSchemaProvider.COLLECTIONS.size} koleksi PocketBase berhasil disalin!"
                                         },
                                         Toast.LENGTH_SHORT
                                     ).show()
@@ -376,7 +376,7 @@ fun PocketBaseConfigDialog(
                                 text = if (showSchemaInfo) {
                                     if (isEn) "Hide Collections JSON" else "Sembunyikan JSON Koleksi"
                                 } else {
-                                    if (isEn) "View 9 Collections Schema JSON" else "Lihat JSON Skema 9 Koleksi"
+                                    if (isEn) "View ${PocketBaseSchemaProvider.COLLECTIONS.size} Collections Schema JSON" else "Lihat JSON Skema ${PocketBaseSchemaProvider.COLLECTIONS.size} Koleksi"
                                 },
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold
