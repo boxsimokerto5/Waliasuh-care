@@ -161,6 +161,7 @@ fun RewardAdDeclarationDialog(
 fun RewardAdDeclarationHint(
     text: String? = null,
     accentColor: Color = Color(0xFF0369A1),
+    compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val s = LocalAppStrings.current
@@ -173,25 +174,27 @@ fun RewardAdDeclarationHint(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(if (compact) 8.dp else 10.dp))
             .background(accentColor.copy(alpha = 0.08f))
-            .border(1.dp, accentColor.copy(alpha = 0.22f), RoundedCornerShape(10.dp))
-            .padding(horizontal = 10.dp, vertical = 6.dp),
+            .border(1.dp, accentColor.copy(alpha = 0.22f), RoundedCornerShape(if (compact) 8.dp else 10.dp))
+            .padding(horizontal = if (compact) 8.dp else 10.dp, vertical = if (compact) 4.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
             imageVector = Icons.Default.OndemandVideo,
             contentDescription = null,
             tint = accentColor,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(if (compact) 13.dp else 15.dp)
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
             text = resolvedText,
-            fontSize = 11.sp,
+            fontSize = if (compact) 10.sp else 11.sp,
             fontWeight = FontWeight.Medium,
             color = accentColor,
-            lineHeight = 15.sp
+            lineHeight = if (compact) 13.sp else 15.sp,
+            maxLines = if (compact) 1 else Int.MAX_VALUE,
+            overflow = if (compact) androidx.compose.ui.text.style.TextOverflow.Ellipsis else androidx.compose.ui.text.style.TextOverflow.Clip
         )
     }
 }

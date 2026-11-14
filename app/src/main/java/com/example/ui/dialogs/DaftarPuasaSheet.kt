@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -24,13 +26,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -138,23 +139,41 @@ fun DaftarPuasaSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding(),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 14.dp)
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Header
+                // Header ringkas
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -163,14 +182,18 @@ fun DaftarPuasaSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (isEn) "Daftar Puasa Students" else "Daftar Siswa Puasa",
-                            fontSize = 17.sp,
+                            fontSize = 15.5.sp,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = if (isEn) "SD, SMP, SMA Puasa participant summary & PDF Report" else "Rekap peserta puasa SD, SMP, SMA & Laporan PDF",
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            text = if (isEn) "SD, SMP, SMA summary & PDF" else "Rekap SD, SMP, SMA & Laporan PDF",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                     IconButton(
@@ -179,30 +202,30 @@ fun DaftarPuasaSheet(
                             .size(48.dp)
                             .testTag("btn_close_daftar_puasa")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close)
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(20.dp))
                     }
                 }
 
                 if (sortedSessions.isEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     ) {
                         Text(
                             text = if (isEn) "No Puasa sessions have been created by Admin Sekolah yet." else "Belum ada sesi puasa yang dibuat oleh Admin Sekolah.",
-                            fontSize = 12.5.sp,
+                            fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(16.dp)
+                            modifier = Modifier.padding(14.dp)
                         )
                     }
                 } else {
-                    // Pilih Sesi
+                    // Pilih Sesi Ringkas
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         sortedSessions.forEach { session ->
                             val selected = selectedSession?.id == session.id
@@ -212,124 +235,80 @@ fun DaftarPuasaSheet(
                                 label = {
                                     Text(
                                         text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate, lang)})",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1
                                     )
                                 },
                                 leadingIcon = {
-                                    Icon(Icons.Default.EventNote, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(13.dp))
                                 },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = accentBlueLight,
                                     selectedLabelColor = accentBlue,
                                     selectedLeadingIconColor = accentBlue
-                                )
+                                ),
+                                modifier = Modifier.heightIn(min = 34.dp)
                             )
                         }
                     }
 
-                    // Summary Rekapitulasi Jumlah (SMA, SMP, SD & Total)
+                    // Gabungan Rekapitulasi & Filter Jenjang (1 baris interaktif - hapus chip duplikat)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         SummaryJenjangTile(
+                            label = if (isEn) "All" else "Semua",
+                            count = sessionRecords.size,
+                            bg = Color(0xFF0F766E),
+                            fg = Color.White,
+                            isSelected = selectedJenjangFilter == "Semua",
+                            onClick = { selectedJenjangFilter = "Semua" },
+                            modifier = Modifier
+                                .weight(1.05f)
+                                .testTag("filter_daftar_Semua")
+                        )
+                        SummaryJenjangTile(
                             label = "SMA",
                             count = smaCount,
                             bg = Color(0xFFF3E8FF),
                             fg = Color(0xFF7E22CE),
-                            modifier = Modifier.weight(1f)
+                            isSelected = selectedJenjangFilter == "SMA",
+                            onClick = { selectedJenjangFilter = "SMA" },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("filter_daftar_SMA")
                         )
                         SummaryJenjangTile(
                             label = "SMP",
                             count = smpCount,
                             bg = Color(0xFFE0F2FE),
                             fg = Color(0xFF0369A1),
-                            modifier = Modifier.weight(1f)
+                            isSelected = selectedJenjangFilter == "SMP",
+                            onClick = { selectedJenjangFilter = "SMP" },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("filter_daftar_SMP")
                         )
                         SummaryJenjangTile(
                             label = "SD",
                             count = sdCount,
                             bg = Color(0xFFDCFCE7),
                             fg = Color(0xFF15803D),
-                            modifier = Modifier.weight(1f)
-                        )
-                        SummaryJenjangTile(
-                            label = "Total",
-                            count = sessionRecords.size,
-                            bg = Color(0xFF0F766E),
-                            fg = Color.White,
-                            modifier = Modifier.weight(1.1f)
+                            isSelected = selectedJenjangFilter == "SD",
+                            onClick = { selectedJenjangFilter = "SD" },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("filter_daftar_SD")
                         )
                     }
 
                     if (otherCount > 0) {
                         Text(
                             text = if (isEn) "*Includes $otherCount students from other levels" else "*Termasuk $otherCount siswa jenjang lainnya",
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    // Tombol Cetak / Share PDF & Share WA
-                    selectedSession?.let { sess ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    pendingPdfSession = sess
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("btn_pdf_daftar_puasa")
-                            ) {
-                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isEn) "PDF Report" else "Laporan PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                            }
-
-                            OutlinedButton(
-                                onClick = {
-                                    val waText = PdfReportGenerator.buildFastingListWaSummary(
-                                        session = sess,
-                                        records = sessionRecords,
-                                        waliName = waliName,
-                                        schoolProfile = schoolProfile,
-                                        language = lang
-                                    )
-                                    val intent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/plain"
-                                        putExtra(Intent.EXTRA_TEXT, waText)
-                                    }
-                                    context.startActivity(
-                                        Intent.createChooser(
-                                            intent,
-                                            if (isEn) "Share Puasa Summary to WA" else "Bagikan Rekap Puasa ke WA"
-                                        )
-                                    )
-                                },
-                                shape = RoundedCornerShape(12.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .heightIn(min = 48.dp)
-                                    .testTag("btn_wa_daftar_puasa")
-                            ) {
-                                Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(if (isEn) "Share WA" else "Bagikan WA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
-                            }
-                        }
-
-                        RewardAdDeclarationHint(
-                            text = if (isEn) "Watch a short video ad to download the PDF Report" else "Tonton iklan video singkat untuk mengunduh Laporan PDF",
-                            accentColor = Color(0xFFDC2626)
                         )
                     }
 
@@ -376,63 +355,136 @@ fun DaftarPuasaSheet(
                         )
                     }
 
-                    // Filter Jenjang + Search Bar
-                    Row(
+                    // Aksi PDF/WA, Pencarian & Daftar Siswa menyatu dalam 1 LazyColumn agar ruang baca jauh lebih lega
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            .weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("Semua", "SMA", "SMP", "SD").forEach { jf ->
-                            val cnt = when (jf) {
-                                "SMA" -> smaCount
-                                "SMP" -> smpCount
-                                "SD" -> sdCount
-                                else -> sessionRecords.size
+                        selectedSession?.let { sess ->
+                            item(key = "daftar_actions") {
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = { pendingPdfSession = sess },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_pdf_daftar_puasa")
+                                        ) {
+                                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                if (isEn) "PDF Report" else "Laporan PDF",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+
+                                        OutlinedButton(
+                                            onClick = {
+                                                val waText = PdfReportGenerator.buildFastingListWaSummary(
+                                                    session = sess,
+                                                    records = sessionRecords,
+                                                    waliName = waliName,
+                                                    schoolProfile = schoolProfile,
+                                                    language = lang
+                                                )
+                                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                                    type = "text/plain"
+                                                    putExtra(Intent.EXTRA_TEXT, waText)
+                                                }
+                                                context.startActivity(
+                                                    Intent.createChooser(
+                                                        intent,
+                                                        if (isEn) "Share Puasa Summary to WA" else "Bagikan Rekap Puasa ke WA"
+                                                    )
+                                                )
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_wa_daftar_puasa")
+                                        ) {
+                                            Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                if (isEn) "Share WA" else "Bagikan WA",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF16A34A),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    RewardAdDeclarationHint(
+                                        text = if (isEn) "Watch a short video ad to download PDF" else "Tonton iklan singkat untuk mengunduh PDF",
+                                        accentColor = Color(0xFFDC2626),
+                                        compact = true
+                                    )
+                                }
                             }
-                            val displayJf = if (isEn && jf == "Semua") "All" else jf
-                            FilterChip(
-                                selected = selectedJenjangFilter == jf,
-                                onClick = { selectedJenjangFilter = jf },
-                                label = { Text("$displayJf ($cnt)", fontSize = 11.sp) }
-                            )
                         }
-                    }
 
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text(if (isEn) "Search student name or class..." else "Cari nama siswa atau kelas...", fontSize = 12.sp) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-
-                    if (filteredRecords.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (sessionRecords.isEmpty()) {
-                                    if (isEn) "No students recorded for Puasa in this session yet." else "Belum ada siswa yang tercatat berpuasa pada sesi ini."
-                                } else {
-                                    if (isEn) "No students match the current filter." else "Tidak ada siswa yang sesuai filter."
+                        item(key = "daftar_search") {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        if (isEn) "Search student name or class..." else "Cari nama siswa atau kelas...",
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 },
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_search_daftar_puasa")
                             )
                         }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 120.dp, max = 320.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+
+                        if (filteredRecords.isEmpty()) {
+                            item(key = "daftar_empty") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(18.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (sessionRecords.isEmpty()) {
+                                            if (isEn) "No students recorded for Puasa in this session yet." else "Belum ada siswa yang tercatat berpuasa pada sesi ini."
+                                        } else {
+                                            if (isEn) "No students match the current filter." else "Tidak ada siswa yang sesuai filter."
+                                        },
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
                             itemsIndexed(filteredRecords, key = { _, rec -> "daftar_puasa_${rec.id}" }) { idx, rec ->
                                 val jenjang = FastingJenjangHelper.resolveJenjang(rec)
                                 Card(
@@ -515,21 +567,25 @@ private fun SummaryJenjangTile(
     count: Int,
     bg: Color,
     fg: Color,
+    isSelected: Boolean = false,
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 48.dp),
         shape = RoundedCornerShape(10.dp),
-        colors = CardDefaults.cardColors(containerColor = bg)
+        colors = CardDefaults.cardColors(containerColor = bg),
+        border = if (isSelected) BorderStroke(2.dp, if (fg == Color.White) Color(0xFF99F6E4) else fg) else null
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp, horizontal = 6.dp),
+                .padding(vertical = 6.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = "$count", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = fg)
-            Text(text = label, fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = fg.copy(alpha = 0.9f))
+            Text(text = "$count", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = fg, maxLines = 1)
+            Text(text = label, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = fg.copy(alpha = 0.92f), maxLines = 1)
         }
     }
 }

@@ -2051,4 +2051,246 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithText("3578150504110001").assertIsDisplayed()
     composeTestRule.onNodeWithText("3506150510180001").assertIsDisplayed()
   }
+
+  @Test
+  fun `verify compact InputPuasaDialog renders header badge, searches student, and registers on tap`() {
+    val session = com.example.data.model.FastingSession(
+      id = 101L,
+      title = "Puasa Senin Kamis",
+      sessionDate = 1794800000000L,
+      isActive = true,
+      schoolId = "SRT1-KDR"
+    )
+    val student1 = com.example.data.model.ChildStudent(
+      id = 201L,
+      name = "ABIMANYU SATRIA PAMUNGKAS",
+      nis = "114240001",
+      nik = "3506010101090001",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-4",
+      jenjang = "SMA",
+      schoolId = "SRT1-KDR"
+    )
+    val student2 = com.example.data.model.ChildStudent(
+      id = 202L,
+      name = "ZAHRA AMALIA",
+      nis = "114240002",
+      nik = "3506010101120002",
+      gender = "P",
+      age = 12,
+      dormitory = "Asrama Putri",
+      classGrade = "SD 6",
+      jenjang = "SD",
+      schoolId = "SRT1-KDR"
+    )
+    val existingRecord = com.example.data.model.FastingRecord(
+      id = 301L,
+      sessionId = session.id,
+      sessionTitle = session.title,
+      studentId = student2.id,
+      studentName = student2.name,
+      studentClass = student2.classGrade,
+      studentDorm = student2.dormitory,
+      studentJenjang = "SD",
+      schoolId = "SRT1-KDR"
+    )
+
+    var registeredStudent: com.example.data.model.ChildStudent? = null
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.InputPuasaDialog(
+          sessions = listOf(session),
+          students = listOf(student1, student2),
+          fastingRecords = listOf(existingRecord),
+          onRegisterStudent = { _, student, callback ->
+            registeredStudent = student
+            callback(true, "Berhasil input ${student.name}")
+          },
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Input Puasa Siswa").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1 Terdaftar").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("chip_session_input_${session.id}").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_scan_barcode_puasa").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("input_search_student_puasa").performTextInput("ABIMANYU")
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("card_pick_puasa_${student1.id}").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(student1.id, registeredStudent?.id)
+  }
+
+  @Test
+  fun `verify compact DaftarPuasaSheet filters records using interactive summary tiles and search`() {
+    val session = com.example.data.model.FastingSession(
+      id = 102L,
+      title = "Puasa Senin Kamis",
+      sessionDate = 1794800000000L,
+      isActive = true,
+      schoolId = "SRT1-KDR"
+    )
+    val recSma = com.example.data.model.FastingRecord(
+      id = 401L,
+      sessionId = session.id,
+      studentId = 11L,
+      studentName = "ABIMANYU SATRIA",
+      studentClass = "X-4",
+      studentDorm = "Asrama Putra",
+      studentJenjang = "SMA",
+      waliName = "Abisarwan Rafif",
+      schoolId = "SRT1-KDR"
+    )
+    val recSd = com.example.data.model.FastingRecord(
+      id = 402L,
+      sessionId = session.id,
+      studentId = 12L,
+      studentName = "BUDI SANTOSO",
+      studentClass = "SD 5",
+      studentDorm = "Asrama Putra",
+      studentJenjang = "SD",
+      waliName = "Abisarwan Rafif",
+      schoolId = "SRT1-KDR"
+    )
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.DaftarPuasaSheet(
+          sessions = listOf(session),
+          fastingRecords = listOf(recSma, recSd),
+          schoolProfile = com.example.data.model.SchoolProfile(),
+          waliName = "Abisarwan Rafif",
+          onDeleteRecord = {},
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("filter_daftar_Semua").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("filter_daftar_SMA").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("filter_daftar_SMP").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("filter_daftar_SD").assertIsDisplayed()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithText("BUDI SANTOSO").assertIsDisplayed()
+
+    // Filter SMA only
+    composeTestRule.onNodeWithTag("filter_daftar_SMA").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithText("BUDI SANTOSO").assertDoesNotExist()
+
+    // Filter SD only
+    composeTestRule.onNodeWithTag("filter_daftar_SD").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("BUDI SANTOSO").assertIsDisplayed()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertDoesNotExist()
+
+    // Back to Semua + search filter
+    composeTestRule.onNodeWithTag("filter_daftar_Semua").performClick()
+    composeTestRule.onNodeWithTag("input_search_daftar_puasa").performTextInput("ABIMANYU")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithText("BUDI SANTOSO").assertDoesNotExist()
+  }
+
+  @Test
+  fun `verify compact ChecklistPuasaSheet switches tabs, filters status, and toggles check`() {
+    val session = com.example.data.model.FastingSession(
+      id = 103L,
+      title = "Puasa Senin Kamis",
+      sessionDate = 1794800000000L,
+      isActive = true,
+      schoolId = "SRT1-KDR"
+    )
+    val recChecked = com.example.data.model.FastingRecord(
+      id = 501L,
+      sessionId = session.id,
+      studentId = 21L,
+      studentName = "ABIMANYU SATRIA",
+      studentClass = "X-4",
+      studentDorm = "Asrama Putra",
+      studentJenjang = "SMA",
+      isSahurChecked = true,
+      sahurCheckedBy = "Abisarwan Rafif",
+      sahurCheckedAt = 1794800000000L,
+      isBukaChecked = false,
+      schoolId = "SRT1-KDR"
+    )
+    val recPending = com.example.data.model.FastingRecord(
+      id = 502L,
+      sessionId = session.id,
+      studentId = 22L,
+      studentName = "CITRA LESTARI",
+      studentClass = "VIII-1",
+      studentDorm = "Asrama Putri",
+      studentJenjang = "SMP",
+      isSahurChecked = false,
+      isBukaChecked = true,
+      bukaCheckedBy = "Ustadzah Sari",
+      bukaCheckedAt = 1794850000000L,
+      schoolId = "SRT1-KDR"
+    )
+
+    var toggledSahurId: Long? = null
+    var toggledBukaId: Long? = null
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.ChecklistPuasaSheet(
+          sessions = listOf(session),
+          fastingRecords = listOf(recChecked, recPending),
+          schoolProfile = com.example.data.model.SchoolProfile(),
+          waliName = "Abisarwan Rafif",
+          onToggleSahur = { toggledSahurId = it.id },
+          onToggleBuka = { toggledBukaId = it.id },
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("tab_checklist_sahur").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tab_checklist_berbuka").assertIsDisplayed()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithText("CITRA LESTARI").assertIsDisplayed()
+
+    // Filter Sudah on Sahur tab
+    composeTestRule.onNodeWithTag("filter_checklist_Sudah").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithText("CITRA LESTARI").assertDoesNotExist()
+
+    // Toggle Sahur item
+    composeTestRule.onNodeWithTag("checklist_item_${recChecked.id}").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(recChecked.id, toggledSahurId)
+
+    // Switch to Berbuka tab -> only CITRA LESTARI is checked ("Sudah")
+    composeTestRule.onNodeWithTag("tab_checklist_berbuka").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("CITRA LESTARI").assertIsDisplayed()
+    composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertDoesNotExist()
+
+    composeTestRule.onNodeWithTag("checklist_item_${recPending.id}").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(recPending.id, toggledBukaId)
+  }
 }

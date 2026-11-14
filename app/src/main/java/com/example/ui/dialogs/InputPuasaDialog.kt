@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -25,13 +27,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircleOutline
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -157,23 +158,41 @@ fun InputPuasaDialog(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        dragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp, bottom = 2.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.outlineVariant)
+                )
+            }
+        },
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding(),
             contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 620.dp)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 14.dp)
+                    .padding(bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Header
+                // Header ringkas 1 baris judul + 1 baris subjudul
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -181,12 +200,12 @@ fun InputPuasaDialog(
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(42.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(tealLight),
                             contentAlignment = Alignment.Center
@@ -195,20 +214,45 @@ fun InputPuasaDialog(
                                 imageVector = Icons.Default.RestaurantMenu,
                                 contentDescription = null,
                                 tint = tealPrimary,
-                                modifier = Modifier.size(22.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = if (isEn) "Input Student Puasa" else "Input Puasa Siswa",
+                                    fontSize = 15.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (selectedSession != null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(tealLight)
+                                            .padding(horizontal = 6.dp, vertical = 1.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "${sessionRecords.size} Registered" else "${sessionRecords.size} Terdaftar",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = tealPrimary,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
                             Text(
-                                text = if (isEn) "Input Student Puasa" else "Input Puasa Siswa",
-                                fontSize = 16.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isEn) "Scan barcode to auto-register or search student name" else "Scan barcode langsung terinput atau cari nama siswa",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = if (isEn) "Scan card or search student name" else "Scan kartu atau ketik nama siswa",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -220,7 +264,8 @@ fun InputPuasaDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = appStrings.nav.close
+                            contentDescription = appStrings.nav.close,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -228,126 +273,73 @@ fun InputPuasaDialog(
                 if (availableSessions.isEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
                         border = BorderStroke(1.dp, Color(0xFFFCD34D))
                     ) {
                         Column(
-                            modifier = Modifier.padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
                                 text = if (isEn) "No Puasa Sessions Available Yet" else "Belum Ada Sesi Puasa Tersedia",
-                                fontSize = 14.sp,
+                                fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF92400E)
                             )
                             Text(
                                 text = if (isEn) {
-                                    "Puasa sessions (e.g., Puasa Senin Kamis) are created via the Admin Sekolah account in the 'Sesi Puasa' tab. Please contact Admin Sekolah to create a session first."
+                                    "Puasa sessions (e.g., Puasa Senin Kamis) are created via Admin Sekolah in the 'Sesi Puasa' tab."
                                 } else {
-                                    "Pembuatan sesi puasa (misal: Puasa Senin Kamis) dilakukan melalui akun Admin Sekolah di tab 'Sesi Puasa'. Hubungi Admin Sekolah untuk membuat sesi terlebih dahulu."
+                                    "Pembuatan sesi puasa dilakukan melalui akun Admin Sekolah di tab 'Sesi Puasa'."
                                 },
-                                fontSize = 12.sp,
+                                fontSize = 11.5.sp,
                                 color = Color(0xFF78350F)
                             )
                         }
                     }
                 } else {
-                    // Pilih Sesi Puasa
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (isEn) "Select Puasa Session:" else "Pilih Sesi Puasa:",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            selectedSession?.let { sess ->
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(tealLight)
-                                        .padding(horizontal = 8.dp, vertical = 2.dp)
-                                ) {
+                    // Pemilih Sesi Ringkas (1 baris tanpa kartu duplikat)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        availableSessions.forEach { session ->
+                            val selected = selectedSession?.id == session.id
+                            val dateStr = DateUtils.formatShortDate(session.sessionDate, lang)
+                            val doneSuffix = if (!session.isActive) {
+                                if (isEn) " • Done" else " • Selesai"
+                            } else ""
+                            FilterChip(
+                                selected = selected,
+                                onClick = { selectedSessionId = session.id },
+                                label = {
                                     Text(
-                                        text = if (isEn) "${sessionRecords.size} Registered" else "${sessionRecords.size} Terdaftar",
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = tealPrimary
+                                        text = "${session.title} ($dateStr)$doneSuffix",
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        maxLines = 1
                                     )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            availableSessions.forEach { session ->
-                                val selected = selectedSession?.id == session.id
-                                FilterChip(
-                                    selected = selected,
-                                    onClick = { selectedSessionId = session.id },
-                                    label = {
-                                        val dateStr = DateUtils.formatShortDate(session.sessionDate, lang)
-                                        val doneSuffix = if (!session.isActive) {
-                                            if (isEn) " • Completed" else " • Selesai"
-                                        } else ""
-                                        Text(
-                                            text = "${session.title} ($dateStr)$doneSuffix",
-                                            fontSize = 11.5.sp,
-                                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.EventNote,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = tealLight,
-                                        selectedLabelColor = tealPrimary,
-                                        selectedLeadingIconColor = tealPrimary
-                                    ),
-                                    modifier = Modifier.testTag("chip_session_input_${session.id}")
-                                )
-                            }
-                        }
-                    }
-
-                    // Banner info sesi aktif
-                    selectedSession?.let { sess ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDFA)),
-                            border = BorderStroke(1.dp, Color(0xFF99F6E4))
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = sess.title,
-                                    fontSize = 13.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = tealPrimary
-                                )
-                                Text(
-                                    text = "${DateUtils.formatFullDate(sess.sessionDate, lang)}${if (sess.description.isNotBlank()) " • ${sess.description}" else ""}",
-                                    fontSize = 11.sp,
-                                    color = Color(0xFF115E59)
-                                )
-                            }
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarToday,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(13.dp)
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = tealLight,
+                                    selectedLabelColor = tealPrimary,
+                                    selectedLeadingIconColor = tealPrimary
+                                ),
+                                modifier = Modifier
+                                    .heightIn(min = 34.dp)
+                                    .testTag("chip_session_input_${session.id}")
+                            )
                         }
                     }
 
@@ -355,168 +347,182 @@ fun InputPuasaDialog(
                     Button(
                         onClick = { showBarcodeScanner = true },
                         enabled = selectedSession != null,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = tealPrimary),
-                        contentPadding = PaddingValues(vertical = 13.dp, horizontal = 16.dp),
+                        contentPadding = PaddingValues(vertical = 10.dp, horizontal = 14.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 50.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_scan_barcode_puasa")
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
                             contentDescription = if (isEn) "Scan Student Card Barcode" else "Scan Barcode Kartu Siswa",
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isEn) "Scan Student Card Barcode (Instant Input)" else "Scan Barcode Kartu Siswa (Langsung Terinput)",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold
+                            text = if (isEn) "Scan Student Card (Instant Input)" else "Scan Barcode Kartu (Langsung Input)",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
-                    // Banner Feedback Scan / Input Terakhir
-                    lastFeedback?.let { (isSuccess, msg) ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSuccess) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (isSuccess) Color(0xFF86EFAC) else Color(0xFFFCD34D)
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 9.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = if (isSuccess) Color(0xFF16A34A) else Color(0xFFD97706),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = msg,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isSuccess) Color(0xFF166534) else Color(0xFF92400E)
-                                    )
-                                }
-                                OutlinedButton(
-                                    onClick = { showBarcodeScanner = true },
-                                    shape = RoundedCornerShape(8.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                    modifier = Modifier.height(30.dp)
-                                ) {
-                                    Text(
-                                        if (isEn) "Scan Again" else "Scan Lagi",
-                                        fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = tealPrimary
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Baris Cari Siswa (Daftar HANYA tampil setelah pengguna mengetik)
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = {
-                            Text(
-                                if (isEn) "Type student name, class, or NIK/NIS..." else "Ketik nama, kelas, atau NIK/NIS siswa...",
-                                fontSize = 12.5.sp
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Search,
-                                contentDescription = if (isEn) "Search Student" else "Cari Siswa",
-                                tint = tealPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = if (isEn) "Clear" else "Bersihkan")
-                                }
-                            }
-                        },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                    // Area feedback, pencarian, dan hasil dalam 1 LazyColumn agar fleksibel saat keyboard muncul
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("input_search_student_puasa")
-                    )
+                            .weight(1f, fill = false),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        lastFeedback?.let { (isSuccess, msg) ->
+                            item(key = "input_feedback") {
+                                Card(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isSuccess) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isSuccess) Color(0xFF86EFAC) else Color(0xFFFCD34D)
+                                    )
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = if (isSuccess) Color(0xFF16A34A) else Color(0xFFD97706),
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = msg,
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isSuccess) Color(0xFF166534) else Color(0xFF92400E)
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = { showBarcodeScanner = true },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier.height(28.dp)
+                                        ) {
+                                            Text(
+                                                if (isEn) "Scan Again" else "Scan Lagi",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = tealPrimary
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
-                    if (searchQuery.isBlank()) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                            )
-                        ) {
-                            Text(
-                                text = if (isEn) {
-                                    "Type a student's name or NIS above to display matching students, or tap Scan Barcode for instant registration."
-                                } else {
-                                    "Ketik nama atau NIS siswa di kolom pencarian di atas untuk menampilkan pilihan siswa, atau gunakan tombol Scan Barcode agar langsung terinput."
+                        item(key = "input_search_bar") {
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        if (isEn) "Name, class, or NIK/NIS..." else "Ketik nama, kelas, atau NIK/NIS...",
+                                        fontSize = 12.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
                                 },
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(12.dp)
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Search,
+                                        contentDescription = if (isEn) "Search Student" else "Cari Siswa",
+                                        tint = tealPrimary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Close, contentDescription = if (isEn) "Clear" else "Bersihkan")
+                                        }
+                                    }
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_search_student_puasa")
                             )
                         }
-                    } else if (matchedStudents.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = if (isEn) {
-                                    "No student found matching \"$searchQuery\"."
-                                } else {
-                                    "Tidak ditemukan siswa dengan kata kunci \"$searchQuery\"."
-                                },
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        Text(
-                            text = if (isEn) {
-                                "Search Results (${matchedStudents.size} Students) — Tap to input Puasa:"
-                            } else {
-                                "Hasil Pencarian (${matchedStudents.size} Siswa) — Ketuk untuk input puasa:"
-                            },
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
 
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 100.dp, max = 260.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                        if (searchQuery.isBlank()) {
+                            item(key = "input_empty_hint") {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = if (isEn) {
+                                            "Type name/NIS above or tap Scan Card for instant input."
+                                        } else {
+                                            "Ketik nama/NIS di atas atau ketuk Scan Kartu agar langsung terinput."
+                                        },
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        lineHeight = 15.sp
+                                    )
+                                }
+                            }
+                        } else if (matchedStudents.isEmpty()) {
+                            item(key = "input_no_match") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isEn) {
+                                            "No student found matching \"$searchQuery\"."
+                                        } else {
+                                            "Tidak ditemukan siswa dengan kata kunci \"$searchQuery\"."
+                                        },
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            item(key = "input_results_header") {
+                                Text(
+                                    text = if (isEn) {
+                                        "Results (${matchedStudents.size}) — Tap to register:"
+                                    } else {
+                                        "Hasil (${matchedStudents.size} Siswa) — Ketuk untuk input:"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
                             items(matchedStudents, key = { "puasa_pick_${it.id}" }) { student ->
                                 val already = isStudentRegistered(student)
                                 val jenjang = FastingJenjangHelper.resolveJenjang(student)
