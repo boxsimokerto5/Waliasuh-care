@@ -54,10 +54,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.widget.Toast
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiHelper
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.AddStudentDialog
+import com.example.ui.dialogs.InputMengajiDialog
+import com.example.ui.dialogs.KartuMengajiSheet
 import com.example.ui.dialogs.StudentCardGeneratorSheet
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.util.StudentClassifier
@@ -75,9 +79,12 @@ fun StudentsScreen(
     val isEn = LocalAppStrings.current.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
+    val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var showCardGeneratorSheet by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForMengajiInput by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForKartuMengaji by remember { mutableStateOf<ChildStudent?>(null) }
 
     val filteredStudents = students.filter { student ->
         if (searchQuery.isBlank()) true
@@ -239,9 +246,13 @@ fun StudentsScreen(
                     ) {
                         items(filteredStudents, key = { it.id }) { student ->
                             val studentRecordsCount = records.count { it.studentId == student.id }
+                            val latestMengaji = remember(mengajiRecords, student) {
+                                MengajiHelper.latestRecordForStudent(mengajiRecords, student)
+                            }
                             CompactStudentCardItem(
                                 student = student,
                                 treatmentCount = studentRecordsCount,
+                                latestMengajiLabel = latestMengaji?.let { MengajiHelper.formatCompactPosition(it) },
                                 onClick = {
                                     TopOnAdManager.onUserActionClick(context)
                                     selectedStudentForDetail = student
@@ -288,12 +299,69 @@ fun StudentsScreen(
 
     selectedStudentForDetail?.let { student ->
         val studentHistory = records.filter { it.studentId == student.id }
+        val studentMengaji = MengajiHelper.recordsForStudent(mengajiRecords, student)
         StudentDetailDialog(
             student = student,
             studentRecords = studentHistory,
             schoolProfile = schoolProfile,
             waliName = waliName,
+            mengajiRecords = studentMengaji,
+            onInputMengaji = { target ->
+                selectedStudentForDetail = null
+                studentForMengajiInput = target
+            },
+            onPrintKartuMengaji = { target ->
+                selectedStudentForDetail = null
+                studentForKartuMengaji = target
+            },
             onDismiss = { selectedStudentForDetail = null }
+        )
+    }
+
+    studentForMengajiInput?.let { target ->
+        InputMengajiDialog(
+            students = students,
+            mengajiRecords = mengajiRecords,
+            initialStudent = target,
+            onSave = { st, dateMillis, bookType, jilidOrJuz, pageOrVerse, fluencyStatus, notes, existingId ->
+                viewModel.saveMengajiRecord(
+                    student = st,
+                    sessionDate = dateMillis,
+                    bookType = bookType,
+                    jilidOrJuz = jilidOrJuz,
+                    pageOrVerse = pageOrVerse,
+                    fluencyStatus = fluencyStatus,
+                    notes = notes,
+                    existingRecordId = existingId
+                ) { _, _ ->
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "Mengaji saved for ${st.name}: $jilidOrJuz • $pageOrVerse"
+                        } else {
+                            "Setoran mengaji ${st.name} tersimpan: $jilidOrJuz • $pageOrVerse"
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                studentForMengajiInput = null
+            },
+            onDismiss = { studentForMengajiInput = null }
+        )
+    }
+
+    studentForKartuMengaji?.let { target ->
+        KartuMengajiSheet(
+            students = students,
+            mengajiRecords = mengajiRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            initialStudent = target,
+            onOpenInputForStudent = { st ->
+                studentForKartuMengaji = null
+                studentForMengajiInput = st
+            },
+            onDismiss = { studentForKartuMengaji = null }
         )
     }
 
@@ -310,6 +378,7 @@ fun StudentsScreen(
 fun CompactStudentCardItem(
     student: ChildStudent,
     treatmentCount: Int,
+    latestMengajiLabel: String? = null,
     onClick: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
@@ -404,6 +473,18 @@ fun CompactStudentCardItem(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
+                    )
+                }
+
+                if (!latestMengajiLabel.isNullOrBlank()) {
+                    Text(
+                        text = if (isEn) "Mengaji: $latestMengajiLabel" else "Mengaji: $latestMengajiLabel",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF047857),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(top = 1.dp)
                     )
                 }
 

@@ -49,6 +49,8 @@ import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiHelper
+import com.example.data.model.MengajiRecord
 import com.example.data.model.ShiftMessage
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -700,5 +702,171 @@ private fun HubStatTile(
     ) {
         Text(value, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold, color = fg, maxLines = 1)
         Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = fg.copy(alpha = 0.9f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+internal fun LazyListScope.mengajiCategoryItems(
+    isEn: Boolean,
+    lang: com.example.util.i18n.AppLanguage,
+    mengajiRecords: List<MengajiRecord>,
+    onOpenInputMengaji: () -> Unit,
+    onOpenRiwayatMengaji: () -> Unit,
+    onOpenKartuMengaji: () -> Unit,
+    onOpenRekapMengaji: () -> Unit
+) {
+    val todayRecords = mengajiRecords.filter { DateUtils.isToday(it.sessionDate) }
+    val fluentCount = mengajiRecords.count { MengajiHelper.isFluent(it.fluencyStatus) }
+    val repeatCount = mengajiRecords.size - fluentCount
+    val recentRecords = mengajiRecords.sortedWith(
+        compareByDescending<MengajiRecord> { it.sessionDate }.thenByDescending { it.createdAt }
+    )
+
+    item(key = "hub_mengaji_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Input Mengaji" else "Input Mengaji",
+                    subtitle = if (isEn) "Auto-Continue Page" else "Lanjut Halaman Anak",
+                    imageRes = R.drawable.img_menu_mengaji,
+                    badgeText = if (isEn) "Scan & Input" else "Scan & Lanjut",
+                    badgeBg = Color(0xFFD1FAE5),
+                    badgeColor = Color(0xFF047857),
+                    bgGradient = listOf(Color(0xFFECFDF5), Color(0xFFD1FAE5).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFA7F3D0),
+                    onClick = onOpenInputMengaji,
+                    testTag = "tile_input_mengaji",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Print Mengaji Card" else "Cetak Kartu Mengaji",
+                    subtitle = if (isEn) "Monthly PDF & Sign" else "Tabel Bulanan & TTD",
+                    imageRes = R.drawable.img_menu_daftar_puasa,
+                    badgeText = if (isEn) "Print & PDF" else "Print & PDF",
+                    badgeBg = Color(0xFFE0F2FE),
+                    badgeColor = Color(0xFF0369A1),
+                    bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFBAE6FD),
+                    onClick = onOpenKartuMengaji,
+                    testTag = "tile_kartu_mengaji",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Daily History" else "Riwayat Mengaji",
+                    subtitle = if (isEn) "Daily Student Logs" else "Setoran Harian Siswa",
+                    imageRes = R.drawable.img_menu_checklist_puasa,
+                    badgeText = if (todayRecords.isNotEmpty()) {
+                        "${todayRecords.size} ${if (isEn) "Today" else "Hari Ini"}"
+                    } else {
+                        "${mengajiRecords.size} Log"
+                    },
+                    badgeBg = Color(0xFFFEF3C7),
+                    badgeColor = Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = onOpenRiwayatMengaji,
+                    testTag = "tile_riwayat_mengaji",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Volume Recap" else "Rekap Jilid Anak",
+                    subtitle = if (isEn) "Last Page Per Student" else "Posisi Terakhir Anak",
+                    imageRes = R.drawable.img_menu_ranking_puasa,
+                    badgeText = if (repeatCount > 0) {
+                        "$repeatCount ${if (isEn) "Repeat" else "Ulang"}"
+                    } else {
+                        if (isEn) "Per Student" else "Per Anak"
+                    },
+                    badgeBg = if (repeatCount > 0) Color(0xFFFEE2E2) else Color(0xFFF3E8FF),
+                    badgeColor = if (repeatCount > 0) Color(0xFFDC2626) else Color(0xFF7E22CE),
+                    bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFE9D5FF),
+                    onClick = onOpenRekapMengaji,
+                    testTag = "tile_rekap_mengaji",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    item(key = "hub_mengaji_summary") {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                HubStatTile("${todayRecords.size}", if (isEn) "Today" else "Hari Ini", Color(0xFFD1FAE5), Color(0xFF047857), Modifier.weight(1f))
+                HubStatTile("$fluentCount", if (isEn) "Fluent" else "Lancar", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
+                HubStatTile("$repeatCount", if (isEn) "Repeat" else "Tdk Lancar", Color(0xFFFEE2E2), Color(0xFFDC2626), Modifier.weight(1f))
+            }
+        }
+    }
+
+    if (recentRecords.isNotEmpty()) {
+        item(key = "hub_mengaji_recent_hdr") {
+            Text(
+                text = if (isEn) "Latest Mengaji Entries" else "Setoran Mengaji Terbaru",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        items(recentRecords.take(4), key = { "hub_mengaji_${it.id}" }) { rec ->
+            val isFluent = MengajiHelper.isFluent(rec.fluencyStatus)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onOpenRiwayatMengaji),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, if (isFluent) Color(0xFFBBF7D0) else Color(0xFFFCA5A5))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(rec.studentName, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            text = "${MengajiHelper.formatCompactPosition(rec)} • ${DateUtils.formatShortDate(rec.sessionDate, lang)}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isFluent) Color(0xFFDCFCE7) else Color(0xFFFEE2E2))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = MengajiHelper.fluencyLabel(rec.fluencyStatus, isEn),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isFluent) Color(0xFF15803D) else Color(0xFFDC2626)
+                        )
+                    }
+                }
+            }
+        }
     }
 }

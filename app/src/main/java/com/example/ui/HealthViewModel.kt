@@ -11,6 +11,8 @@ import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiHelper
+import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -61,7 +63,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.shiftMessageDao(),
             db.haidRecordDao(),
             db.fastingSessionDao(),
-            db.fastingRecordDao()
+            db.fastingRecordDao(),
+            db.mengajiRecordDao()
         )
     }
 
@@ -733,6 +736,109 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
         viewModelScope.launch {
             PocketBaseSyncManager.syncFastingOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    // Multi-tenant isolated Mengaji Berkelanjutan records (melekat pada siswa):
+    val mengajiRecords: StateFlow<List<MengajiRecord>> = combine(
+        repository.allMengajiRecords,
+        _schoolProfile,
+        _currentUserRole
+    ) { records, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun saveMengajiRecord(
+        student: ChildStudent,
+        sessionDate: Long,
+        bookType: String,
+        jilidOrJuz: String,
+        pageOrVerse: String,
+        fluencyStatus: String,
+        notes: String = "",
+        existingRecordId: Long? = null,
+        onComplete: (Boolean, MengajiRecord?) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val activeSchool = student.schoolId.ifBlank {
+                _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            }
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            val resolvedJenjang = FastingJenjangHelper.resolveJenjang(student)
+            val cleanPage = pageOrVerse.trim().ifBlank { "Hal. 1" }
+            val parsedStart = MengajiHelper.extractStartingPageNumber(cleanPage)
+            val parsedEnd = MengajiHelper.extractEndingPageNumber(cleanPage)
+            val signerName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+
+            val record = if (existingRecordId != null && existingRecordId > 0L) {
+                val existing = repository.getAllMengajiRecordsList().firstOrNull { it.id == existingRecordId }
+                MengajiRecord(
+                    id = existingRecordId,
+                    studentId = student.id,
+                    studentName = student.name,
+                    studentNik = cleanNik,
+                    studentNis = student.nis,
+                    studentClass = student.classGrade,
+                    studentDorm = student.dormitory,
+                    studentJenjang = resolvedJenjang,
+                    sessionDate = sessionDate,
+                    bookType = bookType.trim().ifBlank { "Iqro'" },
+                    jilidOrJuz = jilidOrJuz.trim().ifBlank { "Jilid 1" },
+                    pageOrVerse = cleanPage,
+                    startPage = parsedStart,
+                    endPage = parsedEnd,
+                    fluencyStatus = fluencyStatus,
+                    notes = notes.trim(),
+                    waliName = signerName,
+                    schoolId = existing?.schoolId?.ifBlank { activeSchool } ?: activeSchool,
+                    createdAt = existing?.createdAt ?: now,
+                    updatedAt = now
+                )
+            } else {
+                MengajiRecord(
+                    id = PocketBaseSyncManager.generateCloudSafeId(),
+                    studentId = student.id,
+                    studentName = student.name,
+                    studentNik = cleanNik,
+                    studentNis = student.nis,
+                    studentClass = student.classGrade,
+                    studentDorm = student.dormitory,
+                    studentJenjang = resolvedJenjang,
+                    sessionDate = sessionDate,
+                    bookType = bookType.trim().ifBlank { "Iqro'" },
+                    jilidOrJuz = jilidOrJuz.trim().ifBlank { "Jilid 1" },
+                    pageOrVerse = cleanPage,
+                    startPage = parsedStart,
+                    endPage = parsedEnd,
+                    fluencyStatus = fluencyStatus,
+                    notes = notes.trim(),
+                    waliName = signerName,
+                    schoolId = activeSchool,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+
+            repository.insertMengajiRecord(record)
+            onComplete(true, record)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleMengajiRecord(getApplication(), record)
+            }
+        }
+    }
+
+    fun deleteMengajiRecord(record: MengajiRecord) {
+        viewModelScope.launch {
+            repository.deleteMengajiRecord(record)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteMengajiRecord(getApplication(), record.id)
+            }
         }
     }
 
@@ -2383,6 +2489,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (targetSchoolId.isNotBlank()) {
                 repository.deleteFastingRecordsBySchool(targetSchoolId)
                 repository.deleteFastingSessionsBySchool(targetSchoolId)
+                repository.deleteMengajiRecordsBySchool(targetSchoolId)
                 repository.deleteHaidRecordsBySchool(targetSchoolId)
                 repository.deleteShiftMessagesBySchool(targetSchoolId)
                 repository.deleteStudentsBySchool(targetSchoolId)

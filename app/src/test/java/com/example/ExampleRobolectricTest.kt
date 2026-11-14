@@ -622,9 +622,10 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(9, jsonSchema.length())
+    assertEquals(10, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
+    org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
 
     val expectedCollections = listOf(
       "child_students",
@@ -635,6 +636,7 @@ class ExampleRobolectricTest {
       "school_registrations",
       "fasting_sessions",
       "fasting_records",
+      "mengaji_records",
       "school_profiles"
     )
     expectedCollections.forEach { col ->
@@ -644,7 +646,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(9, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(10, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
   }
 
   @Test
@@ -2413,5 +2415,453 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_close_category_hub").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("category_hub_overlay_haid").assertDoesNotExist()
+  }
+
+  @Test
+  fun `verify DashboardScreen compact Gojek faskes strip sorts active faskes first and keeps super-app tiles unobstructed`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    val now = System.currentTimeMillis()
+    val todayPlan = com.example.data.model.MedicalRecord(
+      id = 701L,
+      studentId = 1L,
+      studentName = "Ahmad Fauzan",
+      studentDormitory = "Asrama Putra",
+      faskes = "Puskesmas Wates",
+      complaint = "Batuk pilek",
+      planDate = now,
+      status = "PLANNED"
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 1L,
+      name = "Ahmad Fauzan",
+      nis = "112233",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-1"
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = "Abisarwan Rafif",
+          activePlans = listOf(todayPlan),
+          students = listOf(student),
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {},
+          renderInlineCategoryHub = true
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_summary_today").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("row_faskes_strip").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("fab_dashboard_add").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Berobat Hari Ini").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1/1 Siswa Dijadwalkan").assertIsDisplayed()
+
+    // Active faskes ("Puskesmas Wates") is sorted to the front of the horizontal strip
+    composeTestRule.onNodeWithTag("pill_faskes_puskesmas_wates").assertIsDisplayed()
+    composeTestRule.onNodeWithText("1 Anak").assertIsDisplayed()
+
+    // Super-app icons remain unobstructed
+    composeTestRule.onNodeWithTag("category_berobat").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertIsDisplayed()
+
+    // Clicking the relocated "+ Rencana" button opens CreatePlanDialog cleanly
+    composeTestRule.onNodeWithTag("fab_dashboard_add").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Buat Rencana Berobat").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify MengajiHelper continuous progression, repeating non-fluent page, jilid advance, and student matching`() {
+    // 1. Fresh student starts at Iqro' Jilid 1 Hal. 1
+    val fresh = com.example.data.model.MengajiHelper.suggestNextEntry(null)
+    assertEquals("Iqro'", fresh.bookType)
+    assertEquals("Jilid 1", fresh.jilidOrJuz)
+    assertEquals("Hal. 1", fresh.pageOrVerse)
+    org.junit.Assert.assertFalse(fresh.isRepeatingLast)
+
+    // 2. Fluent session advances page automatically (+1)
+    val fluentRec = com.example.data.model.MengajiRecord(
+      id = 9001L,
+      studentId = 55L,
+      studentName = "Aisyah",
+      studentNik = "3506145501010002",
+      studentNis = "11220055",
+      sessionDate = 1794800000000L,
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 3",
+      pageOrVerse = "Hal. 14",
+      startPage = 14,
+      endPage = 14,
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR
+    )
+    val nextAfterFluent = com.example.data.model.MengajiHelper.suggestNextEntry(fluentRec)
+    assertEquals("Iqro'", nextAfterFluent.bookType)
+    assertEquals("Jilid 3", nextAfterFluent.jilidOrJuz)
+    assertEquals("Hal. 15", nextAfterFluent.pageOrVerse)
+    org.junit.Assert.assertFalse(nextAfterFluent.isRepeatingLast)
+
+    // 3. Non-fluent session prompts repeating exact same page
+    val repeatRec = fluentRec.copy(
+      id = 9002L,
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_TIDAK_LANCAR
+    )
+    val nextAfterRepeat = com.example.data.model.MengajiHelper.suggestNextEntry(repeatRec)
+    assertEquals("Hal. 14", nextAfterRepeat.pageOrVerse)
+    org.junit.Assert.assertTrue(nextAfterRepeat.isRepeatingLast)
+
+    // 4. Advance jilid progression & transition from Jilid 6 -> Al-Qur'an Juz 1
+    assertEquals("Iqro'" to "Jilid 4", com.example.data.model.MengajiHelper.advanceJilidOrJuz("Iqro'", "Jilid 3"))
+    assertEquals("Al-Qur'an" to "Juz 1", com.example.data.model.MengajiHelper.advanceJilidOrJuz("Iqro'", "Jilid 6"))
+
+    // 5. Matches student by ID, NIK, or NIS, and filters by month
+    val studentByNik = com.example.data.model.ChildStudent(
+      id = 999L,
+      name = "Aisyah",
+      nis = "OTHER",
+      gender = "P",
+      age = 12,
+      dormitory = "Asrama Putri",
+      classGrade = "VI-A",
+      nik = "3506145501010002"
+    )
+    org.junit.Assert.assertTrue(com.example.data.model.MengajiHelper.matchesStudent(fluentRec, studentByNik))
+    val monthKey = com.example.util.DateUtils.getMonthKey(fluentRec.sessionDate)
+    assertEquals(1, com.example.data.model.MengajiHelper.filterByMonth(listOf(fluentRec), monthKey).size)
+    assertEquals(0, com.example.data.model.MengajiHelper.filterByMonth(listOf(fluentRec), "2020-01").size)
+  }
+
+  @Test
+  fun `verify HealthViewModel saves and deletes MengajiRecord cleanly in Room`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val student = com.example.data.model.ChildStudent(
+      id = 88001L,
+      name = "Zainal Abidin",
+      nis = "88001",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-2",
+      nik = "3506010101130001",
+      jenjang = "SMP",
+      schoolId = "SRT1-KDR"
+    )
+
+    var savedRecord: com.example.data.model.MengajiRecord? = null
+    vm.saveMengajiRecord(
+      student = student,
+      sessionDate = 1794800000000L,
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 2",
+      pageOrVerse = "Hal. 18",
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+      notes = "Bacaan mad baik"
+    ) { ok, rec ->
+      if (ok) savedRecord = rec
+    }
+
+    var ticks = 0
+    while (savedRecord == null && ticks < 25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(30)
+      ticks++
+    }
+    assertNotNull(savedRecord)
+    assertEquals("Hal. 18", savedRecord?.pageOrVerse)
+    assertEquals(18, savedRecord?.startPage)
+
+    val fetched = com.example.data.database.AppDatabase.getDatabase(app)
+      .mengajiRecordDao()
+      .getAllRecords()
+      .first()
+      .firstOrNull { it.id == savedRecord!!.id }
+    assertNotNull(fetched)
+    assertEquals("Zainal Abidin", fetched?.studentName)
+
+    vm.deleteMengajiRecord(fetched!!)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    kotlinx.coroutines.delay(50)
+    Unit
+  }
+
+  @Test
+  fun `verify PdfReportGenerator builds Kartu Mengaji PDF and WhatsApp summary`() {
+    val context = ApplicationProvider.getApplicationContext<Context>()
+    val student = com.example.data.model.ChildStudent(
+      id = 88002L,
+      name = "Nadia Rahmawati",
+      nis = "88002",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-A",
+      jenjang = "SMP"
+    )
+    val records = listOf(
+      com.example.data.model.MengajiRecord(
+        id = 1L,
+        studentId = student.id,
+        studentName = student.name,
+        sessionDate = 1794800000000L,
+        bookType = "Iqro'",
+        jilidOrJuz = "Jilid 4",
+        pageOrVerse = "Hal. 12",
+        startPage = 12,
+        fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+        waliName = "Ustadzah Amina"
+      ),
+      com.example.data.model.MengajiRecord(
+        id = 2L,
+        studentId = student.id,
+        studentName = student.name,
+        sessionDate = 1794886400000L,
+        bookType = "Iqro'",
+        jilidOrJuz = "Jilid 4",
+        pageOrVerse = "Hal. 13",
+        startPage = 13,
+        fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_TIDAK_LANCAR,
+        waliName = "Ustadzah Amina"
+      )
+    )
+
+    val pdfFile = com.example.util.PdfReportGenerator.generateKartuMengajiPdf(
+      context = context,
+      student = student,
+      records = records,
+      periodLabel = "November 2026",
+      waliName = "Ustadzah Amina",
+      schoolProfile = com.example.data.model.SchoolProfile()
+    )
+    assertNotNull(pdfFile)
+    org.junit.Assert.assertTrue(pdfFile!!.exists())
+    org.junit.Assert.assertTrue(pdfFile.length() > 0L)
+
+    val waText = com.example.util.PdfReportGenerator.buildKartuMengajiWaSummary(
+      student = student,
+      records = records,
+      periodLabel = "November 2026",
+      waliName = "Ustadzah Amina",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      language = com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    org.junit.Assert.assertTrue(waText.contains("Nadia Rahmawati"))
+    org.junit.Assert.assertTrue(waText.contains("November 2026"))
+    org.junit.Assert.assertTrue(waText.contains("Lancar"))
+    org.junit.Assert.assertTrue(waText.contains("Tidak Lancar"))
+    org.junit.Assert.assertTrue(waText.contains("Ustadzah Amina"))
+  }
+
+  @Test
+  fun `verify QuickMenuTiles opens Mengaji hub and InputMengajiDialog auto-continues previous page`() {
+    var openedHub: com.example.ui.components.DashboardCategoryHub? = null
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 77L,
+      name = "Farhan Maulana",
+      nis = "77001",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-1",
+      jenjang = "SMA"
+    )
+    val prevRecord = com.example.data.model.MengajiRecord(
+      id = 501L,
+      studentId = 77L,
+      studentName = "Farhan Maulana",
+      studentNis = "77001",
+      sessionDate = 1794800000000L,
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 5",
+      pageOrVerse = "Hal. 20",
+      startPage = 20,
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR
+    )
+
+    var savedBook = ""
+    var savedJilid = ""
+    var savedPage = ""
+    var savedStatus = ""
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        androidx.compose.foundation.layout.Column {
+          com.example.ui.components.QuickMenuTiles(
+            onOpenCategoryHub = { openedHub = it },
+            onNavigateToPlan = {},
+            onNavigateToDirectTreatment = {},
+            onNavigateToRecords = {},
+            onNavigateToStudents = {},
+            onShowPuskesmasInfo = {}
+          )
+          com.example.ui.dialogs.InputMengajiDialog(
+            students = listOf(student),
+            mengajiRecords = listOf(prevRecord),
+            initialStudent = student,
+            onSave = { _, _, book, jilid, page, status, _, _ ->
+              savedBook = book
+              savedJilid = jilid
+              savedPage = page
+              savedStatus = status
+            },
+            onDismiss = {}
+          )
+        }
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_quick_input_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_mengaji").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.MENGAJI, openedHub)
+
+    // Continuous suggestion should automatically advance Hal. 20 -> Hal. 21
+    composeTestRule.onNodeWithTag("list_input_mengaji_form")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("banner_mengaji_suggestion"))
+    composeTestRule.onNodeWithTag("banner_mengaji_suggestion").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("list_input_mengaji_form")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_page_inc_mengaji"))
+    composeTestRule.onNodeWithTag("btn_page_inc_mengaji").performClick()
+
+    composeTestRule.onNodeWithTag("btn_save_mengaji").performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals("Iqro'", savedBook)
+    assertEquals("Jilid 5", savedJilid)
+    assertEquals("Hal. 22", savedPage)
+    assertEquals(com.example.data.model.MengajiHelper.FLUENCY_LANCAR, savedStatus)
+  }
+
+  @Test
+  fun `verify KartuMengajiSheet displays columns, student rows, and Guardian Signature`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 88L,
+      name = "Siti Fatimah",
+      nis = "88009",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-2",
+      jenjang = "SMP"
+    )
+    val record = com.example.data.model.MengajiRecord(
+      id = 601L,
+      studentId = 88L,
+      studentName = "Siti Fatimah",
+      studentNis = "88009",
+      sessionDate = 1794800000000L,
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 4",
+      pageOrVerse = "Hal. 9",
+      startPage = 9,
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+      waliName = "Ustadzah Sari"
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.KartuMengajiSheet(
+          students = listOf(student),
+          mengajiRecords = listOf(record),
+          schoolProfile = com.example.data.model.SchoolProfile(),
+          waliName = "Ustadzah Sari",
+          initialStudent = student,
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("No").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Tgl").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Jilid").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Hal.").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Ket.").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Wali").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("list_kartu_mengaji_preview")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_kartu_mengaji_601"))
+    composeTestRule.onNodeWithTag("row_kartu_mengaji_601").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Hal. 9").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Lancar").assertIsDisplayed()
+    composeTestRule.onNodeWithText("TTD Wali Asuh").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify StudentDetailDialog attaches Riwayat Mengaji history and action buttons`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 91L,
+      name = "Rafi Pratama",
+      nis = "91001",
+      gender = "L",
+      age = 16,
+      dormitory = "Asrama Putra",
+      classGrade = "XI-1",
+      nik = "3506101010100001",
+      jenjang = "SMA"
+    )
+    val mengajiRec = com.example.data.model.MengajiRecord(
+      id = 701L,
+      studentId = 91L,
+      studentName = "Rafi Pratama",
+      studentNik = "3506101010100001",
+      studentNis = "91001",
+      sessionDate = 1794800000000L,
+      bookType = "Al-Qur'an",
+      jilidOrJuz = "Juz 2",
+      pageOrVerse = "Hal. 32",
+      startPage = 32,
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+      waliName = "Abisarwan Rafif"
+    )
+    var inputClicked = false
+    var kartuClicked = false
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.StudentDetailDialog(
+          student = student,
+          studentRecords = emptyList(),
+          waliName = "Abisarwan Rafif",
+          mengajiRecords = listOf(mengajiRec),
+          onInputMengaji = { inputClicked = true },
+          onPrintKartuMengaji = { kartuClicked = true },
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("badge_student_latest_mengaji").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("student_mengaji_item_701").performScrollTo().assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("btn_student_input_mengaji").performScrollTo().performClick()
+    org.junit.Assert.assertTrue(inputClicked)
+
+    composeTestRule.onNodeWithTag("btn_student_kartu_mengaji").performScrollTo().performClick()
+    org.junit.Assert.assertTrue(kartuClicked)
   }
 }

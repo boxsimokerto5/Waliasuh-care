@@ -5,6 +5,8 @@ import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiHelper
+import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -712,6 +714,89 @@ data class PbSchoolProfileDto(
                 additionalFaskesJson = additionalArr.toString(),
                 faskesContactsJson = SchoolProfile.serializeFaskesContacts(profile.faskesContacts),
                 updatedAt = updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbMengajiRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "student_jenjang") val studentJenjang: String? = null,
+    @Json(name = "session_date") val sessionDate: Long? = null,
+    @Json(name = "book_type") val bookType: String? = null,
+    @Json(name = "jilid_or_juz") val jilidOrJuz: String? = null,
+    @Json(name = "page_or_verse") val pageOrVerse: String? = null,
+    @Json(name = "start_page") val startPage: Int? = null,
+    @Json(name = "end_page") val endPage: Int? = null,
+    @Json(name = "fluency_status") val fluencyStatus: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): MengajiRecord {
+        val now = System.currentTimeMillis()
+        val resolvedSession = sessionDate?.takeIf { it > 0L } ?: now
+        return MengajiRecord(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
+            studentNis = studentNis ?: "",
+            studentClass = studentClass ?: "",
+            studentDorm = studentDorm ?: "",
+            studentJenjang = studentJenjang ?: "",
+            sessionDate = resolvedSession,
+            bookType = bookType?.ifBlank { "Iqro'" } ?: "Iqro'",
+            jilidOrJuz = jilidOrJuz?.ifBlank { "Jilid 1" } ?: "Jilid 1",
+            pageOrVerse = pageOrVerse?.ifBlank { "Hal. 1" } ?: "Hal. 1",
+            startPage = startPage?.takeIf { it > 0 },
+            endPage = endPage?.takeIf { it > 0 },
+            fluencyStatus = fluencyStatus?.ifBlank { MengajiHelper.FLUENCY_LANCAR } ?: MengajiHelper.FLUENCY_LANCAR,
+            notes = notes ?: "",
+            waliName = waliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: resolvedSession,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedSession
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: MengajiRecord): PbMengajiRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.studentId}:${model.sessionDate}:${model.jilidOrJuz}:${model.pageOrVerse}"
+            )
+            return PbMengajiRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                studentJenjang = model.studentJenjang,
+                sessionDate = model.sessionDate,
+                bookType = model.bookType,
+                jilidOrJuz = model.jilidOrJuz,
+                pageOrVerse = model.pageOrVerse,
+                startPage = model.startPage ?: 0,
+                endPage = model.endPage ?: 0,
+                fluencyStatus = model.fluencyStatus,
+                notes = model.notes,
+                waliName = model.waliName,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
             )
         }
     }

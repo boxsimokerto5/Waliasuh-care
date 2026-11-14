@@ -233,6 +233,7 @@ private fun WaliAsuhCareAppContent(
     val suciRecords by viewModel.suciRecords.collectAsStateWithLifecycle()
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
     val inpatientCount = remember(allRecords) {
         allRecords.count { it.isInpatient && it.status != "CANCELLED" }
@@ -523,6 +524,7 @@ private fun WaliAsuhCareAppContent(
                 activeHaidRecords = activeHaidRecords,
                 suciRecords = suciRecords,
                 shiftMessages = shiftMessages,
+                mengajiRecords = mengajiRecords,
                 onDismiss = { dashboardModalState.activeCategoryHub = null },
                 onNavigateToPlan = {
                     dashboardModalState.activeCategoryHub = null
@@ -589,6 +591,27 @@ private fun WaliAsuhCareAppContent(
                 onOpenShiftHistory = {
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.showShiftHistorySheet = true
+                },
+                onOpenInputMengaji = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.mengajiTargetStudent = null
+                    dashboardModalState.mengajiRecordToEdit = null
+                    dashboardModalState.showInputMengajiDialog = true
+                },
+                onOpenRiwayatMengaji = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.riwayatMengajiInitialTab = 0
+                    dashboardModalState.showRiwayatMengajiSheet = true
+                },
+                onOpenKartuMengaji = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.mengajiTargetStudent = null
+                    dashboardModalState.showKartuMengajiSheet = true
+                },
+                onOpenRekapMengaji = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.riwayatMengajiInitialTab = 1
+                    dashboardModalState.showRiwayatMengajiSheet = true
                 }
             )
         }

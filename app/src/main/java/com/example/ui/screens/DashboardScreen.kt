@@ -5,7 +5,9 @@ package com.example.ui.screens
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,12 +20,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsRun
@@ -37,6 +42,7 @@ import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -46,12 +52,12 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -94,12 +100,15 @@ import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.InputHaidDialog
+import com.example.ui.dialogs.InputMengajiDialog
 import com.example.ui.dialogs.InputPuasaDialog
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocalHospital
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import com.example.ui.dialogs.KartuMengajiSheet
 import com.example.ui.dialogs.PrintPdfDialog
 import com.example.ui.dialogs.RankingPuasaSheet
+import com.example.ui.dialogs.RiwayatMengajiSheet
 import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.ui.dialogs.ShiftHistorySheet
 import com.example.ui.dialogs.ShiftMessagesSheet
@@ -113,7 +122,6 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Button
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.ui.text.style.TextOverflow
 
@@ -143,6 +151,7 @@ fun DashboardScreen(
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordPlanToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -155,6 +164,9 @@ fun DashboardScreen(
 
     val todayDateFormatted = remember(s.language) {
         DateUtils.formatFullDate(Calendar.getInstance().timeInMillis)
+    }
+    val todayShortFormatted = remember(s.language) {
+        DateUtils.formatShortDate(Calendar.getInstance().timeInMillis, s.language)
     }
 
     val todayPlans = remember(activePlans) {
@@ -178,26 +190,8 @@ fun DashboardScreen(
     Box(modifier = modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
-            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    TopOnAdManager.onUserActionClick(context)
-                    modalState.showCreateDialog = true
-                },
-                containerColor = WaliPrimary,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.testTag("fab_dashboard_add")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = if (isEn) "Add Sick Student / Treatment Plan" else "Tambah Anak Sakit / Rencana",
-                    modifier = Modifier.size(26.dp)
-                )
-            }
-        }
-    ) { innerPadding ->
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
+        ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -208,200 +202,348 @@ fun DashboardScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 640.dp),
-                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 80.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Wali Subtitle Row (from Image 3: "Wali: Sari Devi")
+                // Compact Gojek-Style Top Faskes Notification Strip Card
                 item {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 2.dp),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "Wali: $waliName",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.clickable(onClick = onNavigateToProfile)
+                    val customFaskesInpatients = remember(allFaskes, inpatientRecords, isEn) {
+                        inpatientRecords.filter { rec ->
+                            allFaskes.none { f -> rec.faskes.contains(f, ignoreCase = true) }
+                        }.groupBy { it.faskes.ifBlank { if (isEn) "Referral Faskes" else "Faskes Rujukan" } }
+                    }
+                    val sortedFaskesEntries = remember(allFaskes, todayPlans, inpatientRecords) {
+                        allFaskes.map { faskesName ->
+                            val count = todayPlans.count { it.faskes.contains(faskesName, ignoreCase = true) }
+                            val faskesInpatients = inpatientRecords.filter {
+                                it.faskes.contains(faskesName, ignoreCase = true)
+                            }
+                            Triple(faskesName, count, faskesInpatients)
+                        }.sortedWith(
+                            compareByDescending<Triple<String, Int, List<MedicalRecord>>> { it.third.isNotEmpty() }
+                                .thenByDescending { it.second > 0 }
                         )
                     }
-                }
 
-                // Summary Card from Image 3
-                item {
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("card_summary_today"),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
                     ) {
                         Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Text(
-                                text = if (isEn) "Today's Treatment Plans ($todayDateFormatted)" else "Rencana Berobat Hari Ini ($todayDateFormatted)",
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Spacer(modifier = Modifier.height(1.dp))
-
-                            allFaskes.forEach { faskesName ->
-                                val count = todayPlans.count { it.faskes.contains(faskesName, ignoreCase = true) }
-                                val faskesInpatients = inpatientRecords.filter {
-                                    it.faskes.contains(faskesName, ignoreCase = true)
-                                }
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                            // Row 1: Concise Title + Short Date Chip + Wali Shortcut + Inline "+ Rencana" CTA
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
                                 ) {
-                                    Text(
-                                        text = if (isEn) "$faskesName: $count Students" else "$faskesName: $count Anak",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.align(Alignment.CenterVertically)
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "Today's Care" else "Berobat Hari Ini",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = WaliPrimary.copy(alpha = 0.12f)
+                                        ) {
+                                            Text(
+                                                text = todayShortFormatted,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = WaliPrimary,
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                    Surface(
+                                        onClick = onNavigateToProfile,
+                                        color = Color.Transparent,
+                                        shape = RoundedCornerShape(6.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(vertical = 2.dp, horizontal = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = "Wali: $waliName",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Button(
+                                    onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        modalState.showCreateDialog = true
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = WaliPrimary,
+                                        contentColor = Color.White
+                                    ),
+                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                    modifier = Modifier
+                                        .heightIn(min = 38.dp)
+                                        .testTag("fab_dashboard_add")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = if (isEn) "Add Sick Student / Treatment Plan" else "Tambah Anak Sakit / Rencana",
+                                        modifier = Modifier.size(16.dp)
                                     )
-                                    if (faskesInpatients.isNotEmpty()) {
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isEn) "Plan" else "Rencana",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+
+                            // Row 2: Horizontal Scrollable Faskes Pill Strip (Inpatients & Active Plans First)
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .testTag("row_faskes_strip"),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                sortedFaskesEntries.forEach { (faskesName, count, faskesInpatients) ->
+                                    val hasActive = count > 0 || faskesInpatients.isNotEmpty()
+                                    val faskesSlug = faskesName.lowercase().replace(" ", "_")
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(
+                                                if (hasActive) WaliPrimary.copy(alpha = 0.10f)
+                                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                            )
+                                            .then(
+                                                if (hasActive) {
+                                                    Modifier.border(
+                                                        width = 1.dp,
+                                                        color = WaliPrimary.copy(alpha = 0.30f),
+                                                        shape = RoundedCornerShape(10.dp)
+                                                    )
+                                                } else {
+                                                    Modifier
+                                                }
+                                            )
+                                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                                            .testTag("pill_faskes_$faskesSlug"),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
                                         Box(
                                             modifier = Modifier
-                                                .clip(RoundedCornerShape(8.dp))
-                                                .background(Color(0xFFDC2626).copy(alpha = 0.12f))
-                                                .clickable {
+                                                .size(6.dp)
+                                                .clip(CircleShape)
+                                                .background(
+                                                    when {
+                                                        faskesInpatients.isNotEmpty() -> Color(0xFFDC2626)
+                                                        count > 0 -> WaliPrimary
+                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                                    }
+                                                )
+                                        )
+                                        Text(
+                                            text = faskesName,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = if (hasActive) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (hasActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1
+                                        )
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = if (count > 0) WaliPrimary else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                                        ) {
+                                            Text(
+                                                text = if (count > 0) {
+                                                    if (isEn) "$count Students" else "$count Anak"
+                                                } else {
+                                                    "0"
+                                                },
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (count > 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                            )
+                                        }
+                                        if (faskesInpatients.isNotEmpty()) {
+                                            Surface(
+                                                onClick = {
                                                     TopOnAdManager.onUserActionClick(context)
                                                     if (faskesInpatients.size == 1) {
                                                         selectedInpatientRecordForDetail = faskesInpatients.first()
                                                     } else {
                                                         inpatientPickerForFaskes = faskesName to faskesInpatients
                                                     }
-                                                }
-                                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                                                .testTag("badge_inpatient_${faskesName.lowercase().replace(" ", "_")}")
-                                        ) {
-                                            Row(
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                },
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFDC2626).copy(alpha = 0.14f),
+                                                modifier = Modifier.testTag("badge_inpatient_$faskesSlug")
                                             ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.LocalHospital,
-                                                    contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
-                                                    tint = Color(0xFFDC2626),
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                                Text(
-                                                    text = if (isEn) "${faskesInpatients.size} Inpatient" else "${faskesInpatients.size} Anak Rawat Inap",
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFB91C1C)
-                                                )
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFB91C1C),
-                                                    modifier = Modifier.size(14.dp)
-                                                )
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.LocalHospital,
+                                                        contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
+                                                        tint = Color(0xFFDC2626),
+                                                        modifier = Modifier.size(12.dp)
+                                                    )
+                                                    Text(
+                                                        text = if (isEn) "${faskesInpatients.size} Inpatient" else "${faskesInpatients.size} Rawat Inap",
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFFB91C1C),
+                                                        maxLines = 1
+                                                    )
+                                                    Icon(
+                                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                        contentDescription = null,
+                                                        tint = Color(0xFFB91C1C),
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
-                            }
 
-                            // Jika ada anak rawat inap di faskes custom / "Lainnya" di luar daftar utama sekolah
-                            val customFaskesInpatients = inpatientRecords.filter { rec ->
-                                allFaskes.none { f -> rec.faskes.contains(f, ignoreCase = true) }
-                            }.groupBy { it.faskes.ifBlank { if (isEn) "Referral Faskes" else "Faskes Rujukan" } }
-
-                            customFaskesInpatients.forEach { (faskesName, list) ->
-                                FlowRow(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = if (isEn) "$faskesName: 0 Students" else "$faskesName: 0 Anak",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.align(Alignment.CenterVertically)
-                                    )
-                                    Box(
+                                customFaskesInpatients.forEach { (faskesName, list) ->
+                                    Row(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color(0xFFDC2626).copy(alpha = 0.12f))
-                                            .clickable {
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .background(Color(0xFFDC2626).copy(alpha = 0.08f))
+                                            .border(
+                                                width = 1.dp,
+                                                color = Color(0xFFDC2626).copy(alpha = 0.25f),
+                                                shape = RoundedCornerShape(10.dp)
+                                            )
+                                            .padding(horizontal = 9.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = faskesName,
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1
+                                        )
+                                        Surface(
+                                            onClick = {
                                                 TopOnAdManager.onUserActionClick(context)
                                                 if (list.size == 1) {
                                                     selectedInpatientRecordForDetail = list.first()
                                                 } else {
                                                     inpatientPickerForFaskes = faskesName to list
                                                 }
-                                            }
-                                            .padding(horizontal = 8.dp, vertical = 3.dp)
-                                            .testTag("badge_inpatient_custom")
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFDC2626).copy(alpha = 0.14f),
+                                            modifier = Modifier.testTag("badge_inpatient_custom")
                                         ) {
-                                            Icon(
-                                                imageVector = Icons.Default.LocalHospital,
-                                                contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
-                                                tint = Color(0xFFDC2626),
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Text(
-                                                text = if (isEn) "${list.size} Inpatient" else "${list.size} Anak Rawat Inap",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFFB91C1C)
-                                            )
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                contentDescription = null,
-                                                tint = Color(0xFFB91C1C),
-                                                modifier = Modifier.size(14.dp)
-                                            )
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.LocalHospital,
+                                                    contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
+                                                    tint = Color(0xFFDC2626),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = if (isEn) "${list.size} Inpatient" else "${list.size} Rawat Inap",
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFB91C1C),
+                                                    maxLines = 1
+                                                )
+                                                Icon(
+                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFB91C1C),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            LinearProgressIndicator(
-                                progress = { progressRatio },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(5.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
-                                color = WaliPrimary,
-                                trackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = if (isEn) "$totalToday Scheduled Today ($totalToday/$totalSchoolStudents Students)" else "$totalToday Anak Dijadwalkan Hari Ini ($totalToday/$totalSchoolStudents Siswa)",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                            // Row 3: Slim Progress Bar + Compact 1-Line Footer
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                LinearProgressIndicator(
+                                    progress = { progressRatio },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp)),
+                                    color = WaliPrimary,
+                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
                                 )
-                                if (upcomingPlans.isNotEmpty()) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
                                     Text(
-                                        text = if (isEn) "📅 +${upcomingPlans.size} upcoming" else "📅 +${upcomingPlans.size} mendatang",
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = WaliPrimary
+                                        text = if (isEn) {
+                                            "$totalToday/$totalSchoolStudents Students Scheduled"
+                                        } else {
+                                            "$totalToday/$totalSchoolStudents Siswa Dijadwalkan"
+                                        },
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    if (upcomingPlans.isNotEmpty()) {
+                                        Text(
+                                            text = if (isEn) "+${upcomingPlans.size} upcoming" else "+${upcomingPlans.size} mendatang",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = WaliPrimary
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -505,6 +647,12 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 modalState.showRankingPuasaSheet = true
                             },
+                            onOpenInputMengaji = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.mengajiTargetStudent = null
+                                modalState.mengajiRecordToEdit = null
+                                modalState.showInputMengajiDialog = true
+                            },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,
@@ -520,6 +668,8 @@ fun DashboardScreen(
                                 val latestSession = fastingSessions.firstOrNull { it.isActive } ?: fastingSessions.firstOrNull()
                                 if (latestSession == null) 0 else fastingRecords.count { it.sessionId == latestSession.id }
                             },
+                            mengajiTodayCount = mengajiRecords.count { DateUtils.isToday(it.sessionDate) },
+                            mengajiTotalCount = mengajiRecords.size,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
                         )
@@ -697,6 +847,7 @@ fun DashboardScreen(
                 activeHaidRecords = activeHaidRecords,
                 suciRecords = suciRecords,
                 shiftMessages = shiftMessages,
+                mengajiRecords = mengajiRecords,
                 onDismiss = { modalState.activeCategoryHub = null },
                 onNavigateToPlan = {
                     modalState.activeCategoryHub = null
@@ -719,7 +870,24 @@ fun DashboardScreen(
                 onOpenFiqihHaid = { modalState.showFiqihHaidDialog = true },
                 onOpenShiftMessages = { modalState.showShiftMessagesSheet = true },
                 onOpenCreateShiftMessage = { modalState.showCreateShiftMessageDialog = true },
-                onOpenShiftHistory = { modalState.showShiftHistorySheet = true }
+                onOpenShiftHistory = { modalState.showShiftHistorySheet = true },
+                onOpenInputMengaji = {
+                    modalState.mengajiTargetStudent = null
+                    modalState.mengajiRecordToEdit = null
+                    modalState.showInputMengajiDialog = true
+                },
+                onOpenRiwayatMengaji = {
+                    modalState.riwayatMengajiInitialTab = 0
+                    modalState.showRiwayatMengajiSheet = true
+                },
+                onOpenKartuMengaji = {
+                    modalState.mengajiTargetStudent = null
+                    modalState.showKartuMengajiSheet = true
+                },
+                onOpenRekapMengaji = {
+                    modalState.riwayatMengajiInitialTab = 1
+                    modalState.showRiwayatMengajiSheet = true
+                }
             )
         }
     }
@@ -1233,6 +1401,102 @@ fun DashboardScreen(
             sessions = fastingSessions,
             fastingRecords = fastingRecords,
             onDismiss = { modalState.showRankingPuasaSheet = false }
+        )
+    }
+
+    // Modal Bottom Sheet 1 (Mengaji): Input Mengaji Berkelanjutan
+    if (modalState.showInputMengajiDialog) {
+        InputMengajiDialog(
+            students = students,
+            mengajiRecords = mengajiRecords,
+            initialStudent = modalState.mengajiTargetStudent,
+            recordToEdit = modalState.mengajiRecordToEdit,
+            onSave = { student, dateMillis, bookType, jilidOrJuz, pageOrVerse, fluencyStatus, notes, existingId ->
+                viewModel.saveMengajiRecord(
+                    student = student,
+                    sessionDate = dateMillis,
+                    bookType = bookType,
+                    jilidOrJuz = jilidOrJuz,
+                    pageOrVerse = pageOrVerse,
+                    fluencyStatus = fluencyStatus,
+                    notes = notes,
+                    existingRecordId = existingId
+                ) { _, _ ->
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "Mengaji saved for ${student.name}: $jilidOrJuz • $pageOrVerse"
+                        } else {
+                            "Setoran mengaji ${student.name} tersimpan: $jilidOrJuz • $pageOrVerse"
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                modalState.showInputMengajiDialog = false
+                modalState.mengajiTargetStudent = null
+                modalState.mengajiRecordToEdit = null
+            },
+            onDismiss = {
+                modalState.showInputMengajiDialog = false
+                modalState.mengajiTargetStudent = null
+                modalState.mengajiRecordToEdit = null
+            }
+        )
+    }
+
+    // Modal Bottom Sheet 2 (Mengaji): Cetak Kartu Mengaji Bulanan & PDF
+    if (modalState.showKartuMengajiSheet) {
+        KartuMengajiSheet(
+            students = students,
+            mengajiRecords = mengajiRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            initialStudent = modalState.mengajiTargetStudent,
+            onOpenInputForStudent = { st ->
+                modalState.showKartuMengajiSheet = false
+                modalState.mengajiTargetStudent = st
+                modalState.mengajiRecordToEdit = null
+                modalState.showInputMengajiDialog = true
+            },
+            onDismiss = {
+                modalState.showKartuMengajiSheet = false
+                modalState.mengajiTargetStudent = null
+            }
+        )
+    }
+
+    // Modal Bottom Sheet 3 (Mengaji): Riwayat Harian & Rekap Jilid Anak
+    if (modalState.showRiwayatMengajiSheet) {
+        RiwayatMengajiSheet(
+            students = students,
+            mengajiRecords = mengajiRecords,
+            initialTab = modalState.riwayatMengajiInitialTab,
+            onContinueStudent = { st ->
+                modalState.showRiwayatMengajiSheet = false
+                modalState.mengajiTargetStudent = st
+                modalState.mengajiRecordToEdit = null
+                modalState.showInputMengajiDialog = true
+            },
+            onOpenKartuForStudent = { st ->
+                modalState.showRiwayatMengajiSheet = false
+                modalState.mengajiTargetStudent = st
+                modalState.showKartuMengajiSheet = true
+            },
+            onEditRecord = { rec ->
+                modalState.showRiwayatMengajiSheet = false
+                modalState.mengajiRecordToEdit = rec
+                modalState.mengajiTargetStudent = null
+                modalState.showInputMengajiDialog = true
+            },
+            onDeleteRecord = { rec ->
+                viewModel.deleteMengajiRecord(rec)
+                Toast.makeText(
+                    context,
+                    if (isEn) "Mengaji record deleted." else "Catatan mengaji dihapus.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { modalState.showRiwayatMengajiSheet = false }
         )
     }
 }

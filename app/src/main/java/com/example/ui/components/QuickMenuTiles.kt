@@ -60,6 +60,7 @@ fun QuickMenuTiles(
     onOpenDaftarPuasa: () -> Unit = {},
     onOpenChecklistPuasa: () -> Unit = {},
     onOpenRankingPuasa: () -> Unit = {},
+    onOpenInputMengaji: () -> Unit = {},
     todayPlansCount: Int = 0,
     inpatientCount: Int = 0,
     studentsCount: Int = 0,
@@ -72,6 +73,8 @@ fun QuickMenuTiles(
     istihadhahCount: Int = 0,
     fastingSessionsCount: Int = 0,
     todayFastingCount: Int = 0,
+    mengajiTodayCount: Int = 0,
+    mengajiTotalCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     modifier: Modifier = Modifier
@@ -226,7 +229,16 @@ fun QuickMenuTiles(
             }
         }
 
-        // Baris 3: Puskesmas Rujukan (Banner Horisontal Cantik)
+        // Baris 3: Mengaji Berkelanjutan & Cetak Kartu Mengaji (Gojek Super-App Hub Card)
+        MengajiWideCard(
+            mengajiTodayCount = mengajiTodayCount,
+            mengajiTotalCount = mengajiTotalCount,
+            onOpenHub = { onOpenCategoryHub(DashboardCategoryHub.MENGAJI) },
+            onQuickInput = onOpenInputMengaji,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        // Baris 4: Puskesmas Rujukan (Banner Horisontal Cantik)
         PuskesmasWideCard(
             faskesSubtitle = faskesBannerSubtitle,
             onClick = onShowPuskesmasInfo,
@@ -488,6 +500,123 @@ fun PuskesmasWideCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MengajiWideCard(
+    mengajiTodayCount: Int = 0,
+    mengajiTotalCount: Int = 0,
+    onOpenHub: () -> Unit,
+    onQuickInput: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isEn = LocalAppStrings.current.isEnglish
+    val emerald = Color(0xFF047857)
+    ElevatedCard(
+        modifier = modifier
+            .clickable(onClick = onOpenHub)
+            .testTag("category_mengaji"),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFFD1FAE5), Color(0xFFECFDF5), Color(0xFFFFFFFF))
+                    )
+                )
+                .border(1.dp, Color(0xFFA7F3D0), RoundedCornerShape(14.dp))
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .shadow(3.dp, CircleShape, spotColor = emerald.copy(alpha = 0.2f))
+                    .clip(CircleShape)
+                    .background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.img_menu_mengaji),
+                    contentDescription = if (isEn) "Mengaji Progress" else "Mengaji Berkelanjutan",
+                    modifier = Modifier.size(46.dp),
+                    contentScale = ContentScale.Crop
+                )
+            }
+
+            Spacer(modifier = Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Mengaji & Progress Card" else "Mengaji & Kartu Kendali",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFF047857))
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                    ) {
+                        Text(
+                            text = when {
+                                mengajiTodayCount > 0 -> if (isEn) "$mengajiTodayCount Today" else "$mengajiTodayCount Hari Ini"
+                                mengajiTotalCount > 0 -> "$mengajiTotalCount Log"
+                                else -> if (isEn) "New" else "Baru"
+                            },
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+                Text(
+                    text = if (isEn) {
+                        "Continuous reading log, volume recap & monthly card print"
+                    } else {
+                        "Input lanjutan jilid/halaman, riwayat anak & cetak kartu"
+                    },
+                    fontSize = 11.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(6.dp))
+
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(emerald)
+                    .clickable(onClick = onQuickInput)
+                    .padding(horizontal = 10.dp, vertical = 7.dp)
+                    .testTag("tile_quick_input_mengaji")
+            ) {
+                Text(
+                    text = if (isEn) "+ Input" else "+ Setor",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1
                 )
             }
         }

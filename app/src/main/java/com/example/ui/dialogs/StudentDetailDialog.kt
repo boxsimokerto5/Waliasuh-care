@@ -25,6 +25,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
@@ -65,6 +67,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiHelper
+import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
@@ -82,6 +86,9 @@ fun StudentDetailDialog(
     studentRecords: List<MedicalRecord>,
     schoolProfile: SchoolProfile = SchoolProfile(),
     waliName: String = "Wali Asuh",
+    mengajiRecords: List<MengajiRecord> = emptyList(),
+    onInputMengaji: ((ChildStudent) -> Unit)? = null,
+    onPrintKartuMengaji: ((ChildStudent) -> Unit)? = null,
     onEditStudent: ((ChildStudent) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -91,6 +98,10 @@ fun StudentDetailDialog(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPrintPdfDialog by remember { mutableStateOf(false) }
     var showCardGeneratorForStudent by remember { mutableStateOf(false) }
+    var showInlineKartuMengaji by remember { mutableStateOf(false) }
+    val orderedMengajiRecords = remember(mengajiRecords, student) {
+        MengajiHelper.recordsForStudent(mengajiRecords, student)
+    }
 
     val calNow = Calendar.getInstance()
     val curMonth = calNow.get(Calendar.MONTH)
@@ -470,6 +481,174 @@ fun StudentDetailDialog(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
 
+                // Riwayat Mengaji Melekat pada Siswa
+                val emeraldPrimary = Color(0xFF047857)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                            contentDescription = null,
+                            tint = emeraldPrimary,
+                            modifier = Modifier.size(17.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) {
+                                "Mengaji History (${orderedMengajiRecords.size}):"
+                            } else {
+                                "Riwayat Mengaji (${orderedMengajiRecords.size} Setoran):"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (onInputMengaji != null) {
+                            OutlinedButton(
+                                onClick = { onInputMengaji(student) },
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .height(34.dp)
+                                    .testTag("btn_student_input_mengaji")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = emeraldPrimary, modifier = Modifier.size(14.dp))
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Text(if (isEn) "Input" else "Input", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = emeraldPrimary)
+                            }
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                if (onPrintKartuMengaji != null) {
+                                    onPrintKartuMengaji(student)
+                                } else {
+                                    showInlineKartuMengaji = true
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .height(34.dp)
+                                .testTag("btn_student_kartu_mengaji")
+                        ) {
+                            Icon(Icons.Default.Print, contentDescription = null, tint = emeraldPrimary, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
+                            Text(if (isEn) "Card" else "Kartu", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = emeraldPrimary)
+                        }
+                    }
+                }
+
+                val latestMengaji = orderedMengajiRecords.firstOrNull()
+                if (latestMengaji == null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f))
+                            .padding(vertical = 10.dp, horizontal = 12.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "No mengaji records for this student yet."
+                            } else {
+                                "Belum ada riwayat setoran mengaji untuk siswa ini."
+                            },
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    val lastFluent = MengajiHelper.isFluent(latestMengaji.fluencyStatus)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (lastFluent) Color(0xFFD1FAE5) else Color(0xFFFEF3C7))
+                            .padding(horizontal = 10.dp, vertical = 6.dp)
+                            .testTag("badge_student_latest_mengaji")
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "Latest Position: ${MengajiHelper.formatCompactPosition(latestMengaji)} (${MengajiHelper.fluencyLabel(latestMengaji.fluencyStatus, true)})"
+                            } else {
+                                "Bacaan Terakhir: ${MengajiHelper.formatCompactPosition(latestMengaji)} (${MengajiHelper.fluencyLabel(latestMengaji.fluencyStatus, false)})"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (lastFluent) Color(0xFF065F46) else Color(0xFF92400E)
+                        )
+                    }
+
+                    orderedMengajiRecords.take(5).forEach { rec ->
+                        val isFluent = MengajiHelper.isFluent(rec.fluencyStatus)
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("student_mengaji_item_${rec.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = MengajiHelper.formatCompactPosition(rec),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "${DateUtils.formatShortDate(rec.sessionDate, s.language)} • Wali: ${rec.waliName}",
+                                        fontSize = 10.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (rec.notes.isNotBlank()) {
+                                        Text(
+                                            text = rec.notes,
+                                            fontSize = 10.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isFluent) Color(0xFFDCFCE7) else Color(0xFFFEE2E2))
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = MengajiHelper.fluencyLabel(rec.fluencyStatus, isEn),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isFluent) Color(0xFF15803D) else Color(0xFFB91C1C)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
                 // Riwayat Kunjungan Pengobatan
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -638,6 +817,21 @@ fun StudentDetailDialog(
             schoolProfile = schoolProfile,
             initialStudent = student,
             onDismiss = { showCardGeneratorForStudent = false }
+        )
+    }
+
+    if (showInlineKartuMengaji) {
+        KartuMengajiSheet(
+            students = listOf(student),
+            mengajiRecords = orderedMengajiRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            initialStudent = student,
+            onOpenInputForStudent = { st ->
+                showInlineKartuMengaji = false
+                onInputMengaji?.invoke(st)
+            },
+            onDismiss = { showInlineKartuMengaji = false }
         )
     }
 }

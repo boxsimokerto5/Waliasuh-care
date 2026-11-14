@@ -23,9 +23,11 @@ import org.json.JSONArray
 import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
+import com.example.data.dao.MengajiRecordDao
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.MengajiRecord
 
 @Database(
     entities = [
@@ -36,9 +38,10 @@ import com.example.data.model.HaidRecord
         ShiftMessage::class,
         HaidRecord::class,
         FastingSession::class,
-        FastingRecord::class
+        FastingRecord::class,
+        MengajiRecord::class
     ],
-    version = 14,
+    version = 15,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun haidRecordDao(): HaidRecordDao
     abstract fun fastingSessionDao(): FastingSessionDao
     abstract fun fastingRecordDao(): FastingRecordDao
+    abstract fun mengajiRecordDao(): MengajiRecordDao
 
     companion object {
         @Volatile
@@ -179,6 +183,37 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_14_15 = object : androidx.room.migration.Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS mengaji_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentNik TEXT NOT NULL DEFAULT '',
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        studentJenjang TEXT NOT NULL DEFAULT '',
+                        sessionDate INTEGER NOT NULL DEFAULT 0,
+                        bookType TEXT NOT NULL DEFAULT 'Iqro''',
+                        jilidOrJuz TEXT NOT NULL DEFAULT 'Jilid 1',
+                        pageOrVerse TEXT NOT NULL DEFAULT 'Hal. 1',
+                        startPage INTEGER,
+                        endPage INTEGER,
+                        fluencyStatus TEXT NOT NULL DEFAULT 'LANCAR',
+                        notes TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -187,7 +222,15 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "waliasuh_care.db"
                 )
-                    .addMigrations(MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_11_12, MIGRATION_12_13, MIGRATION_13_14)
+                    .addMigrations(
+                        MIGRATION_6_7,
+                        MIGRATION_7_8,
+                        MIGRATION_8_9,
+                        MIGRATION_11_12,
+                        MIGRATION_12_13,
+                        MIGRATION_13_14,
+                        MIGRATION_14_15
+                    )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
                     .build()

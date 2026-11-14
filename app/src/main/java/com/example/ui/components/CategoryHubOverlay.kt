@@ -61,6 +61,7 @@ import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
 import com.example.util.DateUtils
@@ -77,6 +78,7 @@ fun CategoryHubOverlay(
     activeHaidRecords: List<HaidRecord>,
     suciRecords: List<HaidRecord>,
     shiftMessages: List<ShiftMessage>,
+    mengajiRecords: List<MengajiRecord> = emptyList(),
     onDismiss: () -> Unit,
     onNavigateToPlan: () -> Unit,
     onNavigateToRecords: () -> Unit,
@@ -93,7 +95,11 @@ fun CategoryHubOverlay(
     onOpenFiqihHaid: () -> Unit,
     onOpenShiftMessages: () -> Unit,
     onOpenCreateShiftMessage: () -> Unit,
-    onOpenShiftHistory: () -> Unit
+    onOpenShiftHistory: () -> Unit,
+    onOpenInputMengaji: () -> Unit = {},
+    onOpenRiwayatMengaji: () -> Unit = {},
+    onOpenKartuMengaji: () -> Unit = {},
+    onOpenRekapMengaji: () -> Unit = {}
 ) {
     var lastCategory by remember { mutableStateOf(category) }
     if (category != null) {
@@ -123,6 +129,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.PUASA -> listOf(Color(0xFF065F46), Color(0xFF0F766E))
             DashboardCategoryHub.HAID -> listOf(Color(0xFF9D174D), Color(0xFFDB2777))
             DashboardCategoryHub.PESAN -> listOf(Color(0xFFB45309), Color(0xFFD97706))
+            DashboardCategoryHub.MENGAJI -> listOf(Color(0xFF047857), Color(0xFF0F766E))
         }
 
         val heroTitle = when (current) {
@@ -130,6 +137,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.PUASA -> if (isEn) "Student Puasa Center" else "Pusat Pendataan Puasa"
             DashboardCategoryHub.HAID -> if (isEn) "Haid & Fiqih Care" else "Pendataan & Fiqih Haid"
             DashboardCategoryHub.PESAN -> if (isEn) "Shift Handover Notes" else "Pesan & Operan Shift"
+            DashboardCategoryHub.MENGAJI -> if (isEn) "Mengaji & Progress Card" else "Mengaji & Kartu Kendali"
         }
 
         val heroSubtitle = when (current) {
@@ -151,6 +159,14 @@ fun CategoryHubOverlay(
                 val activeCount = shiftMessages.count { !it.isCompleted && DateUtils.isToday(it.followUpDate) }
                 if (isEn) "$activeCount active handover notes today" else "$activeCount pesan operan aktif hari ini"
             }
+            DashboardCategoryHub.MENGAJI -> {
+                val todayCount = mengajiRecords.count { DateUtils.isToday(it.sessionDate) }
+                if (isEn) {
+                    "$todayCount entries today • ${mengajiRecords.size} total logs"
+                } else {
+                    "$todayCount setoran hari ini • ${mengajiRecords.size} total catatan"
+                }
+            }
         }
 
         val heroImage = when (current) {
@@ -158,6 +174,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.PUASA -> R.drawable.img_menu_input_puasa
             DashboardCategoryHub.HAID -> R.drawable.img_menu_daftar_haid
             DashboardCategoryHub.PESAN -> R.drawable.img_menu_pesan_shift
+            DashboardCategoryHub.MENGAJI -> R.drawable.img_menu_mengaji
         }
 
         val contextPillText = schoolProfile.shortName
@@ -248,7 +265,7 @@ fun CategoryHubOverlay(
 
                             // Tombol Aksi Cepat Lingkaran di Kanan Atas
                             val quickActionIcon = when (current) {
-                                DashboardCategoryHub.PUASA, DashboardCategoryHub.HAID -> Icons.Default.QrCodeScanner
+                                DashboardCategoryHub.PUASA, DashboardCategoryHub.HAID, DashboardCategoryHub.MENGAJI -> Icons.Default.QrCodeScanner
                                 else -> Icons.Default.Add
                             }
                             val quickActionDesc = when (current) {
@@ -256,6 +273,7 @@ fun CategoryHubOverlay(
                                 DashboardCategoryHub.PUASA -> if (isEn) "Scan Input Puasa" else "Scan Input Puasa"
                                 DashboardCategoryHub.HAID -> if (isEn) "Scan Input Haid" else "Scan Input Haid"
                                 DashboardCategoryHub.PESAN -> if (isEn) "Write Note" else "Tulis Pesan"
+                                DashboardCategoryHub.MENGAJI -> if (isEn) "Scan Input Mengaji" else "Scan Input Mengaji"
                             }
                             Surface(
                                 shape = CircleShape,
@@ -270,6 +288,7 @@ fun CategoryHubOverlay(
                                             DashboardCategoryHub.PUASA -> onOpenInputPuasa()
                                             DashboardCategoryHub.HAID -> onOpenInputHaid()
                                             DashboardCategoryHub.PESAN -> onOpenCreateShiftMessage()
+                                            DashboardCategoryHub.MENGAJI -> onOpenInputMengaji()
                                         }
                                     }
                                     .testTag("btn_quick_action_category_hub")
@@ -385,6 +404,15 @@ fun CategoryHubOverlay(
                                     onOpenShiftMessages = onOpenShiftMessages,
                                     onOpenCreateShiftMessage = onOpenCreateShiftMessage,
                                     onOpenShiftHistory = onOpenShiftHistory
+                                )
+                                DashboardCategoryHub.MENGAJI -> mengajiCategoryItems(
+                                    isEn = isEn,
+                                    lang = lang,
+                                    mengajiRecords = mengajiRecords,
+                                    onOpenInputMengaji = onOpenInputMengaji,
+                                    onOpenRiwayatMengaji = onOpenRiwayatMengaji,
+                                    onOpenKartuMengaji = onOpenKartuMengaji,
+                                    onOpenRekapMengaji = onOpenRekapMengaji
                                 )
                             }
                         }

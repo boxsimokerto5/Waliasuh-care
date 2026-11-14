@@ -99,6 +99,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-created_at"
     ): Response<PbListResponse<PbFastingRecordDto>>
 
+    // --- Mengaji Records ---
+    @GET("api/collections/mengaji_records/records")
+    suspend fun listMengajiRecords(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-session_date"
+    ): Response<PbListResponse<PbMengajiRecordDto>>
+
     // --- School Profiles ---
     @GET("api/collections/school_profiles/records")
     suspend fun listSchoolProfiles(

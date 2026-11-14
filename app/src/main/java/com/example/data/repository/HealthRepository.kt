@@ -16,9 +16,11 @@ import kotlinx.coroutines.flow.emptyFlow
 import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
+import com.example.data.dao.MengajiRecordDao
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.MengajiRecord
 
 class HealthRepository(
     private val studentDao: ChildStudentDao,
@@ -28,7 +30,8 @@ class HealthRepository(
     private val shiftMessageDao: ShiftMessageDao? = null,
     private val haidRecordDao: HaidRecordDao? = null,
     private val fastingSessionDao: FastingSessionDao? = null,
-    private val fastingRecordDao: FastingRecordDao? = null
+    private val fastingRecordDao: FastingRecordDao? = null,
+    private val mengajiRecordDao: MengajiRecordDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -43,6 +46,7 @@ class HealthRepository(
     val suciRecords: Flow<List<HaidRecord>> = haidRecordDao?.getSuciRecords() ?: emptyFlow()
     val allFastingSessions: Flow<List<FastingSession>> = fastingSessionDao?.getAllSessions() ?: emptyFlow()
     val allFastingRecords: Flow<List<FastingRecord>> = fastingRecordDao?.getAllRecords() ?: emptyFlow()
+    val allMengajiRecords: Flow<List<MengajiRecord>> = mengajiRecordDao?.getAllRecords() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -293,5 +297,38 @@ class HealthRepository(
 
     suspend fun deleteFastingRecordsBySchool(schoolId: String) {
         fastingRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Mengaji Berkelanjutan Operations ---
+    suspend fun insertMengajiRecord(record: MengajiRecord): Long =
+        mengajiRecordDao?.insert(record) ?: 0L
+
+    suspend fun insertAllMengajiRecords(records: List<MengajiRecord>) {
+        mengajiRecordDao?.insertAll(records)
+    }
+
+    suspend fun getAllMengajiRecordsList(): List<MengajiRecord> =
+        mengajiRecordDao?.getAllRecordsList() ?: emptyList()
+
+    suspend fun getMengajiRecordsBySchoolList(schoolId: String): List<MengajiRecord> =
+        mengajiRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getMengajiRecordsForStudentList(studentId: Long): List<MengajiRecord> =
+        mengajiRecordDao?.getRecordsForStudentList(studentId) ?: emptyList()
+
+    suspend fun updateMengajiRecord(record: MengajiRecord) {
+        mengajiRecordDao?.update(record)
+    }
+
+    suspend fun deleteMengajiRecord(record: MengajiRecord) {
+        mengajiRecordDao?.delete(record)
+    }
+
+    suspend fun deleteMengajiRecordById(id: Long) {
+        mengajiRecordDao?.deleteById(id)
+    }
+
+    suspend fun deleteMengajiRecordsBySchool(schoolId: String) {
+        mengajiRecordDao?.deleteBySchoolId(schoolId)
     }
 }

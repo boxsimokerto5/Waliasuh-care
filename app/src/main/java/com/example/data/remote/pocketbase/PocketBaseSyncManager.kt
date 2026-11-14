@@ -7,6 +7,7 @@ import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
+import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -393,6 +394,30 @@ object PocketBaseSyncManager {
             }
         }
 
+    // --- Mengaji Records ---
+    suspend fun uploadSingleMengajiRecord(context: Context, record: MengajiRecord) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbMengajiRecordDto.fromDomain(record)
+                upsertSingleDto(service, "mengaji_records", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleMengajiRecord ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteMengajiRecord(context: Context, recordId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("mengaji_records", PocketBaseIdCodec.toPbId(recordId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteMengajiRecord ke PocketBase", e)
+            }
+        }
+
     // --- Wali Accounts ---
     suspend fun uploadWaliAccounts(context: Context, accounts: List<WaliAccount>) =
         withContext(Dispatchers.IO) {
@@ -562,6 +587,7 @@ object PocketBaseSyncManager {
             val service = PocketBaseClient.getService(context) ?: return@withContext
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
+            runCatching { deleteCollectionByFilter(service, "mengaji_records", filter) }
             runCatching { deleteCollectionByFilter(service, "medical_records", filter) }
             runCatching { deleteCollectionByFilter(service, "haid_records", filter) }
             runCatching { deleteCollectionByFilter(service, "shift_messages", filter) }
@@ -732,6 +758,49 @@ object PocketBaseSyncManager {
                 dto.id!! to dto
             }
             upsertBatchOrFallback(service, "fasting_records", pairs)
+        }
+    }
+
+    private suspend fun syncMengajiRecordsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localRecords = repository.getMengajiRecordsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listMengajiRecords(page = page, perPage = 500, filter = filter)
+        }
+        val remoteDtos = remoteRes.getOrNull() ?: return
+        val remoteRecords = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
+
+        val localById = localRecords.associateBy { it.id }
+        val remoteById = remoteRecords.associateBy { it.id }
+        val dirtyRemoteIds = remoteDtos.mapNotNull { dto ->
+            val rawNik = dto.studentNik.orEmpty()
+            val cleanedNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawNik)
+            if (rawNik != cleanedNik) PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id) else null
+        }.toSet()
+
+        val toInsertLocal = remoteRecords.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllMengajiRecords(toInsertLocal)
+        }
+
+        val toPushRemote = remoteRecords.filter { it.id in dirtyRemoteIds } + localRecords.filter { loc ->
+            if (loc.id in dirtyRemoteIds) return@filter false
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { rec ->
+                val dto = PbMengajiRecordDto.fromDomain(rec)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "mengaji_records", pairs)
         }
     }
 
@@ -991,6 +1060,11 @@ object PocketBaseSyncManager {
             }
             runCatching {
                 syncFastingRecordsMerged(service, cleanSchoolId, filter, repository)
+            }
+
+            // 7. Sinkronkan Riwayat Mengaji Berkelanjutan (mengaji_records)
+            runCatching {
+                syncMengajiRecordsMerged(service, cleanSchoolId, filter, repository)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())

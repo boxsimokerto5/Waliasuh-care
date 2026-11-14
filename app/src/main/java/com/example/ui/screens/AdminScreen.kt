@@ -115,6 +115,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingSession
+import com.example.data.model.MengajiHelper
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
@@ -122,6 +123,8 @@ import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
+import com.example.ui.dialogs.InputMengajiDialog
+import com.example.ui.dialogs.KartuMengajiSheet
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
@@ -152,6 +155,7 @@ fun AdminScreen(
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
 
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
@@ -172,6 +176,8 @@ fun AdminScreen(
     var selectedStudentGenderFilter by remember { mutableStateOf("Semua") }
     var studentToDelete by remember { mutableStateOf<ChildStudent?>(null) }
     var selectedDetailStudent by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForMengajiInput by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForKartuMengaji by remember { mutableStateOf<ChildStudent?>(null) }
     var studentToEdit by remember { mutableStateOf<ChildStudent?>(null) }
     var showAddStudentDialog by remember { mutableStateOf(false) }
 
@@ -1571,11 +1577,67 @@ fun AdminScreen(
             studentRecords = allRecords.filter { it.studentId == student.id },
             schoolProfile = schoolProfile,
             waliName = schoolProfile.adminName.ifBlank { waliName },
+            mengajiRecords = MengajiHelper.recordsForStudent(mengajiRecords, student),
+            onInputMengaji = { target ->
+                selectedDetailStudent = null
+                studentForMengajiInput = target
+            },
+            onPrintKartuMengaji = { target ->
+                selectedDetailStudent = null
+                studentForKartuMengaji = target
+            },
             onEditStudent = { toEdit ->
                 selectedDetailStudent = null
                 studentToEdit = toEdit
             },
             onDismiss = { selectedDetailStudent = null }
+        )
+    }
+
+    studentForMengajiInput?.let { target ->
+        InputMengajiDialog(
+            students = schoolStudents,
+            mengajiRecords = mengajiRecords,
+            initialStudent = target,
+            onSave = { st, dateMillis, bookType, jilidOrJuz, pageOrVerse, fluencyStatus, notes, existingId ->
+                viewModel.saveMengajiRecord(
+                    student = st,
+                    sessionDate = dateMillis,
+                    bookType = bookType,
+                    jilidOrJuz = jilidOrJuz,
+                    pageOrVerse = pageOrVerse,
+                    fluencyStatus = fluencyStatus,
+                    notes = notes,
+                    existingRecordId = existingId
+                ) { _, _ ->
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "Mengaji saved for ${st.name}: $jilidOrJuz • $pageOrVerse"
+                        } else {
+                            "Setoran mengaji ${st.name} tersimpan: $jilidOrJuz • $pageOrVerse"
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                studentForMengajiInput = null
+            },
+            onDismiss = { studentForMengajiInput = null }
+        )
+    }
+
+    studentForKartuMengaji?.let { target ->
+        KartuMengajiSheet(
+            students = schoolStudents,
+            mengajiRecords = mengajiRecords,
+            schoolProfile = schoolProfile,
+            waliName = schoolProfile.adminName.ifBlank { waliName },
+            initialStudent = target,
+            onOpenInputForStudent = { st ->
+                studentForKartuMengaji = null
+                studentForMengajiInput = st
+            },
+            onDismiss = { studentForKartuMengaji = null }
         )
     }
 

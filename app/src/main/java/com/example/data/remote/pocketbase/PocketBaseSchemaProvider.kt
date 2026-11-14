@@ -215,6 +215,34 @@ object PocketBaseSchemaProvider {
             indexes = listOf("CREATE INDEX idx_fr_school ON fasting_records (school_id)")
         ),
         PocketBaseCollectionMeta(
+            collectionName = "mengaji_records",
+            description = "Riwayat mengaji berkelanjutan & kartu prestasi mengaji siswa",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nik", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("student_jenjang", "text"),
+                PbFieldDef("session_date", "number"),
+                PbFieldDef("book_type", "text"),
+                PbFieldDef("jilid_or_juz", "text"),
+                PbFieldDef("page_or_verse", "text"),
+                PbFieldDef("start_page", "number"),
+                PbFieldDef("end_page", "number"),
+                PbFieldDef("fluency_status", "text"),
+                PbFieldDef("notes", "text"),
+                PbFieldDef("wali_name", "text"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_mr_school ON mengaji_records (school_id)")
+        ),
+        PocketBaseCollectionMeta(
             collectionName = "school_profiles",
             description = "Profil sekolah, daftar faskes rujukan & kontak faskes",
             multiTenantField = "school_id",
