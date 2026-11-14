@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,27 +56,66 @@ fun ShareWhatsAppDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val treatmentDateStr = record.treatmentDate?.let { DateUtils.formatFullDate(it) }
         ?: DateUtils.formatFullDate(record.planDate)
 
     val controlInfo = if (record.needsControl) {
-        "🗓️ *Wajib Kontrol:* ${record.controlDate?.let { DateUtils.formatFullDate(it) } ?: "Sesuai anjuran dokter"}"
+        if (isEn) {
+            "🗓️ *Control Required:* ${record.controlDate?.let { DateUtils.formatFullDate(it) } ?: "As advised by doctor"}"
+        } else {
+            "🗓️ *Wajib Kontrol:* ${record.controlDate?.let { DateUtils.formatFullDate(it) } ?: "Sesuai anjuran dokter"}"
+        }
     } else {
-        "✅ *Kontrol:* Tidak perlu kontrol (Tuntas)"
+        if (isEn) {
+            "✅ *Control:* Not needed (Cleared)"
+        } else {
+            "✅ *Kontrol:* Tidak perlu kontrol (Tuntas)"
+        }
     }
 
     val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
     val activeShortTitle = schoolProfile.shortName.trim().ifBlank { activeSchoolTitle }
 
     val inpatientInfo = when {
-        record.isInpatient -> "🏥 *Status Perawatan:* SEDANG RAWAT INAP${if (record.inpatientRoom.isNotBlank()) " (Ruang: ${record.inpatientRoom})" else ""}\n"
-        record.dischargeDate != null -> "✅ *Status Perawatan:* Sudah Pulang Rawat Inap (${DateUtils.formatShortDate(record.dischargeDate)})\n"
+        record.isInpatient -> if (isEn) {
+            "🏥 *Care Status:* CURRENTLY INPATIENT${if (record.inpatientRoom.isNotBlank()) " (Room: ${record.inpatientRoom})" else ""}\n"
+        } else {
+            "🏥 *Status Perawatan:* SEDANG RAWAT INAP${if (record.inpatientRoom.isNotBlank()) " (Ruang: ${record.inpatientRoom})" else ""}\n"
+        }
+        record.dischargeDate != null -> if (isEn) {
+            "✅ *Care Status:* Discharged from Inpatient (${DateUtils.formatShortDate(record.dischargeDate)})\n"
+        } else {
+            "✅ *Status Perawatan:* Sudah Pulang Rawat Inap (${DateUtils.formatShortDate(record.dischargeDate)})\n"
+        }
         else -> ""
     }
 
-    val reportText = """
+    val reportText = if (isEn) {
+        """
+🏥 *FOSTER STUDENT TREATMENT REPORT*
+*$activeSchoolTitle*
+----------------------------------------
+👦 *Name:* ${record.studentName}
+🏠 *Asrama:* ${record.studentDormitory}
+📍 *Faskes:* ${record.faskes}
+📅 *Time:* $treatmentDateStr
+$inpatientInfo
+⚠️ *Complaint:* ${record.complaint}
+🩺 *Diagnosis:* ${record.diagnosis.ifBlank { "-" }}
+💉 *Action:* ${record.actionsTaken.ifBlank { "Physical examination" }}
+💊 *Medicine:* ${record.prescription.ifBlank { "-" }}
+$controlInfo
+👤 *Escort:* ${record.escortName.ifBlank { "Wali Asuh $activeShortTitle" }}
+${if (record.notes.isNotBlank()) "📝 *Notes:* ${record.notes}" else ""}
+----------------------------------------
+_Wali Asuh Care ${activeSchoolTitle}_
+""".trimIndent()
+    } else {
+        """
 🏥 *LAPORAN PENGOBATAN ANAK ASUH*
 *$activeSchoolTitle*
 ----------------------------------------
@@ -94,6 +134,7 @@ ${if (record.notes.isNotBlank()) "📝 *Catatan:* ${record.notes}" else ""}
 ----------------------------------------
 _SIK Anak Asuh ${activeSchoolTitle}_
 """.trimIndent()
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -124,7 +165,7 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Laporan WhatsApp",
+                        text = if (isEn) "WhatsApp Report" else "Laporan WhatsApp",
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -132,7 +173,11 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                 }
 
                 Text(
-                    text = "Format pesan siap dikirim ke grup WhatsApp pengasuh / kepala asrama:",
+                    text = if (isEn) {
+                        "Ready-to-send message format for the Asrama / Wali Asuh WhatsApp group:"
+                    } else {
+                        "Format pesan siap dikirim ke grup WhatsApp pengasuh / kepala asrama:"
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -162,16 +207,23 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                         OutlinedButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("Laporan Pengobatan Anak Asuh", reportText)
+                                val clip = ClipData.newPlainText(
+                                    if (isEn) "Foster Student Treatment Report" else "Laporan Pengobatan Anak Asuh",
+                                    reportText
+                                )
                                 clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "Disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Copied to clipboard!" else "Disalin ke clipboard!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             },
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                         ) {
                             Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Salin", fontSize = 11.sp)
+                            Text(if (isEn) "Copy" else "Salin", fontSize = 11.sp)
                         }
 
                         OutlinedButton(
@@ -179,7 +231,7 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
                         ) {
-                            Text("Tutup", fontSize = 11.sp)
+                            Text(s.close, fontSize = 11.sp)
                         }
                     }
 
@@ -189,7 +241,10 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                                 putExtra(Intent.EXTRA_TEXT, reportText)
                                 type = "text/plain"
                             }
-                            val shareIntent = Intent.createChooser(sendIntent, "Kirim Laporan Pengobatan")
+                            val shareIntent = Intent.createChooser(
+                                sendIntent,
+                                if (isEn) "Send Treatment Report" else "Kirim Laporan Pengobatan"
+                            )
                             context.startActivity(shareIntent)
                         },
                         shape = RoundedCornerShape(10.dp),
@@ -198,7 +253,7 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                     ) {
                         Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Kirim / Bagikan", fontSize = 11.sp)
+                        Text(if (isEn) "Send / Share" else "Kirim / Bagikan", fontSize = 11.sp)
                     }
                 }
             }

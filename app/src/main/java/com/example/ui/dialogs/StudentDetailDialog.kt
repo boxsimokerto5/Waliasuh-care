@@ -72,6 +72,7 @@ import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -85,6 +86,8 @@ fun StudentDetailDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showPrintPdfDialog by remember { mutableStateOf(false) }
     var showCardGeneratorForStudent by remember { mutableStateOf(false) }
@@ -108,7 +111,11 @@ fun StudentDetailDialog(
         if (value.isBlank() || value == "-") return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(context, "$label disalin: $value", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            if (isEn) "$label copied: $value" else "$label disalin: $value",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     ModalBottomSheet(
@@ -186,7 +193,7 @@ fun StudentDetailDialog(
                             }
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "NIS / NISN: ${student.nis.ifBlank { "-" }} • ID Sekolah: ${student.schoolId}",
+                                text = "NIS / NISN: ${student.nis.ifBlank { "-" }} • ${if (isEn) "School ID" else "ID Sekolah"}: ${student.schoolId}",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -204,7 +211,7 @@ fun StudentDetailDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Profil Siswa",
+                                    contentDescription = if (isEn) "Edit Student Profile" else "Edit Profil Siswa",
                                     tint = MaterialTheme.colorScheme.primary
                                 )
                             }
@@ -217,7 +224,7 @@ fun StudentDetailDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
-                                contentDescription = "Tutup"
+                                contentDescription = s.nav.close
                             )
                         }
                     }
@@ -233,7 +240,11 @@ fun StudentDetailDialog(
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "⚠️ Perhatian: Anak ini $thisMonthCount kali sakit bulan ini",
+                            text = if (isEn) {
+                                "⚠️ Alert: This student has been sick $thisMonthCount times this month"
+                            } else {
+                                "⚠️ Perhatian: Anak ini $thisMonthCount kali sakit bulan ini"
+                            },
                             fontSize = 11.5.sp,
                             color = Color(0xFFDC2626),
                             fontWeight = FontWeight.Bold
@@ -248,7 +259,7 @@ fun StudentDetailDialog(
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "🩺 1 kali berobat bulan ini",
+                            text = if (isEn) "🩺 1 medical visit this month" else "🩺 1 kali berobat bulan ini",
                             fontSize = 11.5.sp,
                             color = Color(0xFF0369A1),
                             fontWeight = FontWeight.Medium
@@ -273,7 +284,7 @@ fun StudentDetailDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Alergi: ${student.allergies}",
+                            text = if (isEn) "Allergies: ${student.allergies}" else "Alergi: ${student.allergies}",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Bold
@@ -311,7 +322,7 @@ fun StudentDetailDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Identitas Kependudukan & Sekolah",
+                                    text = if (isEn) "Civil & School Identity" else "Identitas Kependudukan & Sekolah",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.5.sp,
                                     color = MaterialTheme.colorScheme.primary
@@ -324,52 +335,59 @@ fun StudentDetailDialog(
                                 label = "NIK",
                                 value = student.nik.ifBlank { "-" },
                                 isMonospace = true,
+                                copyContentDescPrefix = if (isEn) "Copy" else "Salin",
                                 onCopy = if (student.nik.isNotBlank()) {
                                     { copyValue("NIK", student.nik) }
                                 } else null
                             )
                             ProfileDetailRow(
-                                label = "No. KK",
+                                label = if (isEn) "KK No." else "No. KK",
                                 value = student.noKk.ifBlank { "-" },
                                 isMonospace = true,
+                                copyContentDescPrefix = if (isEn) "Copy" else "Salin",
                                 onCopy = if (student.noKk.isNotBlank()) {
-                                    { copyValue("No. KK", student.noKk) }
+                                    { copyValue(if (isEn) "KK No." else "No. KK", student.noKk) }
                                 } else null
                             )
                             ProfileDetailRow(
                                 label = "NIS / NISN",
                                 value = student.nis.ifBlank { "-" },
                                 isMonospace = true,
+                                copyContentDescPrefix = if (isEn) "Copy" else "Salin",
                                 onCopy = if (student.nis.isNotBlank()) {
                                     { copyValue("NIS/NISN", student.nis) }
                                 } else null
                             )
                             ProfileDetailRow(
-                                label = "Jenjang / Kelas",
+                                label = if (isEn) "Level / Class" else "Jenjang / Kelas",
                                 value = "${resolvedJenjang.ifBlank { "-" }} • ${student.classGrade.ifBlank { "-" }}"
                             )
                             ProfileDetailRow(
-                                label = "Jenis Kelamin",
-                                value = if (isMale) "Laki-laki (Putra)" else "Perempuan (Putri)"
+                                label = if (isEn) "Gender" else "Jenis Kelamin",
+                                value = if (isEn) {
+                                    if (isMale) "Male (Putra)" else "Female (Putri)"
+                                } else {
+                                    if (isMale) "Laki-laki (Putra)" else "Perempuan (Putri)"
+                                }
                             )
                             val ttlFormatted = listOf(student.birthPlace, student.birthDate)
                                 .filter { it.isNotBlank() }
                                 .joinToString(", ")
                                 .ifBlank { "-" }
                             ProfileDetailRow(
-                                label = "Tempat, Tgl Lahir",
+                                label = if (isEn) "Birth Place, Date" else "Tempat, Tgl Lahir",
                                 value = ttlFormatted
                             )
                             ProfileDetailRow(
-                                label = "Usia",
-                                value = "${student.age} Tahun"
+                                label = if (isEn) "Age" else "Usia",
+                                value = if (isEn) "${student.age} Years" else "${student.age} Tahun"
                             )
                             ProfileDetailRow(
-                                label = "Nama Ibu Kandung",
+                                label = if (isEn) "Biological Mother" else "Nama Ibu Kandung",
                                 value = student.motherName.ifBlank { "-" }
                             )
                             ProfileDetailRow(
-                                label = "Alamat Lengkap",
+                                label = if (isEn) "Full Address" else "Alamat Lengkap",
                                 value = student.address.ifBlank { "-" }
                             )
                         }
@@ -405,7 +423,7 @@ fun StudentDetailDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Asrama, Kontak & Kesehatan",
+                                text = if (isEn) "Asrama, Contact & Health" else "Asrama, Kontak & Kesehatan",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.5.sp,
                                 color = MaterialTheme.colorScheme.primary
@@ -419,25 +437,29 @@ fun StudentDetailDialog(
                             value = student.dormitory.ifBlank { "-" }
                         )
                         ProfileDetailRow(
-                            label = "Kamar",
+                            label = if (isEn) "Room" else "Kamar",
                             value = student.roomNumber.ifBlank { "-" }
                         )
                         ProfileDetailRow(
-                            label = "Kontak Wali / Ibu",
+                            label = if (isEn) "Guardian / Mother Contact" else "Kontak Wali / Ibu",
                             value = student.emergencyContact.ifBlank { "-" }
                         )
                         ProfileDetailRow(
-                            label = "Golongan Darah",
+                            label = if (isEn) "Blood Type" else "Golongan Darah",
                             value = student.bloodType.ifBlank { "-" }
                         )
                         ProfileDetailRow(
-                            label = "Riwayat Alergi",
-                            value = student.allergies.ifBlank { "Tidak ada" }
+                            label = if (isEn) "Allergy History" else "Riwayat Alergi",
+                            value = student.allergies.ifBlank {
+                                if (isEn) "None" else "Tidak ada"
+                            }.let { raw ->
+                                if (isEn && raw.equals("Tidak ada", ignoreCase = true)) "None" else raw
+                            }
                         )
                         val cleanNotes = student.specialNotes.trim()
                         if (cleanNotes.isNotBlank() && !cleanNotes.equals("Alamat Asal: ${student.address}", ignoreCase = true)) {
                             ProfileDetailRow(
-                                label = "Catatan Khusus",
+                                label = if (isEn) "Special Notes" else "Catatan Khusus",
                                 value = cleanNotes
                             )
                         }
@@ -461,7 +483,11 @@ fun StudentDetailDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Riwayat Berobat (${studentRecords.size} Kali):",
+                            text = if (isEn) {
+                                "Medical History (${studentRecords.size} Visits):"
+                            } else {
+                                "Riwayat Berobat (${studentRecords.size} Kali):"
+                            },
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.sp
                         )
@@ -475,7 +501,7 @@ fun StudentDetailDialog(
                     ) {
                         Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(14.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Cetak PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Print PDF" else "Cetak PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -487,7 +513,11 @@ fun StudentDetailDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Belum ada riwayat pengobatan untuk siswa ini.",
+                            text = if (isEn) {
+                                "No treatment history for this student yet."
+                            } else {
+                                "Belum ada riwayat pengobatan untuk siswa ini."
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -521,14 +551,14 @@ fun StudentDetailDialog(
                                 }
 
                                 Text(
-                                    text = "Keluhan: ${record.complaint}",
+                                    text = if (isEn) "Complaint: ${record.complaint}" else "Keluhan: ${record.complaint}",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Medium
                                 )
 
                                 if (record.diagnosis.isNotBlank()) {
                                     Text(
-                                        text = "Diagnosa: ${record.diagnosis}",
+                                        text = if (isEn) "Diagnosis: ${record.diagnosis}" else "Diagnosa: ${record.diagnosis}",
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.primary,
                                         fontWeight = FontWeight.SemiBold
@@ -537,7 +567,7 @@ fun StudentDetailDialog(
 
                                 if (record.prescription.isNotBlank()) {
                                     Text(
-                                        text = "Obat: ${record.prescription}",
+                                        text = if (isEn) "Medicine: ${record.prescription}" else "Obat: ${record.prescription}",
                                         fontSize = 10.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -567,7 +597,7 @@ fun StudentDetailDialog(
                     ) {
                         Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("Kartu & QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Card & QR" else "Kartu & QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                     if (onEditStudent != null) {
                         OutlinedButton(
@@ -576,14 +606,14 @@ fun StudentDetailDialog(
                         ) {
                             Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Edit Profil", fontSize = 12.sp)
+                            Text(if (isEn) "Edit Profile" else "Edit Profil", fontSize = 12.sp)
                         }
                     }
                     OutlinedButton(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Tutup", fontSize = 12.sp)
+                        Text(s.nav.close, fontSize = 12.sp)
                     }
                 }
             }
@@ -637,6 +667,7 @@ private fun ProfileDetailRow(
     label: String,
     value: String,
     isMonospace: Boolean = false,
+    copyContentDescPrefix: String = "Salin",
     onCopy: (() -> Unit)? = null
 ) {
     Row(
@@ -670,7 +701,7 @@ private fun ProfileDetailRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
-                    contentDescription = "Salin $label",
+                    contentDescription = "$copyContentDescPrefix $label",
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(14.dp)
                 )

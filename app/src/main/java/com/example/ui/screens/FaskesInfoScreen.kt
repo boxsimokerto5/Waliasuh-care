@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun FaskesInfoScreen(
@@ -54,6 +55,7 @@ fun FaskesInfoScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
     val allFaskesDetails = remember(schoolProfile) { schoolProfile.getAllFaskesWithDetails() }
     val referralFaskesNames = remember(schoolProfile) { schoolProfile.getAllFaskes().drop(1) }
 
@@ -92,13 +94,13 @@ fun FaskesInfoScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Rekapitulasi Kunjungan Faskes",
+                            text = if (isEn) "Faskes Visit Recap" else "Rekapitulasi Kunjungan Faskes",
                             fontWeight = FontWeight.Bold,
                             fontSize = 14.sp,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                         Text(
-                            text = "Total ${records.size} rujukan anak asuh $schoolLabel",
+                            text = if (isEn) "Total ${records.size} referrals for $schoolLabel students" else "Total ${records.size} rujukan anak asuh $schoolLabel",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                         )
@@ -126,7 +128,7 @@ fun FaskesInfoScreen(
                                 )
                             }
                             CompactStatBox(
-                                title = "Faskes Lain",
+                                title = if (isEn) "Other Faskes" else "Faskes Lain",
                                 count = otherCount,
                                 bgColor = Color(0xFF512DA8).copy(alpha = 0.14f),
                                 textColor = Color(0xFF512DA8),
@@ -139,7 +141,7 @@ fun FaskesInfoScreen(
 
             item {
                 Text(
-                    text = "Fasilitas Kesehatan Mitra ($schoolLabel)",
+                    text = if (isEn) "Partner Health Facilities ($schoolLabel)" else "Fasilitas Kesehatan Mitra ($schoolLabel)",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.primary
@@ -149,17 +151,21 @@ fun FaskesInfoScreen(
             itemsIndexed(allFaskesDetails) { index, info ->
                 val isPrimary = index == 0
                 val displayAddress = info.address.ifBlank {
-                    if (schoolProfile.city.isNotBlank()) "Wilayah ${schoolProfile.city}" else "Alamat belum diisi Admin Sekolah"
+                    if (schoolProfile.city.isNotBlank()) {
+                        if (isEn) "${schoolProfile.city} Area" else "Wilayah ${schoolProfile.city}"
+                    } else {
+                        if (isEn) "Address not configured by School Admin" else "Alamat belum diisi Admin Sekolah"
+                    }
                 }
                 val displaySubdistrict = if (isPrimary) {
-                    "Faskes Utama (Internal Sekolah)"
+                    if (isEn) "Primary Facility (Internal)" else "Faskes Utama (Internal Sekolah)"
                 } else {
-                    "Faskes Rujukan #$index • ${schoolProfile.city.ifBlank { schoolLabel }}"
+                    if (isEn) "Referral Faskes #$index • ${schoolProfile.city.ifBlank { schoolLabel }}" else "Faskes Rujukan #$index • ${schoolProfile.city.ifBlank { schoolLabel }}"
                 }
                 val displayHours = if (isPrimary) {
-                    "Layanan Internal Asrama / Sekolah"
+                    if (isEn) "Internal Asrama / School Service" else "Layanan Internal Asrama / Sekolah"
                 } else {
-                    "Jadwal sesuai jam layanan / UGD faskes"
+                    if (isEn) "Per facility clinic / ER operating hours" else "Jadwal sesuai jam layanan / UGD faskes"
                 }
 
                 CompactFaskesDetailCard(
@@ -186,7 +192,7 @@ fun FaskesInfoScreen(
                 val referralText = if (referralFaskesNames.isNotEmpty()) {
                     referralFaskesNames.joinToString(" / ")
                 } else {
-                    schoolProfile.primaryFaskesName.ifBlank { "Faskes Rujukan" }
+                    schoolProfile.primaryFaskesName.ifBlank { if (isEn) "Referral Faskes" else "Faskes Rujukan" }
                 }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -206,22 +212,34 @@ fun FaskesInfoScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "SOP Darurat Kesehatan $schoolLabel",
+                                text = if (isEn) "Emergency Health SOP — $schoolLabel" else "SOP Darurat Kesehatan $schoolLabel",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 13.sp
                             )
                         }
 
                         Text(
-                            text = "1. Demam > 38.5°C lebih dari 24 jam atau sesak nafas: Segera rujuk ke UGD $referralText.",
+                            text = if (isEn) {
+                                "1. Fever > 38.5°C for over 24 hours or breathing difficulty: Refer immediately to $referralText ER."
+                            } else {
+                                "1. Demam > 38.5°C lebih dari 24 jam atau sesak nafas: Segera rujuk ke UGD $referralText."
+                            },
                             fontSize = 11.sp
                         )
                         Text(
-                            text = "2. Jangan memberikan obat antibiotik tanpa pemeriksaan dokter faskes.",
+                            text = if (isEn) {
+                                "2. Never administer antibiotics without a doctor's examination at the Faskes."
+                            } else {
+                                "2. Jangan memberikan obat antibiotik tanpa pemeriksaan dokter faskes."
+                            },
                             fontSize = 11.sp
                         )
                         Text(
-                            text = "3. Selalu periksa tanggal kontrol anak agar penyakit sembuh total.",
+                            text = if (isEn) {
+                                "3. Always check follow-up dates so students recover completely."
+                            } else {
+                                "3. Selalu periksa tanggal kontrol anak agar penyakit sembuh total."
+                            },
                             fontSize = 11.sp
                         )
                     }
@@ -274,6 +292,7 @@ fun CompactFaskesDetailCard(
     phone: String,
     onCall: (() -> Unit)? = null
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(10.dp),
@@ -348,11 +367,11 @@ fun CompactFaskesDetailCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Call,
-                            contentDescription = "Hubungi $name",
+                            contentDescription = if (isEn) "Call $name" else "Hubungi $name",
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("Hubungi ($phone)", fontSize = 11.sp)
+                        Text(if (isEn) "Call ($phone)" else "Hubungi ($phone)", fontSize = 11.sp)
                     }
                 }
             } else {
@@ -365,7 +384,7 @@ fun CompactFaskesDetailCard(
                     )
                     Spacer(modifier = Modifier.width(5.dp))
                     Text(
-                        text = "Nomor telepon belum diisi Admin Sekolah",
+                        text = if (isEn) "Phone number not configured by School Admin" else "Nomor telepon belum diisi Admin Sekolah",
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

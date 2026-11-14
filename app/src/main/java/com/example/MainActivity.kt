@@ -10,11 +10,15 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.example.util.NotificationHelper
 import com.example.util.TopOnAdManager
+import com.example.util.i18n.AppLanguageManager
+import com.example.util.i18n.LocalAppStrings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -92,6 +96,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        AppLanguageManager.init(applicationContext)
         NotificationHelper.createNotificationChannel(applicationContext)
         TopOnAdManager.init(this)
         val targetScreen = intent?.getStringExtra("EXTRA_NAV_SCREEN")
@@ -156,9 +161,43 @@ fun WaliAsuhCareApp(
     viewModel: HealthViewModel = viewModel(),
     onLogout: () -> Unit = {}
 ) {
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+    val baseContext = LocalContext.current
+    val localizedContext = remember(baseContext, appLanguage) {
+        AppLanguageManager.createLocalizedContext(baseContext, appLanguage)
+    }
+    val appStrings = remember(appLanguage) {
+        AppLanguageManager.stringsFor(appLanguage)
+    }
+
+    CompositionLocalProvider(
+        LocalContext provides localizedContext,
+        LocalConfiguration provides localizedContext.resources.configuration,
+        LocalAppStrings provides appStrings
+    ) {
+        WaliAsuhCareAppContent(
+            isDarkTheme = isDarkTheme,
+            onToggleTheme = onToggleTheme,
+            initialScreen = initialScreen,
+            viewModel = viewModel,
+            onLogout = onLogout
+        )
+    }
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun WaliAsuhCareAppContent(
+    isDarkTheme: Boolean,
+    onToggleTheme: () -> Unit,
+    initialScreen: WaliNavScreen = WaliNavScreen.DASHBOARD,
+    viewModel: HealthViewModel = viewModel(),
+    onLogout: () -> Unit = {}
+) {
     var currentScreen by rememberSaveable { mutableStateOf(initialScreen) }
     var showNotifModal by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val s = LocalAppStrings.current
 
     // Request POST_NOTIFICATIONS permission on Android 13+ (API 33+)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -239,13 +278,13 @@ fun WaliAsuhCareApp(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Home,
-                                contentDescription = "Dashboard",
+                                contentDescription = s.nav.navHome,
                                 modifier = Modifier.size(22.dp)
                             )
                         },
                         label = {
                             Text(
-                                text = "Dashboard",
+                                text = s.nav.navHome,
                                 fontWeight = if (currentScreen == WaliNavScreen.DASHBOARD) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
                                 maxLines = 1,
@@ -270,13 +309,13 @@ fun WaliAsuhCareApp(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.CalendarToday,
-                                contentDescription = "Rencana",
+                                contentDescription = s.nav.navPlans,
                                 modifier = Modifier.size(20.dp)
                             )
                         },
                         label = {
                             Text(
-                                text = "Rencana",
+                                text = s.nav.navPlans,
                                 fontWeight = if (currentScreen == WaliNavScreen.RENCANA) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
                                 maxLines = 1,
@@ -301,13 +340,13 @@ fun WaliAsuhCareApp(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.FormatListBulleted,
-                                contentDescription = "Tindakan / Rekam Medis",
+                                contentDescription = s.nav.navMedical,
                                 modifier = Modifier.size(22.dp)
                             )
                         },
                         label = {
                             Text(
-                                text = "Tindakan",
+                                text = s.nav.navMedical,
                                 fontWeight = if (currentScreen == WaliNavScreen.TINDAKAN) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
                                 maxLines = 1,
@@ -332,13 +371,13 @@ fun WaliAsuhCareApp(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.People,
-                                contentDescription = "Anak Asuh",
+                                contentDescription = s.nav.navStudents,
                                 modifier = Modifier.size(22.dp)
                             )
                         },
                         label = {
                             Text(
-                                text = "Anak Asuh",
+                                text = s.nav.navStudents,
                                 fontWeight = if (currentScreen == WaliNavScreen.ANAK_ASUH) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
                                 maxLines = 1,
@@ -363,13 +402,13 @@ fun WaliAsuhCareApp(
                         icon = {
                             Icon(
                                 imageVector = Icons.Default.Person,
-                                contentDescription = "Profil",
+                                contentDescription = s.nav.navProfile,
                                 modifier = Modifier.size(22.dp)
                             )
                         },
                         label = {
                             Text(
-                                text = "Profil",
+                                text = s.nav.navProfile,
                                 fontWeight = if (currentScreen == WaliNavScreen.PROFIL) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
                                 maxLines = 1,
@@ -489,7 +528,7 @@ fun WaliAsuhCareApp(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Pengingat Berobat Hari Ini",
+                            text = if (s.isEnglish) "Today's Treatment Reminders" else "Pengingat Berobat Hari Ini",
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -507,14 +546,22 @@ fun WaliAsuhCareApp(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "📋 ${activePlans.size} Anak dijadwalkan periksa hari ini.",
+                                text = if (s.isEnglish) {
+                                    "📋 ${activePlans.size} students scheduled for checkup today."
+                                } else {
+                                    "📋 ${activePlans.size} Anak dijadwalkan periksa hari ini."
+                                },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
                             if (pendingControls.isNotEmpty()) {
                                 Text(
-                                    text = "🗓️ ${pendingControls.size} Anak memiliki jadwal kontrol kembali.",
+                                    text = if (s.isEnglish) {
+                                        "🗓️ ${pendingControls.size} students have follow-up checkups."
+                                    } else {
+                                        "🗓️ ${pendingControls.size} Anak memiliki jadwal kontrol kembali."
+                                    },
                                     fontSize = 13.sp,
                                     color = MaterialTheme.colorScheme.error,
                                     fontWeight = FontWeight.Bold
@@ -525,9 +572,17 @@ fun WaliAsuhCareApp(
 
                     val referralTargetText = schoolProfile.getAllFaskes().drop(1)
                         .joinToString(" / ")
-                        .ifBlank { schoolProfile.primaryFaskesName.ifBlank { "fasilitas kesehatan rujukan" } }
+                        .ifBlank {
+                            schoolProfile.primaryFaskesName.ifBlank {
+                                if (s.isEnglish) "referral health facility" else "fasilitas kesehatan rujukan"
+                            }
+                        }
                     Text(
-                        text = "Pastikan anak asuh telah sarapan dan membawa identitas/BPJS sebelum diberangkatkan ke $referralTargetText.",
+                        text = if (s.isEnglish) {
+                            "Ensure students have eaten breakfast and bring their ID/BPJS before departing to $referralTargetText."
+                        } else {
+                            "Pastikan anak asuh telah sarapan dan membawa identitas/BPJS sebelum diberangkatkan ke $referralTargetText."
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -542,7 +597,7 @@ fun WaliAsuhCareApp(
                             onClick = { showNotifModal = false },
                             shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
                         ) {
-                            Text("Mengerti", fontSize = 12.sp)
+                            Text(s.nav.legalUnderstoodBtn, fontSize = 12.sp)
                         }
                     }
                 }

@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.util.i18n.LocalAppStrings
 import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
@@ -61,6 +62,7 @@ fun CameraBarcodePreview(
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val currentIsEn by rememberUpdatedState(LocalAppStrings.current.isEnglish)
 
     val currentOnBarcodeDetected by rememberUpdatedState(onBarcodeDetected)
     val currentOnFlashAvailabilityChanged by rememberUpdatedState(onFlashAvailabilityChanged)
@@ -117,7 +119,9 @@ fun CameraBarcodePreview(
                         provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA) -> CameraSelector.DEFAULT_BACK_CAMERA
                         provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA) -> CameraSelector.DEFAULT_FRONT_CAMERA
                         else -> {
-                            currentOnCameraError("Kamera perangkat tidak tersedia.")
+                            currentOnCameraError(
+                                if (currentIsEn) "Device camera is not available." else "Kamera perangkat tidak tersedia."
+                            )
                             return@addListener
                         }
                     }
@@ -161,7 +165,13 @@ fun CameraBarcodePreview(
                 } catch (_: Exception) {
                     if (!isDisposed) {
                         currentOnFlashAvailabilityChanged(false)
-                        currentOnCameraError("Kamera tidak dapat diakses. Gunakan input NIK atau pilih cepat.")
+                        currentOnCameraError(
+                            if (currentIsEn) {
+                                "Camera cannot be accessed. Use manual NIK input or quick pick."
+                            } else {
+                                "Kamera tidak dapat diakses. Gunakan input NIK atau pilih cepat."
+                            }
+                        )
                     }
                 }
             },

@@ -78,6 +78,7 @@ import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -88,6 +89,8 @@ fun CreateShiftMessageDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var title by remember { mutableStateOf("") }
     var followUpDate by remember { mutableLongStateOf(System.currentTimeMillis()) }
     var showDatePicker by remember { mutableStateOf(false) }
@@ -116,7 +119,11 @@ fun CreateShiftMessageDialog(
                 } else {
                     "$messageContent $recognizedText"
                 }
-                Toast.makeText(context, "Suara berhasil diubah ke teks!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Voice converted to text!" else "Suara berhasil diubah ke teks!",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -124,13 +131,20 @@ fun CreateShiftMessageDialog(
     fun startVoiceRecognition() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, "id-ID")
-            putExtra(RecognizerIntent.EXTRA_PROMPT, "Bicara sekarang untuk mendiktekan isi pesan shift...")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, if (isEn) "en-US" else "id-ID")
+            putExtra(
+                RecognizerIntent.EXTRA_PROMPT,
+                if (isEn) "Speak now to dictate the shift message..." else "Bicara sekarang untuk mendiktekan isi pesan shift..."
+            )
         }
         try {
             speechLauncher.launch(intent)
         } catch (e: Exception) {
-            Toast.makeText(context, "Fitur suara Google tidak tersedia pada perangkat ini.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (isEn) "Google voice input is not available on this device." else "Fitur suara Google tidak tersedia pada perangkat ini.",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -176,13 +190,17 @@ fun CreateShiftMessageDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Tinggalkan Pesan Shift",
+                            text = if (isEn) "Leave Shift Message" else "Tinggalkan Pesan Shift",
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Operan jaga & catatan penting untuk shift berikutnya",
+                            text = if (isEn) {
+                                "Duty handover & important notes for the next shift"
+                            } else {
+                                "Operan jaga & catatan penting untuk shift berikutnya"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -211,8 +229,13 @@ fun CreateShiftMessageDialog(
                         title = it
                         errorMessage = null
                     },
-                    label = { Text("Judul Pesan *") },
-                    placeholder = { Text("Contoh: Pantau santri Ahmad demam / Minum obat malam") },
+                    label = { Text(if (isEn) "Message Title *" else "Judul Pesan *") },
+                    placeholder = {
+                        Text(
+                            if (isEn) "Example: Monitor student Ahmad fever / Night medication"
+                            else "Contoh: Pantau santri Ahmad demam / Minum obat malam"
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -223,7 +246,7 @@ fun CreateShiftMessageDialog(
                 // 2. Tanggal Tindak Lanjut
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Tanggal Tindak Lanjut:",
+                        text = if (isEn) "Follow-Up Date:" else "Tanggal Tindak Lanjut:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -252,7 +275,7 @@ fun CreateShiftMessageDialog(
                 // 3. Pilihan Shift
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Pilihan Shift Bertugas:",
+                        text = if (isEn) "Duty Shift Selection:" else "Pilihan Shift Bertugas:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -263,12 +286,13 @@ fun CreateShiftMessageDialog(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         shiftOptions.forEach { opt ->
+                            val optLabel = if (isEn && opt == "Semua Shift") "All Shifts" else opt
                             FilterChip(
                                 selected = selectedShift == opt,
                                 onClick = { selectedShift = opt },
                                 label = {
                                     Text(
-                                        text = opt,
+                                        text = optLabel,
                                         fontSize = 11.sp,
                                         maxLines = 1,
                                         softWrap = false
@@ -282,7 +306,7 @@ fun CreateShiftMessageDialog(
                 // 4. Kepada (Optional Dropdown: Semua / Nama Wali Asuh)
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Kepada (Penerima):",
+                        text = if (isEn) "To (Recipient):" else "Kepada (Penerima):",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -301,7 +325,7 @@ fun CreateShiftMessageDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = targetWali,
+                                text = if (isEn && targetWali == "Semua Wali Asuh") "All Wali Asuh" else targetWali,
                                 fontSize = 13.sp,
                                 modifier = Modifier.weight(1f)
                             )
@@ -317,7 +341,12 @@ fun CreateShiftMessageDialog(
                             modifier = Modifier.fillMaxWidth(0.9f)
                         ) {
                             DropdownMenuItem(
-                                text = { Text("Semua Wali Asuh (Broadcast)", fontWeight = FontWeight.Bold) },
+                                text = {
+                                    Text(
+                                        if (isEn) "All Wali Asuh (Broadcast)" else "Semua Wali Asuh (Broadcast)",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
                                 onClick = {
                                     targetWali = "Semua Wali Asuh"
                                     showWaliDropdown = false
@@ -344,7 +373,7 @@ fun CreateShiftMessageDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Isi Pesan / Instruksi Operan *",
+                            text = if (isEn) "Message / Handover Instructions *" else "Isi Pesan / Instruksi Operan *",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -370,7 +399,7 @@ fun CreateShiftMessageDialog(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Bicara (Suara)",
+                                text = if (isEn) "Speak (Voice)" else "Bicara (Suara)",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF16A34A),
@@ -386,7 +415,12 @@ fun CreateShiftMessageDialog(
                             messageContent = it
                             errorMessage = null
                         },
-                        placeholder = { Text("Tuliskan instruksi atau gunakan tombol Bicara (Voice to Text)...") },
+                        placeholder = {
+                            Text(
+                                if (isEn) "Write instructions or tap Speak (Voice to Text)..."
+                                else "Tuliskan instruksi atau gunakan tombol Bicara (Voice to Text)..."
+                            )
+                        },
                         minLines = 3,
                         maxLines = 6,
                         shape = RoundedCornerShape(10.dp),
@@ -399,7 +433,7 @@ fun CreateShiftMessageDialog(
                 // 6. Sifat Pesan: Urgent, Sedang, Biasa
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Sifat / Prioritas Pesan:",
+                        text = if (isEn) "Message Priority:" else "Sifat / Prioritas Pesan:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -415,7 +449,7 @@ fun CreateShiftMessageDialog(
                             onClick = { selectedPriority = "URGENT" },
                             label = {
                                 Text(
-                                    text = "🔴 Urgent (Darurat)",
+                                    text = if (isEn) "🔴 Urgent (Emergency)" else "🔴 Urgent (Darurat)",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -434,7 +468,7 @@ fun CreateShiftMessageDialog(
                             onClick = { selectedPriority = "SEDANG" },
                             label = {
                                 Text(
-                                    text = "🟠 Sedang",
+                                    text = if (isEn) "🟠 Medium" else "🟠 Sedang",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -453,7 +487,7 @@ fun CreateShiftMessageDialog(
                             onClick = { selectedPriority = "BIASA" },
                             label = {
                                 Text(
-                                    text = "🟢 Biasa",
+                                    text = if (isEn) "🟢 Normal" else "🟢 Biasa",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -482,7 +516,7 @@ fun CreateShiftMessageDialog(
                         enabled = !isSubmitting,
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Text("Batal", maxLines = 1, softWrap = false)
+                        Text(s.nav.cancel, maxLines = 1, softWrap = false)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Button(
@@ -491,12 +525,16 @@ fun CreateShiftMessageDialog(
                             val cleanContent = messageContent.trim()
 
                             if (cleanTitle.isBlank()) {
-                                errorMessage = "Judul pesan wajib diisi."
+                                errorMessage = if (isEn) "Message title is required." else "Judul pesan wajib diisi."
                                 return@Button
                             }
 
                             if (cleanContent.isBlank()) {
-                                errorMessage = "Isi pesan wajib diisi atau gunakan tombol suara."
+                                errorMessage = if (isEn) {
+                                    "Message content is required or use the voice button."
+                                } else {
+                                    "Isi pesan wajib diisi atau gunakan tombol suara."
+                                }
                                 return@Button
                             }
 
@@ -510,7 +548,11 @@ fun CreateShiftMessageDialog(
                                 priority = selectedPriority
                             ) {
                                 isSubmitting = false
-                                Toast.makeText(context, "Pesan shift berhasil ditinggalkan!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Shift message saved!" else "Pesan shift berhasil ditinggalkan!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                                 onDismiss()
                             }
                         },
@@ -528,7 +570,11 @@ fun CreateShiftMessageDialog(
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = if (isSubmitting) "Menyimpan..." else "Tinggalkan Pesan",
+                            text = if (isSubmitting) {
+                                if (isEn) "Saving..." else "Menyimpan..."
+                            } else {
+                                if (isEn) "Leave Message" else "Tinggalkan Pesan"
+                            },
                             maxLines = 1,
                             softWrap = false
                         )
@@ -549,12 +595,12 @@ fun CreateShiftMessageDialog(
                     }
                     showDatePicker = false
                 }) {
-                    Text("Pilih")
+                    Text(if (isEn) "Select" else "Pilih")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text("Batal")
+                    Text(s.nav.cancel)
                 }
             }
         ) {

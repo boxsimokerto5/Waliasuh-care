@@ -75,6 +75,7 @@ import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,16 +88,25 @@ fun MonthlyReportDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val currentCal = remember { Calendar.getInstance() }
     var selectedMonth by remember { mutableIntStateOf(currentCal.get(Calendar.MONTH)) }
     var selectedYear by remember { mutableIntStateOf(currentCal.get(Calendar.YEAR)) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val monthNames = remember {
-        listOf(
-            "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-            "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-        )
+    val monthNames = remember(s.language) {
+        if (isEn) {
+            listOf(
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            )
+        } else {
+            listOf(
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            )
+        }
     }
 
     val periodLabel = "${monthNames[selectedMonth]} $selectedYear"
@@ -140,12 +150,16 @@ fun MonthlyReportDialog(
     val morbidityPct = if (totalStudents > 0) (uniqueSickStudents.toFloat() / totalStudents * 100).toInt() else 0
 
     // Top 5 Diagnoses
-    val topDiagnoses = remember(monthRecords) {
+    val topDiagnoses = remember(monthRecords, s.language) {
         val countMap = mutableMapOf<String, Int>()
         monthRecords.forEach { r ->
             val raw = if (r.diagnosis.isNotBlank() && r.diagnosis != "-") r.diagnosis else r.complaint
             val clean = raw.split(",", ";", "/").firstOrNull()?.trim() ?: raw.trim()
-            val key = if (clean.isBlank()) "Pemeriksaan Umum" else clean
+            val key = if (clean.isBlank()) {
+                if (isEn) "General Examination" else "Pemeriksaan Umum"
+            } else {
+                clean
+            }
             countMap[key] = (countMap[key] ?: 0) + 1
         }
         countMap.entries.sortedByDescending { it.value }.take(5)
@@ -154,50 +168,95 @@ fun MonthlyReportDialog(
     val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
 
     // Text for WhatsApp Share
-    val whatsappReportText = remember(monthRecords, periodLabel, waliName, totalStudents, schoolProfile) {
+    val whatsappReportText = remember(monthRecords, periodLabel, waliName, totalStudents, schoolProfile, s.language) {
         buildString {
-            appendLine("📋 *LAPORAN REKAPITULASI KESEHATAN BULANAN*")
-            appendLine("*$activeSchoolTitle*")
-            appendLine("*Periode:* $periodLabel")
-            appendLine("━━━━━━━━━━━━━━━━━━━━━")
-            appendLine("📊 *RINGKASAN STATISTIK:*")
-            appendLine("• Total Kunjungan Berobat: $totalVisits Kali")
-            appendLine("• Jumlah Siswa Sakit: $uniqueSickStudents Anak ($morbidityPct% dari $totalStudents anak asuh)")
-            appendLine("• Distribusi: Asrama Putra: $maleCount | Asrama Putri: $femaleCount")
-            appendLine("• Status: Sembuh/Tuntas: $tuntasCount | Perlu Kontrol: $kontrolCount")
-            appendLine("")
-            appendLine("🏥 *FASKES RUJUKAN:*")
-            faskesCounts.forEach { (name, count) ->
-                appendLine("• $name: $count kunjungan/rujukan")
-            }
-            if (matchedOtherCount > 0) {
-                appendLine("• Faskes Lainnya: $matchedOtherCount rujukan")
-            }
-            appendLine("")
-            appendLine("🚗 *PETUGAS PENGANTAR (SHIFT):*")
-            appendLine("• Shift Pagi: $shiftPagiCount | Shift Sore: $shiftSoreCount | Shift Malam: $shiftMalamCount")
-            appendLine("")
-            if (topDiagnoses.isNotEmpty()) {
-                appendLine("🩺 *DIAGNOSA TERBANYAK:*")
-                topDiagnoses.forEachIndexed { i, entry ->
-                    appendLine("${i + 1}. ${entry.key}: ${entry.value} kasus")
+            if (isEn) {
+                appendLine("📋 *MONTHLY HEALTH RECAPITULATION REPORT*")
+                appendLine("*$activeSchoolTitle*")
+                appendLine("*Period:* $periodLabel")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("📊 *STATISTICS SUMMARY:*")
+                appendLine("• Total Treatment Visits: $totalVisits Times")
+                appendLine("• Sick Students: $uniqueSickStudents Students ($morbidityPct% of $totalStudents foster students)")
+                appendLine("• Distribution: Asrama Putra: $maleCount | Asrama Putri: $femaleCount")
+                appendLine("• Status: Recovered/Cleared: $tuntasCount | Needs Control: $kontrolCount")
+                appendLine("")
+                appendLine("🏥 *REFERRAL FASKES:*")
+                faskesCounts.forEach { (name, count) ->
+                    appendLine("• $name: $count visits/referrals")
+                }
+                if (matchedOtherCount > 0) {
+                    appendLine("• Other Faskes: $matchedOtherCount referrals")
                 }
                 appendLine("")
-            }
-            if (monthRecords.isNotEmpty()) {
-                appendLine("📝 *DAFTAR ANAK SAKIT:*")
-                monthRecords.take(10).forEachIndexed { i, r ->
-                    val tgl = r.treatmentDate?.let { DateUtils.formatShortDate(it) } ?: DateUtils.formatShortDate(r.planDate)
-                    val diag = if (r.diagnosis.isNotBlank() && r.diagnosis != "-") r.diagnosis else r.complaint
-                    appendLine("${i + 1}. $tgl - ${r.studentName} (${r.studentDormitory}): $diag")
+                appendLine("🚗 *ESCORT OFFICER (SHIFT):*")
+                appendLine("• Shift Pagi: $shiftPagiCount | Shift Sore: $shiftSoreCount | Shift Malam: $shiftMalamCount")
+                appendLine("")
+                if (topDiagnoses.isNotEmpty()) {
+                    appendLine("🩺 *TOP DIAGNOSES:*")
+                    topDiagnoses.forEachIndexed { i, entry ->
+                        appendLine("${i + 1}. ${entry.key}: ${entry.value} cases")
+                    }
+                    appendLine("")
                 }
-                if (monthRecords.size > 10) {
-                    appendLine("... dan ${monthRecords.size - 10} kunjungan lainnya tercatat di aplikasi.")
+                if (monthRecords.isNotEmpty()) {
+                    appendLine("📝 *SICK STUDENTS LIST:*")
+                    monthRecords.take(10).forEachIndexed { i, r ->
+                        val tgl = r.treatmentDate?.let { DateUtils.formatShortDate(it) } ?: DateUtils.formatShortDate(r.planDate)
+                        val diag = if (r.diagnosis.isNotBlank() && r.diagnosis != "-") r.diagnosis else r.complaint
+                        appendLine("${i + 1}. $tgl - ${r.studentName} (${r.studentDormitory}): $diag")
+                    }
+                    if (monthRecords.size > 10) {
+                        appendLine("... and ${monthRecords.size - 10} more visits recorded in the app.")
+                    }
+                    appendLine("")
+                }
+                appendLine("👤 *Person in Charge / Wali Asuh:* $waliName")
+                appendLine("🕒 *Printed Date:* ${DateUtils.formatFullDate(System.currentTimeMillis())}")
+            } else {
+                appendLine("📋 *LAPORAN REKAPITULASI KESEHATAN BULANAN*")
+                appendLine("*$activeSchoolTitle*")
+                appendLine("*Periode:* $periodLabel")
+                appendLine("━━━━━━━━━━━━━━━━━━━━━")
+                appendLine("📊 *RINGKASAN STATISTIK:*")
+                appendLine("• Total Kunjungan Berobat: $totalVisits Kali")
+                appendLine("• Jumlah Siswa Sakit: $uniqueSickStudents Anak ($morbidityPct% dari $totalStudents anak asuh)")
+                appendLine("• Distribusi: Asrama Putra: $maleCount | Asrama Putri: $femaleCount")
+                appendLine("• Status: Sembuh/Tuntas: $tuntasCount | Perlu Kontrol: $kontrolCount")
+                appendLine("")
+                appendLine("🏥 *FASKES RUJUKAN:*")
+                faskesCounts.forEach { (name, count) ->
+                    appendLine("• $name: $count kunjungan/rujukan")
+                }
+                if (matchedOtherCount > 0) {
+                    appendLine("• Faskes Lainnya: $matchedOtherCount rujukan")
                 }
                 appendLine("")
+                appendLine("🚗 *PETUGAS PENGANTAR (SHIFT):*")
+                appendLine("• Shift Pagi: $shiftPagiCount | Shift Sore: $shiftSoreCount | Shift Malam: $shiftMalamCount")
+                appendLine("")
+                if (topDiagnoses.isNotEmpty()) {
+                    appendLine("🩺 *DIAGNOSA TERBANYAK:*")
+                    topDiagnoses.forEachIndexed { i, entry ->
+                        appendLine("${i + 1}. ${entry.key}: ${entry.value} kasus")
+                    }
+                    appendLine("")
+                }
+                if (monthRecords.isNotEmpty()) {
+                    appendLine("📝 *DAFTAR ANAK SAKIT:*")
+                    monthRecords.take(10).forEachIndexed { i, r ->
+                        val tgl = r.treatmentDate?.let { DateUtils.formatShortDate(it) } ?: DateUtils.formatShortDate(r.planDate)
+                        val diag = if (r.diagnosis.isNotBlank() && r.diagnosis != "-") r.diagnosis else r.complaint
+                        appendLine("${i + 1}. $tgl - ${r.studentName} (${r.studentDormitory}): $diag")
+                    }
+                    if (monthRecords.size > 10) {
+                        appendLine("... dan ${monthRecords.size - 10} kunjungan lainnya tercatat di aplikasi.")
+                    }
+                    appendLine("")
+                }
+                appendLine("👤 *Penanggung Jawab / Wali Asuh:* $waliName")
+                appendLine("🕒 *Tanggal Cetak:* ${DateUtils.formatFullDate(System.currentTimeMillis())}")
             }
-            appendLine("👤 *Penanggung Jawab / Wali Asuh:* $waliName")
-            appendLine("🕒 *Tanggal Cetak:* ${DateUtils.formatFullDate(System.currentTimeMillis())}")
         }
     }
 
@@ -249,7 +308,7 @@ fun MonthlyReportDialog(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Laporan Bulanan Kesehatan",
+                                text = if (isEn) "Monthly Health Report" else "Laporan Bulanan Kesehatan",
                                 fontSize = 17.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -271,7 +330,7 @@ fun MonthlyReportDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = s.close,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -304,7 +363,7 @@ fun MonthlyReportDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Bulan Sebelumnya",
+                                contentDescription = if (isEn) "Previous Month" else "Bulan Sebelumnya",
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -317,7 +376,11 @@ fun MonthlyReportDialog(
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "${monthRecords.size} catatan kunjungan berobat",
+                                text = if (isEn) {
+                                    "${monthRecords.size} treatment visit records"
+                                } else {
+                                    "${monthRecords.size} catatan kunjungan berobat"
+                                },
                                 fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -336,7 +399,7 @@ fun MonthlyReportDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = "Bulan Berikutnya",
+                                contentDescription = if (isEn) "Next Month" else "Bulan Berikutnya",
                                 modifier = Modifier.size(18.dp)
                             )
                         }
@@ -351,17 +414,17 @@ fun MonthlyReportDialog(
                     Tab(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
-                        text = { Text("Ringkasan", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        text = { Text(if (isEn) "Summary" else "Ringkasan", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
-                        text = { Text("Daftar Kasus (${monthRecords.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        text = { Text(if (isEn) "Cases (${monthRecords.size})" else "Daftar Kasus (${monthRecords.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 2,
                         onClick = { selectedTab = 2 },
-                        text = { Text("Format WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                        text = { Text(if (isEn) "WhatsApp Format" else "Format WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                 }
 
@@ -382,16 +445,16 @@ fun MonthlyReportDialog(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     MetricBox(
-                                        title = "Total Berobat",
-                                        value = "$totalVisits Kali",
-                                        subtitle = "Selama $periodLabel",
+                                        title = if (isEn) "Total Visits" else "Total Berobat",
+                                        value = if (isEn) "$totalVisits Times" else "$totalVisits Kali",
+                                        subtitle = if (isEn) "During $periodLabel" else "Selama $periodLabel",
                                         color = WaliPrimary,
                                         modifier = Modifier.weight(1f)
                                     )
                                     MetricBox(
-                                        title = "Anak Sakit",
-                                        value = "$uniqueSickStudents Anak",
-                                        subtitle = "$morbidityPct% dari $totalStudents siswa",
+                                        title = if (isEn) "Sick Students" else "Anak Sakit",
+                                        value = if (isEn) "$uniqueSickStudents Students" else "$uniqueSickStudents Anak",
+                                        subtitle = if (isEn) "$morbidityPct% of $totalStudents students" else "$morbidityPct% dari $totalStudents siswa",
                                         color = Color(0xFFEA580C),
                                         modifier = Modifier.weight(1f)
                                     )
@@ -409,9 +472,9 @@ fun MonthlyReportDialog(
                                         modifier = Modifier.weight(1f)
                                     )
                                     MetricBox(
-                                        title = "Status Kasus",
-                                        value = "$tuntasCount Sembuh",
-                                        subtitle = "$kontrolCount wajib kontrol",
+                                        title = if (isEn) "Case Status" else "Status Kasus",
+                                        value = if (isEn) "$tuntasCount Recovered" else "$tuntasCount Sembuh",
+                                        subtitle = if (isEn) "$kontrolCount need control" else "$kontrolCount wajib kontrol",
                                         color = Color(0xFF16A34A),
                                         modifier = Modifier.weight(1f)
                                     )
@@ -429,7 +492,7 @@ fun MonthlyReportDialog(
                                         verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Text(
-                                            text = "🩺 Diagnosa / Keluhan Terbanyak",
+                                            text = if (isEn) "🩺 Top Diagnoses / Complaints" else "🩺 Diagnosa / Keluhan Terbanyak",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.5.sp,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -437,7 +500,7 @@ fun MonthlyReportDialog(
 
                                         if (topDiagnoses.isEmpty()) {
                                             Text(
-                                                text = "Tidak ada keluhan sakit tercatat di bulan ini.",
+                                                text = if (isEn) "No illness complaints recorded this month." else "Tidak ada keluhan sakit tercatat di bulan ini.",
                                                 fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -450,7 +513,12 @@ fun MonthlyReportDialog(
                                                         horizontalArrangement = Arrangement.SpaceBetween
                                                     ) {
                                                         Text(text = entry.key, fontSize = 11.5.sp, fontWeight = FontWeight.Medium)
-                                                        Text(text = "${entry.value} kasus (${(pct * 100).toInt()}%)", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                                        Text(
+                                                            text = if (isEn) "${entry.value} cases (${(pct * 100).toInt()}%)" else "${entry.value} kasus (${(pct * 100).toInt()}%)",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.primary
+                                                        )
                                                     }
                                                     Spacer(modifier = Modifier.height(2.dp))
                                                     LinearProgressIndicator(
@@ -477,7 +545,7 @@ fun MonthlyReportDialog(
                                         verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text(
-                                            text = "🏥 Distribusi Faskes & Petugas Pengantar",
+                                            text = if (isEn) "🏥 Faskes & Escort Officer Distribution" else "🏥 Distribusi Faskes & Petugas Pengantar",
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 12.5.sp,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -485,7 +553,9 @@ fun MonthlyReportDialog(
                                         val faskesText = buildString {
                                             append("• Faskes: ")
                                             append(faskesCounts.joinToString(" • ") { (name, cnt) -> "$name ($cnt)" })
-                                            if (matchedOtherCount > 0) append(" • Lainnya ($matchedOtherCount)")
+                                            if (matchedOtherCount > 0) {
+                                                append(if (isEn) " • Other ($matchedOtherCount)" else " • Lainnya ($matchedOtherCount)")
+                                            }
                                         }
                                         Text(
                                             text = faskesText,
@@ -493,7 +563,11 @@ fun MonthlyReportDialog(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = "• Shift Pengantar: Pagi ($shiftPagiCount) • Sore ($shiftSoreCount) • Malam ($shiftMalamCount)",
+                                            text = if (isEn) {
+                                                "• Escort Shift: Pagi ($shiftPagiCount) • Sore ($shiftSoreCount) • Malam ($shiftMalamCount)"
+                                            } else {
+                                                "• Shift Pengantar: Pagi ($shiftPagiCount) • Sore ($shiftSoreCount) • Malam ($shiftMalamCount)"
+                                            },
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -512,7 +586,11 @@ fun MonthlyReportDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = "Kondisi Nihil: Tidak ada anak asuh yang berobat pada bulan ini.",
+                                        text = if (isEn) {
+                                            "Zero Cases: No foster students visited treatment this month."
+                                        } else {
+                                            "Kondisi Nihil: Tidak ada anak asuh yang berobat pada bulan ini."
+                                        },
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -539,7 +617,11 @@ fun MonthlyReportDialog(
                                                 ) {
                                                     Text(text = r.studentName, fontWeight = FontWeight.Bold, fontSize = 12.5.sp)
                                                     Text(
-                                                        text = if (r.needsControl) "Perlu Kontrol" else "Tuntas",
+                                                        text = if (r.needsControl) {
+                                                            if (isEn) "Needs Control" else "Perlu Kontrol"
+                                                        } else {
+                                                            if (isEn) "Cleared" else "Tuntas"
+                                                        },
                                                         fontSize = 10.5.sp,
                                                         fontWeight = FontWeight.Bold,
                                                         color = if (r.needsControl) MaterialTheme.colorScheme.error else Color(0xFF16A34A)
@@ -551,20 +633,24 @@ fun MonthlyReportDialog(
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 Text(
-                                                    text = "Keluhan: ${r.complaint}${if (r.diagnosis.isNotBlank() && r.diagnosis != "-") " | Diagnosa: ${r.diagnosis}" else ""}",
+                                                    text = if (isEn) {
+                                                        "Complaint: ${r.complaint}${if (r.diagnosis.isNotBlank() && r.diagnosis != "-") " | Diagnosis: ${r.diagnosis}" else ""}"
+                                                    } else {
+                                                        "Keluhan: ${r.complaint}${if (r.diagnosis.isNotBlank() && r.diagnosis != "-") " | Diagnosa: ${r.diagnosis}" else ""}"
+                                                    },
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Medium
                                                 )
                                                 if (r.prescription.isNotBlank() && r.prescription != "-") {
                                                     Text(
-                                                        text = "Obat: ${r.prescription}",
+                                                        text = if (isEn) "Medicine: ${r.prescription}" else "Obat: ${r.prescription}",
                                                         fontSize = 10.5.sp,
                                                         color = MaterialTheme.colorScheme.primary
                                                     )
                                                 }
                                                 if (r.escortName.isNotBlank()) {
                                                     Text(
-                                                        text = "Pengantar: ${r.escortName}",
+                                                        text = if (isEn) "Escort: ${r.escortName}" else "Pengantar: ${r.escortName}",
                                                         fontSize = 10.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                                     )
@@ -606,15 +692,24 @@ fun MonthlyReportDialog(
                                     OutlinedButton(
                                         onClick = {
                                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                            clipboard.setPrimaryClip(ClipData.newPlainText("Laporan Bulanan", whatsappReportText))
-                                            Toast.makeText(context, "Laporan disalin ke papan klip!", Toast.LENGTH_SHORT).show()
+                                            clipboard.setPrimaryClip(
+                                                ClipData.newPlainText(
+                                                    if (isEn) "Monthly Report" else "Laporan Bulanan",
+                                                    whatsappReportText
+                                                )
+                                            )
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Report copied to clipboard!" else "Laporan disalin ke papan klip!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         },
                                         shape = RoundedCornerShape(8.dp),
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Icon(imageVector = Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Salin Teks", fontSize = 11.5.sp)
+                                        Text(if (isEn) "Copy Text" else "Salin Teks", fontSize = 11.5.sp)
                                     }
 
                                     Button(
@@ -623,7 +718,12 @@ fun MonthlyReportDialog(
                                                 type = "text/plain"
                                                 putExtra(Intent.EXTRA_TEXT, whatsappReportText)
                                             }
-                                            context.startActivity(Intent.createChooser(shareIntent, "Bagikan ke WhatsApp"))
+                                            context.startActivity(
+                                                Intent.createChooser(
+                                                    shareIntent,
+                                                    if (isEn) "Share to WhatsApp" else "Bagikan ke WhatsApp"
+                                                )
+                                            )
                                         },
                                         shape = RoundedCornerShape(8.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
@@ -631,7 +731,7 @@ fun MonthlyReportDialog(
                                     ) {
                                         Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color.White)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Kirim WA", fontSize = 11.5.sp, color = Color.White)
+                                        Text(if (isEn) "Send WA" else "Kirim WA", fontSize = 11.5.sp, color = Color.White)
                                     }
                                 }
                             }
@@ -664,7 +764,11 @@ fun MonthlyReportDialog(
                                 if (pdfFile != null) {
                                     PdfReportGenerator.openPdfFile(context, pdfFile)
                                 } else {
-                                    Toast.makeText(context, "Gagal membuat dokumen PDF", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Failed to create PDF document" else "Gagal membuat dokumen PDF",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
@@ -678,7 +782,7 @@ fun MonthlyReportDialog(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Cetak PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(if (isEn) "Print PDF" else "Cetak PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         Button(
@@ -687,7 +791,12 @@ fun MonthlyReportDialog(
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, whatsappReportText)
                                 }
-                                context.startActivity(Intent.createChooser(shareIntent, "Bagikan Laporan Bulanan"))
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        shareIntent,
+                                        if (isEn) "Share Monthly Report" else "Bagikan Laporan Bulanan"
+                                    )
+                                )
                             },
                             shape = RoundedCornerShape(10.dp),
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366)),
@@ -702,7 +811,7 @@ fun MonthlyReportDialog(
                                 tint = Color.White
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Bagikan WA", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            Text(if (isEn) "Share WA" else "Bagikan WA", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -713,7 +822,7 @@ fun MonthlyReportDialog(
                             .fillMaxWidth()
                             .testTag("btn_close_monthly_report_bottom")
                     ) {
-                        Text("Tutup", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(s.close, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

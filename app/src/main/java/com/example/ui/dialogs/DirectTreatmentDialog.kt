@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -86,6 +87,8 @@ fun DirectTreatmentDialog(
         inpatientRoom: String
     ) -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val isEditMode = existingRecord != null
     var selectedStudent by remember(existingRecord?.id) {
         mutableStateOf(
@@ -188,7 +191,11 @@ fun DirectTreatmentDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isEditMode) "Edit Rekam Tindakan" else "Input Tindakan Langsung",
+                        text = if (isEditMode) {
+                            if (isEn) "Edit Treatment Record" else "Edit Rekam Tindakan"
+                        } else {
+                            if (isEn) "Direct Treatment Entry" else "Input Tindakan Langsung"
+                        },
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -210,14 +217,14 @@ fun DirectTreatmentDialog(
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                text = "Diinput oleh: $inputBy",
+                                text = if (isEn) "Entered by: $inputBy" else "Diinput oleh: $inputBy",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (rec.editedBy.isNotBlank()) {
                                 Text(
                                     text = buildString {
-                                        append("Diedit oleh: ${rec.editedBy}")
+                                        append(if (isEn) "Edited by: ${rec.editedBy}" else "Diedit oleh: ${rec.editedBy}")
                                         rec.editedAt?.let { append(" (${DateUtils.formatShortDate(it)})") }
                                     },
                                     fontSize = 11.sp,
@@ -230,7 +237,11 @@ fun DirectTreatmentDialog(
                 }
 
                 Text(
-                    text = "Catat tindakan puskesmas tanpa jadwal rencana sebelumnya.",
+                    text = if (isEn) {
+                        "Record Puskesmas actions directly without a prior scheduled plan."
+                    } else {
+                        "Catat tindakan puskesmas tanpa jadwal rencana sebelumnya."
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -242,7 +253,7 @@ fun DirectTreatmentDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Pilih Anak Asuh:",
+                        text = if (isEn) "Select Foster Student:" else "Pilih Anak Asuh:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -260,7 +271,11 @@ fun DirectTreatmentDialog(
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Cari Nama...", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEn) "Search Name..." else "Cari Nama...",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -295,13 +310,15 @@ fun DirectTreatmentDialog(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = selectedStudent?.name ?: "Ketuk untuk memilih anak asuh...",
+                                    text = selectedStudent?.name
+                                        ?: if (isEn) "Tap to select a foster student..." else "Ketuk untuk memilih anak asuh...",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.5.sp,
                                     color = if (selectedStudent != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = selectedStudent?.let { "${it.dormitory} • ${it.classGrade}" } ?: "Cari nama, asrama, atau kelas",
+                                    text = selectedStudent?.let { "${it.dormitory} • ${it.classGrade}" }
+                                        ?: if (isEn) "Search name, Asrama, or grade" else "Cari nama, asrama, atau kelas",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -309,7 +326,7 @@ fun DirectTreatmentDialog(
                         }
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Cari",
+                            contentDescription = s.search,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
@@ -328,7 +345,7 @@ fun DirectTreatmentDialog(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Alergi: ${student.allergies}",
+                                text = if (isEn) "Allergies: ${student.allergies}" else "Alergi: ${student.allergies}",
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -339,7 +356,7 @@ fun DirectTreatmentDialog(
 
                 // Puskesmas Tujuan
                 Text(
-                    text = "Faskes / Fasilitas Kesehatan Pengobatan:",
+                    text = if (isEn) "Treatment Faskes / Health Facility:" else "Faskes / Fasilitas Kesehatan Pengobatan:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -361,7 +378,7 @@ fun DirectTreatmentDialog(
                     FilterChip(
                         selected = selectedFaskes == "Lainnya",
                         onClick = { selectedFaskes = "Lainnya" },
-                        label = { Text("Lainnya", fontSize = 11.sp) },
+                        label = { Text(if (isEn) "Other" else "Lainnya", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                 }
@@ -370,8 +387,8 @@ fun DirectTreatmentDialog(
                     OutlinedTextField(
                         value = customFaskes,
                         onValueChange = { customFaskes = it },
-                        label = { Text("Nama Faskes / RS", fontSize = 12.sp) },
-                        placeholder = { Text("misal: RSUD Gambiran", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Faskes / Hospital Name" else "Nama Faskes / RS", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "e.g.: RSUD Gambiran" else "misal: RSUD Gambiran", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -382,8 +399,8 @@ fun DirectTreatmentDialog(
                 OutlinedTextField(
                     value = complaint,
                     onValueChange = { complaint = it },
-                    label = { Text("Keluhan Awal *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Muntah-muntah, diare, luka", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Initial Complaint *" else "Keluhan Awal *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Vomiting, diarrhea, wound" else "misal: Muntah-muntah, diare, luka", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -393,8 +410,8 @@ fun DirectTreatmentDialog(
                 OutlinedTextField(
                     value = diagnosis,
                     onValueChange = { diagnosis = it },
-                    label = { Text("Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Gastroenteritis Akut", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Doctor / Clinician Diagnosis *" else "Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Acute Gastroenteritis" else "misal: Gastroenteritis Akut", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -406,8 +423,8 @@ fun DirectTreatmentDialog(
                 OutlinedTextField(
                     value = actionsTaken,
                     onValueChange = { actionsTaken = it },
-                    label = { Text("Tindakan yang Dilakukan", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Nebulisasi, pembersihan luka", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Medical Action Taken" else "Tindakan yang Dilakukan", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Nebulization, wound cleaning" else "misal: Nebulisasi, pembersihan luka", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -419,13 +436,21 @@ fun DirectTreatmentDialog(
                     onValueChange = { prescription = it },
                     label = {
                         Text(
-                            text = if (isInpatient) "Resep Obat / Terapi Sementara (Opsional)" else "Resep Obat & Dosis *",
+                            text = if (isInpatient) {
+                                if (isEn) "Prescription / Temporary Therapy (Optional)" else "Resep Obat / Terapi Sementara (Opsional)"
+                            } else {
+                                if (isEn) "Prescription & Dosage *" else "Resep Obat & Dosis *"
+                            },
                             fontSize = 12.sp
                         )
                     },
                     placeholder = {
                         Text(
-                            text = if (isInpatient) "misal: Infus RL / kosongkan dulu jika opname" else "misal: Oralit 3 sachet, Zinc 20mg 1x1",
+                            text = if (isInpatient) {
+                                if (isEn) "e.g.: RL IV drip / leave blank if admitted" else "misal: Infus RL / kosongkan dulu jika opname"
+                            } else {
+                                if (isEn) "e.g.: Oralit 3 sachets, Zinc 20mg 1x1" else "misal: Oralit 3 sachet, Zinc 20mg 1x1"
+                            },
                             fontSize = 12.sp
                         )
                     },
@@ -467,16 +492,24 @@ fun DirectTreatmentDialog(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "Sedang Rawat Inap (Opname)?",
+                                        text = if (isEn) "Currently Inpatient (Admitted)?" else "Sedang Rawat Inap (Opname)?",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = if (isInpatient) Color(0xFFB91C1C) else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = if (isInpatient) {
-                                            "Notif rawat inap tampil di Dashboard & resep boleh menyusul"
+                                            if (isEn) {
+                                                "Inpatient notice appears on Dashboard & prescription can follow later"
+                                            } else {
+                                                "Notif rawat inap tampil di Dashboard & resep boleh menyusul"
+                                            }
                                         } else {
-                                            "Aktifkan jika anak opname / dirawat di IGD"
+                                            if (isEn) {
+                                                "Enable if student is admitted or treated in ER"
+                                            } else {
+                                                "Aktifkan jika anak opname / dirawat di IGD"
+                                            }
                                         },
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -495,8 +528,8 @@ fun DirectTreatmentDialog(
                             OutlinedTextField(
                                 value = inpatientRoom,
                                 onValueChange = { inpatientRoom = it },
-                                label = { Text("Nama Ruang / Kamar (Opsional)", fontSize = 12.sp) },
-                                placeholder = { Text("misal: Ruang Melati Lt. 2 / IGD", fontSize = 12.sp) },
+                                label = { Text(if (isEn) "Room / Ward Name (Optional)" else "Nama Ruang / Kamar (Opsional)", fontSize = 12.sp) },
+                                placeholder = { Text(if (isEn) "e.g.: Melati Ward Fl. 2 / ER" else "misal: Ruang Melati Lt. 2 / IGD", fontSize = 12.sp) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
@@ -526,12 +559,16 @@ fun DirectTreatmentDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Rencana Kontrol Kembali?",
+                                    text = if (isEn) "Follow-up Control Plan?" else "Rencana Kontrol Kembali?",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
                                 )
                                 Text(
-                                    text = if (needsControl) "Anak wajib kontrol ulang" else "Tidak perlu kontrol",
+                                    text = if (needsControl) {
+                                        if (isEn) "Student must attend follow-up control" else "Anak wajib kontrol ulang"
+                                    } else {
+                                        if (isEn) "No follow-up needed" else "Tidak perlu kontrol"
+                                    },
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -552,25 +589,29 @@ fun DirectTreatmentDialog(
                                 FilterChip(
                                     selected = selectedControlDateMillis == calIn3Days,
                                     onClick = { selectedControlDateMillis = calIn3Days },
-                                    label = { Text("+3 Hari", fontSize = 11.sp) },
+                                    label = { Text(if (isEn) "+3 Days" else "+3 Hari", fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                                 FilterChip(
                                     selected = selectedControlDateMillis == calIn5Days,
                                     onClick = { selectedControlDateMillis = calIn5Days },
-                                    label = { Text("+5 Hari", fontSize = 11.sp) },
+                                    label = { Text(if (isEn) "+5 Days" else "+5 Hari", fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                                 FilterChip(
                                     selected = selectedControlDateMillis == calIn7Days,
                                     onClick = { selectedControlDateMillis = calIn7Days },
-                                    label = { Text("+1 Minggu", fontSize = 11.sp) },
+                                    label = { Text(if (isEn) "+1 Week" else "+1 Minggu", fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "Tanggal: ${DateUtils.formatFullDate(selectedControlDateMillis)}",
+                                text = if (isEn) {
+                                    "Date: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                } else {
+                                    "Tanggal: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.Bold
@@ -586,7 +627,7 @@ fun DirectTreatmentDialog(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Tidak perlu kontrol kembali (Tuntas)",
+                                    text = if (isEn) "No follow-up control needed (Cleared)" else "Tidak perlu kontrol kembali (Tuntas)",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.secondary,
                                     fontWeight = FontWeight.Medium
@@ -598,7 +639,7 @@ fun DirectTreatmentDialog(
 
                 // Petugas / Pengasuh Pengantar with Shift Dropdown
                 Text(
-                    text = "Petugas / Pengasuh Pengantar:",
+                    text = if (isEn) "Escort Officer:" else "Petugas / Pengasuh Pengantar:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -610,8 +651,8 @@ fun DirectTreatmentDialog(
                     OutlinedTextField(
                         value = escortName,
                         onValueChange = { escortName = it },
-                        label = { Text("Pilih Shift / Petugas Pengantar", fontSize = 12.sp) },
-                        placeholder = { Text("Pilih shift atau ketik nama...", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Select Shift / Escort Officer" else "Pilih Shift / Petugas Pengantar", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "Select shift or type name..." else "Pilih shift atau ketik nama...", fontSize = 12.sp) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedEscortDropdown)
                         },
@@ -697,8 +738,8 @@ fun DirectTreatmentDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Catatan Tambahan", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Rawat jalan di kamar asrama", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Additional Notes" else "Catatan Tambahan", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Outpatient rest in Asrama room" else "misal: Rawat jalan di kamar asrama", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -716,7 +757,7 @@ fun DirectTreatmentDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Batal", fontSize = 12.sp)
+                        Text(s.cancel, fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -758,9 +799,9 @@ fun DirectTreatmentDialog(
                     ) {
                         Text(
                             text = when {
-                                isEditMode -> "Simpan Perubahan"
-                                isInpatient -> "Simpan Rawat Inap"
-                                else -> "Simpan Pengobatan"
+                                isEditMode -> if (isEn) "Save Changes" else "Simpan Perubahan"
+                                isInpatient -> if (isEn) "Save Inpatient" else "Simpan Rawat Inap"
+                                else -> if (isEn) "Save Treatment" else "Simpan Pengobatan"
                             },
                             fontSize = 12.sp
                         )

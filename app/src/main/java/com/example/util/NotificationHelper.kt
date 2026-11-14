@@ -15,21 +15,21 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.util.i18n.AppLanguageManager
 
 object NotificationHelper {
 
     const val CHANNEL_ID_HEALTH_ALERT = "channel_wali_asuh_health"
-    private const val CHANNEL_NAME = "Laporan Kesehatan Anak Asuh"
-    private const val CHANNEL_DESC = "Pemberitahuan resmi saat ada inputan anak asuh sakit atau jadwal pengobatan Puskesmas"
 
     /**
      * Memastikan Notification Channel terdaftar di sistem Android (Android 8.0 Oreo ke atas).
      */
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val s = AppLanguageManager.getStrings(context).report
             val importance = NotificationManager.IMPORTANCE_HIGH
-            val channel = NotificationChannel(CHANNEL_ID_HEALTH_ALERT, CHANNEL_NAME, importance).apply {
-                description = CHANNEL_DESC
+            val channel = NotificationChannel(CHANNEL_ID_HEALTH_ALERT, s.notifChannelName, importance).apply {
+                description = s.notifChannelDesc
                 enableLights(true)
                 lightColor = Color.parseColor("#0284C7")
                 enableVibration(true)
@@ -57,6 +57,7 @@ object NotificationHelper {
         notificationId: Int = (System.currentTimeMillis() % 100000).toInt()
     ) {
         try {
+            val s = AppLanguageManager.getStrings(context).report
             // Pastikan channel sudah dibuat
             createNotificationChannel(context)
 
@@ -91,22 +92,22 @@ object NotificationHelper {
                 pendingIntentFlags
             )
 
-            val roomDisplay = if (roomNumber.isNotBlank()) "Kamar $roomNumber" else "Asrama"
-            val classDisplay = if (className.isNotBlank()) "Kelas $className" else "Siswa SRT 1"
-            val faskesDisplay = if (faskes.isNotBlank()) faskes else "Puskesmas Rujukan"
+            val roomDisplay = if (roomNumber.isNotBlank()) s.notifRoomFormat(roomNumber) else s.notifRoomDefault
+            val classDisplay = if (className.isNotBlank()) s.notifClassFormat(className) else s.notifClassDefault
+            val faskesDisplay = if (faskes.isNotBlank()) faskes else s.notifFaskesDefault
             val schoolBadge = if (schoolName.isNotBlank()) "[$schoolName] " else ""
 
-            val title = "🏥 ${schoolBadge}Anak Asuh Sakit: $studentName"
-            val shortContent = "$classDisplay ($roomDisplay) • Keluhan: $complaint"
+            val title = s.notifTitleFormat(schoolBadge, studentName)
+            val shortContent = s.notifShortFormat(classDisplay, roomDisplay, complaint)
             val expandedContent = buildString {
                 if (schoolName.isNotBlank()) {
-                    append("Sekolah: ").append(schoolName).append("\n")
+                    append(s.notifSchoolLine(schoolName)).append("\n")
                 }
-                append("Nama Siswa: ").append(studentName).append("\n")
-                append("Jenjang/Kelas: ").append(classDisplay).append(" • ").append(roomDisplay).append("\n")
-                append("Keluhan: ").append(complaint).append("\n")
-                append("Tujuan Rujukan: ").append(faskesDisplay).append("\n")
-                append("Status: Terdaftar di sistem pemantauan Wali Asuh")
+                append(s.notifStudentLine(studentName)).append("\n")
+                append(s.notifClassRoomLine(classDisplay, roomDisplay)).append("\n")
+                append(s.notifComplaintLine(complaint)).append("\n")
+                append(s.notifFaskesLine(faskesDisplay)).append("\n")
+                append(s.notifStatusLine)
             }
 
             val largeIconBitmap = try {
@@ -136,7 +137,7 @@ object NotificationHelper {
                 notify(notificationId, builder.build())
             }
         } catch (e: Exception) {
-            Log.e("NotificationHelper", "Gagal memunculkan notifikasi", e)
+            Log.e("NotificationHelper", "Failed to show notification", e)
         }
     }
 
@@ -144,12 +145,13 @@ object NotificationHelper {
      * Notifikasi uji coba (test) agar pengguna dapat langsung memverifikasi sistem notifikasi resmi di perangkatnya.
      */
     fun showTestNotification(context: Context) {
+        val s = AppLanguageManager.getStrings(context).report
         showSickStudentNotification(
             context = context,
-            studentName = "Rama Aditia (Uji Coba)",
+            studentName = s.notifTestStudentName,
             className = "7 SMP",
             roomNumber = "A-02",
-            complaint = "Demam & Pusing (Tes Notifikasi Resmi)",
+            complaint = s.notifTestComplaint,
             faskes = "Puskesmas Wates",
             notificationId = 9999
         )

@@ -71,6 +71,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
 import com.example.util.StudentClassifier
+import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -95,6 +96,8 @@ fun InputHaidDialog(
     onCompleteHaid: (Long) -> Unit = {},
     onDismiss: () -> Unit
 ) {
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
     val femaleStudents = remember(students) {
         students.filter { StudentClassifier.isFemaleStudent(it) }
     }
@@ -114,7 +117,9 @@ fun InputHaidDialog(
     // Pop-up jika siswi sudah tercatat masih haid aktif di Daftar Haid
     var pendingAlreadyActiveHaid by remember { mutableStateOf<Pair<ChildStudent, HaidRecord>?>(null) }
 
-    val dateFormat = remember { SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID")) }
+    val dateFormat = remember(appStrings.language) {
+        SimpleDateFormat("EEEE, dd MMMM yyyy", appStrings.locale)
+    }
 
     fun findLatestSuciRecord(student: ChildStudent): HaidRecord? {
         return suciRecords
@@ -207,13 +212,13 @@ fun InputHaidDialog(
                         }
                         Column {
                             Text(
-                                text = "Input Pendataan Haid",
+                                text = if (isEn) "Input Haid Record" else "Input Pendataan Haid",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Pilih siswi, tentukan hari haid ke-..., & catatan",
+                                text = if (isEn) "Select student, set Haid day, & add notes" else "Pilih siswi, tentukan hari haid ke-..., & catatan",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -228,7 +233,7 @@ fun InputHaidDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = appStrings.nav.close,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -256,7 +261,7 @@ fun InputHaidDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Scan Kartu Siswa", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Scan Student Card" else "Scan Kartu Siswa", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
 
                     OutlinedButton(
@@ -273,7 +278,7 @@ fun InputHaidDialog(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Pilih Siswi", fontSize = 12.sp)
+                        Text(if (isEn) "Select Student" else "Pilih Siswi", fontSize = 12.sp)
                     }
                 }
 
@@ -282,9 +287,21 @@ fun InputHaidDialog(
                 // Card Siswi Terpilih
                 if (selectedStudent == null) {
                     val emptyPromptText = when {
-                        students.isEmpty() -> "Belum ada data siswa di sekolah ini. Admin perlu mengunggah CSV atau menambah siswa terlebih dahulu."
-                        femaleStudents.isEmpty() -> "Belum ada data siswi putri di sekolah ini. Pastikan kolom Jenis Kelamin bernilai 'P / Perempuan' atau Asrama Putri."
-                        else -> "Silakan Scan Barcode Kartu Siswa atau Pilih Siswi terlebih dahulu (${femaleStudents.size} siswi tersedia)"
+                        students.isEmpty() -> if (isEn) {
+                            "No student data in this school yet. Admin needs to upload CSV or add students first."
+                        } else {
+                            "Belum ada data siswa di sekolah ini. Admin perlu mengunggah CSV atau menambah siswa terlebih dahulu."
+                        }
+                        femaleStudents.isEmpty() -> if (isEn) {
+                            "No female student data in this school yet. Ensure Gender is 'P / Perempuan' or Asrama Putri."
+                        } else {
+                            "Belum ada data siswi putri di sekolah ini. Pastikan kolom Jenis Kelamin bernilai 'P / Perempuan' atau Asrama Putri."
+                        }
+                        else -> if (isEn) {
+                            "Please scan Student Card Barcode or Select Student first (${femaleStudents.size} female students available)"
+                        } else {
+                            "Silakan Scan Barcode Kartu Siswa atau Pilih Siswi terlebih dahulu (${femaleStudents.size} siswi tersedia)"
+                        }
                     }
                     Box(
                         modifier = Modifier
@@ -373,7 +390,11 @@ fun InputHaidDialog(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = "Terverifikasi tes tisu (sebelumnya di Daftar Suci Hari ke-${verifiedFromSuciDay})",
+                                        text = if (isEn) {
+                                            "Tissue test verified (previously in Daftar Suci Day $verifiedFromSuciDay)"
+                                        } else {
+                                            "Terverifikasi tes tisu (sebelumnya di Daftar Suci Hari ke-${verifiedFromSuciDay})"
+                                        },
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = Color(0xFF92400E)
@@ -396,7 +417,11 @@ fun InputHaidDialog(
                                         modifier = Modifier.size(16.dp)
                                     )
                                     Text(
-                                        text = "Riwayat terakhir: Suci Hari ke-${latestSuciForSelected.suciDayCount} (masa minimal ≥ 15 hari terpenuhi)",
+                                        text = if (isEn) {
+                                            "Latest record: Suci Day ${latestSuciForSelected.suciDayCount} (minimum ≥ 15 days met)"
+                                        } else {
+                                            "Riwayat terakhir: Suci Hari ke-${latestSuciForSelected.suciDayCount} (masa minimal ≥ 15 hari terpenuhi)"
+                                        },
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = Color(0xFF166534)
@@ -411,13 +436,17 @@ fun InputHaidDialog(
 
                 // Fitur Utama: Pilih Haid Hari ke-...
                 Text(
-                    text = "Haid Hari ke-...",
+                    text = if (isEn) "Haid Day..." else "Haid Hari ke-...",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "Timeline berjalan otomatis setiap hari dan berpindah ke Daftar Suci setelah hari ke-15.",
+                    text = if (isEn) {
+                        "Timeline advances automatically every day and moves to Daftar Suci after day 15."
+                    } else {
+                        "Timeline berjalan otomatis setiap hari dan berpindah ke Daftar Suci setelah hari ke-15."
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -449,13 +478,13 @@ fun InputHaidDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Remove,
-                                    contentDescription = "Kurangi Hari Haid"
+                                    contentDescription = if (isEn) "Decrease Haid Day" else "Kurangi Hari Haid"
                                 )
                             }
 
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
-                                    text = "Hari ke-$selectedHaidDay",
+                                    text = appStrings.haidFasting.daftarHaidDayBadge(selectedHaidDay),
                                     fontSize = 22.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = if (selectedHaidDay == HaidDateCalculator.MAX_HAID_DAYS) {
@@ -466,7 +495,7 @@ fun InputHaidDialog(
                                     textAlign = TextAlign.Center
                                 )
                                 Text(
-                                    text = "Mulai Hari ke-1: ${dateFormat.format(Date(calculatedStartMillis))}",
+                                    text = "${if (isEn) "Day 1 Start" else "Mulai Hari ke-1"}: ${dateFormat.format(Date(calculatedStartMillis))}",
                                     fontSize = 11.sp,
                                     color = Color(0xFF9D174D),
                                     fontWeight = FontWeight.Medium,
@@ -485,7 +514,7 @@ fun InputHaidDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
-                                    contentDescription = "Tambah Hari Haid"
+                                    contentDescription = if (isEn) "Increase Haid Day" else "Tambah Hari Haid"
                                 )
                             }
                         }
@@ -528,8 +557,14 @@ fun InputHaidDialog(
                 OutlinedTextField(
                     value = notesInput,
                     onValueChange = { notesInput = it },
-                    label = { Text("Tambah Catatan (Opsional)", fontSize = 12.sp) },
-                    placeholder = { Text("Misal: Lapor hari ke-2, atau keterangan khusus asrama", fontSize = 11.sp) },
+                    label = { Text(if (isEn) "Add Notes (Optional)" else "Tambah Catatan (Opsional)", fontSize = 12.sp) },
+                    placeholder = {
+                        Text(
+                            if (isEn) "e.g., Reported on day 2, or special Asrama note"
+                            else "Misal: Lapor hari ke-2, atau keterangan khusus asrama",
+                            fontSize = 11.sp
+                        )
+                    },
                     minLines = 2,
                     maxLines = 4,
                     modifier = Modifier
@@ -555,13 +590,20 @@ fun InputHaidDialog(
                     onClick = {
                         val student = selectedStudent
                         if (student == null) {
-                            errorMessage = "Pilih atau scan kartu siswi terlebih dahulu!"
+                            errorMessage = if (isEn) {
+                                "Select or scan a female student card first!"
+                            } else {
+                                "Pilih atau scan kartu siswi terlebih dahulu!"
+                            }
                             return@Button
                         }
 
                         val finalNotes = buildString {
                             if (verifiedFromSuciDay != null) {
-                                append("[Terverifikasi tes tisu dari Daftar Suci Hari ke-${verifiedFromSuciDay}]")
+                                append(
+                                    if (isEn) "[Tissue-test verified from Daftar Suci Day $verifiedFromSuciDay]"
+                                    else "[Terverifikasi tes tisu dari Daftar Suci Hari ke-${verifiedFromSuciDay}]"
+                                )
                                 if (notesInput.isNotBlank()) append(" ")
                             }
                             if (notesInput.isNotBlank()) {
@@ -597,7 +639,11 @@ fun InputHaidDialog(
                 ) {
                     Icon(imageVector = Icons.Default.Healing, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Simpan Haid Hari ke-$selectedHaidDay", fontSize = 13.5.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        if (isEn) "Save Haid Day $selectedHaidDay" else "Simpan Haid Hari ke-$selectedHaidDay",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
         }
@@ -615,7 +661,11 @@ fun InputHaidDialog(
                 } else {
                     selectedStudent = null
                     verifiedFromSuciDay = null
-                    errorMessage = "Kartu NIK/NIS '$code' tidak ditemukan di database siswi putri."
+                    errorMessage = if (isEn) {
+                        "NIK/NIS card '$code' not found in the female student database."
+                    } else {
+                        "Kartu NIK/NIS '$code' tidak ditemukan di database siswi putri."
+                    }
                 }
             },
             onDismiss = { showScannerDialog = false }
@@ -627,9 +677,9 @@ fun InputHaidDialog(
         SearchStudentDialog(
             students = femaleStudents,
             selectedStudent = selectedStudent,
-            onSelect = { s ->
+            onSelect = { chosen ->
                 showManualSearchDialog = false
-                handleStudentChosen(s)
+                handleStudentChosen(chosen)
             },
             onDismiss = { showManualSearchDialog = false }
         )
@@ -645,7 +695,11 @@ fun InputHaidDialog(
                 if (selectedStudent?.id == student.id) {
                     selectedStudent = null
                 }
-                errorMessage = "Dibatalkan: ${student.name} tetap di Daftar Suci (Hari ke-${suciRec.suciDayCount})."
+                errorMessage = if (isEn) {
+                    "Cancelled: ${student.name} remains in Daftar Suci (Day ${suciRec.suciDayCount})."
+                } else {
+                    "Dibatalkan: ${student.name} tetap di Daftar Suci (Hari ke-${suciRec.suciDayCount})."
+                }
             },
             onConfirmMoveToHaid = {
                 pendingTissueVerification = null
@@ -697,13 +751,13 @@ fun InputHaidDialog(
                         }
                         Column {
                             Text(
-                                text = "Siswi Masih di Daftar Haid",
+                                text = if (isEn) "Student Still in Daftar Haid" else "Siswi Masih di Daftar Haid",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${student.name} • Haid Hari ke-${activeRec.durationDays}",
+                                text = "${student.name} • ${if (isEn) "Haid Day ${activeRec.durationDays}" else "Haid Hari ke-${activeRec.durationDays}"}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFFDB2777)
@@ -712,7 +766,11 @@ fun InputHaidDialog(
                     }
 
                     Text(
-                        text = "${student.name} saat ini masih aktif di Daftar Haid (Hari ke-${activeRec.durationDays} dari maksimal 15 hari). Jika hari ini sudah selesai bersuci, Anda dapat langsung memindahkannya ke Daftar Suci.",
+                        text = if (isEn) {
+                            "${student.name} is currently active in Daftar Haid (Day ${activeRec.durationDays} of max 15 days). If she has completed Mandi Suci today, you can move her directly to Daftar Suci."
+                        } else {
+                            "${student.name} saat ini masih aktif di Daftar Haid (Hari ke-${activeRec.durationDays} dari maksimal 15 hari). Jika hari ini sudah selesai bersuci, Anda dapat langsung memindahkannya ke Daftar Suci."
+                        },
                         fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
@@ -729,7 +787,7 @@ fun InputHaidDialog(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Tutup")
+                            Text(appStrings.nav.close)
                         }
                         Button(
                             onClick = {
@@ -744,7 +802,11 @@ fun InputHaidDialog(
                                 .weight(1.4f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Pindahkan ke Daftar Suci", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (isEn) "Move to Daftar Suci" else "Pindahkan ke Daftar Suci",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }

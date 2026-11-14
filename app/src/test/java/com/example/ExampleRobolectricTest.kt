@@ -1,8 +1,20 @@
 package com.example
 
 import android.content.Context
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -12,6 +24,9 @@ import kotlinx.coroutines.flow.first
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ExampleRobolectricTest {
+
+  @get:Rule
+  val composeTestRule = createComposeRule()
 
   @Test
   fun `read string from context`() {
@@ -1480,5 +1495,242 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertTrue(
       com.example.data.remote.pocketbase.PocketBaseConfig.isSchoolRegistrationDeleted(app, reg)
     )
+  }
+
+  @Test
+  fun `verify AppLanguageManager persistence localized context and DateUtils formatting`() {
+    val baseContext = ApplicationProvider.getApplicationContext<Context>()
+    baseContext.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    // Default is Indonesian
+    assertEquals(
+      com.example.util.i18n.AppLanguage.INDONESIAN,
+      com.example.util.i18n.AppLanguageManager.init(baseContext)
+    )
+
+    // Switch to English & verify persistence
+    com.example.util.i18n.AppLanguageManager.setLanguage(
+      baseContext,
+      com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    assertEquals(
+      com.example.util.i18n.AppLanguage.ENGLISH,
+      com.example.util.i18n.AppLanguageManager.getLanguage(baseContext)
+    )
+
+    val enCtx = com.example.util.i18n.AppLanguageManager.createLocalizedContext(
+      baseContext,
+      com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    assertEquals("Waliasuh Care", enCtx.getString(R.string.app_name))
+    val enDisclaimer = enCtx.getString(R.string.disclaimer_short)
+    org.junit.Assert.assertTrue(enDisclaimer.contains("Sekolah Rakyat"))
+    org.junit.Assert.assertTrue(enDisclaimer.contains("Wali Asuh Care"))
+    org.junit.Assert.assertTrue(enCtx is android.content.ContextWrapper)
+
+    val idCtx = com.example.util.i18n.AppLanguageManager.createLocalizedContext(
+      baseContext,
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val idDisclaimer = idCtx.getString(R.string.disclaimer_short)
+    org.junit.Assert.assertTrue(idDisclaimer.contains("Sekolah Rakyat"))
+    org.junit.Assert.assertTrue(idDisclaimer.contains("alat bantu"))
+
+    // DateUtils formatting
+    val now = System.currentTimeMillis()
+    val todayId = com.example.util.DateUtils.getRelativeDateLabel(now, com.example.util.i18n.AppLanguage.INDONESIAN)
+    val todayEn = com.example.util.DateUtils.getRelativeDateLabel(now, com.example.util.i18n.AppLanguage.ENGLISH)
+    org.junit.Assert.assertTrue(todayId.startsWith("Hari ini ("))
+    org.junit.Assert.assertTrue(todayEn.startsWith("Today ("))
+
+    val calFixed = java.util.Calendar.getInstance().apply {
+      set(2026, java.util.Calendar.NOVEMBER, 14, 10, 0, 0)
+    }.timeInMillis
+    val fullEn = com.example.util.DateUtils.formatFullDate(calFixed, com.example.util.i18n.AppLanguage.ENGLISH)
+    org.junit.Assert.assertTrue(fullEn.contains("November"))
+    org.junit.Assert.assertTrue(fullEn.contains("2026"))
+
+    // Restore Indonesian default
+    com.example.util.i18n.AppLanguageManager.setLanguage(
+      baseContext,
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+  }
+
+  @Test
+  fun `verify HealthViewModel language persistence English WA templates PDFs and preserved Point 2 terms`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val vm1 = com.example.ui.HealthViewModel(app)
+    assertEquals(com.example.util.i18n.AppLanguage.INDONESIAN, vm1.appLanguage.value)
+
+    vm1.setAppLanguage(com.example.util.i18n.AppLanguage.ENGLISH)
+    assertEquals(com.example.util.i18n.AppLanguage.ENGLISH, vm1.appLanguage.value)
+
+    // New ViewModel instance loads persisted ENGLISH setting
+    val vm2 = com.example.ui.HealthViewModel(app)
+    assertEquals(com.example.util.i18n.AppLanguage.ENGLISH, vm2.appLanguage.value)
+
+    val schoolProfile = com.example.data.model.SchoolProfile(
+      schoolName = "Sekolah Rakyat Kabupaten Kediri",
+      shortName = "Sekolah Rakyat Kabupaten Kediri",
+      address = "Ploso Kidul, Plosoklaten, Kediri"
+    )
+    val haidRecord = com.example.data.model.HaidRecord(
+      id = 901L,
+      studentId = 10L,
+      studentName = "Aisyah Putri",
+      studentClass = "VIII-A",
+      studentDorm = "Asrama Putri",
+      startDate = System.currentTimeMillis() - (2L * 86_400_000L),
+      status = "HAID",
+      waliName = "Ustadzah Aminah",
+      schoolId = "SRT1-KDR"
+    )
+    val haidWaEn = com.example.util.PdfReportGenerator.buildDailyHaidSummaryText(
+      activeHaidRecords = listOf(haidRecord),
+      waliName = "Ustadzah Aminah",
+      schoolProfile = schoolProfile,
+      language = com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    org.junit.Assert.assertTrue(haidWaEn.contains("*DAILY FEMALE STUDENT HAID REPORT*"))
+    org.junit.Assert.assertTrue(haidWaEn.contains("Day 3/15"))
+    org.junit.Assert.assertTrue(haidWaEn.contains("Reported by: Ustadzah Aminah"))
+
+    val emptyHaidWaEn = com.example.util.PdfReportGenerator.buildDailyHaidSummaryText(
+      activeHaidRecords = emptyList(),
+      waliName = "Ustadzah Aminah",
+      schoolProfile = schoolProfile,
+      language = com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    org.junit.Assert.assertTrue(emptyHaidWaEn.contains("Suci"))
+
+    val session = com.example.data.model.FastingSession(
+      id = 402L,
+      title = "Puasa Senin Kamis",
+      sessionDate = System.currentTimeMillis(),
+      schoolId = "SRT1-KDR"
+    )
+    val fastingRecord = com.example.data.model.FastingRecord(
+      id = 502L,
+      sessionId = session.id,
+      studentId = 11L,
+      studentName = "Abimanyu Satria",
+      studentClass = "X-4",
+      studentDorm = "Asrama Putra",
+      waliName = "Ustadz Fauzi",
+      isSahurChecked = true,
+      isBukaChecked = false,
+      schoolId = "SRT1-KDR"
+    )
+    val fastingWaEn = com.example.util.PdfReportGenerator.buildFastingListWaSummary(
+      session = session,
+      records = listOf(fastingRecord),
+      waliName = "Ustadz Fauzi",
+      schoolProfile = schoolProfile,
+      language = com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    org.junit.Assert.assertTrue(fastingWaEn.contains("*STUDENT PUASA PARTICIPANTS LIST*"))
+    org.junit.Assert.assertTrue(fastingWaEn.contains("Session: *Puasa Senin Kamis*"))
+    org.junit.Assert.assertTrue(fastingWaEn.contains("*Total Puasa Participants: 1 Students*"))
+
+    val checklistWaEn = com.example.util.PdfReportGenerator.buildFastingChecklistWaSummary(
+      session = session,
+      records = listOf(fastingRecord),
+      waliName = "Ustadz Fauzi",
+      schoolProfile = schoolProfile,
+      language = com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    org.junit.Assert.assertTrue(checklistWaEn.contains("*SAHUR & BERBUKA PUASA CHECKLIST*"))
+    org.junit.Assert.assertTrue(checklistWaEn.contains("Sahur Checked: 1/1"))
+    org.junit.Assert.assertTrue(checklistWaEn.contains("Berbuka Checked: 0/1"))
+
+    // Signature preserves Point 2 Wali Asuh + School Name
+    assertEquals(
+      "Wali Asuh Sekolah Rakyat Kabupaten Kediri,",
+      com.example.util.PdfReportGenerator.buildFooterSignatureTitle(schoolProfile)
+    )
+
+    // PDF files generate cleanly in English mode
+    val listPdf = com.example.util.PdfReportGenerator.generateFastingListPdf(
+      context = app,
+      session = session,
+      records = listOf(fastingRecord),
+      waliName = "Ustadz Fauzi",
+      schoolProfile = schoolProfile
+    )
+    val chkPdf = com.example.util.PdfReportGenerator.generateFastingChecklistPdf(
+      context = app,
+      session = session,
+      records = listOf(fastingRecord),
+      waliName = "Ustadz Fauzi",
+      schoolProfile = schoolProfile
+    )
+    val haidPdf = com.example.util.PdfReportGenerator.generateDailyHaidReportPdf(
+      context = app,
+      activeHaidRecords = listOf(haidRecord),
+      waliName = "Ustadzah Aminah",
+      schoolProfile = schoolProfile
+    )
+    org.junit.Assert.assertNotNull(listPdf)
+    org.junit.Assert.assertTrue(listPdf!!.exists())
+    org.junit.Assert.assertNotNull(chkPdf)
+    org.junit.Assert.assertTrue(chkPdf!!.exists())
+    org.junit.Assert.assertNotNull(haidPdf)
+    org.junit.Assert.assertTrue(haidPdf!!.exists())
+
+    // Reset to Indonesian
+    vm1.setAppLanguage(com.example.util.i18n.AppLanguage.INDONESIAN)
+  }
+
+  @Test
+  fun `verify ProfileScreen language selector switches UI from Indonesian to English and back`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.setAppLanguage(com.example.util.i18n.AppLanguage.INDONESIAN)
+
+    composeTestRule.setContent {
+      val lang by vm.appLanguage.collectAsStateWithLifecycle()
+      val baseContext = LocalContext.current
+      val localizedContext = com.example.util.i18n.AppLanguageManager.createLocalizedContext(baseContext, lang)
+      val appStrings = com.example.util.i18n.AppLanguageManager.stringsFor(lang)
+      CompositionLocalProvider(
+        LocalContext provides localizedContext,
+        LocalConfiguration provides localizedContext.resources.configuration,
+        com.example.util.i18n.LocalAppStrings provides appStrings
+      ) {
+        com.example.ui.screens.ProfileScreen(
+          viewModel = vm,
+          waliName = "Ustadz Ahmad",
+          isDarkTheme = false,
+          onToggleTheme = {},
+          records = emptyList()
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Bahasa Aplikasi").assertIsDisplayed()
+
+    // Open language selector sheet and select English
+    composeTestRule.onNodeWithTag("menu_language_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("option_lang_en").performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals(com.example.util.i18n.AppLanguage.ENGLISH, vm.appLanguage.value)
+    composeTestRule.onNodeWithText("App Language").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Monthly Report").assertIsDisplayed()
+
+    // Switch back to Bahasa Indonesia
+    composeTestRule.onNodeWithTag("menu_language_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("option_lang_id").performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals(com.example.util.i18n.AppLanguage.INDONESIAN, vm.appLanguage.value)
+    composeTestRule.onNodeWithText("Bahasa Aplikasi").assertIsDisplayed()
   }
 }

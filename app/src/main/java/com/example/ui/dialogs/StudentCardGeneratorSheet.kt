@@ -74,6 +74,7 @@ import com.example.util.CardJenjang
 import com.example.util.StudentCardPdfGenerator
 import com.example.util.StudentCardRenderer
 import com.example.util.StudentClassifier
+import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -99,6 +100,8 @@ fun StudentCardGeneratorSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -152,19 +155,25 @@ fun StudentCardGeneratorSheet(
         }
     }
 
-    val filterSummaryLabel = remember(selectedScope, selectedIndividualStudent) {
+    val filterSummaryLabel = remember(selectedScope, selectedIndividualStudent, s.language) {
         when (selectedScope) {
-            CardPrintScope.INDIVIDUAL -> selectedIndividualStudent?.name?.take(28)?.ifBlank { "Individu" } ?: "Individu"
-            CardPrintScope.ALL -> "Semua Anak Asuh"
-            CardPrintScope.MALE -> "Semua Putra"
-            CardPrintScope.FEMALE -> "Semua Putri"
+            CardPrintScope.INDIVIDUAL -> selectedIndividualStudent?.name?.take(28)?.ifBlank {
+                if (isEn) "Individual" else "Individu"
+            } ?: if (isEn) "Individual" else "Individu"
+            CardPrintScope.ALL -> if (isEn) "All Foster Students" else "Semua Anak Asuh"
+            CardPrintScope.MALE -> if (isEn) "All Putra" else "Semua Putra"
+            CardPrintScope.FEMALE -> if (isEn) "All Putri" else "Semua Putri"
         }
     }
 
     fun executeExport(action: CardExportAction) {
         val list = targetStudentsToPrint
         if (list.isEmpty()) {
-            Toast.makeText(context, "Tidak ada data anak asuh pada pilihan ini.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (isEn) "No foster student data found for this selection." else "Tidak ada data anak asuh pada pilihan ini.",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
         isGenerating = true
@@ -180,14 +189,18 @@ fun StudentCardGeneratorSheet(
             }
             isGenerating = false
             if (file == null) {
-                Toast.makeText(context, "Gagal membuat PDF Kartu Anak Asuh.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to generate Foster Student Card PDF." else "Gagal membuat PDF Kartu Anak Asuh.",
+                    Toast.LENGTH_SHORT
+                ).show()
                 return@launch
             }
             when (action) {
                 CardExportAction.PRINT -> StudentCardPdfGenerator.printCardsWithSystemPrintManager(
                     context = context,
                     pdfFile = file,
-                    jobName = "Kartu Anak Asuh - $filterSummaryLabel"
+                    jobName = if (isEn) "Foster Student Cards - $filterSummaryLabel" else "Kartu Anak Asuh - $filterSummaryLabel"
                 )
                 CardExportAction.SHARE -> StudentCardPdfGenerator.shareCardsPdf(
                     context = context,
@@ -251,7 +264,7 @@ fun StudentCardGeneratorSheet(
                         }
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Generate Kartu Anak Asuh",
+                                text = if (isEn) "Generate Foster Student Cards" else "Generate Kartu Anak Asuh",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -274,14 +287,14 @@ fun StudentCardGeneratorSheet(
                             .size(48.dp)
                             .testTag("btn_close_card_generator")
                     ) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup")
+                        Icon(imageVector = Icons.Default.Close, contentDescription = s.nav.close)
                     }
                 }
 
                 // Mode Cetak Chips: Per Orang, Semua, Putra, Putri
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Pilih Mode Cetak Kartu:",
+                        text = if (isEn) "Select Card Print Mode:" else "Pilih Mode Cetak Kartu:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -292,8 +305,8 @@ fun StudentCardGeneratorSheet(
                     ) {
                         CardPrintScope.entries.forEach { scopeOption ->
                             val countLabel = when (scopeOption) {
-                                CardPrintScope.INDIVIDUAL -> "Per Orang"
-                                CardPrintScope.ALL -> "Semua (${students.size})"
+                                CardPrintScope.INDIVIDUAL -> if (isEn) "Per Student" else "Per Orang"
+                                CardPrintScope.ALL -> if (isEn) "All (${students.size})" else "Semua (${students.size})"
                                 CardPrintScope.MALE -> "Putra (${maleStudents.size})"
                                 CardPrintScope.FEMALE -> "Putri (${femaleStudents.size})"
                             }
@@ -334,16 +347,16 @@ fun StudentCardGeneratorSheet(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            ColorLegendPill("Header SMA (10-12): Abu-abu", Color(0xFF475569))
-                            ColorLegendPill("Header SMP (7-9): Biru", Color(0xFF1D4ED8))
-                            ColorLegendPill("Header SD (1-5): Merah", Color(0xFFDC2626))
+                            ColorLegendPill(if (isEn) "SMA Header (10-12): Slate" else "Header SMA (10-12): Abu-abu", Color(0xFF475569))
+                            ColorLegendPill(if (isEn) "SMP Header (7-9): Blue" else "Header SMP (7-9): Biru", Color(0xFF1D4ED8))
+                            ColorLegendPill(if (isEn) "SD Header (1-5): Red" else "Header SD (1-5): Merah", Color(0xFFDC2626))
                         }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            ColorLegendPill("Aksen Putra: Hijau Emerald", Color(0xFF10B981))
-                            ColorLegendPill("Aksen Putri: Pink Rose", Color(0xFFEC4899))
+                            ColorLegendPill(if (isEn) "Putra Accent: Emerald Green" else "Aksen Putra: Hijau Emerald", Color(0xFF10B981))
+                            ColorLegendPill(if (isEn) "Putri Accent: Rose Pink" else "Aksen Putri: Pink Rose", Color(0xFFEC4899))
                         }
                     }
                 }
@@ -353,7 +366,7 @@ fun StudentCardGeneratorSheet(
                     val activeStudent = selectedIndividualStudent
                     if (activeStudent != null) {
                         Text(
-                            text = "Pratinjau Kartu Anak Asuh (QR NIK):",
+                            text = if (isEn) "Foster Student Card Preview (NIK QR):" else "Pratinjau Kartu Anak Asuh (QR NIK):",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -364,7 +377,9 @@ fun StudentCardGeneratorSheet(
                             modifier = Modifier.testTag("card_preview_individual")
                         )
                     } else {
-                        EmptyCardTargetBox("Belum ada data siswa/siswi yang dapat dicetak.")
+                        EmptyCardTargetBox(
+                            if (isEn) "No student data available to print yet." else "Belum ada data siswa/siswi yang dapat dicetak."
+                        )
                     }
 
                     // Pemilih Siswa Individu (jika daftar > 1)
@@ -372,9 +387,14 @@ fun StudentCardGeneratorSheet(
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Cari nama, NIK, NISN, kelas...", fontSize = 12.sp) },
+                            placeholder = {
+                                Text(
+                                    if (isEn) "Search name, NIK, NISN, class..." else "Cari nama, NIK, NISN, kelas...",
+                                    fontSize = 12.sp
+                                )
+                            },
                             leadingIcon = {
-                                Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(18.dp))
+                                Icon(imageVector = Icons.Default.Search, contentDescription = s.nav.search, modifier = Modifier.size(18.dp))
                             },
                             singleLine = true,
                             shape = RoundedCornerShape(12.dp),
@@ -460,7 +480,10 @@ fun StudentCardGeneratorSheet(
                     val count = targetStudentsToPrint.size
                     val estimatedPages = ceil(count.toDouble() / 8.0).toInt().coerceAtLeast(1)
                     if (count == 0) {
-                        EmptyCardTargetBox("Tidak ada anak asuh untuk kategori $filterSummaryLabel.")
+                        EmptyCardTargetBox(
+                            if (isEn) "No foster students found for category $filterSummaryLabel."
+                            else "Tidak ada anak asuh untuk kategori $filterSummaryLabel."
+                        )
                     } else {
                         Card(
                             colors = CardDefaults.cardColors(
@@ -482,12 +505,16 @@ fun StudentCardGeneratorSheet(
                                 )
                                 Column {
                                     Text(
-                                        text = "$count Kartu Anak Asuh Siap Cetak",
+                                        text = if (isEn) "$count Foster Student Cards Ready to Print" else "$count Kartu Anak Asuh Siap Cetak",
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        text = "Tersusun rapi 8 kartu/halaman A4 ($estimatedPages halaman) lengkap dengan garis potong.",
+                                        text = if (isEn) {
+                                            "Neatly arranged 8 cards/A4 page ($estimatedPages pages) complete with cut lines."
+                                        } else {
+                                            "Tersusun rapi 8 kartu/halaman A4 ($estimatedPages halaman) lengkap dengan garis potong."
+                                        },
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -496,7 +523,11 @@ fun StudentCardGeneratorSheet(
                         }
 
                         Text(
-                            text = "Sampel Pratinjau (${minOf(count, 10)} dari $count kartu):",
+                            text = if (isEn) {
+                                "Sample Preview (${minOf(count, 10)} of $count cards):"
+                            } else {
+                                "Sampel Pratinjau (${minOf(count, 10)} dari $count kartu):"
+                            },
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -529,7 +560,11 @@ fun StudentCardGeneratorSheet(
                         CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.5.dp)
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            text = "Menyusun ${targetStudentsToPrint.size} kartu QR ke PDF A4...",
+                            text = if (isEn) {
+                                "Compiling ${targetStudentsToPrint.size} QR cards to A4 PDF..."
+                            } else {
+                                "Menyusun ${targetStudentsToPrint.size} kartu QR ke PDF A4..."
+                            },
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -549,7 +584,11 @@ fun StudentCardGeneratorSheet(
                             Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Cetak / Simpan PDF (${targetStudentsToPrint.size} Kartu)",
+                                text = if (isEn) {
+                                    "Print / Save PDF (${targetStudentsToPrint.size} Cards)"
+                                } else {
+                                    "Cetak / Simpan PDF (${targetStudentsToPrint.size} Kartu)"
+                                },
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -570,7 +609,7 @@ fun StudentCardGeneratorSheet(
                             ) {
                                 Icon(imageVector = Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Buka PDF", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                Text(if (isEn) "Open PDF" else "Buka PDF", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                             }
 
                             OutlinedButton(
@@ -584,7 +623,7 @@ fun StudentCardGeneratorSheet(
                             ) {
                                 Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Bagikan PDF", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                                Text(if (isEn) "Share PDF" else "Bagikan PDF", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
                             }
                         }
                     }

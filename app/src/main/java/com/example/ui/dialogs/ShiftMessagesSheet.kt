@@ -84,6 +84,7 @@ import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +95,8 @@ fun ShiftMessagesSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
     var messageToShare by remember { mutableStateOf<ShiftMessage?>(null) }
@@ -169,7 +172,7 @@ fun ShiftMessagesSheet(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Tinggalkan Pesan",
+                                    text = if (isEn) "Leave Message" else "Tinggalkan Pesan",
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -203,7 +206,7 @@ fun ShiftMessagesSheet(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Tinggalkan Pesan",
+                                    text = if (isEn) "Leave Message" else "Tinggalkan Pesan",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
@@ -226,7 +229,7 @@ fun ShiftMessagesSheet(
                         modifier = Modifier.testTag("tab_shift_today"),
                         text = {
                             Text(
-                                text = "Hari Ini (${todayMessages.size})",
+                                text = if (isEn) "Today (${todayMessages.size})" else "Hari Ini (${todayMessages.size})",
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedDateTab == 0) FontWeight.Bold else FontWeight.Medium,
                                 maxLines = 1,
@@ -240,7 +243,7 @@ fun ShiftMessagesSheet(
                         modifier = Modifier.testTag("tab_shift_upcoming"),
                         text = {
                             Text(
-                                text = "Akan Datang (${upcomingMessages.size})",
+                                text = if (isEn) "Upcoming (${upcomingMessages.size})" else "Akan Datang (${upcomingMessages.size})",
                                 fontSize = 13.sp,
                                 fontWeight = if (selectedDateTab == 1) FontWeight.Bold else FontWeight.Medium,
                                 maxLines = 1,
@@ -259,6 +262,12 @@ fun ShiftMessagesSheet(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     listOf("Aktif", "Urgent", "Selesai", "Semua").forEach { filterOpt ->
+                        val filterLabel = when (filterOpt) {
+                            "Aktif" -> if (isEn) "Active" else "Aktif"
+                            "Urgent" -> "Urgent"
+                            "Selesai" -> if (isEn) "Completed" else "Selesai"
+                            else -> s.nav.all
+                        }
                         val countText = when (filterOpt) {
                             "Aktif" -> " ($activeCount)"
                             "Urgent" -> if (urgentCount > 0) " ($urgentCount)" else ""
@@ -270,7 +279,7 @@ fun ShiftMessagesSheet(
                             onClick = { selectedFilter = filterOpt },
                             label = {
                                 Text(
-                                    text = "$filterOpt$countText",
+                                    text = "$filterLabel$countText",
                                     fontSize = 11.5.sp,
                                     maxLines = 1,
                                     softWrap = false
@@ -313,16 +322,22 @@ fun ShiftMessagesSheet(
                                     modifier = Modifier.size(24.dp)
                                 )
                             }
+                            val activeFilterDisplay = when (selectedFilter) {
+                                "Aktif" -> if (isEn) "Active" else "Aktif"
+                                "Urgent" -> "Urgent"
+                                "Selesai" -> if (isEn) "Completed" else "Selesai"
+                                else -> s.nav.all
+                            }
                             Text(
                                 text = when {
                                     selectedDateTab == 0 && selectedFilter == "Aktif" ->
-                                        "Tidak ada pesan operan shift aktif untuk hari ini."
+                                        if (isEn) "No active shift handover messages for today." else "Tidak ada pesan operan shift aktif untuk hari ini."
                                     selectedDateTab == 1 && selectedFilter == "Aktif" ->
-                                        "Belum ada pesan shift yang akan datang (besok & seterusnya)."
+                                        if (isEn) "No upcoming shift messages (tomorrow & later)." else "Belum ada pesan shift yang akan datang (besok & seterusnya)."
                                     selectedDateTab == 0 ->
-                                        "Tidak ada pesan hari ini pada filter $selectedFilter."
+                                        if (isEn) "No messages today under filter $activeFilterDisplay." else "Tidak ada pesan hari ini pada filter $selectedFilter."
                                     else ->
-                                        "Tidak ada pesan yang akan datang pada filter $selectedFilter."
+                                        if (isEn) "No upcoming messages under filter $activeFilterDisplay." else "Tidak ada pesan yang akan datang pada filter $selectedFilter."
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -330,7 +345,11 @@ fun ShiftMessagesSheet(
                                 textAlign = TextAlign.Center
                             )
                             Text(
-                                text = "Tekan tombol '+ Tinggalkan Pesan' untuk menulis pesan operan jaga sesuai tanggal tugasnya.",
+                                text = if (isEn) {
+                                    "Tap '+ Leave Message' to write a shift handover note for its scheduled date."
+                                } else {
+                                    "Tekan tombol '+ Tinggalkan Pesan' untuk menulis pesan operan jaga sesuai tanggal tugasnya."
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -352,13 +371,25 @@ fun ShiftMessagesSheet(
                                 },
                                 onToggleComplete = {
                                     viewModel.toggleShiftMessageCompleted(msg) {
-                                        val status = if (!msg.isCompleted) "ditandai selesai" else "dibuka kembali"
-                                        Toast.makeText(context, "Pesan shift $status.", Toast.LENGTH_SHORT).show()
+                                        val status = if (isEn) {
+                                            if (!msg.isCompleted) "marked as completed" else "reopened"
+                                        } else {
+                                            if (!msg.isCompleted) "ditandai selesai" else "dibuka kembali"
+                                        }
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Shift message $status." else "Pesan shift $status.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 },
                                 onDelete = {
                                     viewModel.deleteShiftMessage(msg) {
-                                        Toast.makeText(context, "Pesan shift dihapus.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Shift message deleted." else "Pesan shift dihapus.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 }
                             )
@@ -378,7 +409,7 @@ fun ShiftMessagesSheet(
                             .heightIn(min = 48.dp)
                             .testTag("btn_close_shift_messages")
                     ) {
-                        Text("Tutup")
+                        Text(s.nav.close)
                     }
                 }
             }
@@ -395,8 +426,8 @@ fun ShiftMessagesSheet(
 
     // Pop-up Share Pengingat Pesan Shift via WhatsApp
     messageToShare?.let { msg ->
-        val reminderText = remember(msg.id, schoolProfile) {
-            buildShiftReminderWhatsAppText(msg, schoolProfile)
+        val reminderText = remember(msg.id, schoolProfile, s.language) {
+            buildShiftReminderWhatsAppText(msg, schoolProfile, isEn)
         }
         val matchedWali = remember(msg.targetWali, waliAccounts) {
             val cleanTarget = msg.targetWali.trim()
@@ -454,13 +485,13 @@ fun ShiftMessagesSheet(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Ingatkan via WhatsApp",
+                                    text = if (isEn) "Remind via WhatsApp" else "Ingatkan via WhatsApp",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Kepada: ${msg.targetWali} • ${msg.shift}",
+                                    text = "${if (isEn) "To" else "Kepada"}: ${msg.targetWali} • ${msg.shift}",
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -472,7 +503,7 @@ fun ShiftMessagesSheet(
                             onClick = { messageToShare = null },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Tutup")
+                            Icon(Icons.Default.Close, contentDescription = s.nav.close)
                         }
                     }
 
@@ -501,7 +532,11 @@ fun ShiftMessagesSheet(
                                     messageToShare = null
                                     context.startActivity(waIntent)
                                 }.onFailure {
-                                    Toast.makeText(context, "Tidak dapat membuka WhatsApp.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Unable to open WhatsApp." else "Tidak dapat membuka WhatsApp.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                             shape = RoundedCornerShape(12.dp),
@@ -514,7 +549,7 @@ fun ShiftMessagesSheet(
                             Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Chat Langsung WA ke ${matchedWali.name}",
+                                text = if (isEn) "Send WA Directly to ${matchedWali.name}" else "Chat Langsung WA ke ${matchedWali.name}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -530,8 +565,17 @@ fun ShiftMessagesSheet(
                         OutlinedButton(
                             onClick = {
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setPrimaryClip(ClipData.newPlainText("Pengingat Shift", reminderText))
-                                Toast.makeText(context, "Teks pengingat disalin!", Toast.LENGTH_SHORT).show()
+                                clipboard.setPrimaryClip(
+                                    ClipData.newPlainText(
+                                        if (isEn) "Shift Reminder" else "Pengingat Shift",
+                                        reminderText
+                                    )
+                                )
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Reminder text copied!" else "Teks pengingat disalin!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier
@@ -541,7 +585,7 @@ fun ShiftMessagesSheet(
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Salin Teks", fontSize = 12.sp)
+                            Text(if (isEn) "Copy Text" else "Salin Teks", fontSize = 12.sp)
                         }
 
                         Button(
@@ -553,10 +597,17 @@ fun ShiftMessagesSheet(
                                 runCatching {
                                     messageToShare = null
                                     context.startActivity(
-                                        Intent.createChooser(sendIntent, "Bagikan Pengingat Shift ke WhatsApp")
+                                        Intent.createChooser(
+                                            sendIntent,
+                                            if (isEn) "Share Shift Reminder to WhatsApp" else "Bagikan Pengingat Shift ke WhatsApp"
+                                        )
                                     )
                                 }.onFailure {
-                                    Toast.makeText(context, "Gagal membuka menu berbagi.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Failed to open share menu." else "Gagal membuka menu berbagi.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                             shape = RoundedCornerShape(12.dp),
@@ -571,7 +622,7 @@ fun ShiftMessagesSheet(
                             Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Bagikan ke Grup WA",
+                                text = if (isEn) "Share to WA Group" else "Bagikan ke Grup WA",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -595,30 +646,38 @@ private fun formatWhatsAppPhone(raw: String): String? {
 
 private fun buildShiftReminderWhatsAppText(
     msg: ShiftMessage,
-    schoolProfile: SchoolProfile
+    schoolProfile: SchoolProfile,
+    isEn: Boolean = false
 ): String {
     val priorityBadge = when (msg.priority) {
         "URGENT" -> "🔴 *URGENT*"
-        "SEDANG" -> "🟠 *SEDANG*"
-        else -> "🟢 *BIASA*"
+        "SEDANG" -> if (isEn) "🟠 *MEDIUM*" else "🟠 *SEDANG*"
+        else -> if (isEn) "🟢 *NORMAL*" else "🟢 *BIASA*"
     }
     val schoolLabel = schoolProfile.schoolName.trim().ifBlank {
         schoolProfile.shortName.trim().ifBlank { "Wali Asuh Care" }
     }
-    val statusLabel = if (msg.isCompleted) "✅ Sudah Selesai" else "⏳ Belum Selesai (Mohon Tindak Lanjut)"
+    val statusLabel = if (isEn) {
+        if (msg.isCompleted) "✅ Completed" else "⏳ Pending (Please Follow Up)"
+    } else {
+        if (msg.isCompleted) "✅ Sudah Selesai" else "⏳ Belum Selesai (Mohon Tindak Lanjut)"
+    }
     return buildString {
-        appendLine("🔔 *PENGINGAT OPERAN SHIFT WALI ASUH*")
+        appendLine(
+            if (isEn) "🔔 *WALI ASUH SHIFT HANDOVER REMINDER*"
+            else "🔔 *PENGINGAT OPERAN SHIFT WALI ASUH*"
+        )
         appendLine("*$schoolLabel*")
         appendLine("----------------------------------------")
         appendLine("$priorityBadge • ${msg.shift}")
-        appendLine("📌 *Tugas:* ${msg.title}")
-        appendLine("👤 *Kepada:* ${msg.targetWali}")
-        appendLine("📅 *Tindak Lanjut:* ${DateUtils.formatFullDate(msg.followUpDate)}")
-        appendLine("📝 *Isi Pesan:*")
+        appendLine("${if (isEn) "📌 *Task:*" else "📌 *Tugas:*"} ${msg.title}")
+        appendLine("${if (isEn) "👤 *To:*" else "👤 *Kepada:*"} ${msg.targetWali}")
+        appendLine("${if (isEn) "📅 *Follow-Up Date:*" else "📅 *Tindak Lanjut:*"} ${DateUtils.formatFullDate(msg.followUpDate)}")
+        appendLine(if (isEn) "📝 *Message:*" else "📝 *Isi Pesan:*")
         appendLine(msg.messageContent)
         appendLine("----------------------------------------")
-        appendLine("Status: $statusLabel")
-        append("Dibuat oleh: ${msg.senderName}")
+        appendLine("${if (isEn) "Status" else "Status"}: $statusLabel")
+        append("${if (isEn) "Created by" else "Dibuat oleh"}: ${msg.senderName}")
     }
 }
 
@@ -628,6 +687,7 @@ private fun ShiftHeaderTitleBlock(
     urgentCount: Int,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(2.dp)
@@ -637,7 +697,7 @@ private fun ShiftHeaderTitleBlock(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = "Pesan Shift Berikutnya",
+                text = if (isEn) "Next Shift Messages" else "Pesan Shift Berikutnya",
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -663,7 +723,11 @@ private fun ShiftHeaderTitleBlock(
             }
         }
         Text(
-            text = "Serah terima tugas jaga & operan antar wali asuh",
+            text = if (isEn) {
+                "Duty handover & operational notes between Wali Asuh"
+            } else {
+                "Serah terima tugas jaga & operan antar wali asuh"
+            },
             fontSize = 11.5.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -679,6 +743,7 @@ fun ShiftMessageCardItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val isUrgent = message.priority == "URGENT"
     val isSedang = message.priority == "SEDANG"
 
@@ -737,7 +802,11 @@ fun ShiftMessageCardItem(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (isUrgent) "🔴 URGENT" else if (isSedang) "🟠 SEDANG" else "🟢 BIASA",
+                            text = when {
+                                isUrgent -> "🔴 URGENT"
+                                isSedang -> if (isEn) "🟠 MEDIUM" else "🟠 SEDANG"
+                                else -> if (isEn) "🟢 NORMAL" else "🟢 BIASA"
+                            },
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = priorityColor,
@@ -774,7 +843,7 @@ fun ShiftMessageCardItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Ingatkan via WhatsApp",
+                            contentDescription = if (isEn) "Remind via WhatsApp" else "Ingatkan via WhatsApp",
                             tint = Color(0xFF059669),
                             modifier = Modifier.size(18.dp)
                         )
@@ -788,7 +857,7 @@ fun ShiftMessageCardItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Hapus Pesan",
+                            contentDescription = if (isEn) "Delete Message" else "Hapus Pesan",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                             modifier = Modifier.size(18.dp)
                         )
@@ -825,7 +894,7 @@ fun ShiftMessageCardItem(
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = "Kepada: ${message.targetWali}",
+                        text = "${if (isEn) "To" else "Kepada"}: ${message.targetWali}",
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = WaliPrimary
@@ -843,7 +912,7 @@ fun ShiftMessageCardItem(
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        text = "Tindak Lanjut: ${DateUtils.formatFullDate(message.followUpDate)}",
+                        text = "${if (isEn) "Follow-Up" else "Tindak Lanjut"}: ${DateUtils.formatFullDate(message.followUpDate)}",
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -874,7 +943,7 @@ fun ShiftMessageCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Dibuat oleh: ${message.senderName}",
+                    text = "${if (isEn) "Created by" else "Dibuat oleh"}: ${message.senderName}",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -895,13 +964,21 @@ fun ShiftMessageCardItem(
                 ) {
                     Icon(
                         imageVector = if (message.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = if (message.isCompleted) "Selesai" else "Tandai Selesai",
+                        contentDescription = if (message.isCompleted) {
+                            if (isEn) "Completed" else "Selesai"
+                        } else {
+                            if (isEn) "Mark Completed" else "Tandai Selesai"
+                        },
                         tint = if (message.isCompleted) Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = if (message.isCompleted) "Selesai (${message.completedBy.ifBlank { "Wali" }})" else "Tandai Selesai",
+                        text = if (message.isCompleted) {
+                            "${if (isEn) "Done" else "Selesai"} (${message.completedBy.ifBlank { "Wali" }})"
+                        } else {
+                            if (isEn) "Mark Done" else "Tandai Selesai"
+                        },
                         fontSize = 11.5.sp,
                         fontWeight = if (message.isCompleted) FontWeight.Bold else FontWeight.Medium,
                         color = if (message.isCompleted) Color(0xFF16A34A) else MaterialTheme.colorScheme.onSurfaceVariant,

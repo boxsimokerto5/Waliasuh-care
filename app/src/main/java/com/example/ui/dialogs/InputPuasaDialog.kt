@@ -70,6 +70,7 @@ import com.example.data.model.FastingSession
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -81,6 +82,9 @@ fun InputPuasaDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
+    val lang = appStrings.language
     val activeSessions = remember(sessions) {
         sessions.filter { it.isActive }.sortedByDescending { it.sessionDate }
     }
@@ -193,13 +197,13 @@ fun InputPuasaDialog(
                         }
                         Column {
                             Text(
-                                text = "Input Puasa Siswa",
+                                text = if (isEn) "Input Student Puasa" else "Input Puasa Siswa",
                                 fontSize = 16.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Scan barcode langsung terinput atau cari nama siswa",
+                                text = if (isEn) "Scan barcode to auto-register or search student name" else "Scan barcode langsung terinput atau cari nama siswa",
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -213,7 +217,7 @@ fun InputPuasaDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup"
+                            contentDescription = appStrings.nav.close
                         )
                     }
                 }
@@ -230,13 +234,17 @@ fun InputPuasaDialog(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "Belum Ada Sesi Puasa Tersedia",
+                                text = if (isEn) "No Puasa Sessions Available Yet" else "Belum Ada Sesi Puasa Tersedia",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF92400E)
                             )
                             Text(
-                                text = "Pembuatan sesi puasa (misal: Puasa Senin Kamis) dilakukan melalui akun Admin Sekolah di tab 'Sesi Puasa'. Hubungi Admin Sekolah untuk membuat sesi terlebih dahulu.",
+                                text = if (isEn) {
+                                    "Puasa sessions (e.g., Puasa Senin Kamis) are created via the Admin Sekolah account in the 'Sesi Puasa' tab. Please contact Admin Sekolah to create a session first."
+                                } else {
+                                    "Pembuatan sesi puasa (misal: Puasa Senin Kamis) dilakukan melalui akun Admin Sekolah di tab 'Sesi Puasa'. Hubungi Admin Sekolah untuk membuat sesi terlebih dahulu."
+                                },
                                 fontSize = 12.sp,
                                 color = Color(0xFF78350F)
                             )
@@ -251,7 +259,7 @@ fun InputPuasaDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Pilih Sesi Puasa:",
+                                text = if (isEn) "Select Puasa Session:" else "Pilih Sesi Puasa:",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -264,7 +272,7 @@ fun InputPuasaDialog(
                                         .padding(horizontal = 8.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "${sessionRecords.size} Terdaftar",
+                                        text = if (isEn) "${sessionRecords.size} Registered" else "${sessionRecords.size} Terdaftar",
                                         fontSize = 10.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = tealPrimary
@@ -285,9 +293,12 @@ fun InputPuasaDialog(
                                     selected = selected,
                                     onClick = { selectedSessionId = session.id },
                                     label = {
-                                        val dateStr = DateUtils.formatShortDate(session.sessionDate)
+                                        val dateStr = DateUtils.formatShortDate(session.sessionDate, lang)
+                                        val doneSuffix = if (!session.isActive) {
+                                            if (isEn) " • Completed" else " • Selesai"
+                                        } else ""
                                         Text(
-                                            text = "${session.title} ($dateStr)${if (!session.isActive) " • Selesai" else ""}",
+                                            text = "${session.title} ($dateStr)$doneSuffix",
                                             fontSize = 11.5.sp,
                                             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                         )
@@ -329,7 +340,7 @@ fun InputPuasaDialog(
                                     color = tealPrimary
                                 )
                                 Text(
-                                    text = "${DateUtils.formatFullDate(sess.sessionDate)}${if (sess.description.isNotBlank()) " • ${sess.description}" else ""}",
+                                    text = "${DateUtils.formatFullDate(sess.sessionDate, lang)}${if (sess.description.isNotBlank()) " • ${sess.description}" else ""}",
                                     fontSize = 11.sp,
                                     color = Color(0xFF115E59)
                                 )
@@ -351,12 +362,12 @@ fun InputPuasaDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scan Barcode Kartu Siswa",
+                            contentDescription = if (isEn) "Scan Student Card Barcode" else "Scan Barcode Kartu Siswa",
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Scan Barcode Kartu Siswa (Langsung Terinput)",
+                            text = if (isEn) "Scan Student Card Barcode (Instant Input)" else "Scan Barcode Kartu Siswa (Langsung Terinput)",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -406,7 +417,12 @@ fun InputPuasaDialog(
                                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                                     modifier = Modifier.height(30.dp)
                                 ) {
-                                    Text("Scan Lagi", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = tealPrimary)
+                                    Text(
+                                        if (isEn) "Scan Again" else "Scan Lagi",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = tealPrimary
+                                    )
                                 }
                             }
                         }
@@ -416,11 +432,16 @@ fun InputPuasaDialog(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Ketik nama, kelas, atau NIK/NIS siswa...", fontSize = 12.5.sp) },
+                        placeholder = {
+                            Text(
+                                if (isEn) "Type student name, class, or NIK/NIS..." else "Ketik nama, kelas, atau NIK/NIS siswa...",
+                                fontSize = 12.5.sp
+                            )
+                        },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Cari Siswa",
+                                contentDescription = if (isEn) "Search Student" else "Cari Siswa",
                                 tint = tealPrimary,
                                 modifier = Modifier.size(20.dp)
                             )
@@ -428,7 +449,7 @@ fun InputPuasaDialog(
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Close, contentDescription = "Bersihkan")
+                                    Icon(Icons.Default.Close, contentDescription = if (isEn) "Clear" else "Bersihkan")
                                 }
                             }
                         },
@@ -448,7 +469,11 @@ fun InputPuasaDialog(
                             )
                         ) {
                             Text(
-                                text = "Ketik nama atau NIS siswa di kolom pencarian di atas untuk menampilkan pilihan siswa, atau gunakan tombol Scan Barcode agar langsung terinput.",
+                                text = if (isEn) {
+                                    "Type a student's name or NIS above to display matching students, or tap Scan Barcode for instant registration."
+                                } else {
+                                    "Ketik nama atau NIS siswa di kolom pencarian di atas untuk menampilkan pilihan siswa, atau gunakan tombol Scan Barcode agar langsung terinput."
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(12.dp)
@@ -462,14 +487,22 @@ fun InputPuasaDialog(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Tidak ditemukan siswa dengan kata kunci \"$searchQuery\".",
+                                text = if (isEn) {
+                                    "No student found matching \"$searchQuery\"."
+                                } else {
+                                    "Tidak ditemukan siswa dengan kata kunci \"$searchQuery\"."
+                                },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     } else {
                         Text(
-                            text = "Hasil Pencarian (${matchedStudents.size} Siswa) — Ketuk untuk input puasa:",
+                            text = if (isEn) {
+                                "Search Results (${matchedStudents.size} Students) — Tap to input Puasa:"
+                            } else {
+                                "Hasil Pencarian (${matchedStudents.size} Siswa) — Ketuk untuk input puasa:"
+                            },
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -556,12 +589,12 @@ fun InputPuasaDialog(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.CheckCircle,
-                                                    contentDescription = "Sudah Terdaftar",
+                                                    contentDescription = if (isEn) "Already Registered" else "Sudah Terdaftar",
                                                     tint = Color(0xFF16A34A),
                                                     modifier = Modifier.size(16.dp)
                                                 )
                                                 Text(
-                                                    text = "Terdaftar",
+                                                    text = if (isEn) "Registered" else "Terdaftar",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFF15803D)
@@ -574,7 +607,7 @@ fun InputPuasaDialog(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.AddCircleOutline,
-                                                    contentDescription = "Input Puasa",
+                                                    contentDescription = if (isEn) "Input Puasa" else "Input Puasa",
                                                     tint = tealPrimary,
                                                     modifier = Modifier.size(16.dp)
                                                 )
@@ -602,13 +635,17 @@ fun InputPuasaDialog(
             onScanned = { scannedCode ->
                 val matched = StudentClassifier.findMatchingStudent(students, scannedCode)
                 if (matched == null) {
-                    val err = "Kartu siswa dengan kode \"$scannedCode\" tidak ditemukan di data sekolah."
+                    val err = if (isEn) {
+                        "Student card with code \"$scannedCode\" not found in school data."
+                    } else {
+                        "Kartu siswa dengan kode \"$scannedCode\" tidak ditemukan di data sekolah."
+                    }
                     lastFeedback = false to err
                     scannerFloatingFeedback = ScannerFloatingFeedback(
                         id = System.nanoTime(),
                         status = ScannerFeedbackStatus.ERROR,
-                        title = "Kartu tidak ditemukan",
-                        subtitle = "Kode \"$scannedCode\" belum terdaftar"
+                        title = if (isEn) "Card not found" else "Kartu tidak ditemukan",
+                        subtitle = if (isEn) "Code \"$scannedCode\" is not registered" else "Kode \"$scannedCode\" belum terdaftar"
                     )
                 } else {
                     onRegisterStudent(selectedSession, matched) { added, message ->
@@ -621,15 +658,15 @@ fun InputPuasaDialog(
                             ScannerFloatingFeedback(
                                 id = System.nanoTime(),
                                 status = ScannerFeedbackStatus.SUCCESS,
-                                title = "Telah terinput puasa anak ${matched.name}",
+                                title = if (isEn) "Recorded Puasa for ${matched.name}" else "Telah terinput puasa anak ${matched.name}",
                                 subtitle = infoLine.ifBlank { selectedSession.title }
                             )
                         } else {
                             ScannerFloatingFeedback(
                                 id = System.nanoTime(),
                                 status = ScannerFeedbackStatus.WARNING,
-                                title = "${matched.name} sudah terinput",
-                                subtitle = "Sudah terdaftar pada sesi ${selectedSession.title}"
+                                title = if (isEn) "${matched.name} is already registered" else "${matched.name} sudah terinput",
+                                subtitle = if (isEn) "Already registered in session ${selectedSession.title}" else "Sudah terdaftar pada sesi ${selectedSession.title}"
                             )
                         }
                     }
@@ -639,11 +676,27 @@ fun InputPuasaDialog(
                 showBarcodeScanner = false
                 scannerFloatingFeedback = null
             },
-            dialogTitle = "Scan Barcode Puasa Siswa",
-            dialogSubtitle = "Sesi: ${selectedSession.title} • Kamera tetap aktif untuk banyak kartu",
-            quickPickTitle = "Pilih Cepat Kartu Siswa (${students.size} Siswa):",
-            searchPlaceholder = "Cari nama, kelas, kamar, atau NIK siswa...",
-            emptyListMessage = "Belum ada data siswa terdaftar di sekolah ini.",
+            dialogTitle = if (isEn) "Scan Student Puasa Barcode" else "Scan Barcode Puasa Siswa",
+            dialogSubtitle = if (isEn) {
+                "Session: ${selectedSession.title} • Camera stays active for multiple cards"
+            } else {
+                "Sesi: ${selectedSession.title} • Kamera tetap aktif untuk banyak kartu"
+            },
+            quickPickTitle = if (isEn) {
+                "Quick Pick Student Card (${students.size} Students):"
+            } else {
+                "Pilih Cepat Kartu Siswa (${students.size} Siswa):"
+            },
+            searchPlaceholder = if (isEn) {
+                "Search name, class, room, or NIK..."
+            } else {
+                "Cari nama, kelas, kamar, atau NIK siswa..."
+            },
+            emptyListMessage = if (isEn) {
+                "No students registered in this school yet."
+            } else {
+                "Belum ada data siswa terdaftar di sekolah ini."
+            },
             accentColor = WaliPrimary,
             accentBgColor = Color(0xFFCCFBF1),
             cardBgColor = Color(0xFFF0FDFA),

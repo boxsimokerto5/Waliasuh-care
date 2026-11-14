@@ -65,6 +65,7 @@ import com.example.ui.components.FaskesBadge
 import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun CompletedHistoryScreen(
@@ -75,6 +76,7 @@ fun CompletedHistoryScreen(
     selectedFaskes: String,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var recordToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -93,9 +95,9 @@ fun CompletedHistoryScreen(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.FlashOn, contentDescription = "Pengobatan Langsung", modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.FlashOn, contentDescription = if (isEn) "Direct Treatment" else "Pengobatan Langsung", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(5.dp))
-                    Text(text = "Pengobatan Langsung", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(text = if (isEn) "Direct Treatment" else "Pengobatan Langsung", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }
@@ -115,14 +117,14 @@ fun CompletedHistoryScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setHistorySearchQuery(it) },
-                    placeholder = { Text("Cari siswa, diagnosa, obat...", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "Search student, diagnosis, medication..." else "Cari siswa, diagnosa, obat...", fontSize = 12.sp) },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(18.dp))
+                        Icon(imageVector = Icons.Default.Search, contentDescription = if (isEn) "Search" else "Cari", modifier = Modifier.size(18.dp))
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setHistorySearchQuery("") }) {
-                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(16.dp))
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = if (isEn) "Clear" else "Hapus", modifier = Modifier.size(16.dp))
                             }
                         }
                     },
@@ -152,7 +154,7 @@ fun CompletedHistoryScreen(
                     FilterChip(
                         selected = selectedFaskes == "Semua",
                         onClick = { viewModel.setFaskesFilter("Semua") },
-                        label = { Text("Semua (${completedRecords.size})", fontSize = 11.sp) },
+                        label = { Text(if (isEn) "All (${completedRecords.size})" else "Semua (${completedRecords.size})", fontSize = 11.sp) },
                         modifier = Modifier.height(30.dp)
                     )
                     faskesFilterOptions.forEachIndexed { idx, faskesName ->
@@ -185,13 +187,21 @@ fun CompletedHistoryScreen(
                                 modifier = Modifier.size(48.dp)
                             )
                             Text(
-                                text = if (searchQuery.isNotBlank()) "Tidak ditemukan catatan yang cocok." else "Belum ada riwayat pengobatan.",
+                                text = if (isEn) {
+                                    if (searchQuery.isNotBlank()) "No matching records found." else "No treatment history yet."
+                                } else {
+                                    if (searchQuery.isNotBlank()) "Tidak ditemukan catatan yang cocok." else "Belum ada riwayat pengobatan."
+                                },
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Gunakan tombol '+ Pengobatan Langsung' untuk mendata tindakan yang sudah dilakukan di puskesmas.",
+                                text = if (isEn) {
+                                    "Use '+ Direct Treatment' to log examinations already completed at Puskesmas."
+                                } else {
+                                    "Gunakan tombol '+ Pengobatan Langsung' untuk mendata tindakan yang sudah dilakukan di puskesmas."
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -290,6 +300,7 @@ fun CompactCompletedRecordCard(
     onShare: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val accentColor = if (record.faskes.contains("Wates", ignoreCase = true)) Color(0xFF00695C) else Color(0xFF2E7D32)
 
     ElevatedCard(
@@ -359,7 +370,7 @@ fun CompactCompletedRecordCard(
                                 .padding(horizontal = 5.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = "Langsung",
+                                text = if (isEn) "Direct" else "Langsung",
                                 fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.tertiary,
                                 fontWeight = FontWeight.Bold
@@ -370,7 +381,7 @@ fun CompactCompletedRecordCard(
 
                 // Keluhan & Diagnosa (Clean layout)
                 Text(
-                    text = "Keluhan: ${record.complaint}",
+                    text = if (isEn) "Complaint: ${record.complaint}" else "Keluhan: ${record.complaint}",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
@@ -385,7 +396,7 @@ fun CompactCompletedRecordCard(
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                text = "Diagnosa: ",
+                                text = if (isEn) "Diagnosis: " else "Diagnosa: ",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary
@@ -410,7 +421,7 @@ fun CompactCompletedRecordCard(
                         )
                         Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "Obat: ${record.prescription}",
+                            text = if (isEn) "Medication: ${record.prescription}" else "Obat: ${record.prescription}",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -447,7 +458,7 @@ fun CompactCompletedRecordCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Riwayat",
+                                contentDescription = if (isEn) "Edit Record" else "Edit Riwayat",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -459,7 +470,7 @@ fun CompactCompletedRecordCard(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Hapus Riwayat",
+                                contentDescription = if (isEn) "Delete Record" else "Hapus Riwayat",
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -480,14 +491,14 @@ fun CompactCompletedRecordCard(
                                 modifier = Modifier.size(13.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Laporan WA", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                            Text(if (isEn) "WA Report" else "Laporan WA", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
                 }
 
                 val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
                 Text(
-                    text = "Diinput oleh: $creatorLabel",
+                    text = if (isEn) "Input by: $creatorLabel" else "Diinput oleh: $creatorLabel",
                     fontSize = 9.5.sp,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,

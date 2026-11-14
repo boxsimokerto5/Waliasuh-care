@@ -75,6 +75,7 @@ import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
 import com.example.data.model.SchoolProfile
 import com.example.util.PdfReportGenerator
+import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -92,6 +93,8 @@ fun DaftarHaidSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var searchQuery by remember { mutableStateOf("") }
     var selectedDetailRecord by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToComplete by remember { mutableStateOf<HaidRecord?>(null) }
@@ -99,7 +102,7 @@ fun DaftarHaidSheet(
     var recordToDelete by remember { mutableStateOf<HaidRecord?>(null) }
     var showDailyReportSheet by remember { mutableStateOf(false) }
 
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")) }
+    val dateFormat = remember(s.language) { SimpleDateFormat("dd MMM yyyy", s.locale) }
 
     val filteredRecords = remember(searchQuery, activeHaidRecords) {
         if (searchQuery.isBlank()) {
@@ -164,13 +167,17 @@ fun DaftarHaidSheet(
                         }
                         Column {
                             Text(
-                                text = "Daftar Siswi Sedang Haid",
+                                text = if (isEn) "Active Haid Student List" else "Daftar Siswi Sedang Haid",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${activeHaidRecords.size} Santriwati Aktif (Maks 15 Hari • Auto Suci)",
+                                text = if (isEn) {
+                                    "${activeHaidRecords.size} Active Students (Max 15 Days • Auto Suci)"
+                                } else {
+                                    "${activeHaidRecords.size} Santriwati Aktif (Maks 15 Hari • Auto Suci)"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -185,7 +192,7 @@ fun DaftarHaidSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = s.nav.close,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -204,9 +211,13 @@ fun DaftarHaidSheet(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF2F8))
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Text("Total Sedang Haid", fontSize = 10.sp, color = Color(0xFF9D174D))
                             Text(
-                                text = "${activeHaidRecords.size} Siswi",
+                                if (isEn) "Total Currently Haid" else "Total Sedang Haid",
+                                fontSize = 10.sp,
+                                color = Color(0xFF9D174D)
+                            )
+                            Text(
+                                text = if (isEn) "${activeHaidRecords.size} Students" else "${activeHaidRecords.size} Siswi",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF831843)
@@ -223,13 +234,21 @@ fun DaftarHaidSheet(
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
                             Text(
-                                text = if (maxDayCount > 0) "Batas Hari ke-15" else "Aturan Fleksibel 15h",
+                                text = if (isEn) {
+                                    if (maxDayCount > 0) "Day 15 Limit" else "15d Flexible Rule"
+                                } else {
+                                    if (maxDayCount > 0) "Batas Hari ke-15" else "Aturan Fleksibel 15h"
+                                },
                                 fontSize = 10.sp,
                                 color = if (maxDayCount > 0) Color(0xFFB91C1C) else Color(0xFF15803D),
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = if (maxDayCount > 0) "$maxDayCount Siswi Hari ke-15" else "Auto Suci > 15 Hari",
+                                text = if (isEn) {
+                                    if (maxDayCount > 0) "$maxDayCount Students Day 15" else "Auto Suci > 15 Days"
+                                } else {
+                                    if (maxDayCount > 0) "$maxDayCount Siswi Hari ke-15" else "Auto Suci > 15 Hari"
+                                },
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (maxDayCount > 0) Color(0xFF991B1B) else Color(0xFF166534)
@@ -263,7 +282,7 @@ fun DaftarHaidSheet(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Laporan Haid Hari Ini (PDF Berkop & WA)",
+                        text = if (isEn) "Today's Haid Report (Official PDF & WA)" else "Laporan Haid Hari Ini (PDF Berkop & WA)",
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.weight(1f),
@@ -289,7 +308,7 @@ fun DaftarHaidSheet(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Cari nama siswi...", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "Search student name..." else "Cari nama siswi...", fontSize = 12.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
                         },
@@ -299,7 +318,7 @@ fun DaftarHaidSheet(
                                     onClick = { searchQuery = "" },
                                     modifier = Modifier.size(48.dp)
                                 ) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Hapus pencarian", modifier = Modifier.size(16.dp))
+                                    Icon(Icons.Default.Clear, contentDescription = if (isEn) "Clear search" else "Hapus pencarian", modifier = Modifier.size(16.dp))
                                 }
                             }
                         },
@@ -352,7 +371,11 @@ fun DaftarHaidSheet(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = if (activeHaidRecords.isEmpty()) "Tidak ada siswi yang sedang haid saat ini" else "Tidak ada siswi yang cocok dengan pencarian",
+                                text = if (activeHaidRecords.isEmpty()) {
+                                    if (isEn) "No female students currently on Haid" else "Tidak ada siswi yang sedang haid saat ini"
+                                } else {
+                                    if (isEn) "No students match your search" else "Tidak ada siswi yang cocok dengan pencarian"
+                                },
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -360,7 +383,11 @@ fun DaftarHaidSheet(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Semua santriwati berada di Daftar Suci dan siap beribadah.",
+                                text = if (isEn) {
+                                    "All female students are in Daftar Suci and ready for prayer."
+                                } else {
+                                    "Semua santriwati berada di Daftar Suci dan siap beribadah."
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -477,7 +504,7 @@ fun DaftarHaidSheet(
                                                         )
                                                     }
                                                     Text(
-                                                        text = "Hari ke-$days",
+                                                        text = s.haidFasting.daftarHaidDayBadge(days),
                                                         color = Color.White,
                                                         fontWeight = FontWeight.Bold,
                                                         fontSize = 11.sp
@@ -486,7 +513,7 @@ fun DaftarHaidSheet(
                                             }
                                             Icon(
                                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                contentDescription = "Lihat detail ${record.studentName}",
+                                                contentDescription = if (isEn) "View details for ${record.studentName}" else "Lihat detail ${record.studentName}",
                                                 tint = Color(0xFF9D174D).copy(alpha = 0.65f),
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -591,7 +618,7 @@ fun DaftarHaidSheet(
                             onClick = { selectedDetailRecord = null },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Tutup detail")
+                            Icon(Icons.Default.Close, contentDescription = s.nav.close)
                         }
                     }
 
@@ -628,7 +655,11 @@ fun DaftarHaidSheet(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Hari ke-15 (Maksimal Haid): Wajib mandi suci. Lewat hari ke-15 otomatis pindah ke Daftar Suci.",
+                                text = if (isEn) {
+                                    "Day 15 (Max Haid): Mandi Suci required. Past day 15 moves automatically to Daftar Suci."
+                                } else {
+                                    "Hari ke-15 (Maksimal Haid): Wajib mandi suci. Lewat hari ke-15 otomatis pindah ke Daftar Suci."
+                                },
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF991B1B)
@@ -649,19 +680,19 @@ fun DaftarHaidSheet(
                             verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Text(
-                                text = "Mulai Hari ke-1: ${dateFormat.format(Date(rec.startDate))}",
+                                text = "${if (isEn) "Day 1 Start" else "Mulai Hari ke-1"}: ${dateFormat.format(Date(rec.startDate))}",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Dicatat oleh: ${rec.waliName}",
+                                text = "${if (isEn) "Recorded by" else "Dicatat oleh"}: ${rec.waliName}",
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (rec.notes.isNotBlank()) {
                                 Text(
-                                    text = "Catatan: ${rec.notes}",
+                                    text = "${if (isEn) "Notes" else "Catatan"}: ${rec.notes}",
                                     fontSize = 12.sp,
                                     color = Color(0xFF831843),
                                     fontWeight = FontWeight.Medium
@@ -693,7 +724,7 @@ fun DaftarHaidSheet(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Ubah Hari", fontSize = 12.sp, color = Color(0xFFBE185D), fontWeight = FontWeight.SemiBold)
+                            Text(if (isEn) "Edit Day" else "Ubah Hari", fontSize = 12.sp, color = Color(0xFFBE185D), fontWeight = FontWeight.SemiBold)
                         }
 
                         OutlinedButton(
@@ -715,7 +746,7 @@ fun DaftarHaidSheet(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Hapus", fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                            Text(s.nav.delete, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -737,7 +768,11 @@ fun DaftarHaidSheet(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Mandi Suci (Pindah ke Daftar Suci)", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEn) "Mandi Suci (Move to Daftar Suci)" else "Mandi Suci (Pindah ke Daftar Suci)",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -746,8 +781,8 @@ fun DaftarHaidSheet(
 
     // Pop-up Laporan Haid Hari Ini (Cetak/Bagikan PDF Berkop Multi-Tenant & Teks WA)
     if (showDailyReportSheet) {
-        val todayFormatted = remember {
-            SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID")).format(Date())
+        val todayFormatted = remember(s.language) {
+            SimpleDateFormat("EEEE, d MMMM yyyy", s.locale).format(Date())
         }
         ModalBottomSheet(
             onDismissRequest = { showDailyReportSheet = false },
@@ -794,7 +829,7 @@ fun DaftarHaidSheet(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Laporan Haid Hari Ini",
+                                    text = if (isEn) "Today's Haid Report" else "Laporan Haid Hari Ini",
                                     fontSize = 16.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -810,7 +845,7 @@ fun DaftarHaidSheet(
                             onClick = { showDailyReportSheet = false },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Tutup")
+                            Icon(Icons.Default.Close, contentDescription = s.nav.close)
                         }
                     }
 
@@ -832,13 +867,21 @@ fun DaftarHaidSheet(
                                 color = Color(0xFF831843)
                             )
                             Text(
-                                text = "Total terdata hari ini: ${activeHaidRecords.size} Siswi sedang haid",
+                                text = if (isEn) {
+                                    "Total recorded today: ${activeHaidRecords.size} Female students currently on Haid"
+                                } else {
+                                    "Total terdata hari ini: ${activeHaidRecords.size} Siswi sedang haid"
+                                },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF9D174D)
                             )
                             Text(
-                                text = "PDF dilengkapi kop surat sekolah, logo Kemensos & Sekolah Rakyat, serta daftar lengkap siswi sedang haid.",
+                                text = if (isEn) {
+                                    "PDF includes school letterhead, Kemensos & Sekolah Rakyat logos, and full list of female students on Haid."
+                                } else {
+                                    "PDF dilengkapi kop surat sekolah, logo Kemensos & Sekolah Rakyat, serta daftar lengkap siswi sedang haid."
+                                },
                                 fontSize = 11.sp,
                                 color = Color(0xFF9D174D).copy(alpha = 0.85f)
                             )
@@ -857,7 +900,11 @@ fun DaftarHaidSheet(
                                 showDailyReportSheet = false
                                 PdfReportGenerator.openPdfFile(context, pdfFile)
                             } else {
-                                Toast.makeText(context, "Gagal membuat PDF laporan haid.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Failed to generate Haid report PDF." else "Gagal membuat PDF laporan haid.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -869,7 +916,11 @@ fun DaftarHaidSheet(
                     ) {
                         Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Buka / Pratinjau PDF", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEn) "Open / Preview PDF" else "Buka / Pratinjau PDF",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     OutlinedButton(
@@ -884,7 +935,11 @@ fun DaftarHaidSheet(
                                 showDailyReportSheet = false
                                 PdfReportGenerator.shareHaidReportPdf(context, pdfFile, schoolProfile)
                             } else {
-                                Toast.makeText(context, "Gagal membuat PDF laporan haid.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Failed to generate Haid report PDF." else "Gagal membuat PDF laporan haid.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -895,7 +950,11 @@ fun DaftarHaidSheet(
                     ) {
                         Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Bagikan File PDF (WhatsApp / Lainnya)", fontSize = 12.5.sp, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            if (isEn) "Share PDF File (WhatsApp / Other)" else "Bagikan File PDF (WhatsApp / Lainnya)",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
 
                     OutlinedButton(
@@ -911,9 +970,18 @@ fun DaftarHaidSheet(
                             }
                             runCatching {
                                 showDailyReportSheet = false
-                                context.startActivity(Intent.createChooser(intent, "Kirim Ringkasan Haid Hari Ini"))
+                                context.startActivity(
+                                    Intent.createChooser(
+                                        intent,
+                                        if (isEn) "Send Today's Haid Summary" else "Kirim Ringkasan Haid Hari Ini"
+                                    )
+                                )
                             }.onFailure {
-                                Toast.makeText(context, "Tidak dapat membuka aplikasi berbagi.", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to open sharing app." else "Tidak dapat membuka aplikasi berbagi.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         },
                         shape = RoundedCornerShape(12.dp),
@@ -925,7 +993,7 @@ fun DaftarHaidSheet(
                         Icon(Icons.Default.WaterDrop, contentDescription = null, tint = Color(0xFF059669), modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Kirim Ringkasan Teks ke WhatsApp",
+                            text = if (isEn) "Send Text Summary to WhatsApp" else "Kirim Ringkasan Teks ke WhatsApp",
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF059669)
@@ -962,7 +1030,7 @@ fun DaftarHaidSheet(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Sesuaikan Hari Haid & Catatan",
+                        text = if (isEn) "Adjust Haid Day & Notes" else "Sesuaikan Hari Haid & Catatan",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -988,10 +1056,10 @@ fun DaftarHaidSheet(
                             enabled = editDay > 1,
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Remove, contentDescription = "Kurangi Hari")
+                            Icon(Icons.Default.Remove, contentDescription = if (isEn) "Decrease Day" else "Kurangi Hari")
                         }
                         Text(
-                            text = "Haid Hari ke-$editDay",
+                            text = if (isEn) "Haid Day $editDay" else "Haid Hari ke-$editDay",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFDB2777)
@@ -1001,14 +1069,14 @@ fun DaftarHaidSheet(
                             enabled = editDay < HaidDateCalculator.MAX_HAID_DAYS,
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Add, contentDescription = "Tambah Hari")
+                            Icon(Icons.Default.Add, contentDescription = if (isEn) "Increase Day" else "Tambah Hari")
                         }
                     }
 
                     OutlinedTextField(
                         value = editNotes,
                         onValueChange = { editNotes = it },
-                        label = { Text("Catatan") },
+                        label = { Text(if (isEn) "Notes" else "Catatan") },
                         minLines = 2,
                         maxLines = 4,
                         shape = RoundedCornerShape(12.dp),
@@ -1026,7 +1094,7 @@ fun DaftarHaidSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Batal")
+                            Text(s.nav.cancel)
                         }
                         Button(
                             onClick = {
@@ -1045,7 +1113,7 @@ fun DaftarHaidSheet(
                                 .weight(1.3f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Simpan Perubahan", fontWeight = FontWeight.Bold)
+                            Text(if (isEn) "Save Changes" else "Simpan Perubahan", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1094,7 +1162,7 @@ fun DaftarHaidSheet(
                             )
                         }
                         Text(
-                            text = "Konfirmasi Mandi Suci",
+                            text = if (isEn) "Confirm Mandi Suci" else "Konfirmasi Mandi Suci",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1102,7 +1170,11 @@ fun DaftarHaidSheet(
                     }
 
                     Text(
-                        text = "Catat bahwa ${rec.studentName} telah selesai haid di Hari ke-${rec.durationDays} dan sudah bersuci/mandi wajib? Siswi akan langsung dipindahkan ke 'Daftar Suci' (Suci Hari ke-1).",
+                        text = if (isEn) {
+                            "Record that ${rec.studentName} finished Haid on Day ${rec.durationDays} and performed Mandi Suci? The student will move immediately to 'Daftar Suci' (Suci Day 1)."
+                        } else {
+                            "Catat bahwa ${rec.studentName} telah selesai haid di Hari ke-${rec.durationDays} dan sudah bersuci/mandi wajib? Siswi akan langsung dipindahkan ke 'Daftar Suci' (Suci Hari ke-1)."
+                        },
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 19.sp
@@ -1119,7 +1191,7 @@ fun DaftarHaidSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Batal")
+                            Text(s.nav.cancel)
                         }
                         Button(
                             onClick = {
@@ -1132,7 +1204,7 @@ fun DaftarHaidSheet(
                                 .weight(1.3f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Ya, Pindah ke Daftar Suci", fontWeight = FontWeight.Bold)
+                            Text(if (isEn) "Yes, Move to Daftar Suci" else "Ya, Pindah ke Daftar Suci", fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -1181,7 +1253,7 @@ fun DaftarHaidSheet(
                             )
                         }
                         Text(
-                            text = "Hapus Catatan Haid?",
+                            text = if (isEn) "Delete Haid Record?" else "Hapus Catatan Haid?",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
@@ -1189,7 +1261,7 @@ fun DaftarHaidSheet(
                     }
 
                     Text(
-                        text = "Hapus catatan haid untuk ${rec.studentName}?",
+                        text = if (isEn) "Delete Haid record for ${rec.studentName}?" else "Hapus catatan haid untuk ${rec.studentName}?",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1205,7 +1277,7 @@ fun DaftarHaidSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Batal")
+                            Text(s.nav.cancel)
                         }
                         Button(
                             onClick = {
@@ -1218,7 +1290,7 @@ fun DaftarHaidSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Hapus", fontWeight = FontWeight.Bold)
+                            Text(s.nav.delete, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

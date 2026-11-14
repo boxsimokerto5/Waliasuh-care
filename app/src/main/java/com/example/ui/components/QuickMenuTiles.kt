@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.launch
 
 @Composable
@@ -80,6 +81,7 @@ fun QuickMenuTiles(
     faskesBannerSubtitle: String = "",
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val pagerState = rememberPagerState(pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
 
@@ -106,10 +108,10 @@ fun QuickMenuTiles(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             CartoonMenuCard(
-                                title = "Rencana Berobat",
-                                subtitle = "Jadwal Puskesmas",
+                                title = if (isEn) "Treatment Plans" else "Rencana Berobat",
+                                subtitle = if (isEn) "Puskesmas Schedule" else "Jadwal Puskesmas",
                                 imageRes = R.drawable.img_menu_rencana,
-                                badgeText = "Rujukan",
+                                badgeText = if (isEn) "Referral" else "Rujukan",
                                 badgeBg = Color(0xFFE0F2FE),
                                 badgeColor = WaliPrimary,
                                 bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.5f)),
@@ -120,10 +122,10 @@ fun QuickMenuTiles(
                             )
 
                             CartoonMenuCard(
-                                title = "Tindakan Medis",
-                                subtitle = "Input Pengobatan",
+                                title = if (isEn) "Medical Action" else "Tindakan Medis",
+                                subtitle = if (isEn) "Log Treatment" else "Input Pengobatan",
                                 imageRes = R.drawable.img_menu_tindakan,
-                                badgeText = "Langsung",
+                                badgeText = if (isEn) "Direct" else "Langsung",
                                 badgeBg = Color(0xFFFEF3C7),
                                 badgeColor = Color(0xFFD97706),
                                 bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.5f)),
@@ -139,10 +141,10 @@ fun QuickMenuTiles(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             CartoonMenuCard(
-                                title = "Rekam Medis",
-                                subtitle = "Riwayat & Diagnosa",
+                                title = if (isEn) "Medical Records" else "Rekam Medis",
+                                subtitle = if (isEn) "History & Diagnosis" else "Riwayat & Diagnosa",
                                 imageRes = R.drawable.img_menu_rekam_medis,
-                                badgeText = "Resep Obat",
+                                badgeText = if (isEn) "Prescriptions" else "Resep Obat",
                                 badgeBg = Color(0xFFDCFCE7),
                                 badgeColor = Color(0xFF16A34A),
                                 bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.5f)),
@@ -153,16 +155,20 @@ fun QuickMenuTiles(
                             )
 
                             val studentSubtitle = if (studentsCount > 0) {
-                                if (schoolShortName.isNotBlank()) "$studentsCount Siswa $schoolShortName" else "$studentsCount Siswa Terdaftar"
+                                if (isEn) {
+                                    if (schoolShortName.isNotBlank()) "$studentsCount Students • $schoolShortName" else "$studentsCount Registered Students"
+                                } else {
+                                    if (schoolShortName.isNotBlank()) "$studentsCount Siswa $schoolShortName" else "$studentsCount Siswa Terdaftar"
+                                }
                             } else {
-                                "Data Siswa Asrama"
+                                if (isEn) "Asrama Students Data" else "Data Siswa Asrama"
                             }
 
                             CartoonMenuCard(
-                                title = "Anak Asuh",
+                                title = if (isEn) "Students" else "Anak Asuh",
                                 subtitle = studentSubtitle,
                                 imageRes = R.drawable.img_menu_anak_asuh,
-                                badgeText = "Data Asrama",
+                                badgeText = if (isEn) "Asrama Data" else "Data Asrama",
                                 badgeBg = Color(0xFFF3E8FF),
                                 badgeColor = Color(0xFF9333EA),
                                 bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.5f)),
@@ -183,8 +189,8 @@ fun QuickMenuTiles(
                         ) {
                             val shiftBadgeText = when {
                                 urgentShiftMessagesCount > 0 -> "$urgentShiftMessagesCount URGENT"
-                                activeShiftMessagesCount > 0 -> "$activeShiftMessagesCount Pesan"
-                                else -> "Operan Jaga"
+                                activeShiftMessagesCount > 0 -> if (isEn) "$activeShiftMessagesCount Notes" else "$activeShiftMessagesCount Pesan"
+                                else -> if (isEn) "Shift Duty" else "Operan Jaga"
                             }
                             val shiftBadgeBg = when {
                                 urgentShiftMessagesCount > 0 -> Color(0xFFFEE2E2)
@@ -198,8 +204,8 @@ fun QuickMenuTiles(
                             }
 
                             CartoonMenuCard(
-                                title = "Pesan Shift",
-                                subtitle = "Operan Jaga Asrama",
+                                title = if (isEn) "Shift Messages" else "Pesan Shift",
+                                subtitle = if (isEn) "Asrama Duty Handover" else "Operan Jaga Asrama",
                                 imageRes = R.drawable.img_menu_pesan_shift,
                                 badgeText = shiftBadgeText,
                                 badgeBg = shiftBadgeBg,
@@ -212,10 +218,10 @@ fun QuickMenuTiles(
                             )
 
                             CartoonMenuCard(
-                                title = "Tulis Pesan",
+                                title = if (isEn) "Write Note" else "Tulis Pesan",
                                 subtitle = "Voice to Text (Mic)",
                                 imageRes = R.drawable.img_doctor_panda,
-                                badgeText = "Input Suara",
+                                badgeText = if (isEn) "Voice Input" else "Input Suara",
                                 badgeBg = Color(0xFFDCFCE7),
                                 badgeColor = Color(0xFF16A34A),
                                 bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.55f)),
@@ -231,9 +237,9 @@ fun QuickMenuTiles(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val historyBadgeText = when {
-                                uncompletedPastShiftCount > 0 -> "$uncompletedPastShiftCount Terlewat"
-                                pastShiftMessagesCount > 0 -> "$pastShiftMessagesCount Arsip"
-                                else -> "Riwayat Jaga"
+                                uncompletedPastShiftCount > 0 -> if (isEn) "$uncompletedPastShiftCount Missed" else "$uncompletedPastShiftCount Terlewat"
+                                pastShiftMessagesCount > 0 -> if (isEn) "$pastShiftMessagesCount Archive" else "$pastShiftMessagesCount Arsip"
+                                else -> if (isEn) "Duty History" else "Riwayat Jaga"
                             }
                             val historyBadgeBg = when {
                                 uncompletedPastShiftCount > 0 -> Color(0xFFFEF3C7)
@@ -247,8 +253,8 @@ fun QuickMenuTiles(
                             }
 
                             CartoonMenuCard(
-                                title = "Riwayat Operan",
-                                subtitle = "Arsip Lewat Hari Ini",
+                                title = if (isEn) "Handover History" else "Riwayat Operan",
+                                subtitle = if (isEn) "Past Days Archive" else "Arsip Lewat Hari Ini",
                                 imageRes = R.drawable.img_menu_rekam_medis,
                                 badgeText = historyBadgeText,
                                 badgeBg = historyBadgeBg,
@@ -261,10 +267,10 @@ fun QuickMenuTiles(
                             )
 
                             CartoonMenuCard(
-                                title = "Data Asrama",
+                                title = if (isEn) "Asrama Data" else "Data Asrama",
                                 subtitle = if (schoolShortName.isNotBlank()) schoolShortName else "Sekolah Rakyat",
                                 imageRes = R.drawable.img_menu_anak_asuh,
-                                badgeText = "Daftar Asrama",
+                                badgeText = if (isEn) "Asrama Roster" else "Daftar Asrama",
                                 badgeBg = Color(0xFFF3E8FF),
                                 badgeColor = Color(0xFF9333EA),
                                 bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.5f)),
@@ -286,7 +292,7 @@ fun QuickMenuTiles(
                             // Ikon 1: Input Haid (Scan Barcode Kartu Siswa)
                             CartoonMenuCard(
                                 title = "Input Haid",
-                                subtitle = "Scan Kartu / NIK",
+                                subtitle = if (isEn) "Scan Card / NIK" else "Scan Kartu / NIK",
                                 imageRes = R.drawable.img_menu_input_haid,
                                 badgeText = "Scan Barcode",
                                 badgeBg = Color(0xFFFCE7F3),
@@ -299,13 +305,21 @@ fun QuickMenuTiles(
                             )
 
                             // Ikon 2: Daftar Haid (Sedang Aktif)
-                            val haidBadgeText = if (istihadhahCount > 0) "$istihadhahCount Hari ke-15" else "$activeHaidCount Siswi"
+                            val haidBadgeText = if (istihadhahCount > 0) {
+                                if (isEn) "$istihadhahCount Day 15" else "$istihadhahCount Hari ke-15"
+                            } else {
+                                if (isEn) "$activeHaidCount Active" else "$activeHaidCount Siswi"
+                            }
                             val haidBadgeBg = if (istihadhahCount > 0) Color(0xFFFEE2E2) else Color(0xFFFCE7F3)
                             val haidBadgeColor = if (istihadhahCount > 0) Color(0xFFDC2626) else Color(0xFFBE185D)
 
                             CartoonMenuCard(
                                 title = "Daftar Haid",
-                                subtitle = if (activeHaidCount > 0) "$activeHaidCount Sedang Haid" else "Tidak Ada Haid",
+                                subtitle = if (activeHaidCount > 0) {
+                                    if (isEn) "$activeHaidCount Active Haid" else "$activeHaidCount Sedang Haid"
+                                } else {
+                                    if (isEn) "No Active Haid" else "Tidak Ada Haid"
+                                },
                                 imageRes = R.drawable.img_menu_daftar_haid,
                                 badgeText = haidBadgeText,
                                 badgeBg = haidBadgeBg,
@@ -325,9 +339,9 @@ fun QuickMenuTiles(
                             // Ikon 3: Daftar Suci (Riwayat Bersuci)
                             CartoonMenuCard(
                                 title = "Daftar Suci",
-                                subtitle = "Riwayat & Siap Ibadah",
+                                subtitle = if (isEn) "History & Ready for Prayer" else "Riwayat & Siap Ibadah",
                                 imageRes = R.drawable.img_menu_daftar_suci,
-                                badgeText = if (suciCount > 0) "$suciCount Suci" else "Bersuci",
+                                badgeText = if (suciCount > 0) "$suciCount Suci" else "Suci",
                                 badgeBg = Color(0xFFDCFCE7),
                                 badgeColor = Color(0xFF16A34A),
                                 bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
@@ -339,10 +353,10 @@ fun QuickMenuTiles(
 
                             // Ikon 4: Panduan Aplikasi & Fiqih Haid
                             CartoonMenuCard(
-                                title = "Panduan & Fiqih",
-                                subtitle = "Kaidah Syariat Islam",
+                                title = if (isEn) "Guide & Fiqih Haid" else "Panduan & Fiqih",
+                                subtitle = if (isEn) "Fiqih Haid Rules" else "Kaidah Syariat Islam",
                                 imageRes = R.drawable.img_menu_fiqih_haid,
-                                badgeText = "Fiqih Syariat",
+                                badgeText = "Fiqih Haid",
                                 badgeBg = Color(0xFFCCFBF1),
                                 badgeColor = Color(0xFF0F766E),
                                 bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
@@ -364,9 +378,9 @@ fun QuickMenuTiles(
                             // Ikon 1: Input Puasa (Sesi, Scan Barcode & Cari Siswa)
                             CartoonMenuCard(
                                 title = "Input Puasa",
-                                subtitle = "Scan Kartu / Cari Siswa",
+                                subtitle = if (isEn) "Scan Card / Find Student" else "Scan Kartu / Cari Siswa",
                                 imageRes = R.drawable.img_menu_input_puasa,
-                                badgeText = "Scan & Cari",
+                                badgeText = if (isEn) "Scan & Search" else "Scan & Cari",
                                 badgeBg = Color(0xFFCCFBF1),
                                 badgeColor = Color(0xFF0F766E),
                                 bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
@@ -381,7 +395,7 @@ fun QuickMenuTiles(
                                 title = "Daftar Puasa",
                                 subtitle = "SD • SMP • SMA & PDF",
                                 imageRes = R.drawable.img_menu_daftar_puasa,
-                                badgeText = if (todayFastingCount > 0) "$todayFastingCount Puasa" else "Rekap & PDF",
+                                badgeText = if (todayFastingCount > 0) "$todayFastingCount Puasa" else if (isEn) "Recap & PDF" else "Rekap & PDF",
                                 badgeBg = Color(0xFFE0F2FE),
                                 badgeColor = Color(0xFF0369A1),
                                 bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.6f)),
@@ -398,10 +412,10 @@ fun QuickMenuTiles(
                         ) {
                             // Ikon 3: Checklist Puasa (Sahur & Berbuka + PDF)
                             CartoonMenuCard(
-                                title = "Checklist Puasa",
-                                subtitle = "Sahur & Berbuka + PDF",
+                                title = if (isEn) "Puasa Checklist" else "Checklist Puasa",
+                                subtitle = if (isEn) "Sahur & Berbuka + PDF" else "Sahur & Berbuka + PDF",
                                 imageRes = R.drawable.img_menu_checklist_puasa,
-                                badgeText = "Sahur & Buka",
+                                badgeText = if (isEn) "Sahur & Berbuka" else "Sahur & Buka",
                                 badgeBg = Color(0xFFFEF3C7),
                                 badgeColor = Color(0xFFB45309),
                                 bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
@@ -413,10 +427,14 @@ fun QuickMenuTiles(
 
                             // Ikon 4: Ranking & History Sesi Puasa
                             CartoonMenuCard(
-                                title = "Ranking & History",
-                                subtitle = "Siswa Rajin & Sesi",
+                                title = if (isEn) "Puasa Ranking" else "Ranking & History",
+                                subtitle = if (isEn) "Top Students & Sessions" else "Siswa Rajin & Sesi",
                                 imageRes = R.drawable.img_menu_ranking_puasa,
-                                badgeText = if (fastingSessionsCount > 0) "$fastingSessionsCount Sesi" else "Peringkat",
+                                badgeText = if (fastingSessionsCount > 0) {
+                                    if (isEn) "$fastingSessionsCount Sessions" else "$fastingSessionsCount Sesi"
+                                } else {
+                                    if (isEn) "Ranking" else "Peringkat"
+                                },
                                 badgeBg = Color(0xFFF3E8FF),
                                 badgeColor = Color(0xFF7E22CE),
                                 bgGradient = listOf(Color(0xFFFAF5FF), Color(0xFFF3E8FF).copy(alpha = 0.6f)),
@@ -442,10 +460,10 @@ fun QuickMenuTiles(
             // Label Halaman Aktif
             Text(
                 text = when (pagerState.currentPage) {
-                    0 -> "Layanan Kesehatan (1/4)"
-                    1 -> "Pesan Shift & Jaga (2/4)"
-                    2 -> "Pendataan & Fiqih Haid (3/4)"
-                    else -> "Pendataan Puasa (4/4)"
+                    0 -> if (isEn) "Health Services (1/4)" else "Layanan Kesehatan (1/4)"
+                    1 -> if (isEn) "Shift Messages & Duty (2/4)" else "Pesan Shift & Jaga (2/4)"
+                    2 -> if (isEn) "Fiqih Haid Tracking (3/4)" else "Pendataan & Fiqih Haid (3/4)"
+                    else -> if (isEn) "Puasa Attendance (4/4)" else "Pendataan Puasa (4/4)"
                 },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -496,7 +514,11 @@ fun QuickMenuTiles(
                 }
             ) {
                 Text(
-                    text = if (pagerState.currentPage < 3) "Geser ❯" else "Kembali ↺",
+                    text = if (pagerState.currentPage < 3) {
+                        if (isEn) "Swipe ❯" else "Geser ❯"
+                    } else {
+                        if (isEn) "Back ↺" else "Kembali ↺"
+                    },
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = when (pagerState.currentPage) {
@@ -618,6 +640,7 @@ fun PuskesmasWideCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     ElevatedCard(
         modifier = modifier
             .clickable(onClick = onClick)
@@ -651,7 +674,7 @@ fun PuskesmasWideCard(
             ) {
                 Image(
                     painter = painterResource(id = R.drawable.img_menu_puskesmas),
-                    contentDescription = "Puskesmas Rujukan",
+                    contentDescription = if (isEn) "Referral Puskesmas" else "Puskesmas Rujukan",
                     modifier = Modifier.size(48.dp),
                     contentScale = ContentScale.Crop
                 )
@@ -665,7 +688,7 @@ fun PuskesmasWideCard(
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "Faskes & Puskesmas Rujukan",
+                        text = if (isEn) "Referral Faskes & Puskesmas" else "Faskes & Puskesmas Rujukan",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -677,7 +700,7 @@ fun PuskesmasWideCard(
                             .padding(horizontal = 5.dp, vertical = 1.dp)
                     ) {
                         Text(
-                            text = "UGD 24 Jam",
+                            text = if (isEn) "24h ER" else "UGD 24 Jam",
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF16A34A)
@@ -685,7 +708,9 @@ fun PuskesmasWideCard(
                     }
                 }
                 Text(
-                    text = faskesSubtitle.ifBlank { "Lihat daftar fasilitas kesehatan & SOP darurat" },
+                    text = faskesSubtitle.ifBlank {
+                        if (isEn) "View health facilities directory & emergency SOP" else "Lihat daftar fasilitas kesehatan & SOP darurat"
+                    },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 2,

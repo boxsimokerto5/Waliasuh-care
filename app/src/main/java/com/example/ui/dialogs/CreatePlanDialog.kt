@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -81,6 +82,8 @@ fun CreatePlanDialog(
         notes: String
     ) -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val isEditMode = existingRecord != null
     var selectedStudent by remember(existingRecord?.id) {
         mutableStateOf(
@@ -179,7 +182,11 @@ fun CreatePlanDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (isEditMode) "Edit Rencana Berobat" else "Buat Rencana Berobat",
+                        text = if (isEditMode) {
+                            if (isEn) "Edit Medical Plan" else "Edit Rencana Berobat"
+                        } else {
+                            if (isEn) "Create Medical Plan" else "Buat Rencana Berobat"
+                        },
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -201,14 +208,14 @@ fun CreatePlanDialog(
                             verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             Text(
-                                text = "Diinput oleh: $inputBy",
+                                text = if (isEn) "Entered by: $inputBy" else "Diinput oleh: $inputBy",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (rec.editedBy.isNotBlank()) {
                                 Text(
                                     text = buildString {
-                                        append("Diedit oleh: ${rec.editedBy}")
+                                        append(if (isEn) "Edited by: ${rec.editedBy}" else "Diedit oleh: ${rec.editedBy}")
                                         rec.editedAt?.let { append(" (${DateUtils.formatShortDate(it)})") }
                                     },
                                     fontSize = 11.sp,
@@ -227,7 +234,7 @@ fun CreatePlanDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Pilih Anak Asuh:",
+                        text = if (isEn) "Select Foster Student:" else "Pilih Anak Asuh:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -245,7 +252,11 @@ fun CreatePlanDialog(
                             modifier = Modifier.size(13.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Cari Nama...", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEn) "Search Name..." else "Cari Nama...",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -280,13 +291,15 @@ fun CreatePlanDialog(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = selectedStudent?.name ?: "Ketuk untuk memilih anak asuh...",
+                                    text = selectedStudent?.name
+                                        ?: if (isEn) "Tap to select a foster student..." else "Ketuk untuk memilih anak asuh...",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.5.sp,
                                     color = if (selectedStudent != null) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Text(
-                                    text = selectedStudent?.let { "${it.dormitory} • ${it.classGrade}" } ?: "Cari nama, asrama, atau kelas",
+                                    text = selectedStudent?.let { "${it.dormitory} • ${it.classGrade}" }
+                                        ?: if (isEn) "Search name, Asrama, or grade" else "Cari nama, asrama, atau kelas",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -294,7 +307,7 @@ fun CreatePlanDialog(
                         }
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Cari",
+                            contentDescription = s.search,
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
@@ -313,7 +326,7 @@ fun CreatePlanDialog(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Alergi: ${student.allergies}",
+                                text = if (isEn) "Allergies: ${student.allergies}" else "Alergi: ${student.allergies}",
                                 color = MaterialTheme.colorScheme.error,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold
@@ -324,7 +337,7 @@ fun CreatePlanDialog(
 
                 // Pilih Faskes
                 Text(
-                    text = "Faskes / Fasilitas Kesehatan Tujuan:",
+                    text = if (isEn) "Destination Faskes / Health Facility:" else "Faskes / Fasilitas Kesehatan Tujuan:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -346,7 +359,7 @@ fun CreatePlanDialog(
                     FilterChip(
                         selected = selectedFaskes == "Lainnya",
                         onClick = { selectedFaskes = "Lainnya" },
-                        label = { Text("Lainnya", fontSize = 11.sp) },
+                        label = { Text(if (isEn) "Other" else "Lainnya", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                 }
@@ -355,8 +368,8 @@ fun CreatePlanDialog(
                     OutlinedTextField(
                         value = customFaskes,
                         onValueChange = { customFaskes = it },
-                        label = { Text("Nama Faskes / RS", fontSize = 12.sp) },
-                        placeholder = { Text("misal: RSUD Gambiran", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Faskes / Hospital Name" else "Nama Faskes / RS", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "e.g.: RSUD Gambiran" else "misal: RSUD Gambiran", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -365,7 +378,7 @@ fun CreatePlanDialog(
 
                 // Estimasi Jam Berangkat
                 Text(
-                    text = "Estimasi Jam Berangkat:",
+                    text = if (isEn) "Estimated Departure Time:" else "Estimasi Jam Berangkat:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -387,8 +400,8 @@ fun CreatePlanDialog(
                 OutlinedTextField(
                     value = complaint,
                     onValueChange = { complaint = it },
-                    label = { Text("Keluhan / Gejala Sakit *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Demam 38°C sejak pagi", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Complaint / Symptoms *" else "Keluhan / Gejala Sakit *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Fever 38°C since morning" else "misal: Demam 38°C sejak pagi", fontSize = 12.sp) },
                     minLines = 2,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -407,7 +420,7 @@ fun CreatePlanDialog(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Tanggal Rencana:",
+                            text = if (isEn) "Planned Date:" else "Tanggal Rencana:",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -419,7 +432,7 @@ fun CreatePlanDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = "Pilih Tanggal Rencana",
+                                contentDescription = if (isEn) "Pick Planned Date" else "Pilih Tanggal Rencana",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -439,19 +452,19 @@ fun CreatePlanDialog(
                     FilterChip(
                         selected = !isCustomDate && DateUtils.isToday(selectedDateMillis),
                         onClick = { selectedDateMillis = calToday },
-                        label = { Text("Hari Ini", fontSize = 11.sp) },
+                        label = { Text(s.today, fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
                         selected = !isCustomDate && DateUtils.isTomorrow(selectedDateMillis),
                         onClick = { selectedDateMillis = calTomorrow },
-                        label = { Text("Besok", fontSize = 11.sp) },
+                        label = { Text(s.tomorrow, fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
                         selected = !isCustomDate && selectedDateMillis == calIn2Days,
                         onClick = { selectedDateMillis = calIn2Days },
-                        label = { Text("Lusa", fontSize = 11.sp) },
+                        label = { Text(s.dayAfterTomorrow, fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
@@ -466,7 +479,7 @@ fun CreatePlanDialog(
                         },
                         label = {
                             Text(
-                                text = if (isCustomDate) DateUtils.formatShortDate(selectedDateMillis) else "Pilih Tanggal",
+                                text = if (isCustomDate) DateUtils.formatShortDate(selectedDateMillis) else if (isEn) "Pick Date" else "Pilih Tanggal",
                                 fontSize = 11.sp
                             )
                         },
@@ -493,19 +506,27 @@ fun CreatePlanDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = "Pilih Hari",
+                            contentDescription = if (isEn) "Select Day" else "Pilih Hari",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(17.dp)
                         )
                         Column {
                             Text(
-                                text = "Jadwal: ${DateUtils.formatFullDate(selectedDateMillis)} ($selectedTime WIB)",
+                                text = if (isEn) {
+                                    "Schedule: ${DateUtils.formatFullDate(selectedDateMillis)} ($selectedTime WIB)"
+                                } else {
+                                    "Jadwal: ${DateUtils.formatFullDate(selectedDateMillis)} ($selectedTime WIB)"
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.primary,
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Klik untuk memilih hari melalui kalender pop-up",
+                                text = if (isEn) {
+                                    "Tap to pick a date from the pop-up calendar"
+                                } else {
+                                    "Klik untuk memilih hari melalui kalender pop-up"
+                                },
                                 fontSize = 9.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -515,7 +536,7 @@ fun CreatePlanDialog(
 
                 // Petugas Pengantar dengan Dropdown Shift
                 Text(
-                    text = "Petugas Pengantar:",
+                    text = if (isEn) "Escort Officer:" else "Petugas Pengantar:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -527,8 +548,8 @@ fun CreatePlanDialog(
                     OutlinedTextField(
                         value = escortName,
                         onValueChange = { escortName = it },
-                        label = { Text("Pilih Shift / Petugas Pengantar", fontSize = 12.sp) },
-                        placeholder = { Text("Pilih shift atau ketik nama...", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Select Shift / Escort Officer" else "Pilih Shift / Petugas Pengantar", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "Select shift or type name..." else "Pilih shift atau ketik nama...", fontSize = 12.sp) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedEscortDropdown)
                         },
@@ -614,8 +635,8 @@ fun CreatePlanDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
-                    label = { Text("Catatan Asrama", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Sudah dikompres UKS", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Asrama Notes" else "Catatan Asrama", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Applied warm compress at UKS" else "misal: Sudah dikompres UKS", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -633,7 +654,7 @@ fun CreatePlanDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Batal", fontSize = 12.sp)
+                        Text(s.cancel, fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -655,7 +676,14 @@ fun CreatePlanDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("confirm_create_plan_button")
                     ) {
-                        Text(if (isEditMode) "Simpan Perubahan" else "Simpan Rencana", fontSize = 12.sp)
+                        Text(
+                            if (isEditMode) {
+                                if (isEn) "Save Changes" else "Simpan Perubahan"
+                            } else {
+                                if (isEn) "Save Plan" else "Simpan Rencana"
+                            },
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }
@@ -699,7 +727,7 @@ fun CreatePlanDialog(
                     shape = RoundedCornerShape(8.dp),
                     modifier = Modifier.testTag("btn_confirm_date_picker")
                 ) {
-                    Text("Pilih Hari")
+                    Text(if (isEn) "Select Day" else "Pilih Hari")
                 }
             },
             dismissButton = {
@@ -707,7 +735,7 @@ fun CreatePlanDialog(
                     onClick = { showDatePicker = false },
                     shape = RoundedCornerShape(8.dp)
                 ) {
-                    Text("Batal")
+                    Text(s.cancel)
                 }
             }
         ) {
@@ -715,7 +743,7 @@ fun CreatePlanDialog(
                 state = datePickerState,
                 title = {
                     Text(
-                        text = "Pilih Tanggal Rencana Berobat",
+                        text = if (isEn) "Select Planned Treatment Date" else "Pilih Tanggal Rencana Berobat",
                         modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,

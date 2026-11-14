@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.R
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 enum class ProfileLegalSheetType {
     ABOUT,
@@ -89,26 +90,28 @@ fun ProfileLegalBottomSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val (headerTitle, headerIcon, headerAccent) = when (type) {
         ProfileLegalSheetType.ABOUT -> Triple(
-            "Tentang Aplikasi",
+            if (isEn) "About App" else "Tentang Aplikasi",
             Icons.Default.Info,
             WaliPrimary
         )
         ProfileLegalSheetType.PRIVACY_POLICY -> Triple(
-            "Kebijakan Privasi (Privacy Policy)",
+            if (isEn) "Privacy Policy" else "Kebijakan Privasi (Privacy Policy)",
             Icons.Default.PrivacyTip,
             Color(0xFF0F766E)
         )
         ProfileLegalSheetType.TERMS_OF_SERVICE -> Triple(
-            "Syarat & Ketentuan (Terms of Service)",
+            if (isEn) "Terms of Service" else "Syarat & Ketentuan (Terms of Service)",
             Icons.Default.Gavel,
             Color(0xFF7C3AED)
         )
         ProfileLegalSheetType.CONTACT_US -> Triple(
-            "Hubungi Kami (Contact Us)",
+            if (isEn) "Contact Us" else "Hubungi Kami (Contact Us)",
             Icons.Default.SupportAgent,
             Color(0xFF16A34A)
         )
@@ -176,7 +179,7 @@ fun ProfileLegalBottomSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup"
+                            contentDescription = s.close
                         )
                     }
                 }
@@ -184,10 +187,10 @@ fun ProfileLegalBottomSheet(
                 HorizontalDivider()
 
                 when (type) {
-                    ProfileLegalSheetType.ABOUT -> AboutContent()
-                    ProfileLegalSheetType.PRIVACY_POLICY -> PrivacyPolicyContent()
-                    ProfileLegalSheetType.TERMS_OF_SERVICE -> TermsOfServiceContent()
-                    ProfileLegalSheetType.CONTACT_US -> ContactUsContent(context = context)
+                    ProfileLegalSheetType.ABOUT -> AboutContent(isEn = isEn)
+                    ProfileLegalSheetType.PRIVACY_POLICY -> PrivacyPolicyContent(isEn = isEn)
+                    ProfileLegalSheetType.TERMS_OF_SERVICE -> TermsOfServiceContent(isEn = isEn)
+                    ProfileLegalSheetType.CONTACT_US -> ContactUsContent(context = context, isEn = isEn)
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -202,7 +205,7 @@ fun ProfileLegalBottomSheet(
                         .testTag("btn_dismiss_legal_sheet")
                 ) {
                     Text(
-                        text = "Tutup",
+                        text = s.close,
                         fontSize = 13.5.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -213,7 +216,7 @@ fun ProfileLegalBottomSheet(
 }
 
 @Composable
-private fun AboutContent() {
+private fun AboutContent(isEn: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Card(
             shape = RoundedCornerShape(14.dp),
@@ -246,13 +249,21 @@ private fun AboutContent() {
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        text = "Versi ${BuildConfig.VERSION_NAME} • Platform Multi-Sekolah",
+                        text = if (isEn) {
+                            "Version ${BuildConfig.VERSION_NAME} • Multi-School Platform"
+                        } else {
+                            "Versi ${BuildConfig.VERSION_NAME} • Platform Multi-Sekolah"
+                        },
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = WaliPrimary
                     )
                     Text(
-                        text = "Dokumentasi Kesehatan, Haid & Pembinaan Puasa Asrama",
+                        text = if (isEn) {
+                            "Health Documentation, Haid & Asrama Puasa Guidance"
+                        } else {
+                            "Dokumentasi Kesehatan, Haid & Pembinaan Puasa Asrama"
+                        },
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -261,116 +272,177 @@ private fun AboutContent() {
         }
 
         LegalSectionCard(
-            title = "Fungsi Utama Aplikasi",
-            body = "Wali Asuh Care membantu Wali Asuh dan Admin Sekolah dalam mencatat rencana berobat siswa, rujukan faskes, rekam medis asrama, pemantauan siklus haid & bersuci siswi, checklist sahur/berbuka puasa, pesan operan shift, serta pembuatan laporan PDF."
+            title = if (isEn) "Main App Functions" else "Fungsi Utama Aplikasi",
+            body = if (isEn) {
+                "Wali Asuh Care helps Wali Asuh and School Admins record student medical plans, Faskes referrals, Asrama medical records, Haid & Suci cycle monitoring, Sahur/Berbuka Puasa checklists, shift handover messages, and PDF report exports."
+            } else {
+                "Wali Asuh Care membantu Wali Asuh dan Admin Sekolah dalam mencatat rencana berobat siswa, rujukan faskes, rekam medis asrama, pemantauan siklus haid & bersuci siswi, checklist sahur/berbuka puasa, pesan operan shift, serta pembuatan laporan PDF."
+            }
         )
 
         LegalSectionCard(
-            title = "Status Independensi & Disclaimer",
+            title = if (isEn) "Independence Status & Disclaimer" else "Status Independensi & Disclaimer",
             body = stringResource(R.string.disclaimer_full),
             accent = WaliPrimary
         )
 
         LegalSectionCard(
-            title = "Kontak Pengembang",
-            body = "Email: $SUPPORT_EMAIL\nWhatsApp / HP: $SUPPORT_PHONE_LOCAL"
+            title = if (isEn) "Developer Contact" else "Kontak Pengembang",
+            body = if (isEn) {
+                "Email: $SUPPORT_EMAIL\nWhatsApp / Phone: $SUPPORT_PHONE_LOCAL"
+            } else {
+                "Email: $SUPPORT_EMAIL\nWhatsApp / HP: $SUPPORT_PHONE_LOCAL"
+            }
         )
     }
 }
 
 @Composable
-private fun PrivacyPolicyContent() {
+private fun PrivacyPolicyContent(isEn: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "Terakhir diperbarui: November 2026",
+            text = if (isEn) "Last updated: November 2026" else "Terakhir diperbarui: November 2026",
             fontSize = 11.5.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         LegalSectionCard(
-            title = "1. Data yang Dikelola",
-            body = "Aplikasi menyimpan data operasional yang diinput langsung oleh Administrator Sekolah dan Wali Asuh berwenang, meliputi:\n" +
-                "• Identitas siswa (nama, NIS/NIK, kelas, asrama, kontak darurat).\n" +
-                "• Catatan layanan kesehatan, diagnosa rujukan faskes, pendataan haid, dan aktivitas puasa.\n" +
-                "• Akun pengelola (nama, username, nomor telepon wali asuh, dan profil sekolah)."
+            title = if (isEn) "1. Data Managed" else "1. Data yang Dikelola",
+            body = if (isEn) {
+                "The app stores operational data entered directly by authorized School Administrators and Wali Asuh, including:\n" +
+                    "• Student identity (name, NIS/NIK, grade, Asrama, emergency contacts).\n" +
+                    "• Health care records, Faskes referral diagnoses, Haid logs, and Puasa activities.\n" +
+                    "• Staff accounts (name, username, Wali Asuh phone number, and school profile)."
+            } else {
+                "Aplikasi menyimpan data operasional yang diinput langsung oleh Administrator Sekolah dan Wali Asuh berwenang, meliputi:\n" +
+                    "• Identitas siswa (nama, NIS/NIK, kelas, asrama, kontak darurat).\n" +
+                    "• Catatan layanan kesehatan, diagnosa rujukan faskes, pendataan haid, dan aktivitas puasa.\n" +
+                    "• Akun pengelola (nama, username, nomor telepon wali asuh, dan profil sekolah)."
+            }
         )
 
         LegalSectionCard(
-            title = "2. Tujuan Penggunaan & Penyimpanan Data",
-            body = "• Data disimpan secara lokal di perangkat (Room) dan disinkronkan melalui koneksi terenkripsi (HTTPS) ke database cloud multi-tenant (PocketBase) yang terisolasi per kode sekolah (school_id).\n" +
-                "• Data semata-mata digunakan untuk mendukung dokumentasi perawatan, pelaporan wali asuh, dan administrasi internal sekolah terdaftar."
+            title = if (isEn) "2. Purpose & Data Storage" else "2. Tujuan Penggunaan & Penyimpanan Data",
+            body = if (isEn) {
+                "• Data is stored locally on the device (Room) and synced over an encrypted HTTPS connection to a multi-tenant cloud database (PocketBase) isolated by school code (school_id).\n" +
+                    "• Data is used solely to support care documentation, Wali Asuh reporting, and internal administration of registered schools."
+            } else {
+                "• Data disimpan secara lokal di perangkat (Room) dan disinkronkan melalui koneksi terenkripsi (HTTPS) ke database cloud multi-tenant (PocketBase) yang terisolasi per kode sekolah (school_id).\n" +
+                    "• Data semata-mata digunakan untuk mendukung dokumentasi perawatan, pelaporan wali asuh, dan administrasi internal sekolah terdaftar."
+            }
         )
 
         LegalSectionCard(
-            title = "3. Izin Perangkat (Kamera & Penyimpanan)",
-            body = "• Izin Kamera hanya dipakai untuk memindai barcode/QR pada kartu siswa secara lokal di perangkat. Aplikasi tidak mengunggah foto atau rekaman video kamera ke server.\n" +
-                "• Akses dokumen hanya digunakan saat Anda memilih file CSV untuk impor atau menyimpan/membagikan laporan PDF secara manual."
+            title = if (isEn) "3. Device Permissions (Camera & Storage)" else "3. Izin Perangkat (Kamera & Penyimpanan)",
+            body = if (isEn) {
+                "• Camera permission is only used to scan barcodes/QR on student cards locally on the device. The app never uploads camera photos or video recordings to any server.\n" +
+                    "• Document access is only used when you manually pick a CSV file for import or save/share PDF reports."
+            } else {
+                "• Izin Kamera hanya dipakai untuk memindai barcode/QR pada kartu siswa secara lokal di perangkat. Aplikasi tidak mengunggah foto atau rekaman video kamera ke server.\n" +
+                    "• Akses dokumen hanya digunakan saat Anda memilih file CSV untuk impor atau menyimpan/membagikan laporan PDF secara manual."
+            }
         )
 
         LegalSectionCard(
-            title = "4. Layanan Pihak Ketiga & Iklan",
-            body = "• Aplikasi menggunakan layanan iklan (TopOn) untuk menampilkan iklan interstitial dan iklan video berhadiah opsional sebelum membuka/mengunduh Laporan Bulanan atau Laporan PDF Puasa/Kesehatan.\n" +
-                "• Data identitas maupun catatan kesehatan siswa TIDAK pernah dijual, disewakan, atau dikirimkan ke jaringan pengiklan."
+            title = if (isEn) "4. Third-Party Services & Ads" else "4. Layanan Pihak Ketiga & Iklan",
+            body = if (isEn) {
+                "• The app uses an ad service (TopOn) to show interstitial ads and optional rewarded video ads before opening/downloading Monthly Reports or Puasa/Health PDF Reports.\n" +
+                    "• Student identities and health records are NEVER sold, rented, or shared with advertising networks."
+            } else {
+                "• Aplikasi menggunakan layanan iklan (TopOn) untuk menampilkan iklan interstitial dan iklan video berhadiah opsional sebelum membuka/mengunduh Laporan Bulanan atau Laporan PDF Puasa/Kesehatan.\n" +
+                    "• Data identitas maupun catatan kesehatan siswa TIDAK pernah dijual, disewakan, atau dikirimkan ke jaringan pengiklan."
+            }
         )
 
         LegalSectionCard(
-            title = "5. Retensi & Penghapusan Akun / Data",
-            body = "• Wali Asuh dapat menghapus akun pribadinya secara mandiri kapan saja langsung di dalam aplikasi melalui menu Profil -> Hapus Akun Saya.\n" +
-                "• Administrator Sekolah dapat mengedit/menghapus data siswa & wali asuh, atau menghapus akun Admin beserta seluruh data sekolah secara permanen melalui Portal Admin -> Hapus Akun Admin & Data Sekolah Permanen.\n" +
-                "• Untuk permintaan penghapusan data manual atau pertanyaan privasi, hubungi kami di $SUPPORT_EMAIL."
+            title = if (isEn) "5. Retention & Account / Data Deletion" else "5. Retensi & Penghapusan Akun / Data",
+            body = if (isEn) {
+                "• Wali Asuh can delete their personal account anytime directly inside the app via Profile -> Delete My Account.\n" +
+                    "• School Administrators can edit/delete student & Wali Asuh data, or permanently delete the Admin account along with all school data via the School Admin Portal.\n" +
+                    "• For manual deletion requests or privacy questions, contact us at $SUPPORT_EMAIL."
+            } else {
+                "• Wali Asuh dapat menghapus akun pribadinya secara mandiri kapan saja langsung di dalam aplikasi melalui menu Profil -> Hapus Akun Saya.\n" +
+                    "• Administrator Sekolah dapat mengedit/menghapus data siswa & wali asuh, atau menghapus akun Admin beserta seluruh data sekolah secara permanen melalui Portal Admin -> Hapus Akun Admin & Data Sekolah Permanen.\n" +
+                    "• Untuk permintaan penghapusan data manual atau pertanyaan privasi, hubungi kami di $SUPPORT_EMAIL."
+            }
         )
     }
 }
 
 @Composable
-private fun TermsOfServiceContent() {
+private fun TermsOfServiceContent(isEn: Boolean) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
-            text = "Berlaku untuk seluruh pengguna (Admin Sekolah & Wali Asuh)",
+            text = if (isEn) "Applies to all users (School Admin & Wali Asuh)" else "Berlaku untuk seluruh pengguna (Admin Sekolah & Wali Asuh)",
             fontSize = 11.5.sp,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         LegalSectionCard(
-            title = "1. Kelayakan & Otorisasi Pengguna",
-            body = "Aplikasi Wali Asuh Care ditujukan bagi pengelola sekolah, admin asrama, dan wali asuh dewasa (18+) yang telah diberi otorisasi resmi oleh sekolah masing-masing untuk mengelola data operasional asrama."
+            title = if (isEn) "1. Eligibility & User Authorization" else "1. Kelayakan & Otorisasi Pengguna",
+            body = if (isEn) {
+                "Wali Asuh Care is intended for school managers, Asrama admins, and adult Wali Asuh (18+) who have been officially authorized by their respective schools to manage Asrama operational data."
+            } else {
+                "Aplikasi Wali Asuh Care ditujukan bagi pengelola sekolah, admin asrama, dan wali asuh dewasa (18+) yang telah diberi otorisasi resmi oleh sekolah masing-masing untuk mengelola data operasional asrama."
+            }
         )
 
         LegalSectionCard(
-            title = "2. Disclaimer Medis (Penting)",
-            body = "Wali Asuh Care adalah alat bantu dokumentasi dan administrasi harian asrama. Aplikasi ini BUKAN alat diagnosa medis, bukan perangkat kesehatan klinis, dan tidak menggantikan saran, pemeriksaan, atau keputusan dokter maupun fasilitas kesehatan resmi."
+            title = if (isEn) "2. Medical Disclaimer (Important)" else "2. Disclaimer Medis (Penting)",
+            body = if (isEn) {
+                "Wali Asuh Care is a daily Asrama documentation and administration aid. This app is NOT a medical diagnostic tool, NOT a clinical health device, and does NOT replace medical advice, examinations, or decisions by licensed doctors or official Faskes."
+            } else {
+                "Wali Asuh Care adalah alat bantu dokumentasi dan administrasi harian asrama. Aplikasi ini BUKAN alat diagnosa medis, bukan perangkat kesehatan klinis, dan tidak menggantikan saran, pemeriksaan, atau keputusan dokter maupun fasilitas kesehatan resmi."
+            }
         )
 
         LegalSectionCard(
-            title = "3. Keamanan Akun & Kerahasiaan Data",
-            body = "Pengelola sekolah dan wali asuh bertanggung jawab penuh untuk menjaga kerahasiaan Kode Sekolah, Username, dan Kata Sandi masing-masing, serta memastikan data pribadi siswa tidak disalahgunakan di luar kepentingan pengasuhan."
+            title = if (isEn) "3. Account Security & Confidentiality" else "3. Keamanan Akun & Kerahasiaan Data",
+            body = if (isEn) {
+                "School managers and Wali Asuh are fully responsible for keeping their School Code, Username, and Password confidential, and ensuring student personal data is never misused outside caregiving duties."
+            } else {
+                "Pengelola sekolah dan wali asuh bertanggung jawab penuh untuk menjaga kerahasiaan Kode Sekolah, Username, dan Kata Sandi masing-masing, serta memastikan data pribadi siswa tidak disalahgunakan di luar kepentingan pengasuhan."
+            }
         )
 
         LegalSectionCard(
-            title = "4. Penggunaan Fitur & Iklan",
-            body = "Fitur inti pencatatan harian tetap dapat digunakan tanpa biaya langganan. Beberapa fitur ekspor/laporan tertentu dapat menampilkan iklan video berhadiah dengan pemberitahuan jelas sebelum diputar. Dilarang melakukan modifikasi aplikasi, scraping, atau akses tidak sah ke database server."
+            title = if (isEn) "4. Feature Usage & Ads" else "4. Penggunaan Fitur & Iklan",
+            body = if (isEn) {
+                "Core daily recording features remain available without a subscription fee. Certain export/report features may show a rewarded video ad with clear notice beforehand. Modifying the app, scraping, or unauthorized database server access is prohibited."
+            } else {
+                "Fitur inti pencatatan harian tetap dapat digunakan tanpa biaya langganan. Beberapa fitur ekspor/laporan tertentu dapat menampilkan iklan video berhadiah dengan pemberitahuan jelas sebelum diputar. Dilarang melakukan modifikasi aplikasi, scraping, atau akses tidak sah ke database server."
+            }
         )
 
         LegalSectionCard(
-            title = "5. Perubahan Layanan",
-            body = "Pengembang berhak memperbarui fitur, skema sinkronisasi, serta syarat & ketentuan sewaktu-waktu demi keamanan dan peningkatan layanan. Penggunaan aplikasi secara berkelanjutan berarti menyetujui ketentuan terbaru."
+            title = if (isEn) "5. Service Changes" else "5. Perubahan Layanan",
+            body = if (isEn) {
+                "The developer reserves the right to update features, synchronization schemas, and terms & conditions at any time for security and service improvements. Continued use implies agreement to the latest terms."
+            } else {
+                "Pengembang berhak memperbarui fitur, skema sinkronisasi, serta syarat & ketentuan sewaktu-waktu demi keamanan dan peningkatan layanan. Penggunaan aplikasi secara berkelanjutan berarti menyetujui ketentuan terbaru."
+            }
         )
     }
 }
 
 @Composable
-private fun ContactUsContent(context: Context) {
+private fun ContactUsContent(context: Context, isEn: Boolean) {
     fun copyText(label: String, value: String) {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(context, "$label disalin: $value", Toast.LENGTH_SHORT).show()
+        val msg = if (isEn) "$label copied: $value" else "$label disalin: $value"
+        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "Butuh bantuan pendaftaran sekolah, kendala sinkronisasi PocketBase, laporan bug, atau permintaan penghapusan data? Hubungi tim pengembang melalui kanal resmi berikut:",
+            text = if (isEn) {
+                "Need help with school registration, PocketBase sync issues, bug reports, or data deletion requests? Contact the developer team via these official channels:"
+            } else {
+                "Butuh bantuan pendaftaran sekolah, kendala sinkronisasi PocketBase, laporan bug, atau permintaan penghapusan data? Hubungi tim pengembang melalui kanal resmi berikut:"
+            },
             fontSize = 12.5.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 18.sp
@@ -378,58 +450,80 @@ private fun ContactUsContent(context: Context) {
 
         // Kartu Email Resmi
         ContactChannelCard(
-            title = "Email Dukungan Resmi",
+            title = if (isEn) "Official Support Email" else "Email Dukungan Resmi",
             value = SUPPORT_EMAIL,
-            subtitle = "Cocok untuk pengajuan resmi, laporan bug, & permintaan privasi data",
+            subtitle = if (isEn) {
+                "Best for formal inquiries, bug reports, & data privacy requests"
+            } else {
+                "Cocok untuk pengajuan resmi, laporan bug, & permintaan privasi data"
+            },
             icon = Icons.Default.Email,
             accentColor = WaliPrimary,
-            primaryActionLabel = "Kirim Email",
+            primaryActionLabel = if (isEn) "Send Email" else "Kirim Email",
             primaryActionIcon = Icons.Default.Email,
             onPrimaryAction = {
                 val intent = Intent(Intent.ACTION_SENDTO).apply {
                     data = Uri.parse("mailto:$SUPPORT_EMAIL")
-                    putExtra(Intent.EXTRA_SUBJECT, "Dukungan Aplikasi Wali Asuh Care")
+                    putExtra(
+                        Intent.EXTRA_SUBJECT,
+                        if (isEn) "Wali Asuh Care App Support" else "Dukungan Aplikasi Wali Asuh Care"
+                    )
                 }
                 runCatching {
-                    context.startActivity(Intent.createChooser(intent, "Kirim Email ke Pengembang"))
+                    context.startActivity(
+                        Intent.createChooser(
+                            intent,
+                            if (isEn) "Send Email to Developer" else "Kirim Email ke Pengembang"
+                        )
+                    )
                 }.onFailure {
                     copyText("Email", SUPPORT_EMAIL)
                 }
             },
             onCopy = { copyText("Email", SUPPORT_EMAIL) },
+            copyLabelPrefix = if (isEn) "Copy" else "Salin",
             testTagPrefix = "contact_email"
         )
 
         // Kartu WhatsApp / Nomor HP Resmi
         ContactChannelCard(
-            title = "WhatsApp / Telepon Pengembang",
+            title = if (isEn) "Developer WhatsApp / Phone" else "WhatsApp / Telepon Pengembang",
             value = SUPPORT_PHONE_LOCAL,
-            subtitle = "Respon cepat untuk bantuan teknis admin & koordinasi multi-sekolah",
+            subtitle = if (isEn) {
+                "Quick response for admin technical support & multi-school coordination"
+            } else {
+                "Respon cepat untuk bantuan teknis admin & koordinasi multi-sekolah"
+            },
             icon = Icons.Default.Phone,
             accentColor = Color(0xFF16A34A),
-            primaryActionLabel = "Chat WhatsApp",
+            primaryActionLabel = if (isEn) "WhatsApp Chat" else "Chat WhatsApp",
             primaryActionIcon = Icons.Default.Send,
             onPrimaryAction = {
-                val msg = "Halo Admin/Pengembang Wali Asuh Care, saya ingin berkonsultasi mengenai aplikasi."
+                val msg = if (isEn) {
+                    "Hello Wali Asuh Care Admin/Developer, I would like to ask about the app."
+                } else {
+                    "Halo Admin/Pengembang Wali Asuh Care, saya ingin berkonsultasi mengenai aplikasi."
+                }
                 val uri = Uri.parse("https://api.whatsapp.com/send?phone=$SUPPORT_PHONE_INTL&text=${Uri.encode(msg)}")
                 runCatching {
                     context.startActivity(Intent(Intent.ACTION_VIEW, uri))
                 }.onFailure {
                     val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$SUPPORT_PHONE_LOCAL"))
                     runCatching { context.startActivity(dialIntent) }
-                        .onFailure { copyText("Nomor HP", SUPPORT_PHONE_LOCAL) }
+                        .onFailure { copyText(if (isEn) "Phone" else "Nomor HP", SUPPORT_PHONE_LOCAL) }
                 }
             },
-            secondaryActionLabel = "Telepon",
+            secondaryActionLabel = if (isEn) "Call" else "Telepon",
             onSecondaryAction = {
                 val dialIntent = Intent(Intent.ACTION_DIAL, Uri.parse("tel:$SUPPORT_PHONE_LOCAL"))
                 runCatching {
                     context.startActivity(dialIntent)
                 }.onFailure {
-                    copyText("Nomor HP", SUPPORT_PHONE_LOCAL)
+                    copyText(if (isEn) "Phone" else "Nomor HP", SUPPORT_PHONE_LOCAL)
                 }
             },
-            onCopy = { copyText("Nomor HP", SUPPORT_PHONE_LOCAL) },
+            onCopy = { copyText(if (isEn) "Phone" else "Nomor HP", SUPPORT_PHONE_LOCAL) },
+            copyLabelPrefix = if (isEn) "Copy" else "Salin",
             testTagPrefix = "contact_phone"
         )
     }
@@ -481,6 +575,7 @@ private fun ContactChannelCard(
     onCopy: () -> Unit,
     secondaryActionLabel: String? = null,
     onSecondaryAction: (() -> Unit)? = null,
+    copyLabelPrefix: String = "Salin",
     testTagPrefix: String
 ) {
     Card(
@@ -536,7 +631,7 @@ private fun ContactChannelCard(
                 ) {
                     Icon(
                         imageVector = Icons.Default.ContentCopy,
-                        contentDescription = "Salin $title",
+                        contentDescription = "$copyLabelPrefix $title",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(18.dp)
                     )

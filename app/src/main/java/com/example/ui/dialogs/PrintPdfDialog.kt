@@ -72,6 +72,7 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -84,6 +85,8 @@ fun PrintPdfDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val currentCal = remember { Calendar.getInstance() }
@@ -100,10 +103,19 @@ fun PrintPdfDialog(
     var expandedYearDropdown by remember { mutableStateOf(false) }
     var pendingPdfAction by remember { mutableStateOf<String?>(null) } // "OPEN" or "SHARE"
 
-    val monthNames = listOf(
-        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-    )
+    val monthNames = remember(s.language) {
+        if (isEn) {
+            listOf(
+                "January", "February", "March", "April", "May", "June",
+                "July", "August", "September", "October", "November", "December"
+            )
+        } else {
+            listOf(
+                "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+            )
+        }
+    }
     val availableYears = listOf(defaultYear, defaultYear - 1, defaultYear - 2)
 
     // Filter rekam medis sesuai pilihan periode
@@ -132,8 +144,8 @@ fun PrintPdfDialog(
 
     val periodLabel = when (selectedFilterMode) {
         0 -> "${monthNames[selectedMonth]} $selectedYear"
-        1 -> "Tahun $selectedYear"
-        else -> "Seluruh Riwayat Screening"
+        1 -> if (isEn) "Year $selectedYear" else "Tahun $selectedYear"
+        else -> if (isEn) "All Screening History" else "Seluruh Riwayat Screening"
     }
 
     ModalBottomSheet(
@@ -183,7 +195,7 @@ fun PrintPdfDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Cetak Rekap Screening PDF",
+                                text = if (isEn) "Print Screening PDF Recap" else "Cetak Rekap Screening PDF",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -191,7 +203,11 @@ fun PrintPdfDialog(
                                 overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "Dokumen resmi ${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }}",
+                                text = if (isEn) {
+                                    "Official document • ${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }}"
+                                } else {
+                                    "Dokumen resmi ${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }}"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
@@ -200,7 +216,7 @@ fun PrintPdfDialog(
                         }
                     }
                     IconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup")
+                        Icon(imageVector = Icons.Default.Close, contentDescription = s.close)
                     }
                 }
 
@@ -229,7 +245,7 @@ fun PrintPdfDialog(
                                 fontSize = 14.sp
                             )
                             Text(
-                                text = "NIS: ${student.nis} • Kelas: ${student.classGrade}",
+                                text = if (isEn) "NIS: ${student.nis} • Grade: ${student.classGrade}" else "NIS: ${student.nis} • Kelas: ${student.classGrade}",
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -244,7 +260,7 @@ fun PrintPdfDialog(
 
                 // Pilihan Periode Cetak (Bulan dan Tahun)
                 Text(
-                    text = "Pilih Periode Laporan:",
+                    text = if (isEn) "Select Report Period:" else "Pilih Periode Laporan:",
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.5.sp,
                     color = MaterialTheme.colorScheme.onSurface
@@ -257,7 +273,7 @@ fun PrintPdfDialog(
                     FilterChip(
                         selected = selectedFilterMode == 0,
                         onClick = { selectedFilterMode = 0 },
-                        label = { Text("Rekap Bulan", fontSize = 11.5.sp) },
+                        label = { Text(if (isEn) "Monthly" else "Rekap Bulan", fontSize = 11.5.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(14.dp))
                         },
@@ -270,7 +286,7 @@ fun PrintPdfDialog(
                     FilterChip(
                         selected = selectedFilterMode == 1,
                         onClick = { selectedFilterMode = 1 },
-                        label = { Text("Rekap Tahun", fontSize = 11.5.sp) },
+                        label = { Text(if (isEn) "Yearly" else "Rekap Tahun", fontSize = 11.5.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.DateRange, null, modifier = Modifier.size(14.dp))
                         },
@@ -283,7 +299,7 @@ fun PrintPdfDialog(
                     FilterChip(
                         selected = selectedFilterMode == 2,
                         onClick = { selectedFilterMode = 2 },
-                        label = { Text("Semua", fontSize = 11.5.sp) },
+                        label = { Text(if (isEn) "All" else "Semua", fontSize = 11.5.sp) },
                         leadingIcon = {
                             Icon(Icons.Default.History, null, modifier = Modifier.size(14.dp))
                         },
@@ -362,7 +378,11 @@ fun PrintPdfDialog(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text(text = "Tahun Laporan: $selectedYear", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = if (isEn) "Report Year: $selectedYear" else "Tahun Laporan: $selectedYear",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
                             Spacer(modifier = Modifier.width(4.dp))
                             Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(16.dp))
                         }
@@ -372,7 +392,7 @@ fun PrintPdfDialog(
                         ) {
                             availableYears.forEach { year ->
                                 DropdownMenuItem(
-                                    text = { Text("Tahun $year", fontSize = 12.sp) },
+                                    text = { Text(if (isEn) "Year $year" else "Tahun $year", fontSize = 12.sp) },
                                     onClick = {
                                         selectedYear = year
                                         expandedYearDropdown = false
@@ -405,7 +425,7 @@ fun PrintPdfDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Pratinjau Rekap: $periodLabel",
+                                text = if (isEn) "Recap Preview: $periodLabel" else "Pratinjau Rekap: $periodLabel",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (filteredRecords.size >= 2) Color(0xFFB91C1C) else Color(0xFF15803D)
@@ -414,9 +434,17 @@ fun PrintPdfDialog(
 
                         Text(
                             text = if (filteredRecords.isNotEmpty()) {
-                                "Ditemukan ${filteredRecords.size} catatan screening / pengobatan yang akan dimuat ke dalam lembar PDF A4."
+                                if (isEn) {
+                                    "Found ${filteredRecords.size} screening / treatment records to include on the A4 PDF sheet."
+                                } else {
+                                    "Ditemukan ${filteredRecords.size} catatan screening / pengobatan yang akan dimuat ke dalam lembar PDF A4."
+                                }
                             } else {
-                                "Tidak ada catatan berobat pada periode ini. Lembar PDF akan mencantumkan status anak asuh 'Kondisi Sehat'."
+                                if (isEn) {
+                                    "No treatment records for this period. The PDF sheet will indicate 'Healthy Condition'."
+                                } else {
+                                    "Tidak ada catatan berobat pada periode ini. Lembar PDF akan mencantumkan status anak asuh 'Kondisi Sehat'."
+                                }
                             },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -424,7 +452,8 @@ fun PrintPdfDialog(
 
                         if (filteredRecords.isNotEmpty()) {
                             Text(
-                                text = "Diagnosa: " + filteredRecords.joinToString("; ") { it.diagnosis.ifBlank { it.complaint } },
+                                text = (if (isEn) "Diagnosis: " else "Diagnosa: ") +
+                                    filteredRecords.joinToString("; ") { it.diagnosis.ifBlank { it.complaint } },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2
@@ -453,7 +482,7 @@ fun PrintPdfDialog(
                     ) {
                         Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Bagikan PDF", fontSize = 12.sp)
+                        Text(if (isEn) "Share PDF" else "Bagikan PDF", fontSize = 12.sp)
                     }
 
                     Button(
@@ -470,12 +499,16 @@ fun PrintPdfDialog(
                     ) {
                         Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("Cetak / Buka PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Print / Open PDF" else "Cetak / Buka PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
                 RewardAdDeclarationHint(
-                    text = "Tonton iklan video singkat untuk mencetak atau membagikan Laporan PDF",
+                    text = if (isEn) {
+                        "Watch a short video ad to print or share the PDF Report"
+                    } else {
+                        "Tonton iklan video singkat untuk mencetak atau membagikan Laporan PDF"
+                    },
                     accentColor = WaliPrimary
                 )
             }
@@ -484,13 +517,25 @@ fun PrintPdfDialog(
 
     pendingPdfAction?.let { actionType ->
         RewardAdDeclarationDialog(
-            title = if (actionType == "OPEN") "Cetak / Buka Laporan PDF" else "Bagikan Laporan PDF",
-            actionDescription = if (actionType == "OPEN") {
-                "membuat dan membuka Laporan PDF Rekam Medis (${student.name})"
+            title = if (actionType == "OPEN") {
+                if (isEn) "Print / Open PDF Report" else "Cetak / Buka Laporan PDF"
             } else {
-                "membuat dan membagikan Laporan PDF Rekam Medis (${student.name})"
+                if (isEn) "Share PDF Report" else "Bagikan Laporan PDF"
             },
-            confirmButtonText = "Tonton & Unduh PDF",
+            actionDescription = if (actionType == "OPEN") {
+                if (isEn) {
+                    "create and open Medical Record PDF Report (${student.name})"
+                } else {
+                    "membuat dan membuka Laporan PDF Rekam Medis (${student.name})"
+                }
+            } else {
+                if (isEn) {
+                    "create and share Medical Record PDF Report (${student.name})"
+                } else {
+                    "membuat dan membagikan Laporan PDF Rekam Medis (${student.name})"
+                }
+            },
+            confirmButtonText = if (isEn) "Watch & Download PDF" else "Tonton & Unduh PDF",
             onConfirmWatchAd = {
                 pendingPdfAction = null
                 TopOnAdManager.showRewardAdForPdfReport(context) {
@@ -519,7 +564,11 @@ fun PrintPdfDialog(
                             )
                         }
                     } else {
-                        Toast.makeText(context, "Gagal membuat dokumen PDF.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Failed to create PDF document." else "Gagal membuat dokumen PDF.",
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
             },

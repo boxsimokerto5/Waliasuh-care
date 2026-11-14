@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -57,6 +58,8 @@ fun AddStudentDialog(
     onDismiss: () -> Unit,
     onConfirmStudent: (ChildStudent) -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val isEditMode = initialStudent != null
     var name by remember { mutableStateOf(initialStudent?.name ?: "") }
     var nis by remember { mutableStateOf(initialStudent?.nis ?: "") }
@@ -126,7 +129,11 @@ fun AddStudentDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isEditMode) "Edit Profil Siswa" else "Tambah Anak Asuh",
+                        text = if (isEditMode) {
+                            if (isEn) "Edit Student Profile" else "Edit Profil Siswa"
+                        } else {
+                            if (isEn) "Add Foster Student" else "Tambah Anak Asuh"
+                        },
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -136,8 +143,8 @@ fun AddStudentDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Nama Lengkap Siswa *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: ACHMAD DEVA ADIANSA", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Student Full Name *" else "Nama Lengkap Siswa *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g. ACHMAD DEVA ADIANSA" else "misal: ACHMAD DEVA ADIANSA", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -161,14 +168,18 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = ageText,
                         onValueChange = { ageText = it },
-                        label = { Text("Usia (Th)", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Age (Yrs)" else "Usia (Th)", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.weight(0.6f)
                     )
                 }
 
-                Text("Jenis Kelamin & Jenjang:", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                Text(
+                    if (isEn) "Gender & Education Level:" else "Jenis Kelamin & Jenjang:",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -212,7 +223,7 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = classGrade,
                         onValueChange = { classGrade = it },
-                        label = { Text("Kelas", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Class / Grade" else "Kelas", fontSize = 12.sp) },
                         placeholder = { Text("XI-3 (IPS) / VII-1", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -221,7 +232,7 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = roomNumber,
                         onValueChange = { roomNumber = it },
-                        label = { Text("Kamar", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Room" else "Kamar", fontSize = 12.sp) },
                         placeholder = { Text("PL_103 / PP_101", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -233,7 +244,7 @@ fun AddStudentDialog(
                     value = dormitory,
                     onValueChange = { dormitory = it },
                     label = { Text("Asrama *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Asrama Putra", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g. Asrama Putra" else "misal: Asrama Putra", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -241,7 +252,7 @@ fun AddStudentDialog(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
                 Text(
-                    text = "Identitas Kependudukan (Sesuai KK/CSV)",
+                    text = if (isEn) "Civil Identity (per KK / CSV)" else "Identitas Kependudukan (Sesuai KK/CSV)",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -254,7 +265,7 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = nik,
                         onValueChange = { nik = it },
-                        label = { Text("NIK (16 Digit)", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "NIK (16 Digits)" else "NIK (16 Digit)", fontSize = 12.sp) },
                         placeholder = { Text("3506xxxxxxxxxxxx", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -263,7 +274,7 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = noKk,
                         onValueChange = { noKk = it },
-                        label = { Text("No. KK", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "KK No." else "No. KK", fontSize = 12.sp) },
                         placeholder = { Text("3506xxxxxxxxxxxx", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -278,7 +289,7 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = birthPlace,
                         onValueChange = { birthPlace = it },
-                        label = { Text("Tempat Lahir", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Birth Place" else "Tempat Lahir", fontSize = 12.sp) },
                         placeholder = { Text("KEDIRI", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -292,7 +303,7 @@ fun AddStudentDialog(
                                 ageText = StudentCsvParser.estimateAge(newVal).toString()
                             }
                         },
-                        label = { Text("Tgl Lahir (DD-MM-YYYY)", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Birth Date (DD-MM-YYYY)" else "Tgl Lahir (DD-MM-YYYY)", fontSize = 12.sp) },
                         placeholder = { Text("25-12-2009", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -303,8 +314,8 @@ fun AddStudentDialog(
                 OutlinedTextField(
                     value = motherName,
                     onValueChange = { motherName = it },
-                    label = { Text("Nama Ibu Kandung", fontSize = 12.sp) },
-                    placeholder = { Text("misal: DWI MASRUROH", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Biological Mother's Name" else "Nama Ibu Kandung", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g. DWI MASRUROH" else "misal: DWI MASRUROH", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -313,8 +324,8 @@ fun AddStudentDialog(
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("Alamat Lengkap", fontSize = 12.sp) },
-                    placeholder = { Text("Dusun, RT/RW, Desa, Kec, Kab", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Full Address" else "Alamat Lengkap", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "Hamlet, RT/RW, Village, District, Regency" else "Dusun, RT/RW, Desa, Kec, Kab", fontSize = 12.sp) },
                     minLines = 2,
                     maxLines = 3,
                     shape = RoundedCornerShape(10.dp),
@@ -331,7 +342,7 @@ fun AddStudentDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Kesehatan, Golongan Darah & Kontak Wali",
+                            text = if (isEn) "Health, Blood Type & Guardian Contact" else "Kesehatan, Golongan Darah & Kontak Wali",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -350,7 +361,7 @@ fun AddStudentDialog(
                         OutlinedTextField(
                             value = bloodType,
                             onValueChange = { bloodType = it },
-                            label = { Text("Gol. Darah", fontSize = 12.sp) },
+                            label = { Text(if (isEn) "Blood Type" else "Gol. Darah", fontSize = 12.sp) },
                             placeholder = { Text("A / B / AB / O / -", fontSize = 12.sp) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
@@ -359,7 +370,7 @@ fun AddStudentDialog(
                         OutlinedTextField(
                             value = emergencyContact,
                             onValueChange = { emergencyContact = it },
-                            label = { Text("Kontak Pengasuh / Wali", fontSize = 12.sp) },
+                            label = { Text(if (isEn) "Guardian / Caregiver Contact" else "Kontak Pengasuh / Wali", fontSize = 12.sp) },
                             placeholder = { Text("0812-xxxx-xxxx", fontSize = 12.sp) },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
@@ -370,8 +381,8 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = allergies,
                         onValueChange = { allergies = it },
-                        label = { Text("Riwayat Alergi (jika ada)", fontSize = 12.sp) },
-                        placeholder = { Text("misal: Alergi dingin, amoxicillin", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Allergy History (if any)" else "Riwayat Alergi (jika ada)", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "e.g. Cold allergy, amoxicillin" else "misal: Alergi dingin, amoxicillin", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -380,7 +391,7 @@ fun AddStudentDialog(
                     OutlinedTextField(
                         value = specialNotes,
                         onValueChange = { specialNotes = it },
-                        label = { Text("Catatan Khusus", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Special Notes" else "Catatan Khusus", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -398,7 +409,7 @@ fun AddStudentDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Batal", fontSize = 12.sp)
+                        Text(s.nav.cancel, fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -451,7 +462,14 @@ fun AddStudentDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("confirm_add_student_button")
                     ) {
-                        Text(if (isEditMode) "Simpan Perubahan" else "Tambah Siswa", fontSize = 12.sp)
+                        Text(
+                            if (isEditMode) {
+                                if (isEn) "Save Changes" else "Simpan Perubahan"
+                            } else {
+                                if (isEn) "Add Student" else "Tambah Siswa"
+                            },
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }

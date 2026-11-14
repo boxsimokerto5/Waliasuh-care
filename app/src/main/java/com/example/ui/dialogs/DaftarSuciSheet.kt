@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
+import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -82,12 +83,14 @@ fun DaftarSuciSheet(
     onMoveToHaid: (HaidRecord) -> Unit = {},
     onDismiss: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var searchQuery by remember { mutableStateOf("") }
     var selectedDetailRecord by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToDelete by remember { mutableStateOf<HaidRecord?>(null) }
     var recordPendingTissueCheck by remember { mutableStateOf<HaidRecord?>(null) }
 
-    val dateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")) }
+    val dateFormat = remember(s.language) { SimpleDateFormat("dd MMM yyyy", s.locale) }
 
     val activeStudentKeys = remember(activeHaidRecords) {
         activeHaidRecords.map { studentIdentityKey(it) }.toSet()
@@ -173,13 +176,17 @@ fun DaftarSuciSheet(
                         }
                         Column {
                             Text(
-                                text = "Daftar Siswi Suci & Timeline",
+                                text = if (isEn) "Daftar Suci & Timeline" else "Daftar Siswi Suci & Timeline",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "${suciRecords.size} Catatan Suci • Pantau Hari Suci ke-...",
+                                text = if (isEn) {
+                                    "${suciRecords.size} Suci Records • Monitor Suci Days..."
+                                } else {
+                                    "${suciRecords.size} Catatan Suci • Pantau Hari Suci ke-..."
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -194,7 +201,7 @@ fun DaftarSuciSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = s.nav.close,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -213,9 +220,9 @@ fun DaftarSuciSheet(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4))
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Text("Total Catatan Suci", fontSize = 10.sp, color = Color(0xFF15803D))
+                            Text(if (isEn) "Total Suci Records" else "Total Catatan Suci", fontSize = 10.sp, color = Color(0xFF15803D))
                             Text(
-                                text = "${suciRecords.size} Siklus",
+                                text = if (isEn) "${suciRecords.size} Cycles" else "${suciRecords.size} Siklus",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF166534)
@@ -229,9 +236,9 @@ fun DaftarSuciSheet(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFF0F9FF))
                     ) {
                         Column(modifier = Modifier.padding(10.dp)) {
-                            Text("Masa Pantau (<15h Suci)", fontSize = 10.sp, color = Color(0xFF0369A1))
+                            Text(if (isEn) "Watch Window (<15d Suci)" else "Masa Pantau (<15h Suci)", fontSize = 10.sp, color = Color(0xFF0369A1))
                             Text(
-                                text = "$inMinPeriodCount Siswi Aktif",
+                                text = if (isEn) "$inMinPeriodCount Active Students" else "$inMinPeriodCount Siswi Aktif",
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF075985)
@@ -246,7 +253,7 @@ fun DaftarSuciSheet(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Cari nama siswi suci...", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "Search Suci student name..." else "Cari nama siswi suci...", fontSize = 12.sp) },
                     leadingIcon = {
                         Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(16.dp))
                     },
@@ -256,7 +263,7 @@ fun DaftarSuciSheet(
                                 onClick = { searchQuery = "" },
                                 modifier = Modifier.size(48.dp)
                             ) {
-                                Icon(Icons.Default.Clear, contentDescription = "Hapus pencarian", modifier = Modifier.size(16.dp))
+                                Icon(Icons.Default.Clear, contentDescription = if (isEn) "Clear search" else "Hapus pencarian", modifier = Modifier.size(16.dp))
                             }
                         }
                     },
@@ -294,7 +301,11 @@ fun DaftarSuciSheet(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                text = if (suciRecords.isEmpty()) "Belum ada siswi di Daftar Suci" else "Tidak ada siswi yang cocok dengan pencarian",
+                                text = if (suciRecords.isEmpty()) {
+                                    if (isEn) "No students in Daftar Suci yet" else "Belum ada siswi di Daftar Suci"
+                                } else {
+                                    if (isEn) "No students match your search" else "Tidak ada siswi yang cocok dengan pencarian"
+                                },
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -302,7 +313,11 @@ fun DaftarSuciSheet(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Siswi yang mandi suci atau melewati 15 hari haid akan otomatis masuk ke sini.",
+                                text = if (isEn) {
+                                    "Students who complete Mandi Suci or pass 15 Haid days will automatically appear here."
+                                } else {
+                                    "Siswi yang mandi suci atau melewati 15 hari haid akan otomatis masuk ke sini."
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -403,7 +418,11 @@ fun DaftarSuciSheet(
                                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                                             ) {
                                                 Text(
-                                                    text = if (isCurrentSuciStatus) "Suci Hari ke-$suciDay" else "Arsip (${record.durationDays}h)",
+                                                    text = if (isCurrentSuciStatus) {
+                                                        if (isEn) "Suci Day $suciDay" else "Suci Hari ke-$suciDay"
+                                                    } else {
+                                                        if (isEn) "Archive (${record.durationDays}d)" else "Arsip (${record.durationDays}h)"
+                                                    },
                                                     color = Color.White,
                                                     fontWeight = FontWeight.Bold,
                                                     fontSize = 11.sp
@@ -411,7 +430,7 @@ fun DaftarSuciSheet(
                                             }
                                             Icon(
                                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                contentDescription = "Lihat detail ${record.studentName}",
+                                                contentDescription = if (isEn) "View details for ${record.studentName}" else "Lihat detail ${record.studentName}",
                                                 tint = accentColor.copy(alpha = 0.7f),
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -525,7 +544,7 @@ fun DaftarSuciSheet(
                             onClick = { selectedDetailRecord = null },
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(Icons.Default.Close, contentDescription = "Tutup detail")
+                            Icon(Icons.Default.Close, contentDescription = s.nav.close)
                         }
                     }
 
@@ -555,9 +574,9 @@ fun DaftarSuciSheet(
                     ) {
                         Text(
                             text = if (rec.isAutoCompletedByLimit) {
-                                "Otomatis Pindah ke Daftar Suci (Melewati 15 Hari Haid)"
+                                if (isEn) "Auto-Moved to Daftar Suci (Passed 15 Haid Days)" else "Otomatis Pindah ke Daftar Suci (Melewati 15 Hari Haid)"
                             } else {
-                                "Sudah Mandi Wajib (Siap Sholat, Puasa, Mengaji)"
+                                if (isEn) "Mandi Wajib Completed (Ready for Sholat, Puasa, Recitation)" else "Sudah Mandi Wajib (Siap Sholat, Puasa, Mengaji)"
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -578,19 +597,23 @@ fun DaftarSuciSheet(
                             verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Text(
-                                text = "Siklus haid: ${rec.durationDays} hari ($startStr s.d. $endStr)",
+                                text = if (isEn) {
+                                    "Haid cycle: ${rec.durationDays} days ($startStr to $endStr)"
+                                } else {
+                                    "Siklus haid: ${rec.durationDays} hari ($startStr s.d. $endStr)"
+                                },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Verifikasi: ${rec.waliName}",
+                                text = "${if (isEn) "Verified by" else "Verifikasi"}: ${rec.waliName}",
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             if (rec.notes.isNotBlank()) {
                                 Text(
-                                    text = "Catatan: ${rec.notes}",
+                                    text = "${if (isEn) "Notes" else "Catatan"}: ${rec.notes}",
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
@@ -621,7 +644,7 @@ fun DaftarSuciSheet(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Hapus", fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
+                            Text(s.nav.delete, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                         }
 
                         if (isCurrentSuciStatus) {
@@ -649,7 +672,7 @@ fun DaftarSuciSheet(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Pindah ke Haid",
+                                    text = if (isEn) "Move to Haid" else "Pindah ke Haid",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
@@ -716,7 +739,7 @@ fun DaftarSuciSheet(
                             )
                         }
                         Text(
-                            text = "Hapus Riwayat Suci?",
+                            text = if (isEn) "Delete Suci History?" else "Hapus Riwayat Suci?",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.error
@@ -724,7 +747,11 @@ fun DaftarSuciSheet(
                     }
 
                     Text(
-                        text = "Hapus data riwayat siklus haid ${rec.studentName}?",
+                        text = if (isEn) {
+                            "Delete Haid cycle history for ${rec.studentName}?"
+                        } else {
+                            "Hapus data riwayat siklus haid ${rec.studentName}?"
+                        },
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -740,7 +767,7 @@ fun DaftarSuciSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Batal")
+                            Text(s.nav.cancel)
                         }
                         Button(
                             onClick = {
@@ -753,7 +780,7 @@ fun DaftarSuciSheet(
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
                         ) {
-                            Text("Hapus", fontWeight = FontWeight.Bold)
+                            Text(s.nav.delete, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

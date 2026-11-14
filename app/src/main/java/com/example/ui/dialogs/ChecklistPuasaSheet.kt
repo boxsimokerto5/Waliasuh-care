@@ -73,6 +73,7 @@ import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +87,9 @@ fun ChecklistPuasaSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val lang = s.language
     val sortedSessions = remember(sessions) {
         sessions.sortedWith(
             compareByDescending<FastingSession> { it.isActive }
@@ -162,13 +166,17 @@ fun ChecklistPuasaSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Checklist Sahur & Berbuka",
+                            text = if (isEn) "Sahur & Berbuka Checklist" else "Checklist Sahur & Berbuka",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Centang kehadiran sahur & berbuka siswa serta cetak PDF",
+                            text = if (isEn) {
+                                "Check off student Sahur & Berbuka attendance and print PDF"
+                            } else {
+                                "Centang kehadiran sahur & berbuka siswa serta cetak PDF"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -179,7 +187,7 @@ fun ChecklistPuasaSheet(
                             .size(48.dp)
                             .testTag("btn_close_checklist_puasa")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup")
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close)
                     }
                 }
 
@@ -190,7 +198,7 @@ fun ChecklistPuasaSheet(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     ) {
                         Text(
-                            text = "Belum ada sesi puasa yang dibuat oleh Admin Sekolah.",
+                            text = if (isEn) "No Puasa sessions have been created by Admin Sekolah yet." else "Belum ada sesi puasa yang dibuat oleh Admin Sekolah.",
                             fontSize = 12.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -211,7 +219,7 @@ fun ChecklistPuasaSheet(
                                 onClick = { selectedSessionId = session.id },
                                 label = {
                                     Text(
-                                        text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate)})",
+                                        text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate, lang)})",
                                         fontSize = 11.5.sp,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                     )
@@ -289,7 +297,11 @@ fun ChecklistPuasaSheet(
                             ) {
                                 Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Laporan Checklist PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (isEn) "Checklist PDF Report" else "Laporan Checklist PDF",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
 
                             OutlinedButton(
@@ -298,13 +310,19 @@ fun ChecklistPuasaSheet(
                                         session = sess,
                                         records = sessionRecords,
                                         waliName = waliName,
-                                        schoolProfile = schoolProfile
+                                        schoolProfile = schoolProfile,
+                                        language = lang
                                     )
                                     val intent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, waText)
                                     }
-                                    context.startActivity(Intent.createChooser(intent, "Bagikan Checklist ke WA"))
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            intent,
+                                            if (isEn) "Share Checklist to WA" else "Bagikan Checklist ke WA"
+                                        )
+                                    )
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
@@ -319,16 +337,20 @@ fun ChecklistPuasaSheet(
                         }
 
                         RewardAdDeclarationHint(
-                            text = "Tonton iklan video singkat untuk mengunduh Laporan Checklist PDF",
+                            text = if (isEn) "Watch a short video ad to download the Checklist PDF Report" else "Tonton iklan video singkat untuk mengunduh Laporan Checklist PDF",
                             accentColor = amberDark
                         )
                     }
 
                     pendingPdfSession?.let { sessToExport ->
                         RewardAdDeclarationDialog(
-                            title = "Unduh Laporan Checklist PDF",
-                            actionDescription = "mengunduh dan membagikan Laporan Checklist ${sessToExport.title}",
-                            confirmButtonText = "Tonton & Unduh PDF",
+                            title = if (isEn) "Download Checklist PDF Report" else "Unduh Laporan Checklist PDF",
+                            actionDescription = if (isEn) {
+                                "download and share the Checklist Report for ${sessToExport.title}"
+                            } else {
+                                "mengunduh dan membagikan Laporan Checklist ${sessToExport.title}"
+                            },
+                            confirmButtonText = if (isEn) "Watch & Download PDF" else "Tonton & Unduh PDF",
                             onConfirmWatchAd = {
                                 pendingPdfSession = null
                                 TopOnAdManager.showRewardAdForPdfReport(context) {
@@ -343,11 +365,19 @@ fun ChecklistPuasaSheet(
                                         PdfReportGenerator.shareFastingPdf(
                                             context = context,
                                             pdfFile = pdf,
-                                            subject = "Laporan Checklist Sahur & Berbuka - ${sessToExport.title}",
-                                            text = "Terlampir Laporan Checklist Sahur ($sahurDoneCount/${sessionRecords.size}) & Berbuka ($bukaDoneCount/${sessionRecords.size}) untuk ${sessToExport.title}."
+                                            subject = if (isEn) "Sahur & Berbuka Checklist Report - ${sessToExport.title}" else "Laporan Checklist Sahur & Berbuka - ${sessToExport.title}",
+                                            text = if (isEn) {
+                                                "Attached is the Sahur ($sahurDoneCount/${sessionRecords.size}) & Berbuka ($bukaDoneCount/${sessionRecords.size}) Checklist Report for ${sessToExport.title}."
+                                            } else {
+                                                "Terlampir Laporan Checklist Sahur ($sahurDoneCount/${sessionRecords.size}) & Berbuka ($bukaDoneCount/${sessionRecords.size}) untuk ${sessToExport.title}."
+                                            }
                                         )
                                     } else {
-                                        Toast.makeText(context, "Gagal membuat PDF checklist puasa.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Failed to generate Puasa checklist PDF." else "Gagal membuat PDF checklist puasa.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 }
                             },
@@ -361,10 +391,15 @@ fun ChecklistPuasaSheet(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("Semua", "Sudah", "Belum").forEach { opt ->
+                            val displayOpt = when (opt) {
+                                "Semua" -> if (isEn) "All" else "Semua"
+                                "Sudah" -> if (isEn) "Checked" else "Sudah"
+                                else -> if (isEn) "Pending" else "Belum"
+                            }
                             FilterChip(
                                 selected = statusFilter == opt,
                                 onClick = { statusFilter = opt },
-                                label = { Text(opt, fontSize = 11.5.sp) }
+                                label = { Text(displayOpt, fontSize = 11.5.sp) }
                             )
                         }
                     }
@@ -372,7 +407,7 @@ fun ChecklistPuasaSheet(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Cari nama siswa...", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "Search student name..." else "Cari nama siswa...", fontSize = 12.sp) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -387,8 +422,15 @@ fun ChecklistPuasaSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (sessionRecords.isEmpty()) "Belum ada peserta puasa pada sesi ini. Input dulu melalui menu Input Puasa."
-                                else "Tidak ada siswa sesuai filter.",
+                                text = if (sessionRecords.isEmpty()) {
+                                    if (isEn) {
+                                        "No Puasa participants in this session yet. Register students via Input Puasa first."
+                                    } else {
+                                        "Belum ada peserta puasa pada sesi ini. Input dulu melalui menu Input Puasa."
+                                    }
+                                } else {
+                                    if (isEn) "No students match the current filter." else "Tidak ada siswa sesuai filter."
+                                },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -453,9 +495,13 @@ fun ChecklistPuasaSheet(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             if (isChecked && (checker.isNotBlank() || checkedAt != null)) {
-                                                val timeStr = checkedAt?.let { DateUtils.formatTime(it) } ?: ""
+                                                val timeStr = checkedAt?.let { DateUtils.formatTime(it, lang) } ?: ""
                                                 Text(
-                                                    text = "Dicek oleh $checker${if (timeStr.isNotBlank()) " • $timeStr" else ""}",
+                                                    text = if (isEn) {
+                                                        "Checked by $checker${if (timeStr.isNotBlank()) " • $timeStr" else ""}"
+                                                    } else {
+                                                        "Dicek oleh $checker${if (timeStr.isNotBlank()) " • $timeStr" else ""}"
+                                                    },
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Medium,
                                                     color = Color(0xFF15803D)
@@ -470,9 +516,13 @@ fun ChecklistPuasaSheet(
                                         ) {
                                             Text(
                                                 text = if (isChecked) {
-                                                    if (selectedCategoryTab == 0) "Sudah Sahur" else "Sudah Buka"
+                                                    if (selectedCategoryTab == 0) {
+                                                        if (isEn) "Sahur Done" else "Sudah Sahur"
+                                                    } else {
+                                                        if (isEn) "Berbuka Done" else "Sudah Buka"
+                                                    }
                                                 } else {
-                                                    "Belum"
+                                                    if (isEn) "Pending" else "Belum"
                                                 },
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,

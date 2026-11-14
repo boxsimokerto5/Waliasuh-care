@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.HaidDateCalculator
 import com.example.data.model.HaidRecord
+import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -60,6 +61,7 @@ fun HaidTimelineBar(
     maxDays: Int = HaidDateCalculator.MAX_HAID_DAYS,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val clampedDay = currentDay.coerceIn(1, maxDays)
     val accentColor = when {
         clampedDay >= maxDays -> Color(0xFFDC2626)
@@ -96,14 +98,14 @@ fun HaidTimelineBar(
                     modifier = Modifier.size(13.dp)
                 )
                 Text(
-                    text = "Timeline Haid Berjalan",
+                    text = if (isEn) "Active Haid Timeline" else "Timeline Haid Berjalan",
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = accentColor
                 )
             }
             Text(
-                text = "Hari ke-$clampedDay / $maxDays",
+                text = if (isEn) "Day $clampedDay / $maxDays" else "Hari ke-$clampedDay / $maxDays",
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = accentColor
@@ -139,10 +141,14 @@ fun HaidTimelineBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Hari 1", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("Umum 6-7h", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (isEn) "Day 1" else "Hari 1", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (isEn) "Typical 6-7d" else "Umum 6-7h", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                text = if (clampedDay >= maxDays) "Hari 15 (Besok Auto Suci)" else "Maks 15h",
+                text = if (clampedDay >= maxDays) {
+                    if (isEn) "Day 15 (Auto Suci Tomorrow)" else "Hari 15 (Besok Auto Suci)"
+                } else {
+                    if (isEn) "Max 15d" else "Maks 15h"
+                },
                 fontSize = 9.5.sp,
                 fontWeight = if (clampedDay >= maxDays) FontWeight.Bold else FontWeight.Normal,
                 color = if (clampedDay >= maxDays) Color(0xFFDC2626) else MaterialTheme.colorScheme.onSurfaceVariant
@@ -160,6 +166,7 @@ fun SuciTimelineBar(
     minSuciDays: Int = HaidDateCalculator.MIN_SUCI_DAYS,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val isMinimumMet = suciDay >= minSuciDays
     val progressDays = suciDay.coerceIn(1, minSuciDays)
     val accentColor = if (isMinimumMet) Color(0xFF16A34A) else Color(0xFF0284C7)
@@ -189,14 +196,22 @@ fun SuciTimelineBar(
                     modifier = Modifier.size(13.dp)
                 )
                 Text(
-                    text = if (isMinimumMet) "Masa Suci Berjalan" else "Timeline Masa Minimal Suci",
+                    text = if (isEn) {
+                        if (isMinimumMet) "Active Suci Period" else "Minimum Suci Timeline"
+                    } else {
+                        if (isMinimumMet) "Masa Suci Berjalan" else "Timeline Masa Minimal Suci"
+                    },
                     fontSize = 10.5.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = accentColor
                 )
             }
             Text(
-                text = if (isMinimumMet) "Suci Hari ke-$suciDay" else "Suci Hari ke-$suciDay / $minSuciDays",
+                text = if (isEn) {
+                    if (isMinimumMet) "Suci Day $suciDay" else "Suci Day $suciDay / $minSuciDays"
+                } else {
+                    if (isMinimumMet) "Suci Hari ke-$suciDay" else "Suci Hari ke-$suciDay / $minSuciDays"
+                },
                 fontSize = 11.sp,
                 fontWeight = FontWeight.Bold,
                 color = accentColor
@@ -231,12 +246,12 @@ fun SuciTimelineBar(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Suci H-1", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(if (isEn) "Suci D-1" else "Suci H-1", fontSize = 9.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(
-                text = if (isMinimumMet) {
-                    "Minimal 15 hari suci terpenuhi"
+                text = if (isEn) {
+                    if (isMinimumMet) "Minimum 15 Suci days met" else "Strict watch period (<15 Suci days)"
                 } else {
-                    "Masa pantau ketat (<15 hari suci)"
+                    if (isMinimumMet) "Minimal 15 hari suci terpenuhi" else "Masa pantau ketat (<15 hari suci)"
                 },
                 fontSize = 9.5.sp,
                 fontWeight = FontWeight.Medium,
@@ -258,8 +273,10 @@ fun SuciTissueVerificationSheet(
     onCancelStaySuci: () -> Unit,
     onConfirmMoveToHaid: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val suciDay = suciRecord.suciDayCount
-    val suciDateFormat = remember { SimpleDateFormat("dd MMM yyyy", Locale("id", "ID")) }
+    val suciDateFormat = remember(s.language) { SimpleDateFormat("dd MMM yyyy", s.locale) }
     val suciSinceText = suciDateFormat.format(Date(suciRecord.effectiveEndDate ?: suciRecord.endDate ?: suciRecord.startDate))
 
     ModalBottomSheet(
@@ -302,13 +319,17 @@ fun SuciTissueVerificationSheet(
                     }
                     Column {
                         Text(
-                            text = "Terindikasi Masih di Daftar Suci!",
+                            text = if (isEn) "Detected Still in Daftar Suci!" else "Terindikasi Masih di Daftar Suci!",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFB91C1C)
                         )
                         Text(
-                            text = "Suci Hari ke-$suciDay (belum genap 15 hari masa suci)",
+                            text = if (isEn) {
+                                "Suci Day $suciDay (less than 15 Suci days)"
+                            } else {
+                                "Suci Hari ke-$suciDay (belum genap 15 hari masa suci)"
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFFD97706)
@@ -328,13 +349,21 @@ fun SuciTissueVerificationSheet(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Siswi \"$studentName\" tercatat sudah mandi suci sejak $suciSinceText dan saat ini baru memasuki Daftar Suci Hari ke-$suciDay.",
+                            text = if (isEn) {
+                                "Student \"$studentName\" completed Mandi Suci on $suciSinceText and is currently only on Daftar Suci Day $suciDay."
+                            } else {
+                                "Siswi \"$studentName\" tercatat sudah mandi suci sejak $suciSinceText dan saat ini baru memasuki Daftar Suci Hari ke-$suciDay."
+                            },
                             fontSize = 12.5.sp,
                             color = Color(0xFF78350F),
                             lineHeight = 18.sp
                         )
                         Text(
-                            text = "Karena belum melewati batas minimal suci 15 hari, klaim haid ini terindikasi tidak sesuai / berbohong (atau darah penyakit/istihadhah).",
+                            text = if (isEn) {
+                                "Since the 15-day minimum Suci period has not passed, this Haid claim appears inconsistent (or may be Istihadhah bleeding)."
+                            } else {
+                                "Karena belum melewati batas minimal suci 15 hari, klaim haid ini terindikasi tidak sesuai / berbohong (atau darah penyakit/istihadhah)."
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF92400E),
@@ -365,13 +394,17 @@ fun SuciTissueVerificationSheet(
                         )
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "Wajib Cek Bukti Sebelum Memindahkan",
+                                text = if (isEn) "Proof Verification Required Before Moving" else "Wajib Cek Bukti Sebelum Memindahkan",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF991B1B)
                             )
                             Text(
-                                text = "Pastikan siswi benar-benar haid! Minta siswi mengambil tes/sampel darah menggunakan tisu untuk membuktikan memang benar keluar darah.",
+                                text = if (isEn) {
+                                    "Ensure the student is genuinely experiencing Haid! Ask her to perform a tissue blood sample check to verify actual bleeding."
+                                } else {
+                                    "Pastikan siswi benar-benar haid! Minta siswi mengambil tes/sampel darah menggunakan tisu untuk membuktikan memang benar keluar darah."
+                                },
                                 fontSize = 12.sp,
                                 color = Color(0xFF7F1D1D),
                                 lineHeight = 17.sp
@@ -395,7 +428,11 @@ fun SuciTissueVerificationSheet(
                             .testTag("btn_confirm_tissue_move_haid")
                     ) {
                         Text(
-                            text = "Sudah Tes Tisu & Benar Haid • Pindah ke Haid Hari ke-...",
+                            text = if (isEn) {
+                                "Tissue Test Verified & Confirmed Haid • Move to Haid Day..."
+                            } else {
+                                "Sudah Tes Tisu & Benar Haid • Pindah ke Haid Hari ke-..."
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -416,7 +453,7 @@ fun SuciTissueVerificationSheet(
                             .testTag("btn_cancel_tissue_verification")
                     ) {
                         Text(
-                            text = "Batal, Siswi Tetap di Daftar Suci",
+                            text = if (isEn) "Cancel, Keep Student in Daftar Suci" else "Batal, Siswi Tetap di Daftar Suci",
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )

@@ -60,6 +60,7 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 private data class StudentFastingRankItem(
@@ -80,6 +81,9 @@ fun RankingPuasaSheet(
     fastingRecords: List<FastingRecord>,
     onDismiss: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val lang = s.language
     // 0 = Ranking Puasa, 1 = History Sesi
     var selectedTab by remember { mutableIntStateOf(0) }
     var periodFilter by remember { mutableStateOf("Semua Sesi") }
@@ -170,13 +174,17 @@ fun RankingPuasaSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Ranking & History Sesi Puasa",
+                            text = if (isEn) "Puasa Ranking & Session History" else "Ranking & History Sesi Puasa",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Peringkat keaktifan puasa siswa & riwayat seluruh sesi",
+                            text = if (isEn) {
+                                "Student Puasa participation ranking & complete session history"
+                            } else {
+                                "Peringkat keaktifan puasa siswa & riwayat seluruh sesi"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -187,7 +195,7 @@ fun RankingPuasaSheet(
                             .size(48.dp)
                             .testTag("btn_close_ranking_puasa")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup")
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close)
                     }
                 }
 
@@ -221,7 +229,7 @@ fun RankingPuasaSheet(
                                 Icon(Icons.Default.History, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "History Sesi (${sortedSessions.size})",
+                                    text = if (isEn) "Session History (${sortedSessions.size})" else "History Sesi (${sortedSessions.size})",
                                     fontSize = 12.5.sp,
                                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -240,18 +248,22 @@ fun RankingPuasaSheet(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("Semua Sesi", "Bulan Ini").forEach { p ->
+                            val displayP = if (isEn) {
+                                if (p == "Bulan Ini") "This Month" else "All Sessions"
+                            } else p
                             FilterChip(
                                 selected = periodFilter == p,
                                 onClick = { periodFilter = p },
-                                label = { Text(p, fontSize = 11.5.sp) }
+                                label = { Text(displayP, fontSize = 11.5.sp) }
                             )
                         }
                         Spacer(modifier = Modifier.width(4.dp))
                         listOf("Semua", "SMA", "SMP", "SD").forEach { j ->
+                            val displayJ = if (isEn && j == "Semua") "All" else j
                             FilterChip(
                                 selected = jenjangFilter == j,
                                 onClick = { jenjangFilter = j },
-                                label = { Text(j, fontSize = 11.5.sp) }
+                                label = { Text(displayJ, fontSize = 11.5.sp) }
                             )
                         }
                     }
@@ -264,7 +276,11 @@ fun RankingPuasaSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Belum ada riwayat siswa yang terdaftar berpuasa pada filter ini.",
+                                text = if (isEn) {
+                                    "No Puasa student history matches this filter yet."
+                                } else {
+                                    "Belum ada riwayat siswa yang terdaftar berpuasa pada filter ini."
+                                },
                                 fontSize = 12.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -373,7 +389,11 @@ fun RankingPuasaSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Belum ada riwayat sesi puasa yang dibuat oleh Admin Sekolah.",
+                                text = if (isEn) {
+                                    "No Puasa sessions have been created by Admin Sekolah yet."
+                                } else {
+                                    "Belum ada riwayat sesi puasa yang dibuat oleh Admin Sekolah."
+                                },
                                 fontSize = 12.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -425,7 +445,11 @@ fun RankingPuasaSheet(
                                                     .padding(horizontal = 8.dp, vertical = 2.dp)
                                             ) {
                                                 Text(
-                                                    text = if (session.isActive) "Aktif" else "Selesai",
+                                                    text = if (session.isActive) {
+                                                        if (isEn) "Active" else "Aktif"
+                                                    } else {
+                                                        if (isEn) "Completed" else "Selesai"
+                                                    },
                                                     fontSize = 10.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = if (session.isActive) Color(0xFF15803D) else Color(0xFF475569)
@@ -433,18 +457,26 @@ fun RankingPuasaSheet(
                                             }
                                         }
                                         Text(
-                                            text = DateUtils.formatFullDate(session.sessionDate),
+                                            text = DateUtils.formatFullDate(session.sessionDate, lang),
                                             fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = "Total: ${recs.size} Siswa ($sma SMA • $smp SMP • $sd SD)",
+                                            text = if (isEn) {
+                                                "Total: ${recs.size} Students ($sma SMA • $smp SMP • $sd SD)"
+                                            } else {
+                                                "Total: ${recs.size} Siswa ($sma SMA • $smp SMP • $sd SD)"
+                                            },
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = Color(0xFF0F766E)
                                         )
                                         Text(
-                                            text = "Sahur: $sahur/${recs.size} • Berbuka: $buka/${recs.size} • Ketuk untuk lihat peserta",
+                                            text = if (isEn) {
+                                                "Sahur: $sahur/${recs.size} • Berbuka: $buka/${recs.size} • Tap to view participants"
+                                            } else {
+                                                "Sahur: $sahur/${recs.size} • Berbuka: $buka/${recs.size} • Ketuk untuk lihat peserta"
+                                            },
                                             fontSize = 10.5.sp,
                                             color = MaterialTheme.colorScheme.outline
                                         )
@@ -466,7 +498,7 @@ fun RankingPuasaSheet(
                 Column {
                     Text(sess.title, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        DateUtils.formatFullDate(sess.sessionDate),
+                        DateUtils.formatFullDate(sess.sessionDate, lang),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -474,7 +506,10 @@ fun RankingPuasaSheet(
             },
             text = {
                 if (sessRecords.isEmpty()) {
-                    Text("Belum ada peserta terdaftar pada sesi ini.", fontSize = 13.sp)
+                    Text(
+                        if (isEn) "No participants registered in this session yet." else "Belum ada peserta terdaftar pada sesi ini.",
+                        fontSize = 13.sp
+                    )
                 } else {
                     LazyColumn(
                         modifier = Modifier
@@ -502,7 +537,7 @@ fun RankingPuasaSheet(
             },
             confirmButton = {
                 TextButton(onClick = { selectedHistorySession = null }) {
-                    Text("Tutup")
+                    Text(s.nav.close)
                 }
             }
         )

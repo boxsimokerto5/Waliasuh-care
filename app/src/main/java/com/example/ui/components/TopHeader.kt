@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun TopHeader(
@@ -45,6 +46,7 @@ fun TopHeader(
     schoolName: String = "Sekolah Rakyat",
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.primary,
@@ -110,7 +112,7 @@ fun TopHeader(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "$controlCount Kontrol",
+                                text = if (isEn) "$controlCount Follow-up" else "$controlCount Kontrol",
                                 color = MaterialTheme.colorScheme.onError,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -126,7 +128,7 @@ fun TopHeader(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "$activeCount Rencana",
+                                text = if (isEn) "$activeCount Plans" else "$activeCount Rencana",
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
@@ -145,7 +147,11 @@ fun TopHeader(
                     ) {
                         Icon(
                             imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
-                            contentDescription = if (isDarkTheme) "Tema Terang" else "Tema Gelap",
+                            contentDescription = if (isEn) {
+                                if (isDarkTheme) "Light Mode" else "Dark Mode"
+                            } else {
+                                if (isDarkTheme) "Tema Terang" else "Tema Gelap"
+                            },
                             tint = MaterialTheme.colorScheme.onPrimary,
                             modifier = Modifier.size(18.dp)
                         )

@@ -55,6 +55,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -66,12 +67,17 @@ fun DeleteAccountBottomSheet(
     onConfirmDelete: (password: String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val useEn = !isSchoolAdmin && s.isEnglish
+
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var confirmKeyword by remember { mutableStateOf("") }
 
+    val requiredKeyword = if (useEn) "DELETE" else "HAPUS"
     val canSubmit = password.isNotBlank() &&
-        confirmKeyword.trim().equals("HAPUS", ignoreCase = true) &&
+        (confirmKeyword.trim().equals(requiredKeyword, ignoreCase = true) ||
+            confirmKeyword.trim().equals("HAPUS", ignoreCase = true)) &&
         !isProcessing
 
     ModalBottomSheet(
@@ -107,7 +113,7 @@ fun DeleteAccountBottomSheet(
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
                                 imageVector = Icons.Default.DeleteForever,
-                                contentDescription = "Hapus Akun Permanen",
+                                contentDescription = if (useEn) "Delete Account Permanently" else "Hapus Akun Permanen",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -118,10 +124,10 @@ fun DeleteAccountBottomSheet(
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isSchoolAdmin) {
-                                "Hapus Akun Admin & Sekolah"
-                            } else {
-                                "Hapus Akun Wali Asuh"
+                            text = when {
+                                isSchoolAdmin -> "Hapus Akun Admin & Sekolah"
+                                useEn -> "Delete Wali Asuh Account"
+                                else -> "Hapus Akun Wali Asuh"
                             },
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
@@ -143,7 +149,7 @@ fun DeleteAccountBottomSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup"
+                            contentDescription = if (useEn) s.close else "Tutup"
                         )
                     }
                 }
@@ -169,12 +175,12 @@ fun DeleteAccountBottomSheet(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.WarningAmber,
-                                contentDescription = "Peringatan Penghapusan",
+                                contentDescription = if (useEn) "Deletion Warning" else "Peringatan Penghapusan",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Tindakan Ini Bersifat Permanen",
+                                text = if (useEn) "This Action Is Permanent" else "Tindakan Ini Bersifat Permanen",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.error
@@ -188,6 +194,15 @@ fun DeleteAccountBottomSheet(
                                     "• Seluruh akun Wali Asuh di sekolah ini\n" +
                                     "• Seluruh data siswa, rekam medis, catatan haid, sesi & checklist puasa, serta pesan shift\n" +
                                     "Data yang sudah dihapus tidak dapat dipulihkan kembali.",
+                                fontSize = 12.sp,
+                                lineHeight = 18.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        } else if (useEn) {
+                            Text(
+                                text = "Deleting your Wali Asuh account will permanently remove your login credentials (name, username, phone number & password) from this device and the cloud server (PocketBase).\n" +
+                                    "• You will no longer be able to log in with this account.\n" +
+                                    "• Student health records & profiles remain safely stored for the School Admin.",
                                 fontSize = 12.sp,
                                 lineHeight = 18.sp,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -211,10 +226,16 @@ fun DeleteAccountBottomSheet(
                     onValueChange = { password = it },
                     label = {
                         Text(
-                            if (isSchoolAdmin) "Password Admin Sekolah" else "Password Akun Anda"
+                            when {
+                                isSchoolAdmin -> "Password Admin Sekolah"
+                                useEn -> "Your Account Password"
+                                else -> "Password Akun Anda"
+                            }
                         )
                     },
-                    placeholder = { Text("Masukkan password untuk verifikasi") },
+                    placeholder = {
+                        Text(if (useEn) "Enter password to verify" else "Masukkan password untuk verifikasi")
+                    },
                     singleLine = true,
                     enabled = !isProcessing,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
@@ -226,7 +247,11 @@ fun DeleteAccountBottomSheet(
                         ) {
                             Icon(
                                 imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (showPassword) "Sembunyikan password" else "Tampilkan password"
+                                contentDescription = if (showPassword) {
+                                    if (useEn) "Hide password" else "Sembunyikan password"
+                                } else {
+                                    if (useEn) "Show password" else "Tampilkan password"
+                                }
                             )
                         }
                     },
@@ -236,12 +261,14 @@ fun DeleteAccountBottomSheet(
                         .testTag("input_delete_account_password")
                 )
 
-                // Input Konfirmasi HAPUS
+                // Input Konfirmasi HAPUS / DELETE
                 OutlinedTextField(
                     value = confirmKeyword,
                     onValueChange = { confirmKeyword = it },
-                    label = { Text("Ketik HAPUS untuk konfirmasi") },
-                    placeholder = { Text("HAPUS") },
+                    label = {
+                        Text(if (useEn) "Type DELETE to confirm" else "Ketik HAPUS untuk konfirmasi")
+                    },
+                    placeholder = { Text(requiredKeyword) },
                     singleLine = true,
                     enabled = !isProcessing,
                     shape = RoundedCornerShape(12.dp),
@@ -275,7 +302,7 @@ fun DeleteAccountBottomSheet(
                             .heightIn(min = 48.dp)
                             .testTag("btn_cancel_delete_account")
                     ) {
-                        Text("Batal", fontWeight = FontWeight.SemiBold)
+                        Text(if (useEn) s.cancel else "Batal", fontWeight = FontWeight.SemiBold)
                     }
 
                     Button(
@@ -298,9 +325,9 @@ fun DeleteAccountBottomSheet(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Menghapus...", fontWeight = FontWeight.Bold)
+                            Text(if (useEn) "Deleting..." else "Menghapus...", fontWeight = FontWeight.Bold)
                         } else {
-                            Text("Hapus Permanen", fontWeight = FontWeight.Bold)
+                            Text(if (useEn) "Delete Permanently" else "Hapus Permanen", fontWeight = FontWeight.Bold)
                         }
                     }
                 }

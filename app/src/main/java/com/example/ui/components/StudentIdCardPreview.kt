@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.util.StudentCardRenderer
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun StudentIdCardPreview(
@@ -51,6 +52,7 @@ fun StudentIdCardPreview(
     schoolName: String,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val palette = remember(student.jenjang, student.classGrade, student.gender, student.dormitory, student.roomNumber) {
         StudentCardRenderer.resolvePalette(student)
     }
@@ -180,7 +182,7 @@ fun StudentIdCardPreview(
                         )
                         Spacer(modifier = Modifier.height(1.dp))
                         Text(
-                            text = "KARTU IDENTITAS ANAK ASUH",
+                            text = if (isEn) "STUDENT IDENTITY CARD" else "KARTU IDENTITAS ANAK ASUH",
                             color = softGlowColor,
                             fontSize = 6.6.sp,
                             fontWeight = FontWeight.Bold,
@@ -261,9 +263,9 @@ fun StudentIdCardPreview(
                                     append(student.dormitory)
                                 }
                             }
-                            CardFieldLine(label = "Kelas", value = kelasInfo)
+                            CardFieldLine(label = if (isEn) "Class" else "Kelas", value = kelasInfo)
                             CardFieldLine(
-                                label = "Alamat",
+                                label = if (isEn) "Address" else "Alamat",
                                 value = student.address.trim().ifBlank { "-" },
                                 maxLines = 2,
                                 isMutedValue = true
@@ -353,7 +355,7 @@ private fun CardFieldLine(
             text = label,
             color = Color(0xFF64748B),
             fontSize = 8.4.sp,
-            modifier = Modifier.width(34.dp)
+            modifier = Modifier.width(if (label.length > 6) 40.dp else 34.dp)
         )
         Text(
             text = ": ",

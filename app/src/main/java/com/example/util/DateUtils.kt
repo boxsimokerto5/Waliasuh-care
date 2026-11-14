@@ -1,29 +1,42 @@
 package com.example.util
 
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 object DateUtils {
-    private val fullDateFormat = SimpleDateFormat("EEEE, d MMMM yyyy", Locale("id", "ID"))
-    private val shortDateFormat = SimpleDateFormat("d MMM yyyy", Locale("id", "ID"))
-    private val timeFormat = SimpleDateFormat("HH:mm", Locale("id", "ID"))
+    private val monthKeyFormat = SimpleDateFormat("yyyy-MM", Locale.US)
 
-    fun formatFullDate(timestamp: Long): String {
-        return fullDateFormat.format(Date(timestamp))
+    fun formatFullDate(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        val pattern = if (language == AppLanguage.ENGLISH) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+        return SimpleDateFormat(pattern, language.locale).format(Date(timestamp))
     }
 
-    fun formatShortDate(timestamp: Long): String {
-        return shortDateFormat.format(Date(timestamp))
+    fun formatShortDate(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        return SimpleDateFormat("d MMM yyyy", language.locale).format(Date(timestamp))
     }
 
-    fun formatTime(timestamp: Long): String {
-        return timeFormat.format(Date(timestamp))
+    fun formatTime(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        return SimpleDateFormat("HH:mm", language.locale).format(Date(timestamp))
     }
 
-    fun formatDateTime(timestamp: Long): String {
-        return "${formatShortDate(timestamp)} ${formatTime(timestamp)} WIB"
+    fun formatDateTime(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        return "${formatShortDate(timestamp, language)} ${formatTime(timestamp, language)} WIB"
     }
 
     fun isToday(timestamp: Long): Boolean {
@@ -86,11 +99,11 @@ object DateUtils {
         return isWithin7Days || isSameCalendarWeek
     }
 
-    private val monthYearFormat = SimpleDateFormat("MMMM yyyy", Locale("id", "ID"))
-    private val monthKeyFormat = SimpleDateFormat("yyyy-MM", Locale.US)
-
-    fun formatMonthYear(timestamp: Long): String {
-        return monthYearFormat.format(Date(timestamp))
+    fun formatMonthYear(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        return SimpleDateFormat("MMMM yyyy", language.locale).format(Date(timestamp))
     }
 
     fun getMonthKey(timestamp: Long): String {
@@ -118,11 +131,16 @@ object DateUtils {
         return cal1.before(now)
     }
 
-    fun getRelativeDateLabel(timestamp: Long): String {
+    fun getRelativeDateLabel(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        val formattedShort = formatShortDate(timestamp, language)
+        val strings = AppLanguageManager.stringsFor(language).report
         return when {
-            isToday(timestamp) -> "Hari ini (${formatShortDate(timestamp)})"
-            isTomorrow(timestamp) -> "Besok (${formatShortDate(timestamp)})"
-            else -> formatShortDate(timestamp)
+            isToday(timestamp) -> strings.dateTodayPrefix(formattedShort)
+            isTomorrow(timestamp) -> strings.dateTomorrowPrefix(formattedShort)
+            else -> formattedShort
         }
     }
 }

@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +72,8 @@ fun ChangeWaliPasswordDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var nameInput by remember { mutableStateOf(currentAccount?.name ?: currentWaliName) }
     var currentPasswordVisible by remember { mutableStateOf(false) }
     var newPassword by remember { mutableStateOf("") }
@@ -128,13 +131,17 @@ fun ChangeWaliPasswordDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Profil & Ganti Kata Sandi",
+                            text = if (isEn) "Profile & Change Password" else "Profil & Ganti Kata Sandi",
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Buat kata sandi yang mudah diingat untuk sesi berikutnya",
+                            text = if (isEn) {
+                                "Create a memorable password for your next session"
+                            } else {
+                                "Buat kata sandi yang mudah diingat untuk sesi berikutnya"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -164,13 +171,17 @@ fun ChangeWaliPasswordDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "Tersinkronisasi ke Admin Sekolah",
+                                text = if (isEn) "Synced to School Admin" else "Tersinkronisasi ke Admin Sekolah",
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0369A1)
                             )
                             Text(
-                                text = "Kata sandi baru Anda akan otomatis tampil di Portal Administrator Sekolah. Jika suatu saat Anda lupa, Admin Sekolah dapat langsung membantu Anda melihat atau mereset kata sandi ini.",
+                                text = if (isEn) {
+                                    "Your new password will automatically appear in the School Administrator Portal. If you ever forget it, the School Admin can help view or reset it."
+                                } else {
+                                    "Kata sandi baru Anda akan otomatis tampil di Portal Administrator Sekolah. Jika suatu saat Anda lupa, Admin Sekolah dapat langsung membantu Anda melihat atau mereset kata sandi ini."
+                                },
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF0C4A6E),
                                 lineHeight = 16.sp
@@ -206,7 +217,7 @@ fun ChangeWaliPasswordDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Username Login:",
+                                    text = if (isEn) "Login Username:" else "Username Login:",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -226,7 +237,7 @@ fun ChangeWaliPasswordDialog(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Tugas Asrama:",
+                                    text = if (isEn) "Asrama Duty:" else "Tugas Asrama:",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -245,7 +256,7 @@ fun ChangeWaliPasswordDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Sekolah:",
+                                text = if (isEn) "School:" else "Sekolah:",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -273,7 +284,7 @@ fun ChangeWaliPasswordDialog(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Kata Sandi Saat Ini:",
+                                        text = if (isEn) "Current Password:" else "Kata Sandi Saat Ini:",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -291,7 +302,11 @@ fun ChangeWaliPasswordDialog(
                                     ) {
                                         Icon(
                                             imageVector = if (currentPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = if (currentPasswordVisible) "Sembunyikan" else "Lihat",
+                                            contentDescription = if (currentPasswordVisible) {
+                                                if (isEn) "Hide" else "Sembunyikan"
+                                            } else {
+                                                if (isEn) "Show" else "Lihat"
+                                            },
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(16.dp)
                                         )
@@ -324,7 +339,7 @@ fun ChangeWaliPasswordDialog(
                         nameInput = it
                         errorMessage = null
                     },
-                    label = { Text("Nama Lengkap Wali / Pengasuh") },
+                    label = { Text(if (isEn) "Wali Asuh Full Name" else "Nama Lengkap Wali / Pengasuh") },
                     leadingIcon = {
                         Icon(Icons.Default.Person, contentDescription = null, tint = WaliPrimary)
                     },
@@ -342,8 +357,8 @@ fun ChangeWaliPasswordDialog(
                         newPassword = it
                         errorMessage = null
                     },
-                    label = { Text("Kata Sandi Baru *") },
-                    placeholder = { Text("Contoh: Woyowoyo123") },
+                    label = { Text(if (isEn) "New Password *" else "Kata Sandi Baru *") },
+                    placeholder = { Text(if (isEn) "Example: Woyowoyo123" else "Contoh: Woyowoyo123") },
                     leadingIcon = {
                         Icon(Icons.Default.Lock, contentDescription = null, tint = WaliPrimary)
                     },
@@ -351,7 +366,11 @@ fun ChangeWaliPasswordDialog(
                         IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
                             Icon(
                                 imageVector = if (newPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (newPasswordVisible) "Sembunyikan" else "Lihat",
+                                contentDescription = if (newPasswordVisible) {
+                                    if (isEn) "Hide" else "Sembunyikan"
+                                } else {
+                                    if (isEn) "Show" else "Lihat"
+                                },
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -360,7 +379,10 @@ fun ChangeWaliPasswordDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     supportingText = {
-                        Text("Minimal 6 karakter yang mudah Anda ingat", fontSize = 11.sp)
+                        Text(
+                            if (isEn) "Minimum 6 characters easy for you to remember" else "Minimal 6 karakter yang mudah Anda ingat",
+                            fontSize = 11.sp
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -374,8 +396,8 @@ fun ChangeWaliPasswordDialog(
                         confirmPassword = it
                         errorMessage = null
                     },
-                    label = { Text("Ulangi Kata Sandi Baru *") },
-                    placeholder = { Text("Ketik ulang kata sandi baru") },
+                    label = { Text(if (isEn) "Confirm New Password *" else "Ulangi Kata Sandi Baru *") },
+                    placeholder = { Text(if (isEn) "Retype new password" else "Ketik ulang kata sandi baru") },
                     leadingIcon = {
                         Icon(Icons.Default.LockReset, contentDescription = null, tint = WaliPrimary)
                     },
@@ -383,7 +405,11 @@ fun ChangeWaliPasswordDialog(
                         IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                             Icon(
                                 imageVector = if (confirmPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (confirmPasswordVisible) "Sembunyikan" else "Lihat",
+                                contentDescription = if (confirmPasswordVisible) {
+                                    if (isEn) "Hide" else "Sembunyikan"
+                                } else {
+                                    if (isEn) "Show" else "Lihat"
+                                },
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -409,7 +435,7 @@ fun ChangeWaliPasswordDialog(
                         shape = RoundedCornerShape(10.dp),
                         enabled = !isSubmitting
                     ) {
-                        Text("Batal")
+                        Text(s.cancel)
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Button(
@@ -419,22 +445,38 @@ fun ChangeWaliPasswordDialog(
                             val cleanConfirm = confirmPassword.trim()
 
                             if (cleanName.isBlank()) {
-                                errorMessage = "Nama wali / pengasuh tidak boleh kosong."
+                                errorMessage = if (isEn) {
+                                    "Wali Asuh name cannot be empty."
+                                } else {
+                                    "Nama wali / pengasuh tidak boleh kosong."
+                                }
                                 return@Button
                             }
 
                             if (cleanNewPass.isBlank()) {
-                                errorMessage = "Silakan masukkan kata sandi baru."
+                                errorMessage = if (isEn) {
+                                    "Please enter a new password."
+                                } else {
+                                    "Silakan masukkan kata sandi baru."
+                                }
                                 return@Button
                             }
 
                             if (cleanNewPass.length < 6) {
-                                errorMessage = "Kata sandi baru minimal 6 karakter."
+                                errorMessage = if (isEn) {
+                                    "New password must be at least 6 characters."
+                                } else {
+                                    "Kata sandi baru minimal 6 karakter."
+                                }
                                 return@Button
                             }
 
                             if (cleanNewPass != cleanConfirm) {
-                                errorMessage = "Konfirmasi kata sandi tidak cocok. Silakan periksa kembali."
+                                errorMessage = if (isEn) {
+                                    "Password confirmation does not match. Please check again."
+                                } else {
+                                    "Konfirmasi kata sandi tidak cocok. Silakan periksa kembali."
+                                }
                                 return@Button
                             }
 
@@ -445,7 +487,15 @@ fun ChangeWaliPasswordDialog(
                             ) { success, msg ->
                                 isSubmitting = false
                                 if (success) {
-                                    Toast.makeText(context, "Kata sandi berhasil diperbarui dan tersinkronisasi ke Admin!", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) {
+                                            "Password updated and synced to School Admin!"
+                                        } else {
+                                            "Kata sandi berhasil diperbarui dan tersinkronisasi ke Admin!"
+                                        },
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                     onDismiss()
                                 } else {
                                     errorMessage = msg
@@ -463,7 +513,13 @@ fun ChangeWaliPasswordDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (isSubmitting) "Menyimpan..." else "Simpan Kata Sandi")
+                        Text(
+                            if (isSubmitting) {
+                                if (isEn) "Saving..." else "Menyimpan..."
+                            } else {
+                                if (isEn) "Save Password" else "Simpan Kata Sandi"
+                            }
+                        )
                     }
                 }
             }

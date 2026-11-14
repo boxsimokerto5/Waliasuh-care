@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.ui.components.FaskesBadge
 import com.example.ui.theme.StatusDeparted
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -64,6 +65,8 @@ fun DepartReferralDialog(
     onConfirmDeparture: (targetFaskes: String, escortName: String) -> Unit,
     onDirectDiagnose: ((targetFaskes: String, escortName: String) -> Unit)? = null
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     // Faskes rujukan adalah faskes di luar UKS
     val referralFaskesOptions = remember(allFaskesList) {
         val nonUks = allFaskesList.filter { !it.contains("UKS", ignoreCase = true) }
@@ -134,13 +137,17 @@ fun DepartReferralDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Rujuk & Berangkatkan Siswa",
+                            text = if (isEn) "Refer & Dispatch Student" else "Rujuk & Berangkatkan Siswa",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Pilih faskes rujukan lanjutan di luar UKS",
+                            text = if (isEn) {
+                                "Select an advanced referral Faskes outside UKS"
+                            } else {
+                                "Pilih faskes rujukan lanjutan di luar UKS"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -172,7 +179,11 @@ fun DepartReferralDialog(
                             FaskesBadge(faskes = record.faskes)
                         }
                         Text(
-                            text = "${record.studentDormitory} • Keluhan: ${record.complaint}",
+                            text = if (isEn) {
+                                "${record.studentDormitory} • Complaint: ${record.complaint}"
+                            } else {
+                                "${record.studentDormitory} • Keluhan: ${record.complaint}"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -181,7 +192,7 @@ fun DepartReferralDialog(
 
                 // Pilih Faskes Rujukan
                 Text(
-                    text = "Pilih Faskes Rujukan Tujuan *",
+                    text = if (isEn) "Select Referral Faskes *" else "Pilih Faskes Rujukan Tujuan *",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -229,7 +240,7 @@ fun DepartReferralDialog(
                         },
                         label = {
                             Text(
-                                text = "Lainnya...",
+                                text = if (isEn) "Other..." else "Lainnya...",
                                 fontSize = 11.5.sp,
                                 fontWeight = if (isCustomFaskes) FontWeight.Bold else FontWeight.Normal
                             )
@@ -241,8 +252,8 @@ fun DepartReferralDialog(
                     OutlinedTextField(
                         value = customFaskesText,
                         onValueChange = { customFaskesText = it },
-                        label = { Text("Ketik Nama Faskes / RS Rujukan *", fontSize = 12.sp) },
-                        placeholder = { Text("misal: RSUD Gambiran / RS Baptis", fontSize = 12.sp) },
+                        label = { Text(if (isEn) "Referral Faskes / Hospital Name *" else "Ketik Nama Faskes / RS Rujukan *", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "e.g.: RSUD Gambiran / RS Baptis" else "misal: RSUD Gambiran / RS Baptis", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
@@ -255,8 +266,8 @@ fun DepartReferralDialog(
                 OutlinedTextField(
                     value = escortName,
                     onValueChange = { escortName = it },
-                    label = { Text("Nama Petugas Pendamping / Pengantar *", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Ustadz Ahmad / Bu Nur", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Escort Officer Name *" else "Nama Petugas Pendamping / Pengantar *", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Ustadz Ahmad / Bu Nur" else "misal: Ustadz Ahmad / Bu Nur", fontSize = 12.sp) },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Person,
@@ -291,7 +302,7 @@ fun DepartReferralDialog(
                             onClick = onDismiss,
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("Batal", fontSize = 12.sp)
+                            Text(s.cancel, fontSize = 12.sp)
                         }
 
                         Spacer(modifier = Modifier.width(8.dp))
@@ -313,7 +324,11 @@ fun DepartReferralDialog(
                                 modifier = Modifier.size(15.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Berangkatkan Sekarang", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text(
+                                if (isEn) "Dispatch Now" else "Berangkatkan Sekarang",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
 
@@ -336,7 +351,11 @@ fun DepartReferralDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Sudah Pulang? Langsung Input Hasil Diagnosa",
+                                text = if (isEn) {
+                                    "Already Returned? Enter Diagnosis Directly"
+                                } else {
+                                    "Sudah Pulang? Langsung Input Hasil Diagnosa"
+                                },
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold
                             )

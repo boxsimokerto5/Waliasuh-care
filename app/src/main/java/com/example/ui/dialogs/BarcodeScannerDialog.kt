@@ -89,6 +89,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.data.model.ChildStudent
+import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.delay
 
 enum class ScannerFeedbackStatus {
@@ -110,11 +111,11 @@ fun BarcodeScannerDialog(
     femaleStudents: List<ChildStudent>,
     onScanned: (String) -> Unit,
     onDismiss: () -> Unit,
-    dialogTitle: String = "Scan Barcode Kartu Siswa",
-    dialogSubtitle: String = "Membaca NIK / NIS Kartu Siswa Otomatis",
+    dialogTitle: String? = null,
+    dialogSubtitle: String? = null,
     quickPickTitle: String? = null,
-    searchPlaceholder: String = "Cari nama, kelas, kamar, atau NIK siswi...",
-    emptyListMessage: String = "Belum ada data siswi putri terdaftar.",
+    searchPlaceholder: String? = null,
+    emptyListMessage: String? = null,
     accentColor: Color = Color(0xFFDB2777),
     accentBgColor: Color = Color(0xFFFCE7F3),
     cardBgColor: Color = Color(0xFFFDF2F8),
@@ -126,6 +127,13 @@ fun BarcodeScannerDialog(
     floatingFeedback: ScannerFloatingFeedback? = null
 ) {
     val context = LocalContext.current
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
+    val resolvedDialogTitle = dialogTitle ?: if (isEn) "Scan Student Card Barcode" else "Scan Barcode Kartu Siswa"
+    val resolvedDialogSubtitle = dialogSubtitle ?: if (isEn) "Automatically reads Student Card NIK / NIS" else "Membaca NIK / NIS Kartu Siswa Otomatis"
+    val resolvedSearchPlaceholder = searchPlaceholder ?: if (isEn) "Search name, class, room, or NIK..." else "Cari nama, kelas, kamar, atau NIK siswi..."
+    val resolvedEmptyListMessage = emptyListMessage ?: if (isEn) "No female students registered yet." else "Belum ada data siswi putri terdaftar."
+
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -237,13 +245,13 @@ fun BarcodeScannerDialog(
                         }
                         Column {
                             Text(
-                                text = dialogTitle,
+                                text = resolvedDialogTitle,
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = dialogSubtitle,
+                                text = resolvedDialogSubtitle,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -257,7 +265,7 @@ fun BarcodeScannerDialog(
                                 .padding(horizontal = 8.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = "$sessionParticipantCount Anak",
+                                text = if (isEn) "$sessionParticipantCount Students" else "$sessionParticipantCount Anak",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = accentColor
@@ -273,7 +281,7 @@ fun BarcodeScannerDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = appStrings.nav.close,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -339,9 +347,9 @@ fun BarcodeScannerDialog(
                                 Text(
                                     text = cameraError
                                         ?: if (hasCameraPermission) {
-                                            "Menyiapkan kamera scanner..."
+                                            if (isEn) "Preparing scanner camera..." else "Menyiapkan kamera scanner..."
                                         } else {
-                                            "Izin Kamera Dibutuhkan untuk Scan Otomatis"
+                                            if (isEn) "Camera Permission Needed for Auto Scan" else "Izin Kamera Dibutuhkan untuk Scan Otomatis"
                                         },
                                     color = Color.White.copy(alpha = 0.85f),
                                     fontSize = 12.sp,
@@ -392,7 +400,7 @@ fun BarcodeScannerDialog(
                                     .padding(horizontal = 12.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "Arahkan Barcode / QR Kartu Siswa ke Kotak",
+                                    text = if (isEn) "Point Student Card Barcode / QR into the Box" else "Arahkan Barcode / QR Kartu Siswa ke Kotak",
                                     color = Color.White,
                                     fontSize = 10.5.sp,
                                     fontWeight = FontWeight.Medium
@@ -418,7 +426,11 @@ fun BarcodeScannerDialog(
                                 ) {
                                     Icon(
                                         imageVector = if (isFlashOn) Icons.Default.FlashOn else Icons.Default.FlashOff,
-                                        contentDescription = if (isFlashOn) "Matikan Lampu Kilat" else "Nyalakan Lampu Kilat",
+                                        contentDescription = if (isFlashOn) {
+                                            if (isEn) "Turn Off Flash" else "Matikan Lampu Kilat"
+                                        } else {
+                                            if (isEn) "Turn On Flash" else "Nyalakan Lampu Kilat"
+                                        },
                                         tint = if (isFlashOn) Color(0xFFFACC15) else Color.White,
                                         modifier = Modifier.size(18.dp)
                                     )
@@ -441,7 +453,7 @@ fun BarcodeScannerDialog(
                     ) {
                         Icon(imageVector = Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Izinkan Akses Kamera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Grant Camera Access" else "Izinkan Akses Kamera", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
 
@@ -449,7 +461,7 @@ fun BarcodeScannerDialog(
 
                 // Manual NIK / NIS Input Bar
                 Text(
-                    text = "Atau Input NIK / NIS Siswa Manual:",
+                    text = if (isEn) "Or Enter Student NIK / NIS Manually:" else "Atau Input NIK / NIS Siswa Manual:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -465,7 +477,7 @@ fun BarcodeScannerDialog(
                     OutlinedTextField(
                         value = manualNikInput,
                         onValueChange = { manualNikInput = it },
-                        placeholder = { Text("Contoh: 3506123456780001", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "Example: 3506123456780001" else "Contoh: 3506123456780001", fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
@@ -492,7 +504,11 @@ fun BarcodeScannerDialog(
                             .heightIn(min = 48.dp)
                             .testTag("btn_confirm_manual_nik")
                     ) {
-                        Text(if (continuousScan) "Input" else "Pilih", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (continuousScan) "Input" else if (isEn) "Select" else "Pilih",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -500,7 +516,11 @@ fun BarcodeScannerDialog(
 
                 // Quick Pick: Daftar Kartu Siswa Terdaftar (Menampilkan seluruh siswa tanpa batas + filter cepat)
                 Text(
-                    text = quickPickTitle ?: "Pilih Cepat Kartu Siswi Asrama Putri (${filteredFemaleStudents.size} Siswi):",
+                    text = quickPickTitle ?: if (isEn) {
+                        "Quick Pick Asrama Putri Card (${filteredFemaleStudents.size} Students):"
+                    } else {
+                        "Pilih Cepat Kartu Siswi Asrama Putri (${filteredFemaleStudents.size} Siswi):"
+                    },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -512,11 +532,11 @@ fun BarcodeScannerDialog(
                     OutlinedTextField(
                         value = quickSearchQuery,
                         onValueChange = { quickSearchQuery = it },
-                        placeholder = { Text(searchPlaceholder, fontSize = 11.5.sp) },
+                        placeholder = { Text(resolvedSearchPlaceholder, fontSize = 11.5.sp) },
                         leadingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Search,
-                                contentDescription = "Cari Siswa",
+                                contentDescription = if (isEn) "Search Student" else "Cari Siswa",
                                 modifier = Modifier.size(16.dp)
                             )
                         },
@@ -538,9 +558,13 @@ fun BarcodeScannerDialog(
                     ) {
                         Text(
                             text = if (femaleStudents.isEmpty()) {
-                                emptyListMessage
+                                resolvedEmptyListMessage
                             } else {
-                                "Tidak ada siswa yang cocok dengan pencarian \"$quickSearchQuery\"."
+                                if (isEn) {
+                                    "No students match search \"$quickSearchQuery\"."
+                                } else {
+                                    "Tidak ada siswa yang cocok dengan pencarian \"$quickSearchQuery\"."
+                                }
                             },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -629,7 +653,11 @@ fun BarcodeScannerDialog(
                             .testTag("btn_done_continuous_scan")
                     ) {
                         Text(
-                            text = "Selesai & Tutup Kamera${sessionParticipantCount?.let { " ($it Terinput)" } ?: ""}",
+                            text = if (isEn) {
+                                "Done & Close Camera${sessionParticipantCount?.let { " ($it Recorded)" } ?: ""}"
+                            } else {
+                                "Selesai & Tutup Kamera${sessionParticipantCount?.let { " ($it Terinput)" } ?: ""}"
+                            },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold
                         )

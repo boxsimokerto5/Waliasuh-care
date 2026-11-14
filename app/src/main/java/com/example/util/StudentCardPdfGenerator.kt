@@ -25,6 +25,8 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -54,9 +56,12 @@ object StudentCardPdfGenerator {
         var kemensosBitmap: Bitmap? = null
         var sekolahRakyatBitmap: Bitmap? = null
         return try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEnglish = lang == AppLanguage.ENGLISH
+            val localizedContext = AppLanguageManager.createLocalizedContext(context, lang)
             val cleanSchool = schoolName.trim().ifBlank { "Wali Asuh Care School" }
             val totalPages = ceil(students.size.toDouble() / CARDS_PER_PAGE).toInt().coerceAtLeast(1)
-            val datePrint = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale("id", "ID")).format(Date())
+            val datePrint = SimpleDateFormat("dd MMM yyyy, HH:mm", lang.locale).format(Date())
 
             logoBitmap = try {
                 BitmapFactory.decodeResource(context.resources, R.drawable.logo_sr_care)
@@ -144,23 +149,31 @@ object StudentCardPdfGenerator {
                     )
                 }
 
-                val fullTitle = "KARTU ANAK ASUH — ${cleanSchool.uppercase()}"
+                val fullTitle = if (isEnglish) {
+                    "STUDENT ID CARDS — ${cleanSchool.uppercase()}"
+                } else {
+                    "KARTU ANAK ASUH — ${cleanSchool.uppercase()}"
+                }
                 val ellipsizedTitle = TextUtils.ellipsize(fullTitle, titlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
                 val cleanAddr = schoolAddress.trim()
+                val pageWord = if (isEnglish) "Page" else "Hal."
+                val categoryWord = if (isEnglish) "Category" else "Kategori"
+                val studentsWord = if (isEnglish) "Students" else "Siswa"
+                val printedWord = if (isEnglish) "Printed" else "Dicetak"
                 if (cleanAddr.isNotBlank()) {
                     canvas.drawText(ellipsizedTitle, A4_WIDTH_PT / 2f, 28f, titlePaint)
                     val ellipsizedAddr = TextUtils.ellipsize(cleanAddr, subTitlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
                     canvas.drawText(ellipsizedAddr, A4_WIDTH_PT / 2f, 39f, subTitlePaint)
-                    val metaLine = "Kategori: $filterLabel • Total: ${students.size} Siswa • Dicetak: $datePrint • Hal. ${pageIndex + 1} / $totalPages"
+                    val metaLine = "$categoryWord: $filterLabel • Total: ${students.size} $studentsWord • $printedWord: $datePrint • $pageWord ${pageIndex + 1} / $totalPages"
                     val ellipsizedMeta = TextUtils.ellipsize(metaLine, TextPaint(pageCountPaint), maxKopTextWidth, TextUtils.TruncateAt.END).toString()
                     canvas.drawText(ellipsizedMeta, A4_WIDTH_PT / 2f, 50f, pageCountPaint)
                 } else {
                     canvas.drawText(ellipsizedTitle, A4_WIDTH_PT / 2f, 29f, titlePaint)
-                    val subtitleText = "Kategori: $filterLabel • Total: ${students.size} Siswa • Dicetak: $datePrint"
+                    val subtitleText = "$categoryWord: $filterLabel • Total: ${students.size} $studentsWord • $printedWord: $datePrint"
                     val ellipsizedSub = TextUtils.ellipsize(subtitleText, subTitlePaint, maxKopTextWidth, TextUtils.TruncateAt.END).toString()
                     canvas.drawText(ellipsizedSub, A4_WIDTH_PT / 2f, 41f, subTitlePaint)
                     canvas.drawText(
-                        "Hal. ${pageIndex + 1} / $totalPages",
+                        "$pageWord ${pageIndex + 1} / $totalPages",
                         A4_WIDTH_PT / 2f,
                         52f,
                         pageCountPaint
@@ -203,15 +216,21 @@ object StudentCardPdfGenerator {
                         qrBitmap = qrBitmap,
                         logoBitmap = logoBitmap,
                         kemensosBitmap = kemensosBitmap,
-                        sekolahRakyatBitmap = sekolahRakyatBitmap
+                        sekolahRakyatBitmap = sekolahRakyatBitmap,
+                        language = lang
                     )
 
                     qrBitmap?.recycle()
                 }
 
                 // Footer Legend & Disclaimer Independen
+                val legendLine = if (isEnglish) {
+                    "Level Header: SMA (Grey) • SMP (Blue) • SD (Red)  |  Card Trim: Putra (Green) • Putri (Pink)"
+                } else {
+                    "Header Jenjang: SMA (Abu-abu) • SMP (Biru) • SD (Merah)  |  Aksen Kartu: Putra (Hijau) • Putri (Pink)"
+                }
                 canvas.drawText(
-                    "Header Jenjang: SMA (Abu-abu) • SMP (Biru) • SD (Merah)  |  Aksen Kartu: Putra (Hijau) • Putri (Pink)",
+                    legendLine,
                     A4_WIDTH_PT / 2f,
                     A4_HEIGHT_PT - 25f,
                     footerPaint
@@ -223,7 +242,7 @@ object StudentCardPdfGenerator {
                     textAlign = Paint.Align.CENTER
                 }
                 canvas.drawText(
-                    context.getString(R.string.disclaimer_pdf_footer),
+                    localizedContext.getString(R.string.disclaimer_pdf_footer),
                     A4_WIDTH_PT / 2f,
                     A4_HEIGHT_PT - 13f,
                     disclaimerPaint
@@ -313,7 +332,8 @@ object StudentCardPdfGenerator {
                     }
                     try {
                         val destFd = destination ?: run {
-                            callback?.onWriteFailed("Tujuan cetak tidak tersedia")
+                            val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+                            callback?.onWriteFailed(if (isEn) "Print target unavailable" else "Tujuan cetak tidak tersedia")
                             return
                         }
                         FileInputStream(pdfFile).use { input ->
@@ -323,7 +343,8 @@ object StudentCardPdfGenerator {
                         }
                         callback?.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
                     } catch (e: Exception) {
-                        callback?.onWriteFailed(e.message ?: "Gagal menulis dokumen cetak")
+                        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+                        callback?.onWriteFailed(e.message ?: if (isEn) "Failed to write print document" else "Gagal menulis dokumen cetak")
                     }
                 }
             }
@@ -335,12 +356,18 @@ object StudentCardPdfGenerator {
 
             printManager.print(jobName, adapter, attributes)
         } catch (e: Exception) {
-            Toast.makeText(context, "Membuka PDF untuk cetak: ${e.message}", Toast.LENGTH_SHORT).show()
+            val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+            Toast.makeText(
+                context,
+                if (isEn) "Opening PDF for printing: ${e.message}" else "Membuka PDF untuk cetak: ${e.message}",
+                Toast.LENGTH_SHORT
+            ).show()
             openCardsPdf(context, pdfFile)
         }
     }
 
     fun openCardsPdf(context: Context, pdfFile: File) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         try {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", pdfFile)
             val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -348,9 +375,15 @@ object StudentCardPdfGenerator {
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
-            context.startActivity(Intent.createChooser(intent, "Buka PDF Kartu Anak Asuh"))
+            context.startActivity(
+                Intent.createChooser(intent, if (isEn) "Open Student Cards PDF" else "Buka PDF Kartu Anak Asuh")
+            )
         } catch (e: Exception) {
-            Toast.makeText(context, "Tidak ditemukan aplikasi pembuka PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (isEn) "No PDF viewer app found: ${e.message}" else "Tidak ditemukan aplikasi pembuka PDF: ${e.message}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -360,22 +393,31 @@ object StudentCardPdfGenerator {
         filterLabel: String,
         schoolName: String
     ) {
+        val s = AppLanguageManager.getStrings(context)
+        val isEn = s.language == AppLanguage.ENGLISH
         try {
             val uri = FileProvider.getUriForFile(context, "${context.packageName}.provider", pdfFile)
             val cleanSchool = schoolName.ifBlank { "Wali Asuh Care" }
             val intent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Kartu Anak Asuh ($filterLabel) - $cleanSchool")
+                putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    if (isEn) "Student ID Cards ($filterLabel) - $cleanSchool" else "Kartu Anak Asuh ($filterLabel) - $cleanSchool"
+                )
                 putExtra(
                     Intent.EXTRA_TEXT,
-                    "Dokumen PDF Kartu Anak Asuh ($filterLabel) dengan QR NIK dari $cleanSchool. Siap cetak A4 & gunting."
+                    if (isEn) {
+                        "Student ID Cards PDF ($filterLabel) with QR NIK from $cleanSchool. Ready for A4 printing & cutting."
+                    } else {
+                        "Dokumen PDF Kartu Anak Asuh ($filterLabel) dengan QR NIK dari $cleanSchool. Siap cetak A4 & gunting."
+                    }
                 )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(intent, "Bagikan Kartu Anak Asuh PDF"))
+            context.startActivity(Intent.createChooser(intent, s.student.cardPdfChooserTitle))
         } catch (e: Exception) {
-            Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, s.report.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 }

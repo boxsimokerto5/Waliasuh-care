@@ -83,6 +83,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.StatusNeedControl
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -94,6 +95,7 @@ fun PlanScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var selectedTab by remember { mutableIntStateOf(0) }
     var selectedFaskesFilter by remember { mutableStateOf("Semua") }
@@ -133,9 +135,9 @@ fun PlanScreen(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Buat Rencana", modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.Add, contentDescription = if (isEn) "Create Plan" else "Buat Rencana", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(5.dp))
-                    Text(text = "Rencana Berobat", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(text = if (isEn) "Treatment Plan" else "Rencana Berobat", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }
@@ -172,7 +174,7 @@ fun PlanScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Hari Ini (${todayPlans.size + todayControls.size})",
+                                    text = if (isEn) "Today (${todayPlans.size + todayControls.size})" else "Hari Ini (${todayPlans.size + todayControls.size})",
                                     fontSize = 13.sp,
                                     fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -195,7 +197,7 @@ fun PlanScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Semua Tanggal (${allActivePlans.size + allPendingControls.size})",
+                                    text = if (isEn) "All Dates (${allActivePlans.size + allPendingControls.size})" else "Semua Tanggal (${allActivePlans.size + allPendingControls.size})",
                                     fontSize = 13.sp,
                                     fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium
                                 )
@@ -225,7 +227,7 @@ fun PlanScreen(
                             TopOnAdManager.onUserActionClick(context)
                             selectedFaskesFilter = "Semua"
                         },
-                        label = { Text("Semua", fontSize = 11.sp) },
+                        label = { Text(if (isEn) "All" else "Semua", fontSize = 11.sp) },
                         modifier = Modifier.height(28.dp)
                     )
                     FilterChip(
@@ -273,13 +275,21 @@ fun PlanScreen(
                                 modifier = Modifier.size(44.dp)
                             )
                             Text(
-                                text = if (selectedTab == 0) "Tidak ada jadwal berobat/kontrol hari ini." else "Belum ada rencana berobat aktif.",
+                                text = if (isEn) {
+                                    if (selectedTab == 0) "No treatment or follow-up schedule today." else "No active treatment plans yet."
+                                } else {
+                                    if (selectedTab == 0) "Tidak ada jadwal berobat/kontrol hari ini." else "Belum ada rencana berobat aktif."
+                                },
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Tekan '+ Rencana Berobat' untuk menjadwalkan ke Puskesmas Wates atau Plosoklaten.",
+                                text = if (isEn) {
+                                    "Tap '+ Treatment Plan' to schedule a visit to Puskesmas Wates or Plosoklaten."
+                                } else {
+                                    "Tekan '+ Rencana Berobat' untuk menjadwalkan ke Puskesmas Wates atau Plosoklaten."
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -307,7 +317,7 @@ fun PlanScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Jadwal Kontrol Kembali (${displayControls.size})",
+                                        text = if (isEn) "Follow-up Schedules (${displayControls.size})" else "Jadwal Kontrol Kembali (${displayControls.size})",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = StatusNeedControl
@@ -341,7 +351,7 @@ fun PlanScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Rencana Berobat Siswa (${displayPlans.size})",
+                                        text = if (isEn) "Student Treatment Plans (${displayPlans.size})" else "Rencana Berobat Siswa (${displayPlans.size})",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.primary
@@ -478,6 +488,7 @@ fun CompactPlanCardItem(
     onDelete: () -> Unit,
     number: Int? = null
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val accentColor = if (record.faskes.contains("Wates", ignoreCase = true)) Color(0xFF00695C) else Color(0xFF2E7D32)
     val isToday = DateUtils.isToday(record.planDate)
 
@@ -546,7 +557,7 @@ fun CompactPlanCardItem(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Rencana",
+                                contentDescription = if (isEn) "Edit Plan" else "Edit Rencana",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -557,7 +568,7 @@ fun CompactPlanCardItem(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Hapus",
+                                contentDescription = if (isEn) "Delete" else "Hapus",
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -584,7 +595,7 @@ fun CompactPlanCardItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "Tanggal ke Faskes",
+                            contentDescription = if (isEn) "Faskes Date" else "Tanggal ke Faskes",
                             tint = accentColor,
                             modifier = Modifier.size(12.dp)
                         )
@@ -624,7 +635,7 @@ fun CompactPlanCardItem(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                append("Keluhan: ")
+                                append(if (isEn) "Complaint: " else "Keluhan: ")
                             }
                             withStyle(
                                 SpanStyle(
@@ -693,7 +704,7 @@ fun CompactPlanCardItem(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Dirawat di Sini",
+                                text = if (isEn) "Treat Here" else "Dirawat di Sini",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -718,7 +729,7 @@ fun CompactPlanCardItem(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Berangkatkan",
+                                text = if (isEn) "Depart" else "Berangkatkan",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -743,7 +754,7 @@ fun CompactPlanCardItem(
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Log Diagnosis" else "Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -756,6 +767,7 @@ fun CompactControlCardItem(
     record: MedicalRecord,
     onCompleteControl: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -797,9 +809,9 @@ fun CompactControlCardItem(
                 Spacer(modifier = Modifier.width(4.dp))
                 val dateLabel = record.controlDate?.let {
                     "${DateUtils.formatFullDate(it)} (${DateUtils.getRelativeDateLabel(it)})"
-                } ?: "Jadwal kontrol"
+                } ?: if (isEn) "Follow-up schedule" else "Jadwal kontrol"
                 Text(
-                    text = "Kontrol: $dateLabel",
+                    text = if (isEn) "Follow-up: $dateLabel" else "Kontrol: $dateLabel",
                     fontSize = 11.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = StatusNeedControl
@@ -808,7 +820,7 @@ fun CompactControlCardItem(
 
             if (record.diagnosis.isNotBlank()) {
                 Text(
-                    text = "Diagnosa: ${record.diagnosis}",
+                    text = if (isEn) "Diagnosis: ${record.diagnosis}" else "Diagnosa: ${record.diagnosis}",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -831,7 +843,7 @@ fun CompactControlCardItem(
                         modifier = Modifier.size(13.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Tuntas Kontrol", fontSize = 11.sp)
+                    Text(if (isEn) "Complete Follow-up" else "Tuntas Kontrol", fontSize = 11.sp)
                 }
             }
         }

@@ -103,6 +103,7 @@ import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.TopOnAdManager
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -126,6 +127,8 @@ fun DashboardScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
@@ -158,7 +161,7 @@ fun DashboardScreen(
     var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
 
-    val todayDateFormatted = remember {
+    val todayDateFormatted = remember(s.language) {
         DateUtils.formatFullDate(Calendar.getInstance().timeInMillis)
     }
 
@@ -196,7 +199,7 @@ fun DashboardScreen(
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
-                    contentDescription = "Tambah Anak Sakit / Rencana",
+                    contentDescription = if (isEn) "Add Sick Student / Treatment Plan" else "Tambah Anak Sakit / Rencana",
                     modifier = Modifier.size(26.dp)
                 )
             }
@@ -247,7 +250,7 @@ fun DashboardScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "Rencana Berobat Hari Ini ($todayDateFormatted)",
+                                text = if (isEn) "Today's Treatment Plans ($todayDateFormatted)" else "Rencana Berobat Hari Ini ($todayDateFormatted)",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -266,7 +269,7 @@ fun DashboardScreen(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = "$faskesName: $count Anak",
+                                        text = if (isEn) "$faskesName: $count Students" else "$faskesName: $count Anak",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -294,12 +297,12 @@ fun DashboardScreen(
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.LocalHospital,
-                                                    contentDescription = "Rawat Inap",
+                                                    contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
                                                     tint = Color(0xFFDC2626),
                                                     modifier = Modifier.size(13.dp)
                                                 )
                                                 Text(
-                                                    text = "${faskesInpatients.size} Anak Rawat Inap",
+                                                    text = if (isEn) "${faskesInpatients.size} Inpatient" else "${faskesInpatients.size} Anak Rawat Inap",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFFB91C1C)
@@ -319,7 +322,7 @@ fun DashboardScreen(
                             // Jika ada anak rawat inap di faskes custom / "Lainnya" di luar daftar utama sekolah
                             val customFaskesInpatients = inpatientRecords.filter { rec ->
                                 allFaskes.none { f -> rec.faskes.contains(f, ignoreCase = true) }
-                            }.groupBy { it.faskes.ifBlank { "Faskes Rujukan" } }
+                            }.groupBy { it.faskes.ifBlank { if (isEn) "Referral Faskes" else "Faskes Rujukan" } }
 
                             customFaskesInpatients.forEach { (faskesName, list) ->
                                 FlowRow(
@@ -328,7 +331,7 @@ fun DashboardScreen(
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = "$faskesName: 0 Anak",
+                                        text = if (isEn) "$faskesName: 0 Students" else "$faskesName: 0 Anak",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Medium,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -355,12 +358,12 @@ fun DashboardScreen(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.LocalHospital,
-                                                contentDescription = "Rawat Inap",
+                                                contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
                                                 tint = Color(0xFFDC2626),
                                                 modifier = Modifier.size(13.dp)
                                             )
                                             Text(
-                                                text = "${list.size} Anak Rawat Inap",
+                                                text = if (isEn) "${list.size} Inpatient" else "${list.size} Anak Rawat Inap",
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFFB91C1C)
@@ -394,14 +397,14 @@ fun DashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "$totalToday Anak Dijadwalkan Hari Ini ($totalToday/$totalSchoolStudents Siswa)",
+                                    text = if (isEn) "$totalToday Scheduled Today ($totalToday/$totalSchoolStudents Students)" else "$totalToday Anak Dijadwalkan Hari Ini ($totalToday/$totalSchoolStudents Siswa)",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Medium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 if (upcomingPlans.isNotEmpty()) {
                                     Text(
-                                        text = "📅 +${upcomingPlans.size} mendatang",
+                                        text = if (isEn) "📅 +${upcomingPlans.size} upcoming" else "📅 +${upcomingPlans.size} mendatang",
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = WaliPrimary
@@ -426,7 +429,7 @@ fun DashboardScreen(
                             modifier = Modifier.weight(1f)
                         ) {
                             Text(
-                                text = "Geser untuk lebih banyak fitur",
+                                text = if (isEn) "Swipe for more features" else "Geser untuk lebih banyak fitur",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -551,7 +554,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Daftar Rencana Berobat",
+                                text = if (isEn) "Treatment Plan List" else "Daftar Rencana Berobat",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface,
@@ -581,7 +584,7 @@ fun DashboardScreen(
                                     TopOnAdManager.onUserActionClick(context)
                                     selectedPlanFilter = "Hari Ini"
                                 },
-                                label = { Text("Hari Ini (${todayPlans.size})", fontSize = 11.sp) },
+                                label = { Text(if (isEn) "Today (${todayPlans.size})" else "Hari Ini (${todayPlans.size})", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .height(28.dp)
                                     .testTag("chip_filter_today_plans")
@@ -592,7 +595,7 @@ fun DashboardScreen(
                                     TopOnAdManager.onUserActionClick(context)
                                     selectedPlanFilter = "Mendatang"
                                 },
-                                label = { Text("Mendatang (${upcomingPlans.size})", fontSize = 11.sp) },
+                                label = { Text(if (isEn) "Upcoming (${upcomingPlans.size})" else "Mendatang (${upcomingPlans.size})", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .height(28.dp)
                                     .testTag("chip_filter_upcoming_plans")
@@ -603,7 +606,7 @@ fun DashboardScreen(
                                     TopOnAdManager.onUserActionClick(context)
                                     selectedPlanFilter = "Semua"
                                 },
-                                label = { Text("Semua (${activePlans.size})", fontSize = 11.sp) },
+                                label = { Text(if (isEn) "All (${activePlans.size})" else "Semua (${activePlans.size})", fontSize = 11.sp) },
                                 modifier = Modifier
                                     .height(28.dp)
                                     .testTag("chip_filter_all_plans")
@@ -632,14 +635,26 @@ fun DashboardScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = when (selectedPlanFilter) {
-                                        "Hari Ini" -> if (upcomingPlans.isNotEmpty()) {
-                                            "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini. Terdapat ${upcomingPlans.size} rencana di jadwal 'Mendatang'."
-                                        } else {
-                                            "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini."
+                                    text = if (isEn) {
+                                        when (selectedPlanFilter) {
+                                            "Hari Ini" -> if (upcomingPlans.isNotEmpty()) {
+                                                "No students scheduled for treatment today. There are ${upcomingPlans.size} plans under 'Upcoming'."
+                                            } else {
+                                                "No students scheduled for treatment today."
+                                            }
+                                            "Mendatang" -> "No upcoming treatment plans yet."
+                                            else -> "No active treatment plans yet."
                                         }
-                                        "Mendatang" -> "Belum ada rencana berobat untuk tanggal mendatang."
-                                        else -> "Alhamdulillah, belum ada rencana berobat aktif."
+                                    } else {
+                                        when (selectedPlanFilter) {
+                                            "Hari Ini" -> if (upcomingPlans.isNotEmpty()) {
+                                                "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini. Terdapat ${upcomingPlans.size} rencana di jadwal 'Mendatang'."
+                                            } else {
+                                                "Alhamdulillah, tidak ada anak yang dijadwalkan berobat hari ini."
+                                            }
+                                            "Mendatang" -> "Belum ada rencana berobat untuk tanggal mendatang."
+                                            else -> "Alhamdulillah, belum ada rencana berobat aktif."
+                                        }
                                     },
                                     fontSize = 12.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -848,12 +863,12 @@ fun DashboardScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column {
                         Text(
-                            text = "Anak Sedang Rawat Inap",
+                            text = if (isEn) "Currently Inpatient" else "Anak Sedang Rawat Inap",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "$faskesTitle • Ketuk anak untuk membuka kartu tindakan",
+                            text = if (isEn) "$faskesTitle • Tap a student to open action card" else "$faskesTitle • Ketuk anak untuk membuka kartu tindakan",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -889,7 +904,9 @@ fun DashboardScreen(
                                 Text(
                                     text = buildString {
                                         append(rec.diagnosis.ifBlank { rec.complaint })
-                                        if (rec.inpatientRoom.isNotBlank()) append(" • Ruang ${rec.inpatientRoom}")
+                                        if (rec.inpatientRoom.isNotBlank()) {
+                                            append(if (isEn) " • Room ${rec.inpatientRoom}" else " • Ruang ${rec.inpatientRoom}")
+                                        }
                                     },
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -899,7 +916,7 @@ fun DashboardScreen(
                             }
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = "Buka Kartu Tindakan",
+                                contentDescription = if (isEn) "Open Action Card" else "Buka Kartu Tindakan",
                                 tint = Color(0xFFDC2626)
                             )
                         }
@@ -957,7 +974,11 @@ fun DashboardScreen(
                     controlDate = ctrlDate,
                     dischargeNotes = dischargeNotes
                 )
-                Toast.makeText(context, "${record.studentName} ditandai sudah pulang rawat inap", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "${record.studentName} marked as discharged" else "${record.studentName} ditandai sudah pulang rawat inap",
+                    Toast.LENGTH_SHORT
+                ).show()
                 selectedInpatientRecordForDetail = null
             }
         )
@@ -984,7 +1005,7 @@ fun DashboardScreen(
     if (showPuskesmasInfoSheet) {
         FaskesReferralSheet(
             schoolProfile = schoolProfile,
-            title = "Faskes & Puskesmas Rujukan",
+            title = if (isEn) "Referral Faskes & Puskesmas" else "Faskes & Puskesmas Rujukan",
             onDismiss = { showPuskesmasInfoSheet = false }
         )
     }
@@ -1192,6 +1213,7 @@ fun DashboardSickChildItem(
     onEdit: () -> Unit = {},
     onDelete: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val accentColor = if (record.faskes.contains("Wates", ignoreCase = true)) Color(0xFF00695C) else Color(0xFF2E7D32)
     val isToday = DateUtils.isToday(record.planDate)
 
@@ -1260,7 +1282,7 @@ fun DashboardSickChildItem(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Rencana",
+                                contentDescription = if (isEn) "Edit Plan" else "Edit Rencana",
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -1271,7 +1293,7 @@ fun DashboardSickChildItem(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Hapus",
+                                contentDescription = if (isEn) "Delete" else "Hapus",
                                 tint = MaterialTheme.colorScheme.outline,
                                 modifier = Modifier.size(16.dp)
                             )
@@ -1298,7 +1320,7 @@ fun DashboardSickChildItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "Jadwal ke Faskes",
+                            contentDescription = if (isEn) "Faskes Schedule" else "Jadwal ke Faskes",
                             tint = accentColor,
                             modifier = Modifier.size(12.dp)
                         )
@@ -1338,7 +1360,7 @@ fun DashboardSickChildItem(
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             ) {
-                                append("Keluhan: ")
+                                append(if (isEn) "Complaint: " else "Keluhan: ")
                             }
                             withStyle(
                                 SpanStyle(
@@ -1407,7 +1429,7 @@ fun DashboardSickChildItem(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Dirawat di Sini",
+                                text = if (isEn) "Treat Here" else "Dirawat di Sini",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -1432,7 +1454,7 @@ fun DashboardSickChildItem(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Berangkatkan",
+                                text = if (isEn) "Depart" else "Berangkatkan",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -1457,7 +1479,7 @@ fun DashboardSickChildItem(
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Log Diagnosis" else "Input Diagnosa", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }

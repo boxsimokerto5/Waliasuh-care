@@ -71,6 +71,7 @@ import com.example.data.model.ShiftMessage
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 data class ShiftHistoryMonthOption(
     val key: String,
@@ -127,6 +128,8 @@ fun ShiftHistorySheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var searchQuery by remember { mutableStateOf("") }
     var selectedMonthKey by remember { mutableStateOf("ALL") }
     var selectedStatus by remember { mutableStateOf("Semua") } // Semua, Belum Selesai, Selesai
@@ -135,7 +138,7 @@ fun ShiftHistorySheet(
         ShiftHistoryFilterHelper.getPastMessages(messages)
     }
 
-    val monthOptions = remember(pastMessages) {
+    val monthOptions = remember(pastMessages, s.language) {
         ShiftHistoryFilterHelper.getAvailableMonths(pastMessages)
     }
 
@@ -212,7 +215,7 @@ fun ShiftHistorySheet(
                                 verticalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
                                 Text(
-                                    text = "Riwayat Operan Shift",
+                                    text = if (isEn) "Shift Handover History" else "Riwayat Operan Shift",
                                     fontSize = 17.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface,
@@ -227,7 +230,7 @@ fun ShiftHistorySheet(
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
                                         Text(
-                                            text = "$uncompletedPastCount Terlewat",
+                                            text = if (isEn) "$uncompletedPastCount Missed" else "$uncompletedPastCount Terlewat",
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFFD97706),
@@ -244,7 +247,7 @@ fun ShiftHistorySheet(
                                             .padding(horizontal = 6.dp, vertical = 2.dp)
                                     ) {
                                         Text(
-                                            text = "$totalPastCount Arsip",
+                                            text = if (isEn) "$totalPastCount Archived" else "$totalPastCount Arsip",
                                             fontSize = 9.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF16A34A),
@@ -255,7 +258,11 @@ fun ShiftHistorySheet(
                                 }
                             }
                             Text(
-                                text = "Arsip pesan serah terima yang sudah terlewat dari hari ini",
+                                text = if (isEn) {
+                                    "Archive of past shift handover messages prior to today"
+                                } else {
+                                    "Arsip pesan serah terima yang sudah terlewat dari hari ini"
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -269,7 +276,7 @@ fun ShiftHistorySheet(
                     onValueChange = { searchQuery = it },
                     placeholder = {
                         Text(
-                            text = "Cari judul, isi operan, atau nama wali...",
+                            text = if (isEn) "Search title, handover note, or wali name..." else "Cari judul, isi operan, atau nama wali...",
                             fontSize = 12.5.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -278,7 +285,7 @@ fun ShiftHistorySheet(
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
-                            contentDescription = "Cari Riwayat",
+                            contentDescription = if (isEn) "Search History" else "Cari Riwayat",
                             tint = WaliPrimary
                         )
                     },
@@ -292,7 +299,7 @@ fun ShiftHistorySheet(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Hapus Pencarian"
+                                    contentDescription = if (isEn) "Clear Search" else "Hapus Pencarian"
                                 )
                             }
                         }
@@ -324,7 +331,7 @@ fun ShiftHistorySheet(
                             onClick = { selectedMonthKey = "ALL" },
                             label = {
                                 Text(
-                                    text = "Semua Bulan",
+                                    text = if (isEn) "All Months" else "Semua Bulan",
                                     fontSize = 11.5.sp,
                                     maxLines = 1,
                                     softWrap = false
@@ -363,7 +370,7 @@ fun ShiftHistorySheet(
                         onClick = { selectedStatus = "Semua" },
                         label = {
                             Text(
-                                text = "Semua ($baseAllCount)",
+                                text = "${s.nav.all} ($baseAllCount)",
                                 fontSize = 11.5.sp,
                                 maxLines = 1,
                                 softWrap = false
@@ -376,7 +383,7 @@ fun ShiftHistorySheet(
                         onClick = { selectedStatus = "Belum Selesai" },
                         label = {
                             Text(
-                                text = "Belum Selesai ($baseUncompletedCount)",
+                                text = "${if (isEn) "Pending" else "Belum Selesai"} ($baseUncompletedCount)",
                                 fontSize = 11.5.sp,
                                 maxLines = 1,
                                 softWrap = false
@@ -393,7 +400,7 @@ fun ShiftHistorySheet(
                         onClick = { selectedStatus = "Selesai" },
                         label = {
                             Text(
-                                text = "Selesai ($baseCompletedCount)",
+                                text = "${if (isEn) "Completed" else "Selesai"} ($baseCompletedCount)",
                                 fontSize = 11.5.sp,
                                 maxLines = 1,
                                 softWrap = false
@@ -441,9 +448,11 @@ fun ShiftHistorySheet(
                             }
                             Text(
                                 text = if (pastMessages.isEmpty()) {
-                                    "Belum ada riwayat operan shift dari hari-hari sebelumnya."
+                                    if (isEn) "No shift handover history from previous days yet."
+                                    else "Belum ada riwayat operan shift dari hari-hari sebelumnya."
                                 } else {
-                                    "Tidak ada riwayat operan yang sesuai dengan filter atau pencarian."
+                                    if (isEn) "No handover history matches the filter or search."
+                                    else "Tidak ada riwayat operan yang sesuai dengan filter atau pencarian."
                                 },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
@@ -452,9 +461,11 @@ fun ShiftHistorySheet(
                             )
                             Text(
                                 text = if (pastMessages.isEmpty()) {
-                                    "Pesan shift yang tanggal tindak lanjutnya sudah terlewat dari hari ini akan otomatis masuk ke sini."
+                                    if (isEn) "Shift messages whose follow-up date has passed will automatically appear here."
+                                    else "Pesan shift yang tanggal tindak lanjutnya sudah terlewat dari hari ini akan otomatis masuk ke sini."
                                 } else {
-                                    "Ubah kata kunci pencarian, bulan, atau filter status untuk melihat riwayat lainnya."
+                                    if (isEn) "Change your search keyword, month, or status filter to view other history."
+                                    else "Ubah kata kunci pencarian, bulan, atau filter status untuk melihat riwayat lainnya."
                                 },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -469,7 +480,7 @@ fun ShiftHistorySheet(
                                     },
                                     modifier = Modifier.heightIn(min = 48.dp)
                                 ) {
-                                    Text("Reset Semua Filter")
+                                    Text(if (isEn) "Reset All Filters" else "Reset Semua Filter")
                                 }
                             }
                         }
@@ -486,13 +497,25 @@ fun ShiftHistorySheet(
                                 message = msg,
                                 onToggleComplete = {
                                     viewModel.toggleShiftMessageCompleted(msg) {
-                                        val status = if (!msg.isCompleted) "ditandai selesai" else "dibuka kembali"
-                                        Toast.makeText(context, "Riwayat operan $status.", Toast.LENGTH_SHORT).show()
+                                        val status = if (isEn) {
+                                            if (!msg.isCompleted) "marked as completed" else "reopened"
+                                        } else {
+                                            if (!msg.isCompleted) "ditandai selesai" else "dibuka kembali"
+                                        }
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Handover history $status." else "Riwayat operan $status.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 },
                                 onDelete = {
                                     viewModel.deleteShiftMessage(msg) {
-                                        Toast.makeText(context, "Riwayat operan dihapus.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Handover history deleted." else "Riwayat operan dihapus.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 }
                             )
@@ -512,7 +535,7 @@ fun ShiftHistorySheet(
                             .heightIn(min = 48.dp)
                             .testTag("btn_close_shift_history")
                     ) {
-                        Text("Tutup", maxLines = 1, softWrap = false)
+                        Text(s.nav.close, maxLines = 1, softWrap = false)
                     }
                 }
             }
@@ -528,6 +551,7 @@ fun ShiftHistoryCardItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val isUrgent = message.priority == "URGENT"
     val isSedang = message.priority == "SEDANG"
 
@@ -587,7 +611,11 @@ fun ShiftHistoryCardItem(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (message.isCompleted) "Selesai" else "Terlewat • Belum Selesai",
+                            text = if (message.isCompleted) {
+                                if (isEn) "Completed" else "Selesai"
+                            } else {
+                                if (isEn) "Missed • Pending" else "Terlewat • Belum Selesai"
+                            },
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (message.isCompleted) Color(0xFF16A34A) else Color(0xFFD97706),
@@ -604,7 +632,11 @@ fun ShiftHistoryCardItem(
                             .padding(horizontal = 8.dp, vertical = 3.dp)
                     ) {
                         Text(
-                            text = if (isUrgent) "🔴 URGENT" else if (isSedang) "🟠 SEDANG" else "🟢 BIASA",
+                            text = when {
+                                isUrgent -> "🔴 URGENT"
+                                isSedang -> if (isEn) "🟠 MEDIUM" else "🟠 SEDANG"
+                                else -> if (isEn) "🟢 NORMAL" else "🟢 BIASA"
+                            },
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = priorityColor,
@@ -639,7 +671,7 @@ fun ShiftHistoryCardItem(
                 ) {
                     Icon(
                         imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Hapus Riwayat",
+                        contentDescription = if (isEn) "Delete History" else "Hapus Riwayat",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                         modifier = Modifier.size(18.dp)
                     )
@@ -675,7 +707,7 @@ fun ShiftHistoryCardItem(
                         modifier = Modifier.size(14.dp)
                     )
                     Text(
-                        text = "Kepada: ${message.targetWali}",
+                        text = "${if (isEn) "To" else "Kepada"}: ${message.targetWali}",
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = WaliPrimary
@@ -693,7 +725,7 @@ fun ShiftHistoryCardItem(
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        text = "Tanggal Tugas: ${DateUtils.formatFullDate(message.followUpDate)}",
+                        text = "${if (isEn) "Task Date" else "Tanggal Tugas"}: ${DateUtils.formatFullDate(message.followUpDate)}",
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -729,7 +761,7 @@ fun ShiftHistoryCardItem(
                         modifier = Modifier.size(13.dp)
                     )
                     Text(
-                        text = "Ditindaklanjuti: ${DateUtils.formatDateTime(message.completedAt)}",
+                        text = "${if (isEn) "Followed up" else "Ditindaklanjuti"}: ${DateUtils.formatDateTime(message.completedAt)}",
                         fontSize = 11.sp,
                         color = Color(0xFF16A34A)
                     )
@@ -743,7 +775,7 @@ fun ShiftHistoryCardItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Dibuat oleh: ${message.senderName}",
+                    text = "${if (isEn) "Created by" else "Dibuat oleh"}: ${message.senderName}",
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -764,16 +796,20 @@ fun ShiftHistoryCardItem(
                 ) {
                     Icon(
                         imageVector = if (message.isCompleted) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
-                        contentDescription = if (message.isCompleted) "Selesai" else "Tandai Selesai",
+                        contentDescription = if (message.isCompleted) {
+                            if (isEn) "Completed" else "Selesai"
+                        } else {
+                            if (isEn) "Mark Completed" else "Tandai Selesai"
+                        },
                         tint = if (message.isCompleted) Color(0xFF16A34A) else Color(0xFFD97706),
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (message.isCompleted) {
-                            "Selesai (${message.completedBy.ifBlank { "Wali" }})"
+                            "${if (isEn) "Done" else "Selesai"} (${message.completedBy.ifBlank { "Wali" }})"
                         } else {
-                            "Tandai Selesai"
+                            if (isEn) "Mark Done" else "Tandai Selesai"
                         },
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,

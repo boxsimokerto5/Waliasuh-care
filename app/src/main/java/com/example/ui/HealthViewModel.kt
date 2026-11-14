@@ -20,6 +20,8 @@ import com.example.data.remote.pocketbase.PocketBaseSyncManager
 import com.example.data.repository.HealthRepository
 import com.example.util.NotificationHelper
 import com.example.util.PasswordGenerator
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -49,6 +51,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val authPrefs = application.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE)
 
     init {
+        AppLanguageManager.init(application)
         val db = AppDatabase.getDatabase(application)
         repository = HealthRepository(
             db.childStudentDao(),
@@ -60,6 +63,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.fastingSessionDao(),
             db.fastingRecordDao()
         )
+    }
+
+    private val _appLanguage = MutableStateFlow(AppLanguageManager.init(application))
+    val appLanguage: StateFlow<AppLanguage> = _appLanguage.asStateFlow()
+
+    fun setAppLanguage(language: AppLanguage) {
+        AppLanguageManager.setLanguage(getApplication(), language)
+        _appLanguage.value = language
     }
 
     private fun isUnitTestEnvironment(): Boolean {
@@ -588,8 +599,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     (student.nik.isNotBlank() && rec.studentNik.equals(student.nik, ignoreCase = true)) ||
                     (student.nis.isNotBlank() && rec.studentNis.equals(student.nis, ignoreCase = true))
             }
+            val s = AppLanguageManager.getStrings(getApplication()).nav
             if (alreadyRegistered) {
-                onResult(false, "${student.name} sudah terdaftar pada sesi ${session.title}.")
+                onResult(false, s.vmFastingAlreadyRegistered(student.name, session.title))
                 return@launch
             }
 
@@ -616,7 +628,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 updatedAt = now
             )
             repository.insertFastingRecord(record)
-            onResult(true, "${student.name} ($resolvedJenjang) berhasil didaftarkan berpuasa.")
+            onResult(true, s.vmFastingRegisteredSuccess(student.name, resolvedJenjang))
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleFastingRecord(getApplication(), record)
             }
@@ -2015,9 +2027,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
+            val s = AppLanguageManager.getStrings(getApplication()).nav
             val cleanPass = newPassword.trim()
             if (cleanPass.length < 6) {
-                onResult(false, "Kata sandi baru minimal harus 6 karakter.")
+                onResult(false, s.vmPasswordMinError)
                 return@launch
             }
 
@@ -2050,7 +2063,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         .putString("saved_username", updated.username)
                         .apply()
                 }
-                onResult(true, "Kata sandi berhasil diperbarui dan tersinkronisasi ke Admin Sekolah.")
+                onResult(true, s.vmPasswordUpdatedSuccess)
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
                 }
@@ -2074,7 +2087,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         .putString("saved_username", newAcc.username)
                         .apply()
                 }
-                onResult(true, "Kata sandi berhasil dibuat dan tersinkronisasi ke Admin Sekolah.")
+                onResult(true, s.vmPasswordCreatedSuccess)
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(newAcc.copy(id = insertedId)))
                 }
@@ -2091,9 +2104,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
+            val s = AppLanguageManager.getStrings(getApplication()).nav
             val cleanPass = passwordConfirmation.trim()
             if (cleanPass.isBlank()) {
-                onResult(false, "Masukkan password akun Anda untuk konfirmasi.")
+                onResult(false, s.vmDeletePassRequired)
                 return@launch
             }
 
@@ -2113,7 +2127,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             if (account != null) {
                 if (account.password.trim() != cleanPass) {
-                    onResult(false, "Password tidak sesuai. Penghapusan akun dibatalkan.")
+                    onResult(false, s.vmDeletePassMismatch)
                     return@launch
                 }
                 repository.deleteWaliAccount(account)
@@ -2124,7 +2138,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             _waliName.value = "Wali Asuh"
             logout()
-            onResult(true, "Akun Wali Asuh Anda telah dihapus permanen.")
+            onResult(true, s.vmDeleteSuccess)
         }
     }
 

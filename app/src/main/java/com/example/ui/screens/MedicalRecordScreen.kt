@@ -112,6 +112,7 @@ import com.example.ui.dialogs.PrintPdfDialog
 import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 /**
@@ -143,6 +144,8 @@ fun MedicalRecordScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var recordToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -159,7 +162,7 @@ fun MedicalRecordScreen(
     val searchFocusRequester = remember { FocusRequester() }
     val showSearchField = isSearchExpanded || searchQuery.isNotBlank()
 
-    val todayStr = remember { DateUtils.formatShortDate(Calendar.getInstance().timeInMillis) }
+    val todayStr = remember(s.language) { DateUtils.formatShortDate(Calendar.getInstance().timeInMillis) }
 
     val todayRecords = remember(completedRecords) {
         completedRecords.filter { DateUtils.isToday(it.treatmentDate ?: it.planDate) }
@@ -215,9 +218,9 @@ fun MedicalRecordScreen(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.FlashOn, contentDescription = "Tindakan Langsung", modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.FlashOn, contentDescription = if (isEn) "Direct Treatment" else "Tindakan Langsung", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(text = "Tindakan Langsung", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(text = if (isEn) "Direct Treatment" else "Tindakan Langsung", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 }
             }
         }
@@ -245,7 +248,7 @@ fun MedicalRecordScreen(
                         modifier = Modifier.weight(1f)
                     ) {
                         Text(
-                            text = "Rekam Medis & Tindakan",
+                            text = if (isEn) "Medical Records & Actions" else "Rekam Medis & Tindakan",
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
@@ -282,7 +285,11 @@ fun MedicalRecordScreen(
                     ) {
                         Icon(
                             imageVector = if (showSearchField) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = if (showSearchField) "Tutup pencarian" else "Cari rekam medis",
+                            contentDescription = if (isEn) {
+                                if (showSearchField) "Close search" else "Search medical records"
+                            } else {
+                                if (showSearchField) "Tutup pencarian" else "Cari rekam medis"
+                            },
                             tint = if (showSearchField) WaliPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
                         )
@@ -305,7 +312,11 @@ fun MedicalRecordScreen(
                         onValueChange = { viewModel.setHistorySearchQuery(it) },
                         placeholder = {
                             Text(
-                                text = if (selectedTabMode == 0) "Cari siswa, diagnosa, faskes..." else "Cari anak asuh, NIS, asrama...",
+                                text = if (isEn) {
+                                    if (selectedTabMode == 0) "Search student, diagnosis, faskes..." else "Search student, NIS, Asrama..."
+                                } else {
+                                    if (selectedTabMode == 0) "Cari siswa, diagnosa, faskes..." else "Cari anak asuh, NIS, asrama..."
+                                },
                                 fontSize = 12.sp,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
@@ -331,7 +342,7 @@ fun MedicalRecordScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
-                                    contentDescription = "Hapus atau tutup pencarian",
+                                    contentDescription = if (isEn) "Clear or close search" else "Hapus atau tutup pencarian",
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -368,7 +379,7 @@ fun MedicalRecordScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Riwayat Tindakan",
+                                    text = if (isEn) "Treatment History" else "Riwayat Tindakan",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
@@ -392,7 +403,7 @@ fun MedicalRecordScreen(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Screening Anak",
+                                    text = if (isEn) "Health Screening" else "Screening Anak",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     maxLines = 1,
@@ -421,7 +432,7 @@ fun MedicalRecordScreen(
                             },
                             label = {
                                 Text(
-                                    text = "Hari Ini (${todayRecords.size})",
+                                    text = if (isEn) "Today (${todayRecords.size})" else "Hari Ini (${todayRecords.size})",
                                     fontSize = 11.sp,
                                     maxLines = 1
                                 )
@@ -441,7 +452,7 @@ fun MedicalRecordScreen(
                             },
                             label = {
                                 Text(
-                                    text = "Minggu (${thisWeekRecords.size})",
+                                    text = if (isEn) "This Week (${thisWeekRecords.size})" else "Minggu (${thisWeekRecords.size})",
                                     fontSize = 11.sp,
                                     maxLines = 1
                                 )
@@ -461,7 +472,7 @@ fun MedicalRecordScreen(
                             },
                             label = {
                                 Text(
-                                    text = "Semua (${completedRecords.size})",
+                                    text = if (isEn) "All (${completedRecords.size})" else "Semua (${completedRecords.size})",
                                     fontSize = 11.sp,
                                     maxLines = 1
                                 )
@@ -482,7 +493,11 @@ fun MedicalRecordScreen(
                             .padding(horizontal = 8.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = if (selectedTabMode == 0) "${filteredList.size} Data" else "${filteredStudents.size} Anak Asuh",
+                            text = if (isEn) {
+                                if (selectedTabMode == 0) "${filteredList.size} Records" else "${filteredStudents.size} Students"
+                            } else {
+                                if (selectedTabMode == 0) "${filteredList.size} Data" else "${filteredStudents.size} Anak Asuh"
+                            },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = WaliPrimary,
@@ -511,23 +526,45 @@ fun MedicalRecordScreen(
                                     modifier = Modifier.size(44.dp)
                                 )
                                 Text(
-                                    text = if (searchQuery.isNotBlank()) {
-                                        "Tidak ditemukan catatan medis yang cocok dengan '$searchQuery'."
+                                    text = if (isEn) {
+                                        if (searchQuery.isNotBlank()) {
+                                            "No medical records found matching '$searchQuery'."
+                                        } else {
+                                            when (selectedDateFilter) {
+                                                "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
+                                                    "No treatment actions recorded today. There are ${thisWeekRecords.size} records in 'This Week'."
+                                                } else if (completedRecords.isNotEmpty()) {
+                                                    "No treatment actions recorded today. Tap 'All' to view full history."
+                                                } else {
+                                                    "No completed medical records yet."
+                                                }
+                                                "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
+                                                    "No treatment actions recorded this week. Tap 'All' to view full history."
+                                                } else {
+                                                    "No completed medical records yet."
+                                                }
+                                                else -> "No completed medical records yet."
+                                            }
+                                        }
                                     } else {
-                                        when (selectedDateFilter) {
-                                            "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
-                                                "Belum ada tindakan pengobatan hari ini. Terdapat ${thisWeekRecords.size} catatan tindakan di 'Minggu Ini'."
-                                            } else if (completedRecords.isNotEmpty()) {
-                                                "Belum ada tindakan pengobatan hari ini. Tekan 'Semua' untuk melihat seluruh riwayat."
-                                            } else {
-                                                "Belum ada rekam medis pengobatan selesai."
+                                        if (searchQuery.isNotBlank()) {
+                                            "Tidak ditemukan catatan medis yang cocok dengan '$searchQuery'."
+                                        } else {
+                                            when (selectedDateFilter) {
+                                                "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
+                                                    "Belum ada tindakan pengobatan hari ini. Terdapat ${thisWeekRecords.size} catatan tindakan di 'Minggu Ini'."
+                                                } else if (completedRecords.isNotEmpty()) {
+                                                    "Belum ada tindakan pengobatan hari ini. Tekan 'Semua' untuk melihat seluruh riwayat."
+                                                } else {
+                                                    "Belum ada rekam medis pengobatan selesai."
+                                                }
+                                                "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
+                                                    "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua' untuk melihat seluruh riwayat."
+                                                } else {
+                                                    "Belum ada rekam medis pengobatan selesai."
+                                                }
+                                                else -> "Belum ada rekam medis pengobatan selesai."
                                             }
-                                            "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
-                                                "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua' untuk melihat seluruh riwayat."
-                                            } else {
-                                                "Belum ada rekam medis pengobatan selesai."
-                                            }
-                                            else -> "Belum ada rekam medis pengobatan selesai."
                                         }
                                     },
                                     fontWeight = FontWeight.SemiBold,
@@ -536,7 +573,11 @@ fun MedicalRecordScreen(
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                 )
                                 Text(
-                                    text = "Gunakan tombol '+ Tindakan Langsung' untuk mendata hasil berobat anak di puskesmas.",
+                                    text = if (isEn) {
+                                        "Use '+ Direct Treatment' to log treatment results from Puskesmas."
+                                    } else {
+                                        "Gunakan tombol '+ Tindakan Langsung' untuk mendata hasil berobat anak di puskesmas."
+                                    },
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -586,7 +627,7 @@ fun MedicalRecordScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Tidak ditemukan data anak asuh.",
+                                text = if (isEn) "No students found." else "Tidak ditemukan data anak asuh.",
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -662,7 +703,11 @@ fun MedicalRecordScreen(
                     controlDate = ctrlDate,
                     dischargeNotes = dischargeNotes
                 )
-                Toast.makeText(context, "${record.studentName} ditandai sudah pulang rawat inap", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "${record.studentName} marked as discharged" else "${record.studentName} ditandai sudah pulang rawat inap",
+                    Toast.LENGTH_SHORT
+                ).show()
                 selectedRecordForDetail = null
             }
         )
@@ -785,10 +830,11 @@ fun SlimMedicalRecordCardItem(
     onEdit: () -> Unit = {},
     onShare: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val dateStr = record.treatmentDate?.let { DateUtils.formatShortDate(it) }
         ?: DateUtils.formatShortDate(record.planDate)
     val timeStr = "${record.departureTime} WIB"
-    val gradeText = student?.classGrade ?: "Kelas Siswa"
+    val gradeText = student?.classGrade ?: if (isEn) "Class" else "Kelas Siswa"
     val dormText = record.studentDormitory
     val gender = student?.gender ?: "L"
 
@@ -862,7 +908,7 @@ fun SlimMedicalRecordCardItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Edit,
-                            contentDescription = "Edit Rekam Tindakan",
+                            contentDescription = if (isEn) "Edit Medical Record" else "Edit Rekam Tindakan",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(17.dp)
                         )
@@ -876,7 +922,7 @@ fun SlimMedicalRecordCardItem(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Laporan WhatsApp",
+                            contentDescription = if (isEn) "WhatsApp Report" else "Laporan WhatsApp",
                             tint = Color(0xFF25D366),
                             modifier = Modifier.size(17.dp)
                         )
@@ -884,7 +930,7 @@ fun SlimMedicalRecordCardItem(
 
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = "Lihat Detail Lengkap",
+                        contentDescription = if (isEn) "View Full Details" else "Lihat Detail Lengkap",
                         tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
                         modifier = Modifier.size(20.dp)
                     )
@@ -908,7 +954,11 @@ fun SlimMedicalRecordCardItem(
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
-                    text = "Diagnosa: ${record.diagnosis.ifBlank { record.complaint.ifBlank { "Pemeriksaan medis" } }}",
+                    text = if (isEn) {
+                        "Diagnosis: ${record.diagnosis.ifBlank { record.complaint.ifBlank { "Medical check" } }}"
+                    } else {
+                        "Diagnosa: ${record.diagnosis.ifBlank { record.complaint.ifBlank { "Pemeriksaan medis" } }}"
+                    },
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -950,7 +1000,11 @@ fun SlimMedicalRecordCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = if (record.inpatientRoom.isNotBlank()) "🏥 RAWAT INAP (${record.inpatientRoom})" else "🏥 RAWAT INAP",
+                            text = if (isEn) {
+                                if (record.inpatientRoom.isNotBlank()) "🏥 INPATIENT (${record.inpatientRoom})" else "🏥 INPATIENT"
+                            } else {
+                                if (record.inpatientRoom.isNotBlank()) "🏥 RAWAT INAP (${record.inpatientRoom})" else "🏥 RAWAT INAP"
+                            },
                             color = Color(0xFFB91C1C),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
@@ -964,7 +1018,7 @@ fun SlimMedicalRecordCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "✅ Pulang ${DateUtils.formatShortDate(record.dischargeDate)}",
+                            text = if (isEn) "✅ Discharged ${DateUtils.formatShortDate(record.dischargeDate)}" else "✅ Pulang ${DateUtils.formatShortDate(record.dischargeDate)}",
                             color = Color(0xFF15803D),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
@@ -981,7 +1035,11 @@ fun SlimMedicalRecordCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "Kontrol: ${record.controlDate?.let { DateUtils.formatShortDate(it) } ?: "Terjadwal"}",
+                            text = if (isEn) {
+                                "Follow-up: ${record.controlDate?.let { DateUtils.formatShortDate(it) } ?: "Scheduled"}"
+                            } else {
+                                "Kontrol: ${record.controlDate?.let { DateUtils.formatShortDate(it) } ?: "Terjadwal"}"
+                            },
                             color = Color(0xFFD97706),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
@@ -998,7 +1056,7 @@ fun SlimMedicalRecordCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "⚠️ ${thisMonthCount}x Sakit Bulan Ini",
+                            text = if (isEn) "⚠️ ${thisMonthCount}x Sick This Month" else "⚠️ ${thisMonthCount}x Sakit Bulan Ini",
                             color = Color(0xFFDC2626),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
@@ -1009,7 +1067,7 @@ fun SlimMedicalRecordCardItem(
 
             val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
             Text(
-                text = "Diinput oleh: $creatorLabel",
+                text = if (isEn) "Input by: $creatorLabel" else "Diinput oleh: $creatorLabel",
                 fontSize = 9.5.sp,
                 color = MaterialTheme.colorScheme.outline,
                 maxLines = 1,
@@ -1031,6 +1089,7 @@ fun ChildHealthPrimaryCardItem(
     latestRecord: MedicalRecord?,
     onClick: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -1085,7 +1144,7 @@ fun ChildHealthPrimaryCardItem(
 
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = "Buka Buku Kesehatan",
+                    contentDescription = if (isEn) "Open Health Book" else "Buka Buku Kesehatan",
                     tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
                     modifier = Modifier.size(20.dp)
                 )
@@ -1105,7 +1164,7 @@ fun ChildHealthPrimaryCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "⚠️ $thisMonthCount Kali Sakit Bulan Ini",
+                            text = if (isEn) "⚠️ $thisMonthCount Visits This Month" else "⚠️ $thisMonthCount Kali Sakit Bulan Ini",
                             color = Color(0xFFDC2626),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Bold
@@ -1119,7 +1178,7 @@ fun ChildHealthPrimaryCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "🩺 1 Kali Sakit Bulan Ini",
+                            text = if (isEn) "🩺 1 Visit This Month" else "🩺 1 Kali Sakit Bulan Ini",
                             color = Color(0xFF0369A1),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Medium
@@ -1133,7 +1192,7 @@ fun ChildHealthPrimaryCardItem(
                             .padding(horizontal = 6.dp, vertical = 2.5.dp)
                     ) {
                         Text(
-                            text = "✅ Sehat Bulan Ini",
+                            text = if (isEn) "✅ Healthy This Month" else "✅ Sehat Bulan Ini",
                             color = Color(0xFF15803D),
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Medium
@@ -1148,7 +1207,7 @@ fun ChildHealthPrimaryCardItem(
                         .padding(horizontal = 6.dp, vertical = 2.5.dp)
                 ) {
                     Text(
-                        text = "📋 $totalRecordsCount Riwayat Screening",
+                        text = if (isEn) "📋 $totalRecordsCount Screening Records" else "📋 $totalRecordsCount Riwayat Screening",
                         fontSize = 10.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontWeight = FontWeight.Medium
@@ -1161,7 +1220,11 @@ fun ChildHealthPrimaryCardItem(
                 val lastDateStr = latestRecord.treatmentDate?.let { DateUtils.formatShortDate(it) }
                     ?: DateUtils.formatShortDate(latestRecord.planDate)
                 Text(
-                    text = "Terakhir: ${latestRecord.diagnosis.ifBlank { latestRecord.complaint }} ($lastDateStr • ${latestRecord.faskes.replace("Puskesmas ", "")})",
+                    text = if (isEn) {
+                        "Latest: ${latestRecord.diagnosis.ifBlank { latestRecord.complaint }} ($lastDateStr • ${latestRecord.faskes.replace("Puskesmas ", "")})"
+                    } else {
+                        "Terakhir: ${latestRecord.diagnosis.ifBlank { latestRecord.complaint }} ($lastDateStr • ${latestRecord.faskes.replace("Puskesmas ", "")})"
+                    },
                     fontSize = 10.5.sp,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,
@@ -1190,11 +1253,13 @@ fun MedicalRecordDetailSheet(
     onDelete: () -> Unit,
     onDischargeInpatient: ((diagnosis: String, prescription: String, needsControl: Boolean, controlDate: Long?, notes: String) -> Unit)? = null
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showDischargeDialog by remember { mutableStateOf(false) }
     val treatmentDateStr = record.treatmentDate?.let { DateUtils.formatFullDate(it) }
         ?: DateUtils.formatFullDate(record.planDate)
-    val gradeText = student?.classGrade ?: "Kelas Siswa"
+    val gradeText = student?.classGrade ?: if (isEn) "Class" else "Kelas Siswa"
     val gender = student?.gender ?: "L"
 
     ModalBottomSheet(
@@ -1246,7 +1311,11 @@ fun MedicalRecordDetailSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Gender: ${if (gender == "L") "Putra" else "Putri"} • Usia: ${student?.age ?: "-"} Tahun",
+                                text = if (isEn) {
+                                    "Gender: ${if (gender == "L") "Putra" else "Putri"} • Age: ${student?.age ?: "-"} yrs"
+                                } else {
+                                    "Gender: ${if (gender == "L") "Putra" else "Putri"} • Usia: ${student?.age ?: "-"} Tahun"
+                                },
                                 fontSize = 10.5.sp,
                                 color = MaterialTheme.colorScheme.outline
                             )
@@ -1262,7 +1331,7 @@ fun MedicalRecordDetailSheet(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
-                                    contentDescription = "Edit Rekam Tindakan",
+                                    contentDescription = if (isEn) "Edit Record" else "Edit Rekam Tindakan",
                                     tint = WaliPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -1272,7 +1341,7 @@ fun MedicalRecordDetailSheet(
                             onClick = onDismiss,
                             modifier = Modifier.size(32.dp)
                         ) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup", modifier = Modifier.size(18.dp))
+                            Icon(imageVector = Icons.Default.Close, contentDescription = s.nav.closeBtn, modifier = Modifier.size(18.dp))
                         }
                     }
                 }
@@ -1291,7 +1360,7 @@ fun MedicalRecordDetailSheet(
                                 .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "⚠️ $thisMonthCount Kali Sakit Bulan Ini",
+                                text = if (isEn) "⚠️ $thisMonthCount Visits This Month" else "⚠️ $thisMonthCount Kali Sakit Bulan Ini",
                                 color = Color(0xFFDC2626),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold
@@ -1305,7 +1374,7 @@ fun MedicalRecordDetailSheet(
                                 .padding(horizontal = 7.dp, vertical = 3.dp)
                         ) {
                             Text(
-                                text = "🩺 1 Kali Sakit Bulan Ini",
+                                text = if (isEn) "🩺 1 Visit This Month" else "🩺 1 Kali Sakit Bulan Ini",
                                 color = Color(0xFF0369A1),
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Medium
@@ -1347,7 +1416,7 @@ fun MedicalRecordDetailSheet(
                                     modifier = Modifier.size(18.dp)
                                 )
                                 Text(
-                                    text = "STATUS: SEDANG RAWAT INAP (OPNAME)",
+                                    text = if (isEn) "STATUS: CURRENTLY INPATIENT" else "STATUS: SEDANG RAWAT INAP (OPNAME)",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFFB91C1C)
@@ -1355,11 +1424,11 @@ fun MedicalRecordDetailSheet(
                             }
                             Text(
                                 text = buildString {
-                                    append("Dirawat di ${record.faskes}")
+                                    append(if (isEn) "Admitted at ${record.faskes}" else "Dirawat di ${record.faskes}")
                                     if (record.inpatientRoom.isNotBlank()) {
-                                        append(" • Ruang: ${record.inpatientRoom}")
+                                        append(if (isEn) " • Room: ${record.inpatientRoom}" else " • Ruang: ${record.inpatientRoom}")
                                     }
-                                    append(" • Masuk: ${DateUtils.formatShortDate(record.treatmentDate ?: record.planDate)}")
+                                    append(if (isEn) " • Admitted: ${DateUtils.formatShortDate(record.treatmentDate ?: record.planDate)}" else " • Masuk: ${DateUtils.formatShortDate(record.treatmentDate ?: record.planDate)}")
                                 },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1383,7 +1452,7 @@ fun MedicalRecordDetailSheet(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Sudah Pulang / Selesai Rawat Inap",
+                                        text = if (isEn) "Confirm Inpatient Discharge" else "Sudah Pulang / Selesai Rawat Inap",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
@@ -1413,7 +1482,10 @@ fun MedicalRecordDetailSheet(
                             )
                             Text(
                                 text = buildString {
-                                    append("Selesai Rawat Inap • Pulang: ${DateUtils.formatFullDate(record.dischargeDate)}")
+                                    append(
+                                        if (isEn) "Inpatient Completed • Discharged: ${DateUtils.formatFullDate(record.dischargeDate)}"
+                                        else "Selesai Rawat Inap • Pulang: ${DateUtils.formatFullDate(record.dischargeDate)}"
+                                    )
                                     if (record.inpatientRoom.isNotBlank()) {
                                         append(" (${record.inpatientRoom})")
                                     }
@@ -1439,25 +1511,25 @@ fun MedicalRecordDetailSheet(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "🏥 Informasi Kunjungan Faskes:",
+                            text = if (isEn) "🏥 Faskes Visit Information:" else "🏥 Informasi Kunjungan Faskes:",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.primary
                         )
-                        Text(text = "📍 Tempat: ${record.faskes}", fontSize = 11.5.sp)
-                        Text(text = "📅 Tanggal: $treatmentDateStr", fontSize = 11.5.sp)
-                        Text(text = "⏰ Jam Keberangkatan: ${record.departureTime} WIB", fontSize = 11.5.sp)
-                        Text(text = "👤 Pendamping: ${record.escortName.ifBlank { "Wali Asuh SRT 1" }}", fontSize = 11.5.sp)
+                        Text(text = if (isEn) "📍 Facility: ${record.faskes}" else "📍 Tempat: ${record.faskes}", fontSize = 11.5.sp)
+                        Text(text = if (isEn) "📅 Date: $treatmentDateStr" else "📅 Tanggal: $treatmentDateStr", fontSize = 11.5.sp)
+                        Text(text = if (isEn) "⏰ Departure Time: ${record.departureTime} WIB" else "⏰ Jam Keberangkatan: ${record.departureTime} WIB", fontSize = 11.5.sp)
+                        Text(text = if (isEn) "👤 Escort: ${record.escortName.ifBlank { "Wali Asuh SRT 1" }}" else "👤 Pendamping: ${record.escortName.ifBlank { "Wali Asuh SRT 1" }}", fontSize = 11.5.sp)
                         val creatorLabel = record.createdBy.ifBlank { record.escortName.ifBlank { "-" } }
                         Text(
-                            text = "✍️ Diinput oleh: $creatorLabel",
+                            text = if (isEn) "✍️ Input by: $creatorLabel" else "✍️ Diinput oleh: $creatorLabel",
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (record.editedBy.isNotBlank()) {
                             val editedTimeLabel = record.editedAt?.let { " (${DateUtils.formatShortDate(it)})" }.orEmpty()
                             Text(
-                                text = "✏️ Diedit oleh: ${record.editedBy}$editedTimeLabel",
+                                text = if (isEn) "✏️ Edited by: ${record.editedBy}$editedTimeLabel" else "✏️ Diedit oleh: ${record.editedBy}$editedTimeLabel",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.primary
@@ -1479,13 +1551,15 @@ fun MedicalRecordDetailSheet(
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = "🔍 Keluhan & Gejala Awal:",
+                            text = if (isEn) "🔍 Initial Complaint & Symptoms:" else "🔍 Keluhan & Gejala Awal:",
                             fontWeight = FontWeight.Bold,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = record.complaint.ifBlank { "Tidak ada catatan keluhan awal khusus." },
+                            text = record.complaint.ifBlank {
+                                if (isEn) "No initial complaint notes recorded." else "Tidak ada catatan keluhan awal khusus."
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -1514,14 +1588,16 @@ fun MedicalRecordDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "Hasil Diagnosa Dokter:",
+                                text = if (isEn) "Doctor Diagnosis:" else "Hasil Diagnosa Dokter:",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = Color(0xFF0369A1)
                             )
                         }
                         Text(
-                            text = record.diagnosis.ifBlank { "Pemeriksaan kesehatan umum puskesmas." },
+                            text = record.diagnosis.ifBlank {
+                                if (isEn) "General Puskesmas health examination." else "Pemeriksaan kesehatan umum puskesmas."
+                            },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -1551,14 +1627,16 @@ fun MedicalRecordDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "Tindakan Medis di Puskesmas:",
+                                text = if (isEn) "Medical Action at Puskesmas:" else "Tindakan Medis di Puskesmas:",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = Color(0xFF047857)
                             )
                         }
                         Text(
-                            text = record.actionsTaken.ifBlank { "Observasi dan penanganan dasar." },
+                            text = record.actionsTaken.ifBlank {
+                                if (isEn) "Observation and basic care." else "Observasi dan penanganan dasar."
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -1587,14 +1665,16 @@ fun MedicalRecordDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(5.dp))
                             Text(
-                                text = "Resep Obat & Aturan Minum:",
+                                text = if (isEn) "Prescription & Dosage:" else "Resep Obat & Aturan Minum:",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
                                 color = Color(0xFF6D28D9)
                             )
                         }
                         Text(
-                            text = record.prescription.ifBlank { "Tidak ada resep obat tambahan." },
+                            text = record.prescription.ifBlank {
+                                if (isEn) "No additional prescription." else "Tidak ada resep obat tambahan."
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -1624,21 +1704,26 @@ fun MedicalRecordDetailSheet(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Instruksi Kontrol Ulang:",
+                                    text = if (isEn) "Follow-up Instructions:" else "Instruksi Kontrol Ulang:",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = Color(0xFFB45309)
                                 )
                             }
                             Text(
-                                text = record.controlDate?.let { "Tanggal Kontrol: ${DateUtils.formatFullDate(it)}" }
-                                    ?: "Jadwal kontrol terdaftar",
+                                text = record.controlDate?.let {
+                                    if (isEn) "Follow-up Date: ${DateUtils.formatFullDate(it)}" else "Tanggal Kontrol: ${DateUtils.formatFullDate(it)}"
+                                } ?: if (isEn) "Follow-up scheduled" else "Jadwal kontrol terdaftar",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = if (record.isControlCompleted) "Status: Sudah selesai kontrol" else "Status: Wajib kontrol kembali ke faskes",
+                                text = if (isEn) {
+                                    if (record.isControlCompleted) "Status: Follow-up completed" else "Status: Must return to faskes for follow-up"
+                                } else {
+                                    if (record.isControlCompleted) "Status: Sudah selesai kontrol" else "Status: Wajib kontrol kembali ke faskes"
+                                },
                                 fontSize = 11.sp,
                                 color = if (record.isControlCompleted) Color(0xFF059669) else Color(0xFFD97706),
                                 fontWeight = FontWeight.Medium
@@ -1669,7 +1754,11 @@ fun MedicalRecordDetailSheet(
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
-                                    text = "Riwayat Screening Terikat Siswa Ini (${allStudentRecords.size} Catatan):",
+                                    text = if (isEn) {
+                                        "Linked Screening History (${allStudentRecords.size} Records):"
+                                    } else {
+                                        "Riwayat Screening Terikat Siswa Ini (${allStudentRecords.size} Catatan):"
+                                    },
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -1705,7 +1794,7 @@ fun MedicalRecordDetailSheet(
                                             )
                                             if (isCurrent) {
                                                 Text(
-                                                    text = "(Kunjungan Ini)",
+                                                    text = if (isEn) "(This Visit)" else "(Kunjungan Ini)",
                                                     fontSize = 9.5.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = WaliPrimary
@@ -1713,13 +1802,17 @@ fun MedicalRecordDetailSheet(
                                             }
                                         }
                                         Text(
-                                            text = "Diagnosa: ${itemRecord.diagnosis.ifBlank { itemRecord.complaint }}",
+                                            text = if (isEn) {
+                                                "Diagnosis: ${itemRecord.diagnosis.ifBlank { itemRecord.complaint }}"
+                                            } else {
+                                                "Diagnosa: ${itemRecord.diagnosis.ifBlank { itemRecord.complaint }}"
+                                            },
                                             fontSize = 10.5.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         if (itemRecord.actionsTaken.isNotBlank()) {
                                             Text(
-                                                text = "Tindakan: ${itemRecord.actionsTaken}",
+                                                text = if (isEn) "Action: ${itemRecord.actionsTaken}" else "Tindakan: ${itemRecord.actionsTaken}",
                                                 fontSize = 10.sp,
                                                 color = MaterialTheme.colorScheme.outline
                                             )
@@ -1742,7 +1835,7 @@ fun MedicalRecordDetailSheet(
                 ) {
                     Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Cetak Rekap Screening PDF (Bulan / Tahun)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(s.medical.passportPrintPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
@@ -1763,11 +1856,11 @@ fun MedicalRecordDetailSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = "Hapus Riwayat",
+                            contentDescription = if (isEn) "Delete Record" else "Hapus Riwayat",
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Hapus Riwayat", fontSize = 11.5.sp)
+                        Text(if (isEn) "Delete Record" else "Hapus Riwayat", fontSize = 11.5.sp)
                     }
 
                     Button(
@@ -1785,7 +1878,7 @@ fun MedicalRecordDetailSheet(
                             modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(5.dp))
-                        Text("Laporan WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "WhatsApp Report" else "Laporan WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1807,7 +1900,7 @@ fun MedicalRecordDetailSheet(
             onDismissRequest = { showDischargeDialog = false },
             title = {
                 Text(
-                    text = "Selesai Rawat Inap",
+                    text = if (isEn) "Complete Inpatient Stay" else "Selesai Rawat Inap",
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
@@ -1818,14 +1911,14 @@ fun MedicalRecordDetailSheet(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "Konfirmasi ${record.studentName} telah pulang dari ${record.faskes}. Anda dapat melengkapi diagnosa akhir atau resep pulang jika diperlukan.",
+                        text = s.medical.medDischargeDialogBody(record.studentName, record.faskes),
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedTextField(
                         value = updDiagnosis,
                         onValueChange = { updDiagnosis = it },
-                        label = { Text("Diagnosa Akhir", fontSize = 12.sp) },
+                        label = { Text(s.medical.medDischargeFinalDiagLabel, fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -1833,8 +1926,8 @@ fun MedicalRecordDetailSheet(
                     OutlinedTextField(
                         value = updPrescription,
                         onValueChange = { updPrescription = it },
-                        label = { Text("Resep Obat Pulang (Opsional)", fontSize = 12.sp) },
-                        placeholder = { Text("misal: Paracetamol 3x1, Vitamin", fontSize = 12.sp) },
+                        label = { Text(s.medical.medDischargeFinalPrescLabel, fontSize = 12.sp) },
+                        placeholder = { Text(s.medical.medDischargeFinalPrescPlaceholder, fontSize = 12.sp) },
                         minLines = 2,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -1845,7 +1938,7 @@ fun MedicalRecordDetailSheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Perlu Kontrol Ulang?",
+                            text = s.medical.medDischargeNeedControlSwitch,
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -1859,20 +1952,20 @@ fun MedicalRecordDetailSheet(
                             FilterChip(
                                 selected = selectedCtrlMillis == calIn3Days,
                                 onClick = { selectedCtrlMillis = calIn3Days },
-                                label = { Text("+3 Hari", fontSize = 11.sp) }
+                                label = { Text(s.medical.medDischargeIn3Days, fontSize = 11.sp) }
                             )
                             FilterChip(
                                 selected = selectedCtrlMillis == calIn7Days,
                                 onClick = { selectedCtrlMillis = calIn7Days },
-                                label = { Text("+1 Minggu", fontSize = 11.sp) }
+                                label = { Text(s.medical.medDischargeIn7Days, fontSize = 11.sp) }
                             )
                         }
                     }
                     OutlinedTextField(
                         value = dischargeNotes,
                         onValueChange = { dischargeNotes = it },
-                        label = { Text("Catatan Pulang (Opsional)", fontSize = 12.sp) },
-                        placeholder = { Text("misal: Istirahat 2 hari di asrama", fontSize = 12.sp) },
+                        label = { Text(s.medical.medDischargeNotesLabel, fontSize = 12.sp) },
+                        placeholder = { Text(s.medical.medDischargeNotesPlaceholder, fontSize = 12.sp) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -1897,12 +1990,12 @@ fun MedicalRecordDetailSheet(
                     ),
                     modifier = Modifier.testTag("confirm_discharge_inpatient_button")
                 ) {
-                    Text("Konfirmasi Pulang", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(s.medical.medDischargeConfirmBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDischargeDialog = false }) {
-                    Text("Batal", fontSize = 12.sp)
+                    Text(s.nav.cancelBtn, fontSize = 12.sp)
                 }
             }
         )
@@ -1923,6 +2016,7 @@ fun ChildHealthPassportSheet(
     onPrintPdf: () -> Unit = {},
     onShareRecord: (MedicalRecord) -> Unit
 ) {
+    val s = LocalAppStrings.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -1974,14 +2068,14 @@ fun ChildHealthPassportSheet(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Asrama: ${student.dormitory} • Gol. Darah: ${student.bloodType}",
+                                text = s.medical.passportBloodTypeLabel(student.dormitory, student.bloodType),
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.outline
                             )
                         }
                     }
                     IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = "Tutup")
+                        Icon(imageVector = Icons.Default.Close, contentDescription = s.nav.closeBtn)
                     }
                 }
 
@@ -1998,19 +2092,19 @@ fun ChildHealthPassportSheet(
                         verticalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Text(
-                            text = if (thisMonthCount >= 2) "⚠️ Perhatian Kesehatan Anak:" else "🩺 Ringkasan Screening:",
+                            text = if (thisMonthCount >= 2) s.medical.passportAlertHighFreq else s.medical.passportAlertNormal,
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = if (thisMonthCount >= 2) Color(0xFFDC2626) else Color(0xFF16A34A)
                         )
                         Text(
-                            text = "Anak asuh ini tercatat $thisMonthCount kali sakit / berobat dalam bulan berjalan.",
+                            text = s.medical.passportMonthlyFreqText(thisMonthCount),
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Total seluruh riwayat screening kesehatan terikat: ${records.size} catatan.",
+                            text = s.medical.passportTotalRecordsText(records.size),
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -2032,12 +2126,12 @@ fun ChildHealthPassportSheet(
                 ) {
                     Icon(imageVector = Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Cetak Rekap Screening PDF (Bulan / Tahun)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text(s.medical.passportPrintPdfBtn, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
 
                 // Timeline Seluruh Riwayat Screening
                 Text(
-                    text = "Riwayat Screening & Pengobatan Terikat (${records.size} Kunjungan):",
+                    text = s.medical.passportHistoryHeader(records.size),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -2051,7 +2145,7 @@ fun ChildHealthPassportSheet(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Belum ada catatan rekam medis atau screening untuk anak asuh ini.",
+                            text = s.medical.passportHistoryEmpty,
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -2078,7 +2172,7 @@ fun ChildHealthPassportSheet(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Kunjungan #${records.size - index} • $recDateStr",
+                                        text = s.medical.passportVisitTitle(records.size - index, recDateStr),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         color = WaliPrimary
@@ -2087,14 +2181,14 @@ fun ChildHealthPassportSheet(
                                 }
 
                                 Text(
-                                    text = "Keluhan: ${rec.complaint}",
+                                    text = "${s.medical.passportComplaintPrefix} ${rec.complaint}",
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
 
                                 if (rec.diagnosis.isNotBlank()) {
                                     Text(
-                                        text = "Diagnosa: ${rec.diagnosis}",
+                                        text = "${s.medical.medDiagnosisPrefix} ${rec.diagnosis}",
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF0369A1)
@@ -2103,7 +2197,7 @@ fun ChildHealthPassportSheet(
 
                                 if (rec.actionsTaken.isNotBlank()) {
                                     Text(
-                                        text = "Tindakan: ${rec.actionsTaken}",
+                                        text = "${s.medical.medActionsPrefix} ${rec.actionsTaken}",
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -2111,7 +2205,7 @@ fun ChildHealthPassportSheet(
 
                                 if (rec.prescription.isNotBlank()) {
                                     Text(
-                                        text = "Obat: ${rec.prescription}",
+                                        text = "${s.medical.medPrescriptionPrefix} ${rec.prescription}",
                                         fontSize = 11.sp,
                                         color = Color(0xFF6D28D9)
                                     )
@@ -2136,7 +2230,7 @@ fun ChildHealthPassportSheet(
                                     ) {
                                         Icon(imageVector = Icons.Default.Share, contentDescription = null, modifier = Modifier.size(12.dp))
                                         Spacer(modifier = Modifier.width(3.dp))
-                                        Text("Laporan WA", fontSize = 10.sp)
+                                        Text(s.medical.passportWaReportBtn, fontSize = 10.sp)
                                     }
                                 }
                             }
@@ -2151,7 +2245,7 @@ fun ChildHealthPassportSheet(
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Tutup", fontSize = 12.sp)
+                    Text(s.nav.closeBtn, fontSize = 12.sp)
                 }
             }
         }

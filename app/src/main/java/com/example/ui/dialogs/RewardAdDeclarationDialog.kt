@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 /**
  * Dialog deklarasi eksplisit sebelum memutar Rewarded Video Ad
@@ -41,12 +42,21 @@ import com.example.ui.theme.WaliPrimary
  */
 @Composable
 fun RewardAdDeclarationDialog(
-    title: String = "Tonton Video untuk Lanjutkan",
-    actionDescription: String = "mengunduh dan membuka Laporan PDF",
-    confirmButtonText: String = "Tonton & Lanjutkan",
+    title: String? = null,
+    actionDescription: String? = null,
+    confirmButtonText: String? = null,
     onConfirmWatchAd: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+
+    val resolvedTitle = title ?: if (isEn) "Watch Video to Continue" else "Tonton Video untuk Lanjutkan"
+    val resolvedActionDesc = actionDescription
+        ?: if (isEn) "download and open the PDF Report" else "mengunduh dan membuka Laporan PDF"
+    val resolvedConfirmText = confirmButtonText
+        ?: if (isEn) "Watch & Continue" else "Tonton & Lanjutkan"
+
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -67,7 +77,7 @@ fun RewardAdDeclarationDialog(
         },
         title = {
             Text(
-                text = title,
+                text = resolvedTitle,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
@@ -79,7 +89,11 @@ fun RewardAdDeclarationDialog(
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Tonton iklan video singkat hingga selesai untuk $actionDescription.",
+                    text = if (isEn) {
+                        "Watch a short video ad until the end to $resolvedActionDesc."
+                    } else {
+                        "Tonton iklan video singkat hingga selesai untuk $resolvedActionDesc."
+                    },
                     fontSize = 13.5.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     lineHeight = 19.sp
@@ -92,7 +106,11 @@ fun RewardAdDeclarationDialog(
                         .padding(horizontal = 10.dp, vertical = 8.dp)
                 ) {
                     Text(
-                        text = "Jika iklan video belum tersedia saat ini, proses akan langsung dilanjutkan tanpa menunggu.",
+                        text = if (isEn) {
+                            "If a video ad is unavailable right now, the process will continue immediately without waiting."
+                        } else {
+                            "Jika iklan video belum tersedia saat ini, proses akan langsung dilanjutkan tanpa menunggu."
+                        },
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 16.sp
@@ -116,7 +134,7 @@ fun RewardAdDeclarationDialog(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = confirmButtonText,
+                    text = resolvedConfirmText,
                     fontSize = 12.5.sp,
                     fontWeight = FontWeight.Bold
                 )
@@ -130,7 +148,7 @@ fun RewardAdDeclarationDialog(
                     .heightIn(min = 48.dp)
                     .testTag("btn_cancel_reward_ad")
             ) {
-                Text("Batal", fontSize = 12.5.sp)
+                Text(s.cancel, fontSize = 12.5.sp)
             }
         }
     )
@@ -141,10 +159,17 @@ fun RewardAdDeclarationDialog(
  */
 @Composable
 fun RewardAdDeclarationHint(
-    text: String = "Tonton iklan video singkat untuk mengunduh/membuka Laporan PDF",
+    text: String? = null,
     accentColor: Color = Color(0xFF0369A1),
     modifier: Modifier = Modifier
 ) {
+    val s = LocalAppStrings.current
+    val resolvedText = text ?: if (s.isEnglish) {
+        "Watch a short video ad to download/open the PDF Report"
+    } else {
+        "Tonton iklan video singkat untuk mengunduh/membuka Laporan PDF"
+    }
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -162,7 +187,7 @@ fun RewardAdDeclarationHint(
         )
         Spacer(modifier = Modifier.width(6.dp))
         Text(
-            text = text,
+            text = resolvedText,
             fontSize = 11.sp,
             fontWeight = FontWeight.Medium,
             color = accentColor,

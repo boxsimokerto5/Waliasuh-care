@@ -14,6 +14,8 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
 import com.example.data.model.ChildStudent
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -197,8 +199,10 @@ object StudentCardRenderer {
         qrBitmap: Bitmap?,
         logoBitmap: Bitmap? = null,
         kemensosBitmap: Bitmap? = null,
-        sekolahRakyatBitmap: Bitmap? = null
+        sekolahRakyatBitmap: Bitmap? = null,
+        language: AppLanguage = AppLanguageManager.currentLanguage
     ) {
+        val isEnglish = language == AppLanguage.ENGLISH
         val palette = resolvePalette(student)
         val cornerRadius = height * 0.065f
         val cardRect = RectF(left, top, left + width, top + height)
@@ -342,7 +346,8 @@ object StudentCardRenderer {
         canvas.restore()
 
         val subBaselineY = headerTextStartY + schoolLayout.height + height * 0.012f - subLabelPaint.fontMetrics.ascent
-        canvas.drawText("KARTU IDENTITAS ANAK ASUH", schoolTextLeft, subBaselineY, subLabelPaint)
+        val cardSubtitle = if (isEnglish) "STUDENT IDENTITY CARD" else "KARTU IDENTITAS ANAK ASUH"
+        canvas.drawText(cardSubtitle, schoolTextLeft, subBaselineY, subLabelPaint)
 
         // 4. Area Konten Putih: Kiri (Biodata lengkap termasuk NIK utuh) & Kanan (Micro-pill + QR Code)
         val bodyTop = top + headerHeight + dividerRibbonH
@@ -498,10 +503,12 @@ object StudentCardRenderer {
                 append(student.dormitory)
             }
         }
-        drawFieldRow("Kelas", kelasText)
+        val kelasLabel = if (isEnglish) "Class" else "Kelas"
+        val alamatLabel = if (isEnglish) "Address" else "Alamat"
+        drawFieldRow(kelasLabel, kelasText)
 
         // Alamat (maks 2 baris rapi)
-        canvas.drawText("Alamat", infoLeft, cursorY, labelPaint)
+        canvas.drawText(alamatLabel, infoLeft, cursorY, labelPaint)
         val addrLeft = infoLeft + labelColW
         val addrWidth = (infoRight - addrLeft).coerceAtLeast(20f).toInt()
         val addrValue = ": ${student.address.trim().ifBlank { "-" }}"

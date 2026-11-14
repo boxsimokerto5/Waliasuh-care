@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.util.StudentClassifier
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -61,6 +62,8 @@ fun SearchStudentDialog(
     onSelect: (ChildStudent) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var searchQuery by remember { mutableStateOf("") }
     var selectedDormitoryFilter by remember { mutableStateOf("Semua") }
 
@@ -132,13 +135,17 @@ fun SearchStudentDialog(
                         }
                         Column {
                             Text(
-                                text = "Pilih Anak Asuh",
+                                text = if (isEn) "Select Foster Student" else "Pilih Anak Asuh",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Cari berdasarkan nama, asrama, atau kelas",
+                                text = if (isEn) {
+                                    "Search by name, Asrama, or grade"
+                                } else {
+                                    "Cari berdasarkan nama, asrama, atau kelas"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -152,7 +159,7 @@ fun SearchStudentDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup",
+                            contentDescription = s.close,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -164,7 +171,12 @@ fun SearchStudentDialog(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    placeholder = { Text("Ketik nama anak asuh...", fontSize = 13.sp) },
+                    placeholder = {
+                        Text(
+                            if (isEn) "Type foster student name..." else "Ketik nama anak asuh...",
+                            fontSize = 13.sp
+                        )
+                    },
                     leadingIcon = {
                         Icon(
                             imageVector = Icons.Default.Search,
@@ -181,7 +193,7 @@ fun SearchStudentDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
-                                    contentDescription = "Hapus",
+                                    contentDescription = if (isEn) "Clear" else "Hapus",
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -204,15 +216,16 @@ fun SearchStudentDialog(
                 ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("Semua", "Putra", "Putri").forEach { dorm ->
+                            val chipLabel = if (dorm == "Semua") s.all else dorm
                             FilterChip(
                                 selected = selectedDormitoryFilter == dorm,
                                 onClick = { selectedDormitoryFilter = dorm },
-                                label = { Text(dorm, fontSize = 11.sp) }
+                                label = { Text(chipLabel, fontSize = 11.sp) }
                             )
                         }
                     }
                     Text(
-                        text = "${filteredStudents.size} anak",
+                        text = if (isEn) "${filteredStudents.size} students" else "${filteredStudents.size} anak",
                         fontSize = 11.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary
@@ -246,14 +259,18 @@ fun SearchStudentDialog(
                                 modifier = Modifier.size(40.dp)
                             )
                             Text(
-                                text = "Tidak ada anak asuh yang cocok",
+                                text = if (isEn) "No matching foster student" else "Tidak ada anak asuh yang cocok",
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurface,
                                 textAlign = TextAlign.Center
                             )
                             Text(
-                                text = "Coba kata kunci lain atau ubah filter asrama",
+                                text = if (isEn) {
+                                    "Try another keyword or change Asrama filter"
+                                } else {
+                                    "Coba kata kunci lain atau ubah filter asrama"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
@@ -346,7 +363,7 @@ fun SearchStudentDialog(
                                                 )
                                                 Spacer(modifier = Modifier.width(3.dp))
                                                 Text(
-                                                    text = "Alergi: ${student.allergies}",
+                                                    text = if (isEn) "Allergies: ${student.allergies}" else "Alergi: ${student.allergies}",
                                                     fontSize = 10.5.sp,
                                                     color = MaterialTheme.colorScheme.error,
                                                     fontWeight = FontWeight.Medium
@@ -358,7 +375,7 @@ fun SearchStudentDialog(
                                     if (isSelected) {
                                         Icon(
                                             imageVector = Icons.Default.Check,
-                                            contentDescription = "Terpilih",
+                                            contentDescription = if (isEn) "Selected" else "Terpilih",
                                             tint = MaterialTheme.colorScheme.primary,
                                             modifier = Modifier.size(20.dp)
                                         )

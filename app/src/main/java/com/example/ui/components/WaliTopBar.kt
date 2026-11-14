@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun WaliTopBar(
@@ -51,6 +52,8 @@ fun WaliTopBar(
     schoolName: String = "SRT 1 Kabupaten Kediri",
     modifier: Modifier = Modifier
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
@@ -124,7 +127,7 @@ fun WaliTopBar(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MedicalServices,
-                                contentDescription = "Rekam Medis Dokter",
+                                contentDescription = if (isEn) "Medical Records" else "Rekam Medis Dokter",
                                 tint = WaliPrimary,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -154,7 +157,7 @@ fun WaliTopBar(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Notifications,
-                                    contentDescription = "Notifikasi Pengingat",
+                                    contentDescription = if (isEn) "Reminder Notifications" else "Notifikasi Pengingat",
                                     tint = if (notificationCount > 0) WaliPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(22.dp)
                                 )
@@ -174,7 +177,7 @@ fun WaliTopBar(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Person,
-                            contentDescription = "Profil Wali",
+                            contentDescription = if (isEn) "Wali Profile" else "Profil Wali",
                             tint = WaliPrimary,
                             modifier = Modifier.size(20.dp)
                         )

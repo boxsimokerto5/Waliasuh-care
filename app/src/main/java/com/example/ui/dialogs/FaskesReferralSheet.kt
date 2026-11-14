@@ -51,15 +51,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FaskesReferralSheet(
     schoolProfile: SchoolProfile,
-    title: String = "Puskesmas Langganan Rujukan",
+    title: String? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val resolvedTitle = title ?: if (isEn) "Referral Puskesmas Facilities" else "Puskesmas Langganan Rujukan"
     val allFaskes = schoolProfile.getAllFaskesWithDetails()
     val hasIncompleteInfo = allFaskes.drop(1).any { it.address.isBlank() || it.phone.isBlank() }
 
@@ -100,13 +104,17 @@ fun FaskesReferralSheet(
                     }
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = title,
+                            text = resolvedTitle,
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Fasilitas kesehatan terdaftar • ${schoolProfile.schoolName}",
+                            text = if (isEn) {
+                                "Registered Faskes • ${schoolProfile.schoolName}"
+                            } else {
+                                "Fasilitas kesehatan terdaftar • ${schoolProfile.schoolName}"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
@@ -122,11 +130,15 @@ fun FaskesReferralSheet(
                     } else {
                         "$index. ${info.name}"
                     }
-                    val badgeLabel = if (isPrimaryInternal) "Faskes Utama" else "Rujukan #$index"
+                    val badgeLabel = if (isPrimaryInternal) {
+                        if (isEn) "Primary Faskes" else "Faskes Utama"
+                    } else {
+                        if (isEn) "Referral #$index" else "Rujukan #$index"
+                    }
                     val resolvedAddress = when {
                         info.address.isNotBlank() -> info.address
-                        schoolProfile.city.isNotBlank() -> "Wilayah ${schoolProfile.city}"
-                        else -> "Alamat belum diisi Admin Sekolah"
+                        schoolProfile.city.isNotBlank() -> if (isEn) "${schoolProfile.city} Area" else "Wilayah ${schoolProfile.city}"
+                        else -> if (isEn) "Address not set by School Admin" else "Alamat belum diisi Admin Sekolah"
                     }
 
                     Card(
@@ -227,9 +239,9 @@ fun FaskesReferralSheet(
                                     )
                                     Text(
                                         text = if (info.phone.isNotBlank()) {
-                                            "Telepon: ${info.phone}"
+                                            if (isEn) "Phone: ${info.phone}" else "Telepon: ${info.phone}"
                                         } else {
-                                            "Telepon belum diisi Admin"
+                                            if (isEn) "Phone not set by Admin" else "Telepon belum diisi Admin"
                                         },
                                         fontSize = 11.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -256,11 +268,15 @@ fun FaskesReferralSheet(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.Call,
-                                            contentDescription = "Hubungi ${info.name}",
+                                            contentDescription = if (isEn) "Call ${info.name}" else "Hubungi ${info.name}",
                                             modifier = Modifier.size(13.dp)
                                         )
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("Hubungi", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                                        Text(
+                                            if (isEn) "Call" else "Hubungi",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
                                     }
                                 }
                             }
@@ -285,7 +301,11 @@ fun FaskesReferralSheet(
                                 modifier = Modifier.size(15.dp)
                             )
                             Text(
-                                text = "Admin Sekolah dapat melengkapi alamat & nomor telepon faskes melalui menu Admin Sekolah → Edit Profil Sekolah.",
+                                text = if (isEn) {
+                                    "School Admin can complete Faskes address & phone details via School Admin -> Edit School Profile."
+                                } else {
+                                    "Admin Sekolah dapat melengkapi alamat & nomor telepon faskes melalui menu Admin Sekolah → Edit Profil Sekolah."
+                                },
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -301,7 +321,7 @@ fun FaskesReferralSheet(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.heightIn(min = 48.dp)
                     ) {
-                        Text("Tutup")
+                        Text(s.close)
                     }
                 }
             }

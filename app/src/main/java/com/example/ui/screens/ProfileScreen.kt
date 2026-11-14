@@ -30,11 +30,13 @@ import android.widget.Toast
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MenuBook
@@ -43,8 +45,11 @@ import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.SupportAgent
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.LocalAppStrings
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.FaskesReferralSheet
@@ -101,6 +106,9 @@ fun ProfileScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val currentLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
@@ -108,6 +116,7 @@ fun ProfileScreen(
     var showEditAccountDialog by remember { mutableStateOf(false) }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
+    var showLanguageSheet by remember { mutableStateOf(false) }
     var showMonthlyReportDialog by remember { mutableStateOf(false) }
     var showMonthlyReportAdConfirm by remember { mutableStateOf(false) }
     var showGuideDialog by remember { mutableStateOf(false) }
@@ -128,7 +137,7 @@ fun ProfileScreen(
             contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 80.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Header Titles from Image 1: "Menu Lainnya", "Wali: Sari Devi"
+            // Header Titles
             item {
                 Row(
                     modifier = Modifier
@@ -138,7 +147,7 @@ fun ProfileScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Menu Lainnya",
+                        text = if (isEn) "More Menu" else "Menu Lainnya",
                         fontSize = 19.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -154,13 +163,13 @@ fun ProfileScreen(
 
             // GROUP 1: Pengaturan App
             item {
-                SectionHeader(title = "Pengaturan App")
+                SectionHeader(title = s.nav.profileAppSettingsSection)
             }
 
             item {
                 MenuSettingCard(
-                    title = "Puskesmas Saya",
-                    subtitle = "Daftar Puskesmas langganan",
+                    title = if (isEn) "My Puskesmas" else "Puskesmas Saya",
+                    subtitle = if (isEn) "Registered referral Puskesmas list" else "Daftar Puskesmas langganan",
                     icon = Icons.Default.LocalHospital,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
@@ -174,8 +183,8 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Notifikasi",
-                    subtitle = "Atur pengingat berobat",
+                    title = if (isEn) "Notifications" else "Notifikasi",
+                    subtitle = if (isEn) "Manage medical treatment alerts" else "Atur pengingat berobat",
                     icon = Icons.Default.Notifications,
                     iconBg = Color(0xFFEFF6FF),
                     iconColor = Color(0xFF2563EB),
@@ -189,8 +198,8 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Akun & Kata Sandi",
-                    subtitle = "Profil akun & ganti kata sandi login",
+                    title = if (isEn) "Account & Password" else "Akun & Kata Sandi",
+                    subtitle = if (isEn) "Account profile & change login password" else "Profil akun & ganti kata sandi login",
                     icon = Icons.Default.AccountCircle,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF475569),
@@ -203,7 +212,7 @@ fun ProfileScreen(
             }
 
             item {
-                // Theme Toggle Item (matching Image 1 style)
+                // Theme Toggle Item
                 ElevatedCard(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
@@ -235,13 +244,17 @@ fun ProfileScreen(
                             Spacer(modifier = Modifier.width(12.dp))
                             Column {
                                 Text(
-                                    text = if (isDarkTheme) "Tema Gelap (Aktif)" else "Tema Terang (Aktif)",
+                                    text = if (isEn) {
+                                        if (isDarkTheme) s.nav.profileThemeDarkActive else s.nav.profileThemeLightActive
+                                    } else {
+                                        if (isDarkTheme) "Tema Gelap (Aktif)" else "Tema Terang (Aktif)"
+                                    },
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Beralih tampilan terang / gelap",
+                                    text = if (isEn) "Switch light / dark display" else "Beralih tampilan terang / gelap",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -259,19 +272,94 @@ fun ProfileScreen(
                 }
             }
 
+            item {
+                // Language Selector Card
+                ElevatedCard(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .minimumInteractiveComponentSize()
+                        .clickable {
+                            TopOnAdManager.onUserActionClick(context)
+                            showLanguageSheet = true
+                        }
+                        .testTag("menu_language_profile"),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFE0F2FE)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Language,
+                                    contentDescription = s.nav.profileLanguageTitle,
+                                    tint = WaliPrimary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Text(
+                                    text = s.nav.profileLanguageTitle,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = s.nav.profileLanguageSubtitle(currentLanguage.displayName),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = WaliPrimary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = currentLanguage.shortBadge,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WaliPrimary,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             // GROUP 2: Laporan
             item {
-                SectionHeader(title = "Laporan")
+                SectionHeader(title = if (isEn) "Reports" else "Laporan")
             }
 
             item {
                 MenuSettingCard(
-                    title = "Laporan Bulanan",
-                    subtitle = "Rekapitulasi lengkap, statistik sakit & ekspor PDF/WA • Tonton iklan video singkat",
+                    title = if (isEn) "Monthly Report" else "Laporan Bulanan",
+                    subtitle = if (isEn) {
+                        "Full recap, illness stats & PDF/WA export • Watch short sponsor video"
+                    } else {
+                        "Rekapitulasi lengkap, statistik sakit & ekspor PDF/WA • Tonton iklan video singkat"
+                    },
                     icon = Icons.Default.Assessment,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
-                    badgeText = "Iklan Video",
+                    badgeText = if (isEn) "Video Ad" else "Iklan Video",
                     onClick = {
                         showMonthlyReportAdConfirm = true
                     },
@@ -281,13 +369,13 @@ fun ProfileScreen(
 
             // GROUP 3: Lainnya
             item {
-                SectionHeader(title = "Lainnya")
+                SectionHeader(title = if (isEn) "Others" else "Lainnya")
             }
 
             item {
                 MenuSettingCard(
-                    title = "Panduan",
-                    subtitle = "Panduan penggunaan aplikasi",
+                    title = if (isEn) "User Guide" else "Panduan",
+                    subtitle = if (isEn) "How to use Wali Asuh Care" else "Panduan penggunaan aplikasi",
                     icon = Icons.Default.MenuBook,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF334155),
@@ -301,13 +389,13 @@ fun ProfileScreen(
 
             // GROUP 4: Informasi & Legal
             item {
-                SectionHeader(title = "Informasi & Legal")
+                SectionHeader(title = if (isEn) "Information & Legal" else "Informasi & Legal")
             }
 
             item {
                 MenuSettingCard(
-                    title = "Tentang Aplikasi",
-                    subtitle = "Versi aplikasi, fungsi & status independensi",
+                    title = s.nav.profileAboutTitle,
+                    subtitle = if (isEn) "App version, functions & independence notice" else "Versi aplikasi, fungsi & status independensi",
                     icon = Icons.Default.Info,
                     iconBg = Color(0xFFE0F2FE),
                     iconColor = WaliPrimary,
@@ -319,7 +407,7 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = "Privacy Policy",
-                    subtitle = "Kebijakan privasi, data siswa & izin perangkat",
+                    subtitle = if (isEn) "Privacy policy, student data & device permissions" else "Kebijakan privasi, data siswa & izin perangkat",
                     icon = Icons.Default.PrivacyTip,
                     iconBg = Color(0xFFCCFBF1),
                     iconColor = Color(0xFF0F766E),
@@ -331,7 +419,7 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = "Terms & Service",
-                    subtitle = "Syarat, ketentuan & disclaimer penggunaan",
+                    subtitle = if (isEn) "Terms, conditions & usage disclaimer" else "Syarat, ketentuan & disclaimer penggunaan",
                     icon = Icons.Default.Gavel,
                     iconBg = Color(0xFFF3E8FF),
                     iconColor = Color(0xFF7C3AED),
@@ -343,7 +431,7 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = "Contact Us",
-                    subtitle = "Hubungi pengembang (Email & WhatsApp dukungan)",
+                    subtitle = if (isEn) "Contact developer support (Email & WhatsApp)" else "Hubungi pengembang (Email & WhatsApp dukungan)",
                     icon = Icons.Default.SupportAgent,
                     iconBg = Color(0xFFDCFCE7),
                     iconColor = Color(0xFF16A34A),
@@ -355,8 +443,8 @@ fun ProfileScreen(
             if (role == UserRole.WALI) {
                 item {
                     MenuSettingCard(
-                        title = "Hapus Akun Saya",
-                        subtitle = "Hapus permanen akun login Wali Asuh ini",
+                        title = if (isEn) "Delete My Account" else "Hapus Akun Saya",
+                        subtitle = if (isEn) "Permanently delete this Wali Asuh login account" else "Hapus permanen akun login Wali Asuh ini",
                         icon = Icons.Default.DeleteForever,
                         iconBg = Color(0xFFFEE2E2),
                         iconColor = Color(0xFFB91C1C),
@@ -371,8 +459,8 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Keluar",
-                    subtitle = "Keluar dari sesi login aplikasi",
+                    title = if (isEn) s.nav.logoutBtn else "Keluar",
+                    subtitle = if (isEn) "Sign out from current app session" else "Keluar dari sesi login aplikasi",
                     icon = Icons.Default.ExitToApp,
                     iconBg = Color(0xFFFEE2E2),
                     iconColor = Color(0xFFDC2626),
@@ -466,7 +554,7 @@ fun ProfileScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Outlined.Info,
-                                contentDescription = "Informasi status aplikasi",
+                                contentDescription = s.nav.profileDisclaimerLabel,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.size(15.dp)
                             )
@@ -495,11 +583,72 @@ fun ProfileScreen(
         )
     }
 
+    // Modal Bottom Sheet: Bahasa Aplikasi
+    if (showLanguageSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showLanguageSheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = { BottomSheetDefaults.DragHandle() },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 600.dp)
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 28.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = s.nav.profileLanguageSheetTitle,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = s.nav.profileLanguageSheetSubtitle,
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(2.dp))
+
+                    LanguageOptionCard(
+                        language = AppLanguage.INDONESIAN,
+                        description = s.nav.profileLanguageIdDesc,
+                        isSelected = currentLanguage == AppLanguage.INDONESIAN,
+                        activeTag = s.nav.profileLanguageActiveTag,
+                        testTag = "option_lang_id",
+                        onClick = {
+                            viewModel.setAppLanguage(AppLanguage.INDONESIAN)
+                            showLanguageSheet = false
+                        }
+                    )
+
+                    LanguageOptionCard(
+                        language = AppLanguage.ENGLISH,
+                        description = s.nav.profileLanguageEnDesc,
+                        isSelected = currentLanguage == AppLanguage.ENGLISH,
+                        activeTag = s.nav.profileLanguageActiveTag,
+                        testTag = "option_lang_en",
+                        onClick = {
+                            viewModel.setAppLanguage(AppLanguage.ENGLISH)
+                            showLanguageSheet = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+
     // Modal Bottom Sheet: Puskesmas Saya (Dinamis sesuai Faskes Tenant Sekolah)
     if (showPuskesmasDialog) {
         FaskesReferralSheet(
             schoolProfile = schoolProfile,
-            title = "Puskesmas Langganan Rujukan",
+            title = if (isEn) "Registered Referral Puskesmas" else "Puskesmas Langganan Rujukan",
             onDismiss = { showPuskesmasDialog = false }
         )
     }
@@ -522,18 +671,46 @@ fun ProfileScreen(
                         .padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Pengaturan Notifikasi Resmi", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(
+                        text = if (isEn) "Official Notification Settings" else "Pengaturan Notifikasi Resmi",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
                         shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Text("✅ Notifikasi Resmi Google Android: Aktif", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = WaliPrimary)
-                            Text("🔔 Saluran: Laporan Kesehatan Anak Asuh", fontSize = 12.sp)
-                            Text("📌 Notifikasi otomatis muncul di bar atas ponsel saat ada anak asuh sakit baru diinput.", fontSize = 12.sp)
-                            Text("✅ Pengingat Berangkat: Aktif (08:00 WIB)", fontSize = 12.sp)
-                            Text("✅ Notifikasi Jadwal Kontrol: Aktif (H-1 & Hari H)", fontSize = 12.sp)
-                            Text("✅ Laporan Rekam Medis WhatsApp: Siap", fontSize = 12.sp)
+                            Text(
+                                text = if (isEn) "✅ Official Android Notifications: Active" else "✅ Notifikasi Resmi Google Android: Aktif",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WaliPrimary
+                            )
+                            Text(
+                                text = if (isEn) "🔔 Channel: ${s.report.notifChannelName}" else "🔔 Saluran: Laporan Kesehatan Anak Asuh",
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = if (isEn) {
+                                    "📌 Alerts appear in your status bar automatically when a sick student report is added."
+                                } else {
+                                    "📌 Notifikasi otomatis muncul di bar atas ponsel saat ada anak asuh sakit baru diinput."
+                                },
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = if (isEn) "✅ Departure Reminder: Active (08:00 WIB)" else "✅ Pengingat Berangkat: Aktif (08:00 WIB)",
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = if (isEn) "✅ Follow-up Checkup Alerts: Active (D-1 & Day D)" else "✅ Notifikasi Jadwal Kontrol: Aktif (H-1 & Hari H)",
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = if (isEn) "✅ WhatsApp Medical Report: Ready" else "✅ Laporan Rekam Medis WhatsApp: Siap",
+                                fontSize = 12.sp
+                            )
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
@@ -548,10 +725,10 @@ fun ProfileScreen(
                             },
                             shape = RoundedCornerShape(10.dp)
                         ) {
-                            Text("🔔 Coba Tes Notifikasi", fontSize = 12.sp)
+                            Text(if (isEn) "🔔 Send Test Alert" else "🔔 Coba Tes Notifikasi", fontSize = 12.sp)
                         }
                         Button(onClick = { showNotifDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("Tutup", fontSize = 12.sp)
+                            Text(s.nav.closeBtn, fontSize = 12.sp)
                         }
                     }
                 }
@@ -589,7 +766,11 @@ fun ProfileScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Panduan Penggunaan Aplikasi", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(
+                        text = if (isEn) "App Usage Guide" else "Panduan Penggunaan Aplikasi",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
                         shape = RoundedCornerShape(10.dp)
@@ -598,12 +779,20 @@ fun ProfileScreen(
                             val guideFaskes = schoolProfile.getAllFaskes()
                                 .takeIf { it.isNotEmpty() }
                                 ?.joinToString(" / ")
-                                ?: "Faskes Rujukan"
-                            Text("1. Masukkan anak sakit melalui tombol (+) di Dashboard atau Rencana.", fontSize = 12.sp)
-                            Text("2. Pilih faskes tujuan ($guideFaskes) dan jam berangkat.", fontSize = 12.sp)
-                            Text("3. Setelah tiba di faskes/puskesmas, nakes/pengasuh mencatat hasil diagnosa & obat.", fontSize = 12.sp)
-                            Text("4. Tentukan tanggal kontrol atau centang tidak perlu kontrol.", fontSize = 12.sp)
-                            Text("5. Bagikan laporan ke grup WhatsApp pengasuh dengan tombol Laporan WA.", fontSize = 12.sp)
+                                ?: if (isEn) "Referral Facility" else "Faskes Rujukan"
+                            if (isEn) {
+                                Text("1. Add a sick student via the (+) button on Dashboard or Plans.", fontSize = 12.sp)
+                                Text("2. Choose destination facility ($guideFaskes) and departure time.", fontSize = 12.sp)
+                                Text("3. After arriving at UKS/Puskesmas, record the diagnosis & medication.", fontSize = 12.sp)
+                                Text("4. Set a follow-up checkup date or mark as no follow-up needed.", fontSize = 12.sp)
+                                Text("5. Share reports to the Wali Asuh WhatsApp group via the WA Report button.", fontSize = 12.sp)
+                            } else {
+                                Text("1. Masukkan anak sakit melalui tombol (+) di Dashboard atau Rencana.", fontSize = 12.sp)
+                                Text("2. Pilih faskes tujuan ($guideFaskes) dan jam berangkat.", fontSize = 12.sp)
+                                Text("3. Setelah tiba di faskes/puskesmas, nakes/pengasuh mencatat hasil diagnosa & obat.", fontSize = 12.sp)
+                                Text("4. Tentukan tanggal kontrol atau centang tidak perlu kontrol.", fontSize = 12.sp)
+                                Text("5. Bagikan laporan ke grup WhatsApp pengasuh dengan tombol Laporan WA.", fontSize = 12.sp)
+                            }
                         }
                     }
                     Card(
@@ -623,7 +812,7 @@ fun ProfileScreen(
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Text(
-                                    text = "Tentang & Status Aplikasi",
+                                    text = if (isEn) "About & App Status" else "Tentang & Status Aplikasi",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -640,7 +829,7 @@ fun ProfileScreen(
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         Button(onClick = { showGuideDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("Tutup")
+                            Text(s.nav.closeBtn)
                         }
                     }
                 }
@@ -666,12 +855,20 @@ fun ProfileScreen(
                         .padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text("Konfirmasi Keluar", fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                    Text("Apakah Anda yakin ingin keluar dari sesi Wali Asuh Care?", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = if (isEn) s.nav.logoutConfirmTitle else "Konfirmasi Keluar",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                    Text(
+                        text = if (isEn) "Are you sure you want to log out of the Wali Asuh Care session?" else "Apakah Anda yakin ingin keluar dari sesi Wali Asuh Care?",
+                        fontSize = 13.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                     Spacer(modifier = Modifier.height(4.dp))
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         OutlinedButton(onClick = { showExitDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text("Batal")
+                            Text(s.nav.cancelBtn)
                         }
                         Spacer(modifier = Modifier.width(8.dp))
                         Button(
@@ -683,7 +880,7 @@ fun ProfileScreen(
                             shape = RoundedCornerShape(10.dp),
                             colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                         ) {
-                            Text("Keluar")
+                            Text(s.nav.logoutBtn)
                         }
                     }
                 }
@@ -693,9 +890,9 @@ fun ProfileScreen(
 
     if (showMonthlyReportAdConfirm) {
         RewardAdDeclarationDialog(
-            title = "Buka Laporan Bulanan",
-            actionDescription = "membuka Laporan Bulanan lengkap & ekspor PDF",
-            confirmButtonText = "Tonton & Buka Laporan",
+            title = if (isEn) "Open Monthly Report" else "Buka Laporan Bulanan",
+            actionDescription = if (isEn) "open the full Monthly Report & export PDF" else "membuka Laporan Bulanan lengkap & ekspor PDF",
+            confirmButtonText = if (isEn) "Watch & Open Report" else "Tonton & Buka Laporan",
             onConfirmWatchAd = {
                 showMonthlyReportAdConfirm = false
                 TopOnAdManager.showRewardAdForMonthlyReport(context) {
@@ -842,6 +1039,91 @@ fun MenuSettingCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 15.sp
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LanguageOptionCard(
+    language: AppLanguage,
+    description: String,
+    isSelected: Boolean,
+    activeTag: String,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(14.dp),
+        color = if (isSelected) WaliPrimary.copy(alpha = 0.09f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) WaliPrimary else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .testTag(testTag)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(38.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(if (isSelected) WaliPrimary else MaterialTheme.colorScheme.surface),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = language.shortBadge,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = language.displayName,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = description,
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            if (isSelected) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = activeTag,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = WaliPrimary
+                    )
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = activeTag,
+                        tint = WaliPrimary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
         }
     }

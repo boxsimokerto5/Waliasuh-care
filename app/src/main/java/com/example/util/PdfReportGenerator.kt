@@ -22,6 +22,8 @@ import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -37,7 +39,7 @@ object PdfReportGenerator {
     }
 
     /**
-     * Membuat dokumen PDF resmi Rekap Screening Kesehatan Siswa Sekolah Rakyat SRT 1 Kediri.
+     * Membuat dokumen PDF resmi Rekap Screening Kesehatan Siswa Sekolah Rakyat.
      * Mendukung rekap bulanan, tahunan, atau seluruh riwayat.
      */
     fun generateHealthReportPdf(
@@ -50,6 +52,8 @@ object PdfReportGenerator {
         schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
             val document = PdfDocument()
             val pageWidth = 595 // Standard A4 width in points
             val pageHeight = 842 // Standard A4 height in points
@@ -67,26 +71,36 @@ object PdfReportGenerator {
             currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
 
             // 2. Judul Dokumen & Periode
-            currentY = drawTitleAndPeriod(canvas, paint, pageWidth, currentY, periodLabel)
+            currentY = drawTitleAndPeriod(canvas, paint, pageWidth, currentY, periodLabel, lang)
 
             // 3. Biodata Identitas Anak Asuh (Primary)
-            currentY = drawStudentBio(canvas, paint, pageWidth, currentY, student)
+            currentY = drawStudentBio(canvas, paint, pageWidth, currentY, student, isEn)
 
             // 4. Ringkasan Eksekutif Frekuensi Sakit / Screening
-            currentY = drawScreeningSummary(canvas, paint, pageWidth, currentY, records, periodLabel)
+            currentY = drawScreeningSummary(canvas, paint, pageWidth, currentY, records, periodLabel, isEn)
 
             // 5. Daftar Riwayat Kunjungan / Tindakan Medis
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 11f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("RINCIAN PEMERIKSAAN & TINDAKAN MEDIS (${records.size} Kunjungan):", 35f, currentY, paint)
+            val detailHeader = if (isEn) {
+                "EXAMINATION & MEDICAL ACTION DETAILS (${records.size} Visits):"
+            } else {
+                "RINCIAN PEMERIKSAAN & TINDAKAN MEDIS (${records.size} Kunjungan):"
+            }
+            canvas.drawText(detailHeader, 35f, currentY, paint)
             currentY += 14f
 
             if (records.isEmpty()) {
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
                 paint.textSize = 10f
                 paint.color = Color.rgb(100, 116, 139)
-                canvas.drawText("Tidak ada catatan riwayat sakit / berobat pada periode ini (Kondisi Sehat).", 40f, currentY + 12f, paint)
+                val emptyDetail = if (isEn) {
+                    "No medical / illness records found in this period (Healthy Status)."
+                } else {
+                    "Tidak ada catatan riwayat sakit / berobat pada periode ini (Kondisi Sehat)."
+                }
+                canvas.drawText(emptyDetail, 40f, currentY + 12f, paint)
                 currentY += 30f
             } else {
                 for ((index, record) in records.withIndex()) {
@@ -103,11 +117,16 @@ object PdfReportGenerator {
                         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         paint.textSize = 9f
                         paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText("Rekap Screening Kesehatan: ${student.name} (Halaman $pageNumber)", 35f, currentY, paint)
+                        val contHeader = if (isEn) {
+                            "Health Screening Recap: ${student.name} (Page $pageNumber)"
+                        } else {
+                            "Rekap Screening Kesehatan: ${student.name} (Halaman $pageNumber)"
+                        }
+                        canvas.drawText(contHeader, 35f, currentY, paint)
                         currentY += 16f
                     }
 
-                    currentY = drawRecordItem(canvas, paint, pageWidth, currentY, index + 1, record)
+                    currentY = drawRecordItem(canvas, paint, pageWidth, currentY, index + 1, record, lang)
                     currentY += 10f
                 }
             }
@@ -281,25 +300,46 @@ object PdfReportGenerator {
         return y + 14f
     }
 
-    private fun drawTitleAndPeriod(canvas: Canvas, paint: Paint, width: Int, startY: Float, period: String): Float {
+    private fun drawTitleAndPeriod(
+        canvas: Canvas,
+        paint: Paint,
+        width: Int,
+        startY: Float,
+        period: String,
+        language: AppLanguage = AppLanguage.INDONESIAN
+    ): Float {
+        val isEn = language == AppLanguage.ENGLISH
         var y = startY
         paint.textAlign = Paint.Align.CENTER
 
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 12f
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText("LEMBAR REKAPITULASI SCREENING & REKAM MEDIS ANAK ASUH", width / 2f, y, paint)
+        val docTitle = if (isEn) {
+            "STUDENT SCREENING & MEDICAL RECORD RECAP SHEET"
+        } else {
+            "LEMBAR REKAPITULASI SCREENING & REKAM MEDIS ANAK ASUH"
+        }
+        canvas.drawText(docTitle, width / 2f, y, paint)
 
         y += 13f
         paint.textSize = 10f
         paint.color = Color.rgb(2, 132, 199)
-        canvas.drawText("PERIODE LAPORAN: ${period.uppercase(Locale("id", "ID"))}", width / 2f, y, paint)
+        val periodPrefix = if (isEn) "REPORT PERIOD" else "PERIODE LAPORAN"
+        canvas.drawText("$periodPrefix: ${period.uppercase(language.locale)}", width / 2f, y, paint)
 
         paint.textAlign = Paint.Align.LEFT
         return y + 14f
     }
 
-    private fun drawStudentBio(canvas: Canvas, paint: Paint, width: Int, startY: Float, student: ChildStudent): Float {
+    private fun drawStudentBio(
+        canvas: Canvas,
+        paint: Paint,
+        width: Int,
+        startY: Float,
+        student: ChildStudent,
+        isEn: Boolean = false
+    ): Float {
         val boxLeft = 35f
         val boxRight = width - 35f
         val boxHeight = 62f
@@ -323,27 +363,36 @@ object PdfReportGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 9.5f
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText("Nama Anak Asuh :", boxLeft + 10f, y, paint)
+        canvas.drawText(if (isEn) "Student Name :" else "Nama Anak Asuh :", boxLeft + 10f, y, paint)
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.color = Color.rgb(15, 118, 110)
         canvas.drawText(student.name, boxLeft + 95f, y, paint)
 
         // Kolom Kanan
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText("Asrama Santri :", width / 2f + 10f, y, paint)
+        canvas.drawText(if (isEn) "Asrama :" else "Asrama Santri :", width / 2f + 10f, y, paint)
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         canvas.drawText(student.dormitory, width / 2f + 85f, y, paint)
 
         y += 14f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText("NIS / ID Siswa   : ${student.nis}", boxLeft + 10f, y, paint)
-        canvas.drawText("Kelas Pendidikan: ${student.classGrade}", width / 2f + 10f, y, paint)
+        canvas.drawText(if (isEn) "NIS / Student ID : ${student.nis}" else "NIS / ID Siswa   : ${student.nis}", boxLeft + 10f, y, paint)
+        canvas.drawText(if (isEn) "Class / Grade   : ${student.classGrade}" else "Kelas Pendidikan: ${student.classGrade}", width / 2f + 10f, y, paint)
 
         y += 14f
-        val genderStr = if (student.gender.equals("P", ignoreCase = true)) "Perempuan (Putri)" else "Laki-laki (Putra)"
-        canvas.drawText("Jenis Kelamin     : $genderStr", boxLeft + 10f, y, paint)
-        canvas.drawText("Golongan Darah : ${student.bloodType}  |  Usia: ${student.age} Th", width / 2f + 10f, y, paint)
+        val genderStr = if (student.gender.equals("P", ignoreCase = true)) {
+            if (isEn) "Female (Putri)" else "Perempuan (Putri)"
+        } else {
+            if (isEn) "Male (Putra)" else "Laki-laki (Putra)"
+        }
+        canvas.drawText(if (isEn) "Gender           : $genderStr" else "Jenis Kelamin     : $genderStr", boxLeft + 10f, y, paint)
+        val bloodAgeStr = if (isEn) {
+            "Blood Type     : ${student.bloodType}  |  Age: ${student.age} Yrs"
+        } else {
+            "Golongan Darah : ${student.bloodType}  |  Usia: ${student.age} Th"
+        }
+        canvas.drawText(bloodAgeStr, width / 2f + 10f, y, paint)
 
         return startY + boxHeight + 12f
     }
@@ -354,7 +403,8 @@ object PdfReportGenerator {
         width: Int,
         startY: Float,
         records: List<MedicalRecord>,
-        period: String
+        period: String,
+        isEn: Boolean = false
     ): Float {
         val boxLeft = 35f
         val boxRight = width - 35f
@@ -377,12 +427,18 @@ object PdfReportGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 9.5f
         paint.color = if (isMultiSickness) Color.rgb(185, 28, 28) else Color.rgb(21, 128, 61)
-        val alertText = if (isMultiSickness) {
-            "PERHATIAN: Anak asuh ini tercatat ${records.size} KALI SAKIT / BEROBAT dalam periode $period."
-        } else if (records.size == 1) {
-            "STATUS: Tercatat 1 kali kunjungan pengobatan dalam periode $period."
+        val alertText = if (isEn) {
+            when {
+                isMultiSickness -> "ATTENTION: This student was recorded ${records.size} TIMES SICK / TREATED in $period."
+                records.size == 1 -> "STATUS: Recorded 1 medical visit in $period."
+                else -> "STATUS: Student is HEALTHY (0 medical visits) in $period."
+            }
         } else {
-            "STATUS: Anak asuh dalam kondisi SEHAT (0 kali berobat) dalam periode $period."
+            when {
+                isMultiSickness -> "PERHATIAN: Anak asuh ini tercatat ${records.size} KALI SAKIT / BEROBAT dalam periode $period."
+                records.size == 1 -> "STATUS: Tercatat 1 kali kunjungan pengobatan dalam periode $period."
+                else -> "STATUS: Anak asuh dalam kondisi SEHAT (0 kali berobat) dalam periode $period."
+            }
         }
         canvas.drawText(alertText, boxLeft + 10f, y, paint)
 
@@ -391,7 +447,12 @@ object PdfReportGenerator {
         paint.textSize = 8.5f
         paint.color = Color.rgb(71, 85, 105)
         val controlCount = records.count { it.needsControl }
-        canvas.drawText("Total Riwayat Screening Terdaftar: ${records.size} Data  •  Jadwal Kontrol Terbit: $controlCount Kali", boxLeft + 10f, y, paint)
+        val subLine = if (isEn) {
+            "Total Linked Screening Records: ${records.size} Entries  •  Follow-ups Issued: $controlCount"
+        } else {
+            "Total Riwayat Screening Terdaftar: ${records.size} Data  •  Jadwal Kontrol Terbit: $controlCount Kali"
+        }
+        canvas.drawText(subLine, boxLeft + 10f, y, paint)
 
         return startY + boxHeight + 14f
     }
@@ -402,8 +463,10 @@ object PdfReportGenerator {
         width: Int,
         startY: Float,
         number: Int,
-        record: MedicalRecord
+        record: MedicalRecord,
+        language: AppLanguage = AppLanguage.INDONESIAN
     ): Float {
+        val isEn = language == AppLanguage.ENGLISH
         val boxLeft = 35f
         val boxRight = width - 35f
         val boxHeight = 78f
@@ -421,14 +484,15 @@ object PdfReportGenerator {
 
         // Bar header item
         paint.style = Paint.Style.FILL
-        val dateStr = record.treatmentDate?.let { DateUtils.formatFullDate(it) }
-            ?: DateUtils.formatFullDate(record.planDate)
+        val dateStr = record.treatmentDate?.let { DateUtils.formatFullDate(it, language) }
+            ?: DateUtils.formatFullDate(record.planDate, language)
 
         var y = startY + 13f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 9.5f
         paint.color = Color.rgb(15, 118, 110)
-        canvas.drawText("Kunjungan #$number  •  $dateStr (${record.departureTime} WIB)", boxLeft + 10f, y, paint)
+        val visitLabel = if (isEn) "Visit" else "Kunjungan"
+        canvas.drawText("$visitLabel #$number  •  $dateStr (${record.departureTime} WIB)", boxLeft + 10f, y, paint)
 
         paint.color = Color.rgb(30, 41, 59)
         paint.textAlign = Paint.Align.RIGHT
@@ -445,31 +509,68 @@ object PdfReportGenerator {
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.textSize = 8.5f
         paint.color = Color.rgb(51, 65, 85)
-        canvas.drawText("• Keluhan Awal   : ${record.complaint}", boxLeft + 10f, y, paint)
+        canvas.drawText(
+            if (isEn) "• Initial Complaint : ${record.complaint}" else "• Keluhan Awal   : ${record.complaint}",
+            boxLeft + 10f,
+            y,
+            paint
+        )
 
         y += 11f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.color = Color.rgb(2, 132, 199)
-        canvas.drawText("• Diagnosa Dokter: ${record.diagnosis.ifBlank { "Pemeriksaan umum puskesmas" }}", boxLeft + 10f, y, paint)
+        val defaultDiag = if (isEn) "General Puskesmas checkup" else "Pemeriksaan umum puskesmas"
+        canvas.drawText(
+            if (isEn) "• Doctor Diagnosis  : ${record.diagnosis.ifBlank { defaultDiag }}" else "• Diagnosa Dokter: ${record.diagnosis.ifBlank { defaultDiag }}",
+            boxLeft + 10f,
+            y,
+            paint
+        )
 
         y += 11f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.color = Color.rgb(51, 65, 85)
-        canvas.drawText("• Tindakan Medis: ${record.actionsTaken.ifBlank { "Pemeriksaan dan observasi" }}", boxLeft + 10f, y, paint)
+        val defaultAction = if (isEn) "Examination and observation" else "Pemeriksaan dan observasi"
+        canvas.drawText(
+            if (isEn) "• Medical Action    : ${record.actionsTaken.ifBlank { defaultAction }}" else "• Tindakan Medis: ${record.actionsTaken.ifBlank { defaultAction }}",
+            boxLeft + 10f,
+            y,
+            paint
+        )
 
         y += 11f
         paint.color = Color.rgb(109, 40, 217)
-        canvas.drawText("• Resep / Obat    : ${record.prescription.ifBlank { "Tidak ada resep obat khusus" }}", boxLeft + 10f, y, paint)
+        val defaultPresc = if (isEn) "No special prescription" else "Tidak ada resep obat khusus"
+        canvas.drawText(
+            if (isEn) "• Prescription / Med: ${record.prescription.ifBlank { defaultPresc }}" else "• Resep / Obat    : ${record.prescription.ifBlank { defaultPresc }}",
+            boxLeft + 10f,
+            y,
+            paint
+        )
 
         y += 11f
         paint.color = if (record.needsControl) Color.rgb(180, 83, 9) else Color.rgb(100, 116, 139)
         val controlInfo = if (record.needsControl) {
-            "Kontrol Ulang: ${record.controlDate?.let { DateUtils.formatShortDate(it) } ?: "Terjadwal"} (${if (record.isControlCompleted) "Selesai" else "Belum Kontrol"})"
+            val ctrlDateStr = record.controlDate?.let { DateUtils.formatShortDate(it, language) }
+                ?: if (isEn) "Scheduled" else "Terjadwal"
+            val ctrlState = if (record.isControlCompleted) {
+                if (isEn) "Done" else "Selesai"
+            } else {
+                if (isEn) "Pending" else "Belum Kontrol"
+            }
+            if (isEn) "Follow-up: $ctrlDateStr ($ctrlState)" else "Kontrol Ulang: $ctrlDateStr ($ctrlState)"
         } else {
-            "Kontrol: Tidak Perlu Kontrol"
+            if (isEn) "Follow-up: Not Needed" else "Kontrol: Tidak Perlu Kontrol"
         }
-        val escortInfo = if (record.escortName.isNotBlank()) " | Pendamping: ${record.escortName}" else ""
-        canvas.drawText("• Status Kontrol  : $controlInfo$escortInfo", boxLeft + 10f, y, paint)
+        val escortInfo = if (record.escortName.isNotBlank()) {
+            if (isEn) " | Escort: ${record.escortName}" else " | Pendamping: ${record.escortName}"
+        } else ""
+        canvas.drawText(
+            if (isEn) "• Follow-up Status  : $controlInfo$escortInfo" else "• Status Kontrol  : $controlInfo$escortInfo",
+            boxLeft + 10f,
+            y,
+            paint
+        )
 
         return startY + boxHeight
     }
@@ -484,8 +585,11 @@ object PdfReportGenerator {
         waliName: String,
         schoolProfile: SchoolProfile = SchoolProfile()
     ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val localizedContext = AppLanguageManager.createLocalizedContext(context, lang)
         val y = (startY + 15f).coerceAtMost(height - 122f)
-        val todayDate = SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(Date())
+        val datePattern = if (lang == AppLanguage.ENGLISH) "MMMM d, yyyy" else "d MMMM yyyy"
+        val todayDate = SimpleDateFormat(datePattern, lang.locale).format(Date())
         val cityLabel = schoolProfile.city.trim().ifBlank { "Indonesia" }
         val effectiveWaliName = waliName.trim().ifBlank { "Wali Asuh" }
         val rightX = width - 50f
@@ -539,7 +643,7 @@ object PdfReportGenerator {
         paint.textSize = 6.5f
         paint.color = Color.rgb(148, 163, 184)
         canvas.drawText(
-            context.getString(R.string.disclaimer_pdf_footer),
+            localizedContext.getString(R.string.disclaimer_pdf_footer),
             width / 2f,
             height - 15f,
             paint
@@ -559,6 +663,8 @@ object PdfReportGenerator {
         schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
             val document = PdfDocument()
             val pageWidth = 595 // Standard A4 width
             val pageHeight = 842 // Standard A4 height
@@ -579,12 +685,18 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 12f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("LAPORAN REKAPITULASI KESEHATAN ANAK ASUH BULANAN", pageWidth / 2f, currentY, paint)
+            canvas.drawText(
+                if (isEn) "MONTHLY STUDENT HEALTH RECAPITULATION REPORT" else "LAPORAN REKAPITULASI KESEHATAN ANAK ASUH BULANAN",
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
 
             currentY += 13f
             paint.textSize = 10f
             paint.color = Color.rgb(2, 132, 199)
-            canvas.drawText("PERIODE BULAN: ${monthYearLabel.uppercase(Locale("id", "ID"))}", pageWidth / 2f, currentY, paint)
+            val periodPrefix = if (isEn) "MONTH PERIOD" else "PERIODE BULAN"
+            canvas.drawText("$periodPrefix: ${monthYearLabel.uppercase(lang.locale)}", pageWidth / 2f, currentY, paint)
             paint.textAlign = Paint.Align.LEFT
             currentY += 16f
 
@@ -618,7 +730,7 @@ object PdfReportGenerator {
                 }
                 "• Faskes: $topTwo"
             } else {
-                "• Total Rujukan: ${records.size} Kali"
+                if (isEn) "• Referrals: ${records.size}" else "• Total Rujukan: ${records.size} Kali"
             }
             val morbiditasPct = if (totalStudentsCount > 0) (uniqueSick.toFloat() / totalStudentsCount * 100).toInt() else 0
 
@@ -626,20 +738,34 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 9.5f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("RINGKASAN EKSEKUTIF BULANAN:", boxLeft + 10f, statY, paint)
+            canvas.drawText(
+                if (isEn) "MONTHLY EXECUTIVE SUMMARY:" else "RINGKASAN EKSEKUTIF BULANAN:",
+                boxLeft + 10f,
+                statY,
+                paint
+            )
 
             statY += 13f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             paint.textSize = 8.5f
             paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText("• Total Populasi Anak: $totalStudentsCount Anak", boxLeft + 10f, statY, paint)
-            canvas.drawText("• Total Kunjungan Berobat: ${records.size} Kali", boxLeft + 175f, statY, paint)
-            canvas.drawText("• Jumlah Anak Sakit: $uniqueSick Anak ($morbiditasPct%)", boxLeft + 350f, statY, paint)
-
-            statY += 12f
-            canvas.drawText("• Distribusi Asrama: $maleCount Putra | $femaleCount Putri", boxLeft + 10f, statY, paint)
-            canvas.drawText("• Status: $tuntasCount Tuntas | $kontrolCount Perlu Kontrol", boxLeft + 175f, statY, paint)
-            canvas.drawText(faskesSummaryText, boxLeft + 350f, statY, paint)
+            if (isEn) {
+                canvas.drawText("• Total Population: $totalStudentsCount Students", boxLeft + 10f, statY, paint)
+                canvas.drawText("• Total Visits: ${records.size} Times", boxLeft + 175f, statY, paint)
+                canvas.drawText("• Sick Students: $uniqueSick ($morbiditasPct%)", boxLeft + 350f, statY, paint)
+                statY += 12f
+                canvas.drawText("• Asrama Breakdown: $maleCount Putra | $femaleCount Putri", boxLeft + 10f, statY, paint)
+                canvas.drawText("• Status: $tuntasCount Done | $kontrolCount Control", boxLeft + 175f, statY, paint)
+                canvas.drawText(faskesSummaryText, boxLeft + 350f, statY, paint)
+            } else {
+                canvas.drawText("• Total Populasi Anak: $totalStudentsCount Anak", boxLeft + 10f, statY, paint)
+                canvas.drawText("• Total Kunjungan Berobat: ${records.size} Kali", boxLeft + 175f, statY, paint)
+                canvas.drawText("• Jumlah Anak Sakit: $uniqueSick Anak ($morbiditasPct%)", boxLeft + 350f, statY, paint)
+                statY += 12f
+                canvas.drawText("• Distribusi Asrama: $maleCount Putra | $femaleCount Putri", boxLeft + 10f, statY, paint)
+                canvas.drawText("• Status: $tuntasCount Tuntas | $kontrolCount Perlu Kontrol", boxLeft + 175f, statY, paint)
+                canvas.drawText(faskesSummaryText, boxLeft + 350f, statY, paint)
+            }
 
             currentY += boxHeight + 14f
 
@@ -647,14 +773,24 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 10.5f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("DAFTAR REKAM MEDIS & KUNJUNGAN BEROBAT (${records.size} Kasus):", 35f, currentY, paint)
+            canvas.drawText(
+                if (isEn) "MEDICAL RECORDS & VISITS LIST (${records.size} Cases):" else "DAFTAR REKAM MEDIS & KUNJUNGAN BEROBAT (${records.size} Kasus):",
+                35f,
+                currentY,
+                paint
+            )
             currentY += 14f
 
             if (records.isEmpty()) {
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
                 paint.textSize = 9.5f
                 paint.color = Color.rgb(100, 116, 139)
-                canvas.drawText("Tidak ada riwayat sakit / berobat pada periode bulan ini (Kondisi Nihil/Sehat).", 40f, currentY + 12f, paint)
+                canvas.drawText(
+                    if (isEn) "No illness / treatment records in this month (All Healthy)." else "Tidak ada riwayat sakit / berobat pada periode bulan ini (Kondisi Nihil/Sehat).",
+                    40f,
+                    currentY + 12f,
+                    paint
+                )
                 currentY += 30f
             } else {
                 for ((index, record) in records.withIndex()) {
@@ -669,11 +805,16 @@ object PdfReportGenerator {
                         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         paint.textSize = 9f
                         paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText("Lanjutan Laporan Bulanan Kesehatan - $monthYearLabel (Halaman $pageNumber)", 35f, currentY, paint)
+                        val contMonthly = if (isEn) {
+                            "Continued Monthly Health Report - $monthYearLabel (Page $pageNumber)"
+                        } else {
+                            "Lanjutan Laporan Bulanan Kesehatan - $monthYearLabel (Halaman $pageNumber)"
+                        }
+                        canvas.drawText(contMonthly, 35f, currentY, paint)
                         currentY += 16f
                     }
 
-                    currentY = drawRecordItem(canvas, paint, pageWidth, currentY, index + 1, record)
+                    currentY = drawRecordItem(canvas, paint, pageWidth, currentY, index + 1, record, lang)
                     currentY += 8f
                 }
             }
@@ -713,6 +854,7 @@ object PdfReportGenerator {
      * Membuka dokumen PDF hasil cetak menggunakan PDF viewer bawaan Android atau dialog print.
      */
     fun openPdfFile(context: Context, pdfFile: File) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         try {
             val uri = FileProvider.getUriForFile(
                 context,
@@ -726,10 +868,14 @@ object PdfReportGenerator {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
 
-            val chooser = Intent.createChooser(intent, "Buka / Cetak Rekap PDF")
+            val chooser = Intent.createChooser(intent, if (isEn) "Open / Print PDF Recap" else "Buka / Cetak Rekap PDF")
             context.startActivity(chooser)
         } catch (e: Exception) {
-            Toast.makeText(context, "Tidak ditemukan aplikasi pembuka PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (isEn) "No PDF viewer app found: ${e.message}" else "Tidak ditemukan aplikasi pembuka PDF: ${e.message}",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -742,6 +888,8 @@ object PdfReportGenerator {
         studentName: String,
         schoolName: String = "Wali Asuh Care"
     ) {
+        val s = AppLanguageManager.getStrings(context).report
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         try {
             val uri = FileProvider.getUriForFile(
                 context,
@@ -753,14 +901,24 @@ object PdfReportGenerator {
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Rekap Screening Kesehatan - $studentName")
-                putExtra(Intent.EXTRA_TEXT, "Dokumen resmi Rekapitulasi Screening Kesehatan Anak Asuh $studentName ($cleanSchool).")
+                putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    if (isEn) "Health Screening Recap - $studentName" else "Rekap Screening Kesehatan - $studentName"
+                )
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    if (isEn) {
+                        "Official Health Screening Recapitulation document for $studentName ($cleanSchool)."
+                    } else {
+                        "Dokumen resmi Rekapitulasi Screening Kesehatan Anak Asuh $studentName ($cleanSchool)."
+                    }
+                )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            context.startActivity(Intent.createChooser(shareIntent, "Bagikan Dokumen PDF"))
+            context.startActivity(Intent.createChooser(shareIntent, s.pdfPassportChooserTitle))
         } catch (e: Exception) {
-            Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -776,6 +934,8 @@ object PdfReportGenerator {
         reportDateMillis: Long = System.currentTimeMillis()
     ): File? {
         try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
             val document = PdfDocument()
             val pageWidth = 595
             val pageHeight = 842
@@ -786,9 +946,9 @@ object PdfReportGenerator {
             var canvas = page.canvas
 
             val paint = Paint().apply { isAntiAlias = true }
-            val localeId = Locale("id", "ID")
-            val fullDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(reportDateMillis))
-            val shortDateFmt = SimpleDateFormat("dd MMM yyyy", localeId)
+            val fullPattern = if (isEn) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+            val fullDateLabel = SimpleDateFormat(fullPattern, lang.locale).format(Date(reportDateMillis))
+            val shortDateFmt = SimpleDateFormat("dd MMM yyyy", lang.locale)
 
             var currentY = 35f
 
@@ -800,13 +960,23 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 13f
             paint.color = Color.rgb(157, 23, 77) // Rose 800
-            canvas.drawText("LAPORAN HARIAN SISWI SEDANG HAID (UZUR IBADAH)", pageWidth / 2f, currentY + 12f, paint)
+            canvas.drawText(
+                if (isEn) "DAILY FEMALE STUDENT HAID REPORT" else "LAPORAN HARIAN SISWI SEDANG HAID (UZUR IBADAH)",
+                pageWidth / 2f,
+                currentY + 12f,
+                paint
+            )
             currentY += 27f
 
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 10f
             paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText("Hari / Tanggal: $fullDateLabel", pageWidth / 2f, currentY, paint)
+            canvas.drawText(
+                if (isEn) "Day / Date: $fullDateLabel" else "Hari / Tanggal: $fullDateLabel",
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
             currentY += 16f
             paint.textAlign = Paint.Align.LEFT
 
@@ -827,15 +997,25 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 9.5f
             paint.color = Color.rgb(131, 24, 67)
-            canvas.drawText("RINGKASAN HARIAN:", boxLeft + 10f, boxTop + 15f, paint)
+            canvas.drawText(if (isEn) "DAILY SUMMARY:" else "RINGKASAN HARIAN:", boxLeft + 10f, boxTop + 15f, paint)
 
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             paint.textSize = 9f
             paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText("• Total Sedang Haid: ${activeHaidRecords.size} Siswi", boxLeft + 10f, boxTop + 31f, paint)
-            canvas.drawText("• Batas Hari ke-15: $maxDayCount Siswi", boxLeft + 195f, boxTop + 31f, paint)
+            canvas.drawText(
+                if (isEn) "• Total Active Haid: ${activeHaidRecords.size} Students" else "• Total Sedang Haid: ${activeHaidRecords.size} Siswi",
+                boxLeft + 10f,
+                boxTop + 31f,
+                paint
+            )
+            canvas.drawText(
+                if (isEn) "• 15-Day Limit: $maxDayCount Students" else "• Batas Hari ke-15: $maxDayCount Siswi",
+                boxLeft + 195f,
+                boxTop + 31f,
+                paint
+            )
             val pencetak = TextUtils.ellipsize(
-                "Petugas: $waliName",
+                if (isEn) "Officer: $waliName" else "Petugas: $waliName",
                 TextPaint(paint),
                 170f,
                 TextUtils.TruncateAt.END
@@ -846,8 +1026,8 @@ object PdfReportGenerator {
 
             // 4. Tabel Daftar Siswi Sedang Haid
             val sortedRecords = activeHaidRecords.sortedWith(
-                compareBy<HaidRecord> { it.studentClass.lowercase(localeId) }
-                    .thenBy { it.studentName.lowercase(localeId) }
+                compareBy<HaidRecord> { it.studentClass.lowercase(lang.locale) }
+                    .thenBy { it.studentName.lowercase(lang.locale) }
             )
 
             fun drawHaidTableHeader(startYPos: Float): Float {
@@ -866,11 +1046,11 @@ object PdfReportGenerator {
                 paint.color = Color.rgb(131, 24, 67)
                 val textY = hTop + 15.5f
                 canvas.drawText("No", 42f, textY, paint)
-                canvas.drawText("Nama Siswi", 68f, textY, paint)
-                canvas.drawText("Kelas / Asrama", 222f, textY, paint)
-                canvas.drawText("Mulai Haid", 332f, textY, paint)
-                canvas.drawText("Waktu Berjalan", 404f, textY, paint)
-                canvas.drawText("Wali / Catatan", 482f, textY, paint)
+                canvas.drawText(if (isEn) "Student Name" else "Nama Siswi", 68f, textY, paint)
+                canvas.drawText(if (isEn) "Class / Asrama" else "Kelas / Asrama", 222f, textY, paint)
+                canvas.drawText(if (isEn) "Haid Start" else "Mulai Haid", 332f, textY, paint)
+                canvas.drawText(if (isEn) "Duration" else "Waktu Berjalan", 404f, textY, paint)
+                canvas.drawText(if (isEn) "Wali / Notes" else "Wali / Catatan", 482f, textY, paint)
                 return hTop + hHeight
             }
 
@@ -890,7 +1070,11 @@ object PdfReportGenerator {
                 paint.textSize = 10f
                 paint.color = Color.rgb(21, 128, 61)
                 canvas.drawText(
-                    "Nihil — Tidak ada siswi yang tercatat sedang haid pada hari ini (Semua Suci).",
+                    if (isEn) {
+                        "None — No female students recorded on Haid today (All Suci)."
+                    } else {
+                        "Nihil — Tidak ada siswi yang tercatat sedang haid pada hari ini (Semua Suci)."
+                    },
                     pageWidth / 2f,
                     emptyBoxTop + 27f,
                     paint
@@ -913,7 +1097,16 @@ object PdfReportGenerator {
                         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         paint.textSize = 9f
                         paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText("Lanjutan Laporan Harian Siswi Sedang Haid — $fullDateLabel (Halaman $pageNumber)", 35f, currentY, paint)
+                        canvas.drawText(
+                            if (isEn) {
+                                "Continued Daily Haid Report — $fullDateLabel (Page $pageNumber)"
+                            } else {
+                                "Lanjutan Laporan Harian Siswi Sedang Haid — $fullDateLabel (Halaman $pageNumber)"
+                            },
+                            35f,
+                            currentY,
+                            paint
+                        )
                         currentY += 12f
                         currentY = drawHaidTableHeader(currentY)
                     }
@@ -956,7 +1149,11 @@ object PdfReportGenerator {
                         days >= 12 -> Color.rgb(180, 83, 9)
                         else -> Color.rgb(190, 24, 93)
                     }
-                    val dayText = if (rec.isIstihadhahWarning) "Hari ke-$days (Maks)" else "Hari ke-$days / 15"
+                    val dayText = if (isEn) {
+                        if (rec.isIstihadhahWarning) "Day $days (Max)" else "Day $days / 15"
+                    } else {
+                        if (rec.isIstihadhahWarning) "Hari ke-$days (Maks)" else "Hari ke-$days / 15"
+                    }
                     canvas.drawText(dayText, 404f, textY, paint)
 
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
@@ -1006,34 +1203,39 @@ object PdfReportGenerator {
         activeHaidRecords: List<HaidRecord>,
         waliName: String,
         schoolProfile: SchoolProfile,
-        reportDateMillis: Long = System.currentTimeMillis()
+        reportDateMillis: Long = System.currentTimeMillis(),
+        language: AppLanguage = AppLanguageManager.currentLanguage
     ): String {
-        val localeId = Locale("id", "ID")
-        val fullDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(reportDateMillis))
+        val isEn = language == AppLanguage.ENGLISH
+        val fullPattern = if (isEn) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+        val fullDateLabel = SimpleDateFormat(fullPattern, language.locale).format(Date(reportDateMillis))
         val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Sekolah Rakyat" } }
         val sorted = activeHaidRecords.sortedWith(
-            compareBy<HaidRecord> { it.studentClass.lowercase(localeId) }
-                .thenBy { it.studentName.lowercase(localeId) }
+            compareBy<HaidRecord> { it.studentClass.lowercase(language.locale) }
+                .thenBy { it.studentName.lowercase(language.locale) }
         )
 
         return buildString {
-            appendLine("*LAPORAN HARIAN SISWI SEDANG HAID*")
+            appendLine(if (isEn) "*DAILY FEMALE STUDENT HAID REPORT*" else "*LAPORAN HARIAN SISWI SEDANG HAID*")
             appendLine("*$schoolTitle*")
-            appendLine("Tanggal: $fullDateLabel")
-            appendLine("Total: ${sorted.size} Siswi")
+            appendLine(if (isEn) "Date: $fullDateLabel" else "Tanggal: $fullDateLabel")
+            appendLine(if (isEn) "Total: ${sorted.size} Students" else "Total: ${sorted.size} Siswi")
             appendLine()
             if (sorted.isEmpty()) {
-                appendLine("_Nihil — Seluruh siswi dalam status Suci._")
+                appendLine(if (isEn) "_None — All female students are Suci._" else "_Nihil — Seluruh siswi dalam status Suci._")
             } else {
                 sorted.forEachIndexed { idx, rec ->
                     val classLabel = rec.studentClass.ifBlank { rec.studentDorm }
                     val classSuffix = if (classLabel.isNotBlank()) " ($classLabel)" else ""
-                    val warn = if (rec.isIstihadhahWarning) " ⚠️ Hari ke-15" else ""
-                    appendLine("${idx + 1}. ${rec.studentName}$classSuffix — Hari ke-${rec.durationDays}/15$warn")
+                    val warn = if (rec.isIstihadhahWarning) {
+                        if (isEn) " ⚠️ Day 15" else " ⚠️ Hari ke-15"
+                    } else ""
+                    val dayStr = if (isEn) "Day ${rec.durationDays}/15" else "Hari ke-${rec.durationDays}/15"
+                    appendLine("${idx + 1}. ${rec.studentName}$classSuffix — $dayStr$warn")
                 }
             }
             appendLine()
-            append("Dilaporkan oleh: $waliName")
+            append(if (isEn) "Reported by: $waliName" else "Dilaporkan oleh: $waliName")
         }
     }
 
@@ -1043,26 +1245,40 @@ object PdfReportGenerator {
         schoolProfile: SchoolProfile,
         reportDateMillis: Long = System.currentTimeMillis()
     ) {
+        val s = AppLanguageManager.getStrings(context).report
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
         try {
             val uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.provider",
                 pdfFile
             )
-            val dateLabel = SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(Date(reportDateMillis))
+            val datePattern = if (isEn) "MMMM d, yyyy" else "d MMMM yyyy"
+            val dateLabel = SimpleDateFormat(datePattern, lang.locale).format(Date(reportDateMillis))
             val cleanSchool = schoolProfile.schoolName.ifBlank { "Wali Asuh Care" }
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "Laporan Haid Harian ($dateLabel) - $cleanSchool")
-                putExtra(Intent.EXTRA_TEXT, "Terlampir Laporan Harian Siswi Sedang Haid ($dateLabel) untuk $cleanSchool.")
+                putExtra(
+                    Intent.EXTRA_SUBJECT,
+                    if (isEn) "Daily Haid Report ($dateLabel) - $cleanSchool" else "Laporan Haid Harian ($dateLabel) - $cleanSchool"
+                )
+                putExtra(
+                    Intent.EXTRA_TEXT,
+                    if (isEn) {
+                        "Attached is the Daily Female Student Haid Report ($dateLabel) for $cleanSchool."
+                    } else {
+                        "Terlampir Laporan Harian Siswi Sedang Haid ($dateLabel) untuk $cleanSchool."
+                    }
+                )
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
-            context.startActivity(Intent.createChooser(shareIntent, "Bagikan Laporan Haid PDF"))
+            context.startActivity(Intent.createChooser(shareIntent, s.pdfHaidChooserTitle))
         } catch (e: Exception) {
-            Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -1077,6 +1293,8 @@ object PdfReportGenerator {
         schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
             val document = PdfDocument()
             val pageWidth = 595
             val pageHeight = 842
@@ -1087,8 +1305,8 @@ object PdfReportGenerator {
             var canvas = page.canvas
 
             val paint = Paint().apply { isAntiAlias = true }
-            val localeId = Locale("id", "ID")
-            val sessionDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+            val fullPattern = if (isEn) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+            val sessionDateLabel = SimpleDateFormat(fullPattern, lang.locale).format(Date(session.sessionDate))
 
             var currentY = 35f
 
@@ -1108,12 +1326,17 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 13f
             paint.color = Color.rgb(15, 118, 110)
-            canvas.drawText("LAPORAN DAFTAR PESERTA PUASA SISWA", pageWidth / 2f, currentY + 12f, paint)
+            canvas.drawText(
+                if (isEn) "STUDENT PUASA PARTICIPANTS REPORT" else "LAPORAN DAFTAR PESERTA PUASA SISWA",
+                pageWidth / 2f,
+                currentY + 12f,
+                paint
+            )
             currentY += 26f
 
             paint.textSize = 10.5f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("${session.title.uppercase(localeId)} — $sessionDateLabel", pageWidth / 2f, currentY, paint)
+            canvas.drawText("${session.title.uppercase(lang.locale)} — $sessionDateLabel", pageWidth / 2f, currentY, paint)
             currentY += 16f
             paint.textAlign = Paint.Align.LEFT
 
@@ -1138,15 +1361,21 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 9.5f
             paint.color = Color.rgb(15, 118, 110)
-            canvas.drawText("RINGKASAN PESERTA PUASA:", boxLeft + 10f, boxTop + 15f, paint)
+            canvas.drawText(
+                if (isEn) "PUASA PARTICIPANTS SUMMARY:" else "RINGKASAN PESERTA PUASA:",
+                boxLeft + 10f,
+                boxTop + 15f,
+                paint
+            )
 
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 9f
             paint.color = Color.rgb(15, 23, 42)
+            val studentUnit = if (isEn) "Students" else "Anak"
             val breakdownText = buildString {
-                append("• SMA: $smaCount Anak   • SMP: $smpCount Anak   • SD: $sdCount Anak")
-                if (otherCount > 0) append("   • Lainnya: $otherCount")
-                append("   |   TOTAL: ${records.size} SISWA")
+                append("• SMA: $smaCount $studentUnit   • SMP: $smpCount $studentUnit   • SD: $sdCount $studentUnit")
+                if (otherCount > 0) append(if (isEn) "   • Other: $otherCount" else "   • Lainnya: $otherCount")
+                append(if (isEn) "   |   TOTAL: ${records.size} STUDENTS" else "   |   TOTAL: ${records.size} SISWA")
             }
             canvas.drawText(breakdownText, boxLeft + 10f, boxTop + 33f, paint)
 
@@ -1161,8 +1390,8 @@ object PdfReportGenerator {
                         FastingJenjangHelper.JENJANG_SD -> 2
                         else -> 3
                     }
-                }.thenBy { it.studentClass.lowercase(localeId) }
-                    .thenBy { it.studentName.lowercase(localeId) }
+                }.thenBy { it.studentClass.lowercase(lang.locale) }
+                    .thenBy { it.studentName.lowercase(lang.locale) }
             )
 
             fun drawTableHeader(startYPos: Float): Float {
@@ -1181,10 +1410,10 @@ object PdfReportGenerator {
                 paint.color = Color.rgb(17, 94, 89)
                 val textY = hTop + 15.5f
                 canvas.drawText("No", 42f, textY, paint)
-                canvas.drawText("Nama Siswa", 70f, textY, paint)
-                canvas.drawText("Jenjang", 242f, textY, paint)
-                canvas.drawText("Kelas / Asrama", 300f, textY, paint)
-                canvas.drawText("Penginput", 448f, textY, paint)
+                canvas.drawText(if (isEn) "Student Name" else "Nama Siswa", 70f, textY, paint)
+                canvas.drawText(if (isEn) "Level" else "Jenjang", 242f, textY, paint)
+                canvas.drawText(if (isEn) "Class / Asrama" else "Kelas / Asrama", 300f, textY, paint)
+                canvas.drawText(if (isEn) "Recorded By" else "Penginput", 448f, textY, paint)
                 return hTop + hHeight
             }
 
@@ -1197,7 +1426,12 @@ object PdfReportGenerator {
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
                 paint.textSize = 9.5f
                 paint.color = Color.rgb(100, 116, 139)
-                canvas.drawText("Belum ada siswa terdaftar berpuasa pada sesi ini.", pageWidth / 2f, emptyTop + 26f, paint)
+                canvas.drawText(
+                    if (isEn) "No students registered for Puasa in this session yet." else "Belum ada siswa terdaftar berpuasa pada sesi ini.",
+                    pageWidth / 2f,
+                    emptyTop + 26f,
+                    paint
+                )
                 paint.textAlign = Paint.Align.LEFT
                 currentY = emptyTop + emptyH + 14f
             } else {
@@ -1215,7 +1449,12 @@ object PdfReportGenerator {
                         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         paint.textSize = 9f
                         paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText("Lanjutan Daftar Puasa (${session.title}) - Halaman $pageNumber", 35f, currentY, paint)
+                        canvas.drawText(
+                            if (isEn) "Continued Puasa List (${session.title}) - Page $pageNumber" else "Lanjutan Daftar Puasa (${session.title}) - Halaman $pageNumber",
+                            35f,
+                            currentY,
+                            paint
+                        )
                         currentY += 12f
                         currentY = drawTableHeader(currentY)
                     }
@@ -1305,6 +1544,8 @@ object PdfReportGenerator {
         schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
             val document = PdfDocument()
             val pageWidth = 595
             val pageHeight = 842
@@ -1315,8 +1556,8 @@ object PdfReportGenerator {
             var canvas = page.canvas
 
             val paint = Paint().apply { isAntiAlias = true }
-            val localeId = Locale("id", "ID")
-            val sessionDateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+            val fullPattern = if (isEn) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+            val sessionDateLabel = SimpleDateFormat(fullPattern, lang.locale).format(Date(session.sessionDate))
 
             var currentY = 35f
 
@@ -1336,12 +1577,17 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 13f
             paint.color = Color.rgb(180, 83, 9)
-            canvas.drawText("LAPORAN CHECKLIST SAHUR & BERBUKA PUASA", pageWidth / 2f, currentY + 12f, paint)
+            canvas.drawText(
+                if (isEn) "SAHUR & BERBUKA PUASA CHECKLIST REPORT" else "LAPORAN CHECKLIST SAHUR & BERBUKA PUASA",
+                pageWidth / 2f,
+                currentY + 12f,
+                paint
+            )
             currentY += 26f
 
             paint.textSize = 10.5f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("${session.title.uppercase(localeId)} — $sessionDateLabel", pageWidth / 2f, currentY, paint)
+            canvas.drawText("${session.title.uppercase(lang.locale)} — $sessionDateLabel", pageWidth / 2f, currentY, paint)
             currentY += 16f
             paint.textAlign = Paint.Align.LEFT
 
@@ -1365,22 +1611,27 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 9.5f
             paint.color = Color.rgb(146, 64, 14)
-            canvas.drawText("REKAPITULASI CHECKLIST SAHUR & BERBUKA:", boxLeft + 10f, boxTop + 15f, paint)
+            canvas.drawText(
+                if (isEn) "SAHUR & BERBUKA CHECKLIST SUMMARY:" else "REKAPITULASI CHECKLIST SAHUR & BERBUKA:",
+                boxLeft + 10f,
+                boxTop + 15f,
+                paint
+            )
 
             paint.textSize = 9f
             paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText(
-                "• Total Terdaftar: ${records.size} Siswa   • Sudah Sahur: $sahurDone / ${records.size}   • Sudah Berbuka: $bukaDone / ${records.size}   • Lengkap: $bothDone",
-                boxLeft + 10f,
-                boxTop + 33f,
-                paint
-            )
+            val statsLine = if (isEn) {
+                "• Registered: ${records.size} Students   • Sahur: $sahurDone / ${records.size}   • Berbuka: $bukaDone / ${records.size}   • Complete: $bothDone"
+            } else {
+                "• Total Terdaftar: ${records.size} Siswa   • Sudah Sahur: $sahurDone / ${records.size}   • Sudah Berbuka: $bukaDone / ${records.size}   • Lengkap: $bothDone"
+            }
+            canvas.drawText(statsLine, boxLeft + 10f, boxTop + 33f, paint)
             currentY = boxTop + summaryHeight + 14f
 
             val sortedRecords = records.sortedWith(
                 compareBy<FastingRecord> { FastingJenjangHelper.resolveJenjang(it) }
-                    .thenBy { it.studentClass.lowercase(localeId) }
-                    .thenBy { it.studentName.lowercase(localeId) }
+                    .thenBy { it.studentClass.lowercase(lang.locale) }
+                    .thenBy { it.studentName.lowercase(lang.locale) }
             )
 
             fun drawChecklistHeader(startYPos: Float): Float {
@@ -1399,8 +1650,8 @@ object PdfReportGenerator {
                 paint.color = Color.rgb(146, 64, 14)
                 val textY = hTop + 15.5f
                 canvas.drawText("No", 42f, textY, paint)
-                canvas.drawText("Nama Siswa", 70f, textY, paint)
-                canvas.drawText("Jenjang / Kelas", 242f, textY, paint)
+                canvas.drawText(if (isEn) "Student Name" else "Nama Siswa", 70f, textY, paint)
+                canvas.drawText(if (isEn) "Level / Class" else "Jenjang / Kelas", 242f, textY, paint)
                 canvas.drawText("Sahur", 386f, textY, paint)
                 canvas.drawText("Berbuka", 470f, textY, paint)
                 return hTop + hHeight
@@ -1415,12 +1666,19 @@ object PdfReportGenerator {
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
                 paint.textSize = 9.5f
                 paint.color = Color.rgb(100, 116, 139)
-                canvas.drawText("Belum ada peserta puasa untuk dichecklist pada sesi ini.", pageWidth / 2f, emptyTop + 26f, paint)
+                canvas.drawText(
+                    if (isEn) "No Puasa participants to check in this session yet." else "Belum ada peserta puasa untuk dichecklist pada sesi ini.",
+                    pageWidth / 2f,
+                    emptyTop + 26f,
+                    paint
+                )
                 paint.textAlign = Paint.Align.LEFT
                 currentY = emptyTop + emptyH + 14f
             } else {
                 currentY = drawChecklistHeader(currentY)
                 val rowHeight = 22f
+                val doneLabel = if (isEn) "✓ Checked" else "✓ Sudah"
+                val pendingLabel = if (isEn) "Pending" else "Belum"
                 sortedRecords.forEachIndexed { idx, rec ->
                     if (currentY > pageHeight - 125f) {
                         document.finishPage(page)
@@ -1433,7 +1691,12 @@ object PdfReportGenerator {
                         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                         paint.textSize = 9f
                         paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText("Lanjutan Checklist Sahur & Berbuka (${session.title}) - Halaman $pageNumber", 35f, currentY, paint)
+                        canvas.drawText(
+                            if (isEn) "Continued Sahur & Berbuka Checklist (${session.title}) - Page $pageNumber" else "Lanjutan Checklist Sahur & Berbuka (${session.title}) - Halaman $pageNumber",
+                            35f,
+                            currentY,
+                            paint
+                        )
                         currentY += 12f
                         currentY = drawChecklistHeader(currentY)
                     }
@@ -1468,10 +1731,10 @@ object PdfReportGenerator {
 
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     paint.color = if (rec.isSahurChecked) Color.rgb(21, 128, 61) else Color.rgb(148, 163, 184)
-                    canvas.drawText(if (rec.isSahurChecked) "✓ Sudah" else "Belum", 386f, textY, paint)
+                    canvas.drawText(if (rec.isSahurChecked) doneLabel else pendingLabel, 386f, textY, paint)
 
                     paint.color = if (rec.isBukaChecked) Color.rgb(21, 128, 61) else Color.rgb(148, 163, 184)
-                    canvas.drawText(if (rec.isBukaChecked) "✓ Sudah" else "Belum", 470f, textY, paint)
+                    canvas.drawText(if (rec.isBukaChecked) doneLabel else pendingLabel, 470f, textY, paint)
 
                     currentY = rTop + rowHeight
                 }
@@ -1511,26 +1774,29 @@ object PdfReportGenerator {
         session: FastingSession,
         records: List<FastingRecord>,
         waliName: String,
-        schoolProfile: SchoolProfile
+        schoolProfile: SchoolProfile,
+        language: AppLanguage = AppLanguageManager.currentLanguage
     ): String {
-        val localeId = Locale("id", "ID")
-        val dateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+        val isEn = language == AppLanguage.ENGLISH
+        val fullPattern = if (isEn) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+        val dateLabel = SimpleDateFormat(fullPattern, language.locale).format(Date(session.sessionDate))
         val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Wali Asuh Care" } }
         val sdCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SD }
         val smpCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMP }
         val smaCount = records.count { FastingJenjangHelper.resolveJenjang(it) == FastingJenjangHelper.JENJANG_SMA }
 
         return buildString {
-            appendLine("*DAFTAR PESERTA PUASA SISWA*")
+            appendLine(if (isEn) "*STUDENT PUASA PARTICIPANTS LIST*" else "*DAFTAR PESERTA PUASA SISWA*")
             appendLine("*$schoolTitle*")
-            appendLine("Sesi: *${session.title}*")
-            appendLine("Tanggal: $dateLabel")
+            appendLine(if (isEn) "Session: *${session.title}*" else "Sesi: *${session.title}*")
+            appendLine(if (isEn) "Date: $dateLabel" else "Tanggal: $dateLabel")
             appendLine()
-            appendLine("*Rekap Jenjang:*")
-            appendLine("• SMA: $smaCount Anak")
-            appendLine("• SMP: $smpCount Anak")
-            appendLine("• SD : $sdCount Anak")
-            appendLine("*Total Berpuasa: ${records.size} Siswa*")
+            appendLine(if (isEn) "*Level Summary:*" else "*Rekap Jenjang:*")
+            val unitWord = if (isEn) "Students" else "Anak"
+            appendLine("• SMA: $smaCount $unitWord")
+            appendLine("• SMP: $smpCount $unitWord")
+            appendLine("• SD : $sdCount $unitWord")
+            appendLine(if (isEn) "*Total Puasa Participants: ${records.size} Students*" else "*Total Berpuasa: ${records.size} Siswa*")
             appendLine()
             if (records.isNotEmpty()) {
                 records.sortedBy { it.studentName }.forEachIndexed { idx, rec ->
@@ -1540,7 +1806,7 @@ object PdfReportGenerator {
                 }
                 appendLine()
             }
-            append("Dilaporkan oleh: $waliName")
+            append(if (isEn) "Reported by: $waliName" else "Dilaporkan oleh: $waliName")
         }
     }
 
@@ -1548,30 +1814,32 @@ object PdfReportGenerator {
         session: FastingSession,
         records: List<FastingRecord>,
         waliName: String,
-        schoolProfile: SchoolProfile
+        schoolProfile: SchoolProfile,
+        language: AppLanguage = AppLanguageManager.currentLanguage
     ): String {
-        val localeId = Locale("id", "ID")
-        val dateLabel = SimpleDateFormat("EEEE, d MMMM yyyy", localeId).format(Date(session.sessionDate))
+        val isEn = language == AppLanguage.ENGLISH
+        val fullPattern = if (isEn) "EEEE, MMMM d, yyyy" else "EEEE, d MMMM yyyy"
+        val dateLabel = SimpleDateFormat(fullPattern, language.locale).format(Date(session.sessionDate))
         val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Wali Asuh Care" } }
         val sahurCount = records.count { it.isSahurChecked }
         val bukaCount = records.count { it.isBukaChecked }
 
         return buildString {
-            appendLine("*CHECKLIST SAHUR & BERBUKA PUASA*")
+            appendLine(if (isEn) "*SAHUR & BERBUKA PUASA CHECKLIST*" else "*CHECKLIST SAHUR & BERBUKA PUASA*")
             appendLine("*$schoolTitle*")
-            appendLine("Sesi: *${session.title}*")
-            appendLine("Tanggal: $dateLabel")
-            appendLine("• Terdaftar: ${records.size} Siswa")
-            appendLine("• Sudah Sahur: $sahurCount/${records.size}")
-            appendLine("• Sudah Berbuka: $bukaCount/${records.size}")
+            appendLine(if (isEn) "Session: *${session.title}*" else "Sesi: *${session.title}*")
+            appendLine(if (isEn) "Date: $dateLabel" else "Tanggal: $dateLabel")
+            appendLine(if (isEn) "• Registered: ${records.size} Students" else "• Terdaftar: ${records.size} Siswa")
+            appendLine(if (isEn) "• Sahur Checked: $sahurCount/${records.size}" else "• Sudah Sahur: $sahurCount/${records.size}")
+            appendLine(if (isEn) "• Berbuka Checked: $bukaCount/${records.size}" else "• Sudah Berbuka: $bukaCount/${records.size}")
             appendLine()
             records.sortedBy { it.studentName }.forEachIndexed { idx, rec ->
                 val sMark = if (rec.isSahurChecked) "✅" else "⬜"
                 val bMark = if (rec.isBukaChecked) "✅" else "⬜"
-                appendLine("${idx + 1}. ${rec.studentName} — Sahur: $sMark | Buka: $bMark")
+                appendLine("${idx + 1}. ${rec.studentName} — Sahur: $sMark | Berbuka: $bMark")
             }
             appendLine()
-            append("Dilaporkan oleh: $waliName")
+            append(if (isEn) "Reported by: $waliName" else "Dilaporkan oleh: $waliName")
         }
     }
 
@@ -1581,6 +1849,7 @@ object PdfReportGenerator {
         subject: String,
         text: String
     ) {
+        val s = AppLanguageManager.getStrings(context).report
         try {
             val uri = FileProvider.getUriForFile(
                 context,
@@ -1594,9 +1863,9 @@ object PdfReportGenerator {
                 putExtra(Intent.EXTRA_TEXT, text)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
-            context.startActivity(Intent.createChooser(shareIntent, "Bagikan Laporan Puasa PDF"))
+            context.startActivity(Intent.createChooser(shareIntent, s.pdfPuasaChooserTitle))
         } catch (e: Exception) {
-            Toast.makeText(context, "Gagal membagikan PDF: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
         }
     }
 }

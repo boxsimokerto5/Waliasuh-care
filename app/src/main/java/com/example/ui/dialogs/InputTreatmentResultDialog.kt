@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.ui.components.FaskesBadge
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,6 +68,8 @@ fun InputTreatmentResultDialog(
         inpatientRoom: String
     ) -> Unit
 ) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
     var diagnosis by remember { mutableStateOf("") }
     var actionsTaken by remember { mutableStateOf("") }
     var prescription by remember { mutableStateOf("") }
@@ -121,7 +124,11 @@ fun InputTreatmentResultDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = if (isUks) "Input Diagnosa & Penanganan UKS" else "Input Diagnosa & Hasil Berobat",
+                        text = if (isUks) {
+                            if (isEn) "Enter Diagnosis & UKS Handling" else "Input Diagnosa & Penanganan UKS"
+                        } else {
+                            if (isEn) "Enter Diagnosis & Treatment Result" else "Input Diagnosa & Hasil Berobat"
+                        },
                         fontSize = 17.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -150,7 +157,11 @@ fun InputTreatmentResultDialog(
                             FaskesBadge(faskes = record.faskes)
                         }
                         Text(
-                            text = "${record.studentDormitory} • Keluhan: ${record.complaint}",
+                            text = if (isEn) {
+                                "${record.studentDormitory} • Complaint: ${record.complaint}"
+                            } else {
+                                "${record.studentDormitory} • Keluhan: ${record.complaint}"
+                            },
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -161,8 +172,26 @@ fun InputTreatmentResultDialog(
                 OutlinedTextField(
                     value = diagnosis,
                     onValueChange = { diagnosis = it },
-                    label = { Text(if (isUks) "Diagnosa / Indikasi Petugas UKS *" else "Diagnosa Dokter / Nakes *", fontSize = 12.sp) },
-                    placeholder = { Text(if (isUks) "misal: Febris H-1 / Common Cold / Luka Lecet" else "misal: ISPA / Faringitis Akut", fontSize = 12.sp) },
+                    label = {
+                        Text(
+                            if (isUks) {
+                                if (isEn) "UKS Officer Diagnosis / Indication *" else "Diagnosa / Indikasi Petugas UKS *"
+                            } else {
+                                if (isEn) "Doctor / Clinician Diagnosis *" else "Diagnosa Dokter / Nakes *"
+                            },
+                            fontSize = 12.sp
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            if (isUks) {
+                                if (isEn) "e.g.: Fever Day 1 / Common Cold / Abrasion" else "misal: Febris H-1 / Common Cold / Luka Lecet"
+                            } else {
+                                if (isEn) "e.g.: URTI / Acute Pharyngitis" else "misal: ISPA / Faringitis Akut"
+                            },
+                            fontSize = 12.sp
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -174,8 +203,26 @@ fun InputTreatmentResultDialog(
                 OutlinedTextField(
                     value = actionsTaken,
                     onValueChange = { actionsTaken = it },
-                    label = { Text(if (isUks) "Tindakan UKS (Kompres, Istirahat, dll)" else "Tindakan Medis di Faskes", fontSize = 12.sp) },
-                    placeholder = { Text(if (isUks) "misal: Kompres hangat, observasi suhu di UKS" else "misal: Pemeriksaan fisik, pembersihan luka", fontSize = 12.sp) },
+                    label = {
+                        Text(
+                            if (isUks) {
+                                if (isEn) "UKS Action (Compress, Rest, etc.)" else "Tindakan UKS (Kompres, Istirahat, dll)"
+                            } else {
+                                if (isEn) "Medical Action at Faskes" else "Tindakan Medis di Faskes"
+                            },
+                            fontSize = 12.sp
+                        )
+                    },
+                    placeholder = {
+                        Text(
+                            if (isUks) {
+                                if (isEn) "e.g.: Warm compress, temperature monitoring at UKS" else "misal: Kompres hangat, observasi suhu di UKS"
+                            } else {
+                                if (isEn) "e.g.: Physical exam, wound cleaning" else "misal: Pemeriksaan fisik, pembersihan luka"
+                            },
+                            fontSize = 12.sp
+                        )
+                    },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -188,9 +235,9 @@ fun InputTreatmentResultDialog(
                     label = {
                         Text(
                             text = when {
-                                isInpatient -> "Resep Obat / Terapi Sementara (Opsional)"
-                                isUks -> "Obat yang Diberikan (dari Kotak UKS) *"
-                                else -> "Resep Obat & Aturan Minum *"
+                                isInpatient -> if (isEn) "Prescription / Temporary Therapy (Optional)" else "Resep Obat / Terapi Sementara (Opsional)"
+                                isUks -> if (isEn) "Medicine Given (from UKS Kit) *" else "Obat yang Diberikan (dari Kotak UKS) *"
+                                else -> if (isEn) "Prescription & Dosage *" else "Resep Obat & Aturan Minum *"
                             },
                             fontSize = 12.sp
                         )
@@ -198,9 +245,9 @@ fun InputTreatmentResultDialog(
                     placeholder = {
                         Text(
                             text = when {
-                                isInpatient -> "misal: Infus RL / kosongkan dulu jika opname"
-                                isUks -> "misal: Paracetamol 500mg, Minyak Kayu Putih"
-                                else -> "misal: Paracetamol 3x1, Amoxicillin 3x1"
+                                isInpatient -> if (isEn) "e.g.: RL IV drip / leave blank if admitted" else "misal: Infus RL / kosongkan dulu jika opname"
+                                isUks -> if (isEn) "e.g.: Paracetamol 500mg, Eucalyptus Oil" else "misal: Paracetamol 500mg, Minyak Kayu Putih"
+                                else -> if (isEn) "e.g.: Paracetamol 3x1, Amoxicillin 3x1" else "misal: Paracetamol 3x1, Amoxicillin 3x1"
                             },
                             fontSize = 12.sp
                         )
@@ -243,16 +290,24 @@ fun InputTreatmentResultDialog(
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = "Sedang Rawat Inap (Opname)?",
+                                        text = if (isEn) "Currently Inpatient (Admitted)?" else "Sedang Rawat Inap (Opname)?",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
                                         color = if (isInpatient) Color(0xFFB91C1C) else MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = if (isInpatient) {
-                                            "Notif rawat inap tampil di Dashboard & resep boleh menyusul"
+                                            if (isEn) {
+                                                "Inpatient notice appears on Dashboard & prescription can follow later"
+                                            } else {
+                                                "Notif rawat inap tampil di Dashboard & resep boleh menyusul"
+                                            }
                                         } else {
-                                            "Aktifkan jika ternyata anak harus rawat inap"
+                                            if (isEn) {
+                                                "Enable if student is admitted to inpatient care"
+                                            } else {
+                                                "Aktifkan jika ternyata anak harus rawat inap"
+                                            }
                                         },
                                         fontSize = 11.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -271,8 +326,8 @@ fun InputTreatmentResultDialog(
                             OutlinedTextField(
                                 value = inpatientRoom,
                                 onValueChange = { inpatientRoom = it },
-                                label = { Text("Nama Ruang / Kamar (Opsional)", fontSize = 12.sp) },
-                                placeholder = { Text("misal: Ruang Melati Lt. 2 / IGD", fontSize = 12.sp) },
+                                label = { Text(if (isEn) "Room / Ward Name (Optional)" else "Nama Ruang / Kamar (Opsional)", fontSize = 12.sp) },
+                                placeholder = { Text(if (isEn) "e.g.: Melati Ward Fl. 2 / ER" else "misal: Ruang Melati Lt. 2 / IGD", fontSize = 12.sp) },
                                 singleLine = true,
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
@@ -302,12 +357,16 @@ fun InputTreatmentResultDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Jadwal Kontrol Kembali",
+                                    text = if (isEn) "Follow-up Control Schedule" else "Jadwal Kontrol Kembali",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 13.sp
                                 )
                                 Text(
-                                    text = if (needsControl) "Anak wajib periksa ulang" else "Centang/aktifkan jika perlu kontrol",
+                                    text = if (needsControl) {
+                                        if (isEn) "Student must attend follow-up check" else "Anak wajib periksa ulang"
+                                    } else {
+                                        if (isEn) "Enable if follow-up control is needed" else "Centang/aktifkan jika perlu kontrol"
+                                    },
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -328,25 +387,29 @@ fun InputTreatmentResultDialog(
                                 FilterChip(
                                     selected = selectedControlDateMillis == calIn3Days,
                                     onClick = { selectedControlDateMillis = calIn3Days },
-                                    label = { Text("+3 Hari", fontSize = 11.sp) },
+                                    label = { Text(if (isEn) "+3 Days" else "+3 Hari", fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                                 FilterChip(
                                     selected = selectedControlDateMillis == calIn5Days,
                                     onClick = { selectedControlDateMillis = calIn5Days },
-                                    label = { Text("+5 Hari", fontSize = 11.sp) },
+                                    label = { Text(if (isEn) "+5 Days" else "+5 Hari", fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                                 FilterChip(
                                     selected = selectedControlDateMillis == calIn7Days,
                                     onClick = { selectedControlDateMillis = calIn7Days },
-                                    label = { Text("+1 Minggu", fontSize = 11.sp) },
+                                    label = { Text(if (isEn) "+1 Week" else "+1 Minggu", fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                             }
                             Spacer(modifier = Modifier.height(3.dp))
                             Text(
-                                text = "Tanggal Kontrol: ${DateUtils.formatFullDate(selectedControlDateMillis)}",
+                                text = if (isEn) {
+                                    "Control Date: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                } else {
+                                    "Tanggal Kontrol: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.Bold
@@ -362,7 +425,7 @@ fun InputTreatmentResultDialog(
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Tidak perlu kontrol kembali (Tuntas)",
+                                    text = if (isEn) "No follow-up control needed (Cleared)" else "Tidak perlu kontrol kembali (Tuntas)",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.secondary,
                                     fontWeight = FontWeight.Medium
@@ -376,8 +439,8 @@ fun InputTreatmentResultDialog(
                 OutlinedTextField(
                     value = additionalNotes,
                     onValueChange = { additionalNotes = it },
-                    label = { Text("Catatan Dokter / Pantauan Asrama", fontSize = 12.sp) },
-                    placeholder = { Text("misal: Istirahat di kamar UKS", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Doctor / Asrama Monitoring Notes" else "Catatan Dokter / Pantauan Asrama", fontSize = 12.sp) },
+                    placeholder = { Text(if (isEn) "e.g.: Rest in UKS room" else "misal: Istirahat di kamar UKS", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -395,7 +458,7 @@ fun InputTreatmentResultDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Batal", fontSize = 12.sp)
+                        Text(s.cancel, fontSize = 12.sp)
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
@@ -421,7 +484,14 @@ fun InputTreatmentResultDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("confirm_submit_treatment_button")
                     ) {
-                        Text(if (isInpatient) "Simpan Rawat Inap" else "Simpan & Selesaikan", fontSize = 12.sp)
+                        Text(
+                            if (isInpatient) {
+                                if (isEn) "Save Inpatient" else "Simpan Rawat Inap"
+                            } else {
+                                if (isEn) "Save & Complete" else "Simpan & Selesaikan"
+                            },
+                            fontSize = 12.sp
+                        )
                     }
                 }
             }

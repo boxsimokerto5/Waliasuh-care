@@ -61,6 +61,7 @@ import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.StudentCardGeneratorSheet
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.util.StudentClassifier
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun StudentsScreen(
@@ -71,6 +72,7 @@ fun StudentsScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
@@ -109,9 +111,9 @@ fun StudentsScreen(
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = "Tambah Siswa", modifier = Modifier.size(18.dp))
+                    Icon(imageVector = Icons.Default.Add, contentDescription = if (isEn) "Add Student" else "Tambah Siswa", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(5.dp))
-                    Text(text = "Tambah Anak Asuh", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(text = if (isEn) "Add Student" else "Tambah Anak Asuh", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }
@@ -131,14 +133,14 @@ fun StudentsScreen(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { viewModel.setStudentSearchQuery(it) },
-                    placeholder = { Text("Cari nama, NIK, NISN, kelas, alamat...", fontSize = 11.5.sp) },
+                    placeholder = { Text(if (isEn) "Search name, NIK, NISN, class, address..." else "Cari nama, NIK, NISN, kelas, alamat...", fontSize = 11.5.sp) },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.Search, contentDescription = "Cari", modifier = Modifier.size(16.dp))
+                        Icon(imageVector = Icons.Default.Search, contentDescription = if (isEn) "Search" else "Cari", modifier = Modifier.size(16.dp))
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = { viewModel.setStudentSearchQuery("") }) {
-                                Icon(imageVector = Icons.Default.Clear, contentDescription = "Hapus", modifier = Modifier.size(14.dp))
+                                Icon(imageVector = Icons.Default.Clear, contentDescription = if (isEn) "Clear" else "Hapus", modifier = Modifier.size(14.dp))
                             }
                         }
                     },
@@ -161,13 +163,13 @@ fun StudentsScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Total: ${filteredStudents.size} Anak Asuh",
+                            text = if (isEn) "Total: ${filteredStudents.size} Students" else "Total: ${filteredStudents.size} Anak Asuh",
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = schoolProfile.shortName.ifBlank { "Sekolah" },
+                            text = schoolProfile.shortName.ifBlank { if (isEn) "School" else "Sekolah" },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.primary,
                             fontWeight = FontWeight.Bold,
@@ -193,7 +195,7 @@ fun StudentsScreen(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Cetak Kartu",
+                            text = if (isEn) "Print Cards" else "Cetak Kartu",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -218,7 +220,11 @@ fun StudentsScreen(
                                 modifier = Modifier.size(44.dp)
                             )
                             Text(
-                                text = if (searchQuery.isNotBlank()) "Tidak ada anak asuh dengan nama tersebut." else "Belum ada data anak asuh.",
+                                text = if (isEn) {
+                                    if (searchQuery.isNotBlank()) "No students match that search." else "No students recorded yet."
+                                } else {
+                                    if (searchQuery.isNotBlank()) "Tidak ada anak asuh dengan nama tersebut." else "Belum ada data anak asuh."
+                                },
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -306,6 +312,7 @@ fun CompactStudentCardItem(
     treatmentCount: Int,
     onClick: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
@@ -413,7 +420,7 @@ fun CompactStudentCardItem(
                         )
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(
-                            text = "Alergi: ${student.allergies}",
+                            text = if (isEn) "Allergy: ${student.allergies}" else "Alergi: ${student.allergies}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.error,
                             fontWeight = FontWeight.Bold,
@@ -440,7 +447,7 @@ fun CompactStudentCardItem(
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        text = "Berobat",
+                        text = if (isEn) "Visits" else "Berobat",
                         fontSize = 9.sp,
                         color = MaterialTheme.colorScheme.primary,
                         maxLines = 1,

@@ -68,6 +68,7 @@ import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -80,6 +81,9 @@ fun DaftarPuasaSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val lang = s.language
     val sortedSessions = remember(sessions) {
         sessions.sortedWith(
             compareByDescending<FastingSession> { it.isActive }
@@ -158,13 +162,13 @@ fun DaftarPuasaSheet(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Daftar Siswa Puasa",
+                            text = if (isEn) "Daftar Puasa Students" else "Daftar Siswa Puasa",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Rekap peserta puasa SD, SMP, SMA & Laporan PDF",
+                            text = if (isEn) "SD, SMP, SMA Puasa participant summary & PDF Report" else "Rekap peserta puasa SD, SMP, SMA & Laporan PDF",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -175,7 +179,7 @@ fun DaftarPuasaSheet(
                             .size(48.dp)
                             .testTag("btn_close_daftar_puasa")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = "Tutup")
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close)
                     }
                 }
 
@@ -186,7 +190,7 @@ fun DaftarPuasaSheet(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
                     ) {
                         Text(
-                            text = "Belum ada sesi puasa yang dibuat oleh Admin Sekolah.",
+                            text = if (isEn) "No Puasa sessions have been created by Admin Sekolah yet." else "Belum ada sesi puasa yang dibuat oleh Admin Sekolah.",
                             fontSize = 12.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp)
@@ -207,7 +211,7 @@ fun DaftarPuasaSheet(
                                 onClick = { selectedSessionId = session.id },
                                 label = {
                                     Text(
-                                        text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate)})",
+                                        text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate, lang)})",
                                         fontSize = 11.5.sp,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
                                     )
@@ -261,7 +265,7 @@ fun DaftarPuasaSheet(
 
                     if (otherCount > 0) {
                         Text(
-                            text = "*Termasuk $otherCount siswa jenjang lainnya",
+                            text = if (isEn) "*Includes $otherCount students from other levels" else "*Termasuk $otherCount siswa jenjang lainnya",
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -287,7 +291,7 @@ fun DaftarPuasaSheet(
                             ) {
                                 Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Laporan PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(if (isEn) "PDF Report" else "Laporan PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                             }
 
                             OutlinedButton(
@@ -296,13 +300,19 @@ fun DaftarPuasaSheet(
                                         session = sess,
                                         records = sessionRecords,
                                         waliName = waliName,
-                                        schoolProfile = schoolProfile
+                                        schoolProfile = schoolProfile,
+                                        language = lang
                                     )
                                     val intent = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
                                         putExtra(Intent.EXTRA_TEXT, waText)
                                     }
-                                    context.startActivity(Intent.createChooser(intent, "Bagikan Rekap Puasa ke WA"))
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            intent,
+                                            if (isEn) "Share Puasa Summary to WA" else "Bagikan Rekap Puasa ke WA"
+                                        )
+                                    )
                                 },
                                 shape = RoundedCornerShape(12.dp),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
@@ -313,21 +323,25 @@ fun DaftarPuasaSheet(
                             ) {
                                 Icon(Icons.Default.Share, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Bagikan WA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
+                                Text(if (isEn) "Share WA" else "Bagikan WA", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF16A34A))
                             }
                         }
 
                         RewardAdDeclarationHint(
-                            text = "Tonton iklan video singkat untuk mengunduh Laporan PDF",
+                            text = if (isEn) "Watch a short video ad to download the PDF Report" else "Tonton iklan video singkat untuk mengunduh Laporan PDF",
                             accentColor = Color(0xFFDC2626)
                         )
                     }
 
                     pendingPdfSession?.let { sessToExport ->
                         RewardAdDeclarationDialog(
-                            title = "Unduh Laporan PDF Puasa",
-                            actionDescription = "mengunduh dan membagikan Laporan PDF ${sessToExport.title}",
-                            confirmButtonText = "Tonton & Unduh PDF",
+                            title = if (isEn) "Download Puasa PDF Report" else "Unduh Laporan PDF Puasa",
+                            actionDescription = if (isEn) {
+                                "download and share the PDF Report for ${sessToExport.title}"
+                            } else {
+                                "mengunduh dan membagikan Laporan PDF ${sessToExport.title}"
+                            },
+                            confirmButtonText = if (isEn) "Watch & Download PDF" else "Tonton & Unduh PDF",
                             onConfirmWatchAd = {
                                 pendingPdfSession = null
                                 TopOnAdManager.showRewardAdForPdfReport(context) {
@@ -342,11 +356,19 @@ fun DaftarPuasaSheet(
                                         PdfReportGenerator.shareFastingPdf(
                                             context = context,
                                             pdfFile = pdf,
-                                            subject = "Laporan Daftar Puasa - ${sessToExport.title}",
-                                            text = "Terlampir Laporan Daftar Siswa Puasa (${sessToExport.title}, Total ${sessionRecords.size} Anak: $smaCount SMA, $smpCount SMP, $sdCount SD)."
+                                            subject = if (isEn) "Daftar Puasa Report - ${sessToExport.title}" else "Laporan Daftar Puasa - ${sessToExport.title}",
+                                            text = if (isEn) {
+                                                "Attached is the Daftar Puasa Students Report (${sessToExport.title}, Total ${sessionRecords.size} Students: $smaCount SMA, $smpCount SMP, $sdCount SD)."
+                                            } else {
+                                                "Terlampir Laporan Daftar Siswa Puasa (${sessToExport.title}, Total ${sessionRecords.size} Anak: $smaCount SMA, $smpCount SMP, $sdCount SD)."
+                                            }
                                         )
                                     } else {
-                                        Toast.makeText(context, "Gagal membuat PDF laporan puasa.", Toast.LENGTH_SHORT).show()
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Failed to generate Puasa PDF report." else "Gagal membuat PDF laporan puasa.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 }
                             },
@@ -368,10 +390,11 @@ fun DaftarPuasaSheet(
                                 "SD" -> sdCount
                                 else -> sessionRecords.size
                             }
+                            val displayJf = if (isEn && jf == "Semua") "All" else jf
                             FilterChip(
                                 selected = selectedJenjangFilter == jf,
                                 onClick = { selectedJenjangFilter = jf },
-                                label = { Text("$jf ($cnt)", fontSize = 11.sp) }
+                                label = { Text("$displayJf ($cnt)", fontSize = 11.sp) }
                             )
                         }
                     }
@@ -379,7 +402,7 @@ fun DaftarPuasaSheet(
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
-                        placeholder = { Text("Cari nama siswa atau kelas...", fontSize = 12.sp) },
+                        placeholder = { Text(if (isEn) "Search student name or class..." else "Cari nama siswa atau kelas...", fontSize = 12.sp) },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
                         singleLine = true,
                         shape = RoundedCornerShape(10.dp),
@@ -394,8 +417,11 @@ fun DaftarPuasaSheet(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = if (sessionRecords.isEmpty()) "Belum ada siswa yang tercatat berpuasa pada sesi ini."
-                                else "Tidak ada siswa yang sesuai filter.",
+                                text = if (sessionRecords.isEmpty()) {
+                                    if (isEn) "No students recorded for Puasa in this session yet." else "Belum ada siswa yang tercatat berpuasa pada sesi ini."
+                                } else {
+                                    if (isEn) "No students match the current filter." else "Tidak ada siswa yang sesuai filter."
+                                },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -452,7 +478,11 @@ fun DaftarPuasaSheet(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                             Text(
-                                                text = "Diinput oleh: ${rec.waliName.ifBlank { "-" }}",
+                                                text = if (isEn) {
+                                                    "Recorded by: ${rec.waliName.ifBlank { "-" }}"
+                                                } else {
+                                                    "Diinput oleh: ${rec.waliName.ifBlank { "-" }}"
+                                                },
                                                 fontSize = 10.sp,
                                                 color = MaterialTheme.colorScheme.outline
                                             )
@@ -463,7 +493,7 @@ fun DaftarPuasaSheet(
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.DeleteOutline,
-                                                contentDescription = "Hapus Peserta",
+                                                contentDescription = if (isEn) "Remove Participant" else "Hapus Peserta",
                                                 tint = MaterialTheme.colorScheme.error,
                                                 modifier = Modifier.size(18.dp)
                                             )

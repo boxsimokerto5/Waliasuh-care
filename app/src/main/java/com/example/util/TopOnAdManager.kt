@@ -12,6 +12,8 @@ import com.anythink.interstitial.api.ATInterstitial
 import com.anythink.interstitial.api.ATInterstitialListener
 import com.anythink.rewardvideo.api.ATRewardVideoAd
 import com.anythink.rewardvideo.api.ATRewardVideoListener
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import com.example.BuildConfig
 
 object TopOnAdManager {
@@ -284,10 +286,11 @@ object TopOnAdManager {
         context: Context,
         onProceedToReport: () -> Unit
     ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         showRewardAdForAction(
             context = context,
-            actionLabel = "membuka Laporan Bulanan",
-            fallbackToast = "Membuka Laporan Bulanan...",
+            actionLabel = if (isEn) "open Monthly Report" else "membuka Laporan Bulanan",
+            fallbackToast = if (isEn) "Opening Monthly Report..." else "Membuka Laporan Bulanan...",
             onProceed = onProceedToReport
         )
     }
@@ -299,10 +302,11 @@ object TopOnAdManager {
         context: Context,
         onProceedToPdf: () -> Unit
     ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         showRewardAdForAction(
             context = context,
-            actionLabel = "mengunduh Laporan PDF",
-            fallbackToast = "Menyiapkan Laporan PDF...",
+            actionLabel = if (isEn) "download PDF Report" else "mengunduh Laporan PDF",
+            fallbackToast = if (isEn) "Preparing PDF Report..." else "Menyiapkan Laporan PDF...",
             onProceed = onProceedToPdf
         )
     }

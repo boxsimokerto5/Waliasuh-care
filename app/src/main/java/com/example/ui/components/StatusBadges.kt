@@ -22,18 +22,20 @@ import com.example.ui.theme.StatusNoControl
 import com.example.ui.theme.StatusPlanned
 import com.example.ui.theme.StatusSiapJalan
 import com.example.ui.theme.StatusSiapJalanBg
+import com.example.util.i18n.LocalAppStrings
 
 @Composable
 fun StatusBadge(
     status: String,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val (bgColor, textColor, label) = when (status.uppercase()) {
-        "MENUNGGU", "PLANNED" -> Triple(StatusMenungguBg, StatusMenunggu, "Menunggu")
-        "SIAP JALAN" -> Triple(StatusSiapJalanBg, StatusSiapJalan, "Siap Jalan")
-        "DIANTER", "DEPARTED" -> Triple(StatusDianterBg, StatusDianter, "Dianter")
-        "SELESAI", "COMPLETED" -> Triple(Color(0xFFDBEAFE), Color(0xFF1D4ED8), "Selesai")
-        "CANCELLED", "BATAL" -> Triple(Color(0xFFF1F5F9), Color(0xFF64748B), "Batal")
+        "MENUNGGU", "PLANNED" -> Triple(StatusMenungguBg, StatusMenunggu, if (isEn) "Waiting" else "Menunggu")
+        "SIAP JALAN" -> Triple(StatusSiapJalanBg, StatusSiapJalan, if (isEn) "Ready to Go" else "Siap Jalan")
+        "DIANTER", "DEPARTED" -> Triple(StatusDianterBg, StatusDianter, if (isEn) "Escorted" else "Dianter")
+        "SELESAI", "COMPLETED" -> Triple(Color(0xFFDBEAFE), Color(0xFF1D4ED8), if (isEn) "Completed" else "Selesai")
+        "CANCELLED", "BATAL" -> Triple(Color(0xFFF1F5F9), Color(0xFF64748B), if (isEn) "Cancelled" else "Batal")
         else -> Triple(Color(0xFFFEF3C7), Color(0xFFD97706), status)
     }
 
@@ -59,21 +61,22 @@ fun ControlBadge(
     isCompleted: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val (bgColor, textColor, label) = when {
         !needsControl -> Triple(
             StatusNoControl.copy(alpha = 0.10f),
             StatusNoControl,
-            "Tidak Perlu Kontrol"
+            if (isEn) "No Follow-up" else "Tidak Perlu Kontrol"
         )
         isCompleted -> Triple(
             StatusCompleted.copy(alpha = 0.12f),
             StatusCompleted,
-            "Kontrol Selesai"
+            if (isEn) "Follow-up Done" else "Kontrol Selesai"
         )
         else -> Triple(
             StatusNeedControl.copy(alpha = 0.12f),
             StatusNeedControl,
-            "Kontrol: ${controlDateFormatted ?: "Terjadwal"}"
+            if (isEn) "Follow-up: ${controlDateFormatted ?: "Scheduled"}" else "Kontrol: ${controlDateFormatted ?: "Terjadwal"}"
         )
     }
 
