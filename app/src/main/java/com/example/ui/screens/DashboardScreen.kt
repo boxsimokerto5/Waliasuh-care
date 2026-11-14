@@ -75,10 +75,14 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
+import com.example.ui.components.CategoryHubOverlay
+import com.example.ui.components.DashboardCategoryHub
+import com.example.ui.components.DashboardModalState
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
+import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.CreateShiftMessageDialog
@@ -124,7 +128,9 @@ fun DashboardScreen(
     onNavigateToRecords: () -> Unit,
     onNavigateToStudents: () -> Unit,
     onNavigateToProfile: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    modalState: DashboardModalState = rememberDashboardModalState(),
+    renderInlineCategoryHub: Boolean = true
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -137,20 +143,6 @@ fun DashboardScreen(
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
-    var showCreateDialog by remember { mutableStateOf(false) }
-    var showDirectTreatmentDialog by remember { mutableStateOf(false) }
-    var showPuskesmasInfoSheet by remember { mutableStateOf(false) }
-    var showShiftMessagesSheet by remember { mutableStateOf(false) }
-    var showCreateShiftMessageDialog by remember { mutableStateOf(false) }
-    var showShiftHistorySheet by remember { mutableStateOf(false) }
-    var showInputHaidDialog by remember { mutableStateOf(false) }
-    var showDaftarHaidSheet by remember { mutableStateOf(false) }
-    var showDaftarSuciSheet by remember { mutableStateOf(false) }
-    var showFiqihHaidDialog by remember { mutableStateOf(false) }
-    var showInputPuasaDialog by remember { mutableStateOf(false) }
-    var showDaftarPuasaSheet by remember { mutableStateOf(false) }
-    var showChecklistPuasaSheet by remember { mutableStateOf(false) }
-    var showRankingPuasaSheet by remember { mutableStateOf(false) }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordPlanToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -183,14 +175,15 @@ fun DashboardScreen(
     val totalSchoolStudents = students.size
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
                 onClick = {
                     TopOnAdManager.onUserActionClick(context)
-                    showCreateDialog = true
+                    modalState.showCreateDialog = true
                 },
                 containerColor = WaliPrimary,
                 contentColor = Color.White,
@@ -415,7 +408,7 @@ fun DashboardScreen(
                     }
                 }
 
-                // Quick Menu Tiles with Cute 3D Cartoon Icons
+                // Super-App Hub Grid ala Gojek (Semua Kategori & Layanan)
                 item {
                     Row(
                         modifier = Modifier
@@ -424,26 +417,15 @@ fun DashboardScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
+                        Text(
+                            text = if (isEn) "Categories & Services" else "Kategori & Layanan",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = if (isEn) "Swipe for more features" else "Geser untuk lebih banyak fitur",
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                contentDescription = null,
-                                tint = WaliPrimary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
+                        )
                         IconButton(
                             onClick = {
                                 TopOnAdManager.onUserActionClick(context)
@@ -464,61 +446,67 @@ fun DashboardScreen(
                 if (showGridTiles) {
                     item {
                         QuickMenuTiles(
+                            onOpenCategoryHub = { category ->
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.activeCategoryHub = category
+                            },
                             onNavigateToPlan = onNavigateToPlan,
                             onNavigateToDirectTreatment = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showDirectTreatmentDialog = true
+                                modalState.showDirectTreatmentDialog = true
                             },
                             onNavigateToRecords = onNavigateToRecords,
                             onNavigateToStudents = onNavigateToStudents,
                             onShowPuskesmasInfo = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showPuskesmasInfoSheet = true
+                                modalState.showPuskesmasInfoSheet = true
                             },
                             onOpenShiftMessages = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showShiftMessagesSheet = true
+                                modalState.showShiftMessagesSheet = true
                             },
                             onOpenCreateShiftMessage = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showCreateShiftMessageDialog = true
+                                modalState.showCreateShiftMessageDialog = true
                             },
                             onOpenShiftHistory = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showShiftHistorySheet = true
+                                modalState.showShiftHistorySheet = true
                             },
                             onOpenInputHaid = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showInputHaidDialog = true
+                                modalState.showInputHaidDialog = true
                             },
                             onOpenDaftarHaid = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showDaftarHaidSheet = true
+                                modalState.showDaftarHaidSheet = true
                             },
                             onOpenDaftarSuci = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showDaftarSuciSheet = true
+                                modalState.showDaftarSuciSheet = true
                             },
                             onOpenFiqihHaid = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showFiqihHaidDialog = true
+                                modalState.showFiqihHaidDialog = true
                             },
                             onOpenInputPuasa = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showInputPuasaDialog = true
+                                modalState.showInputPuasaDialog = true
                             },
                             onOpenDaftarPuasa = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showDaftarPuasaSheet = true
+                                modalState.showDaftarPuasaSheet = true
                             },
                             onOpenChecklistPuasa = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showChecklistPuasaSheet = true
+                                modalState.showChecklistPuasaSheet = true
                             },
                             onOpenRankingPuasa = {
                                 TopOnAdManager.onUserActionClick(context)
-                                showRankingPuasaSheet = true
+                                modalState.showRankingPuasaSheet = true
                             },
+                            todayPlansCount = totalToday,
+                            inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,
                             activeShiftMessagesCount = shiftMessages.count { !it.isCompleted && DateUtils.isToday(it.followUpDate) },
                             urgentShiftMessagesCount = shiftMessages.count { it.priority == "URGENT" && !it.isCompleted && DateUtils.isToday(it.followUpDate) },
@@ -697,17 +685,56 @@ fun DashboardScreen(
         }
     }
 
-    if (showCreateDialog) {
+        // Fallback inline overlay bila DashboardScreen dipanggil langsung tanpa MainActivity wrapper
+        if (renderInlineCategoryHub) {
+            CategoryHubOverlay(
+                category = modalState.activeCategoryHub,
+                schoolProfile = schoolProfile,
+                activePlans = activePlans,
+                inpatientCount = inpatientRecords.size,
+                fastingSessions = fastingSessions,
+                fastingRecords = fastingRecords,
+                activeHaidRecords = activeHaidRecords,
+                suciRecords = suciRecords,
+                shiftMessages = shiftMessages,
+                onDismiss = { modalState.activeCategoryHub = null },
+                onNavigateToPlan = {
+                    modalState.activeCategoryHub = null
+                    onNavigateToPlan()
+                },
+                onNavigateToRecords = {
+                    modalState.activeCategoryHub = null
+                    onNavigateToRecords()
+                },
+                onOpenCreatePlan = { modalState.showCreateDialog = true },
+                onOpenDirectTreatment = { modalState.showDirectTreatmentDialog = true },
+                onOpenFaskesInfo = { modalState.showPuskesmasInfoSheet = true },
+                onOpenInputPuasa = { modalState.showInputPuasaDialog = true },
+                onOpenDaftarPuasa = { modalState.showDaftarPuasaSheet = true },
+                onOpenChecklistPuasa = { modalState.showChecklistPuasaSheet = true },
+                onOpenRankingPuasa = { modalState.showRankingPuasaSheet = true },
+                onOpenInputHaid = { modalState.showInputHaidDialog = true },
+                onOpenDaftarHaid = { modalState.showDaftarHaidSheet = true },
+                onOpenDaftarSuci = { modalState.showDaftarSuciSheet = true },
+                onOpenFiqihHaid = { modalState.showFiqihHaidDialog = true },
+                onOpenShiftMessages = { modalState.showShiftMessagesSheet = true },
+                onOpenCreateShiftMessage = { modalState.showCreateShiftMessageDialog = true },
+                onOpenShiftHistory = { modalState.showShiftHistorySheet = true }
+            )
+        }
+    }
+
+    if (modalState.showCreateDialog) {
         CreatePlanDialog(
             students = students,
             primaryFaskesName = schoolProfile.primaryFaskesName,
             secondaryFaskesName = schoolProfile.secondaryFaskesName,
             allFaskesList = schoolProfile.getAllFaskes(),
-            onDismiss = { showCreateDialog = false },
+            onDismiss = { modalState.showCreateDialog = false },
             onConfirm = { student, faskes, complaint, planDate, time, escort, notes ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.createTreatmentPlan(student, faskes, complaint, planDate, time, escort, notes)
-                showCreateDialog = false
+                modalState.showCreateDialog = false
             }
         )
     }
@@ -779,13 +806,13 @@ fun DashboardScreen(
         )
     }
 
-    if (showDirectTreatmentDialog) {
+    if (modalState.showDirectTreatmentDialog) {
         DirectTreatmentDialog(
             students = students,
             primaryFaskesName = schoolProfile.primaryFaskesName,
             secondaryFaskesName = schoolProfile.secondaryFaskesName,
             allFaskesList = schoolProfile.getAllFaskes(),
-            onDismiss = { showDirectTreatmentDialog = false },
+            onDismiss = { modalState.showDirectTreatmentDialog = false },
             onConfirm = { student, faskes, complaint, diagnosis, actions, prescription, needsCtrl, ctrlDate, escort, notes, isInpatient, inpatientRoom ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.recordDirectTreatment(
@@ -802,7 +829,7 @@ fun DashboardScreen(
                     isInpatient = isInpatient,
                     inpatientRoom = inpatientRoom
                 )
-                showDirectTreatmentDialog = false
+                modalState.showDirectTreatmentDialog = false
             }
         )
     }
@@ -1002,46 +1029,46 @@ fun DashboardScreen(
         )
     }
 
-    if (showPuskesmasInfoSheet) {
+    if (modalState.showPuskesmasInfoSheet) {
         FaskesReferralSheet(
             schoolProfile = schoolProfile,
             title = if (isEn) "Referral Faskes & Puskesmas" else "Faskes & Puskesmas Rujukan",
-            onDismiss = { showPuskesmasInfoSheet = false }
+            onDismiss = { modalState.showPuskesmasInfoSheet = false }
         )
     }
 
     // Sinkronkan pesan & centang operan shift online setiap kali sheet pesan/riwayat dibuka
-    LaunchedEffect(showShiftMessagesSheet, showShiftHistorySheet) {
-        if (showShiftMessagesSheet || showShiftHistorySheet) {
+    LaunchedEffect(modalState.showShiftMessagesSheet, modalState.showShiftHistorySheet) {
+        if (modalState.showShiftMessagesSheet || modalState.showShiftHistorySheet) {
             viewModel.syncShiftMessagesOnlineQuietly()
         }
     }
 
     // Modal Bottom Sheet: Pesan Shift Berikutnya (Daftar Kartu Operan Jaga)
-    if (showShiftMessagesSheet) {
+    if (modalState.showShiftMessagesSheet) {
         ShiftMessagesSheet(
             viewModel = viewModel,
             messages = shiftMessages,
             waliAccounts = waliAccounts,
-            onDismiss = { showShiftMessagesSheet = false }
+            onDismiss = { modalState.showShiftMessagesSheet = false }
         )
     }
 
-    // Modal Bottom Sheet: Form Tinggalkan Pesan Shift (Voice to Text)
-    if (showCreateShiftMessageDialog) {
+    // Modal Bottom Sheet: Form Tinggalkan Pesan Shift
+    if (modalState.showCreateShiftMessageDialog) {
         CreateShiftMessageDialog(
             viewModel = viewModel,
             waliAccounts = waliAccounts,
-            onDismiss = { showCreateShiftMessageDialog = false }
+            onDismiss = { modalState.showCreateShiftMessageDialog = false }
         )
     }
 
     // Modal Bottom Sheet: Riwayat Operan (Arsip Pesan Lewat Hari Ini)
-    if (showShiftHistorySheet) {
+    if (modalState.showShiftHistorySheet) {
         ShiftHistorySheet(
             viewModel = viewModel,
             messages = shiftMessages,
-            onDismiss = { showShiftHistorySheet = false }
+            onDismiss = { modalState.showShiftHistorySheet = false }
         )
     }
 
@@ -1049,7 +1076,7 @@ fun DashboardScreen(
     var preselectedTissueVerified by remember { mutableStateOf(false) }
 
     // Modal Bottom Sheet: Pendataan Haid Siswi (Scan Barcode Kartu Siswa)
-    if (showInputHaidDialog) {
+    if (modalState.showInputHaidDialog) {
         InputHaidDialog(
             students = students,
             activeHaidRecords = activeHaidRecords,
@@ -1065,7 +1092,7 @@ fun DashboardScreen(
                 viewModel.completeHaidRecord(id)
             },
             onDismiss = {
-                showInputHaidDialog = false
+                modalState.showInputHaidDialog = false
                 preselectedHaidStudent = null
                 preselectedTissueVerified = false
             }
@@ -1073,7 +1100,7 @@ fun DashboardScreen(
     }
 
     // Modal Bottom Sheet: Daftar Siswi Sedang Haid
-    if (showDaftarHaidSheet) {
+    if (modalState.showDaftarHaidSheet) {
         DaftarHaidSheet(
             activeHaidRecords = activeHaidRecords,
             schoolProfile = schoolProfile,
@@ -1088,17 +1115,17 @@ fun DashboardScreen(
                 viewModel.deleteHaidRecord(rec)
             },
             onOpenInputHaid = {
-                showDaftarHaidSheet = false
+                modalState.showDaftarHaidSheet = false
                 preselectedHaidStudent = null
                 preselectedTissueVerified = false
-                showInputHaidDialog = true
+                modalState.showInputHaidDialog = true
             },
-            onDismiss = { showDaftarHaidSheet = false }
+            onDismiss = { modalState.showDaftarHaidSheet = false }
         )
     }
 
     // Modal Bottom Sheet: Daftar Siswi Suci & Timeline Masa Suci
-    if (showDaftarSuciSheet) {
+    if (modalState.showDaftarSuciSheet) {
         DaftarSuciSheet(
             suciRecords = suciRecords,
             activeHaidRecords = activeHaidRecords,
@@ -1123,34 +1150,41 @@ fun DashboardScreen(
                 )
                 preselectedHaidStudent = matchedStudent
                 preselectedTissueVerified = true
-                showDaftarSuciSheet = false
-                showInputHaidDialog = true
+                modalState.showDaftarSuciSheet = false
+                modalState.showInputHaidDialog = true
             },
-            onDismiss = { showDaftarSuciSheet = false }
+            onDismiss = { modalState.showDaftarSuciSheet = false }
         )
     }
 
     // Modal Bottom Sheet: Panduan Aplikasi & Fiqih Haid Wanita
-    if (showFiqihHaidDialog) {
+    if (modalState.showFiqihHaidDialog) {
         FiqihHaidDialog(
-            onDismiss = { showFiqihHaidDialog = false }
+            onDismiss = { modalState.showFiqihHaidDialog = false }
         )
     }
 
     // Sinkronkan sesi & checklist sahur/berbuka puasa online setiap kali modul puasa dibuka
     LaunchedEffect(
-        showInputPuasaDialog,
-        showDaftarPuasaSheet,
-        showChecklistPuasaSheet,
-        showRankingPuasaSheet
+        modalState.showInputPuasaDialog,
+        modalState.showDaftarPuasaSheet,
+        modalState.showChecklistPuasaSheet,
+        modalState.showRankingPuasaSheet,
+        modalState.activeCategoryHub
     ) {
-        if (showInputPuasaDialog || showDaftarPuasaSheet || showChecklistPuasaSheet || showRankingPuasaSheet) {
+        if (modalState.showInputPuasaDialog || modalState.showDaftarPuasaSheet ||
+            modalState.showChecklistPuasaSheet || modalState.showRankingPuasaSheet ||
+            modalState.activeCategoryHub == DashboardCategoryHub.PUASA
+        ) {
             viewModel.syncFastingOnlineQuietly()
+        }
+        if (modalState.activeCategoryHub == DashboardCategoryHub.PESAN) {
+            viewModel.syncShiftMessagesOnlineQuietly()
         }
     }
 
     // Modal Bottom Sheet 1 (Puasa): Input Puasa (Sesi, Scan Barcode & Cari Siswa)
-    if (showInputPuasaDialog) {
+    if (modalState.showInputPuasaDialog) {
         InputPuasaDialog(
             sessions = fastingSessions,
             students = students,
@@ -1158,12 +1192,12 @@ fun DashboardScreen(
             onRegisterStudent = { session, student, onResult ->
                 viewModel.registerStudentForFasting(session, student, onResult)
             },
-            onDismiss = { showInputPuasaDialog = false }
+            onDismiss = { modalState.showInputPuasaDialog = false }
         )
     }
 
     // Modal Bottom Sheet 2 (Puasa): Daftar Siswa Puasa (SD/SMP/SMA + Total & PDF)
-    if (showDaftarPuasaSheet) {
+    if (modalState.showDaftarPuasaSheet) {
         DaftarPuasaSheet(
             sessions = fastingSessions,
             fastingRecords = fastingRecords,
@@ -1172,12 +1206,12 @@ fun DashboardScreen(
             onDeleteRecord = { rec ->
                 viewModel.deleteFastingRecord(rec)
             },
-            onDismiss = { showDaftarPuasaSheet = false }
+            onDismiss = { modalState.showDaftarPuasaSheet = false }
         )
     }
 
     // Modal Bottom Sheet 3 (Puasa): Checklist Sahur & Berbuka + PDF
-    if (showChecklistPuasaSheet) {
+    if (modalState.showChecklistPuasaSheet) {
         ChecklistPuasaSheet(
             sessions = fastingSessions,
             fastingRecords = fastingRecords,
@@ -1189,16 +1223,16 @@ fun DashboardScreen(
             onToggleBuka = { rec ->
                 viewModel.toggleFastingBuka(rec)
             },
-            onDismiss = { showChecklistPuasaSheet = false }
+            onDismiss = { modalState.showChecklistPuasaSheet = false }
         )
     }
 
     // Modal Bottom Sheet 4 (Puasa): Ranking Siswa & History Sesi Puasa
-    if (showRankingPuasaSheet) {
+    if (modalState.showRankingPuasaSheet) {
         RankingPuasaSheet(
             sessions = fastingSessions,
             fastingRecords = fastingRecords,
-            onDismiss = { showRankingPuasaSheet = false }
+            onDismiss = { modalState.showRankingPuasaSheet = false }
         )
     }
 }

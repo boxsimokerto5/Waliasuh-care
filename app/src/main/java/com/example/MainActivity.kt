@@ -70,7 +70,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.HealthViewModel
 import com.example.ui.UserRole
+import com.example.ui.components.CategoryHubOverlay
 import com.example.ui.components.WaliTopBar
+import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.LoginScreen
@@ -226,6 +228,15 @@ private fun WaliAsuhCareAppContent(
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
     val historySearchQuery by viewModel.historySearchQuery.collectAsStateWithLifecycle()
     val studentSearchQuery by viewModel.studentSearchQuery.collectAsStateWithLifecycle()
+    val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
+    val activeHaidRecords by viewModel.activeHaidRecords.collectAsStateWithLifecycle()
+    val suciRecords by viewModel.suciRecords.collectAsStateWithLifecycle()
+    val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
+    val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val dashboardModalState = rememberDashboardModalState()
+    val inpatientCount = remember(allRecords) {
+        allRecords.count { it.isInpatient && it.status != "CANCELLED" }
+    }
 
     // Handle back button for secondary screens -> return to Dashboard
     if (currentScreen != WaliNavScreen.DASHBOARD) {
@@ -234,9 +245,10 @@ private fun WaliAsuhCareAppContent(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize(),
-        contentWindowInsets = WindowInsets.safeDrawing,
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             WaliTopBar(
                 notificationCount = pendingControls.size + activePlans.size,
@@ -453,7 +465,9 @@ private fun WaliAsuhCareAppContent(
                         onNavigateToProfile = {
                             TopOnAdManager.onUserActionClick(context)
                             currentScreen = WaliNavScreen.PROFIL
-                        }
+                        },
+                        modalState = dashboardModalState,
+                        renderInlineCategoryHub = false
                     )
                 }
                 WaliNavScreen.RENCANA -> {
@@ -494,6 +508,89 @@ private fun WaliAsuhCareAppContent(
                     )
                 }
             }
+        }
+        }
+
+        // Halaman Sub-Kategori Full-Screen ala Gojek/GoFood (Slide dari kanan)
+        if (currentScreen == WaliNavScreen.DASHBOARD) {
+            CategoryHubOverlay(
+                category = dashboardModalState.activeCategoryHub,
+                schoolProfile = schoolProfile,
+                activePlans = activePlans,
+                inpatientCount = inpatientCount,
+                fastingSessions = fastingSessions,
+                fastingRecords = fastingRecords,
+                activeHaidRecords = activeHaidRecords,
+                suciRecords = suciRecords,
+                shiftMessages = shiftMessages,
+                onDismiss = { dashboardModalState.activeCategoryHub = null },
+                onNavigateToPlan = {
+                    dashboardModalState.activeCategoryHub = null
+                    TopOnAdManager.onUserActionClick(context)
+                    currentScreen = WaliNavScreen.RENCANA
+                },
+                onNavigateToRecords = {
+                    dashboardModalState.activeCategoryHub = null
+                    TopOnAdManager.onUserActionClick(context)
+                    currentScreen = WaliNavScreen.TINDAKAN
+                },
+                onOpenCreatePlan = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showCreateDialog = true
+                },
+                onOpenDirectTreatment = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showDirectTreatmentDialog = true
+                },
+                onOpenFaskesInfo = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showPuskesmasInfoSheet = true
+                },
+                onOpenInputPuasa = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showInputPuasaDialog = true
+                },
+                onOpenDaftarPuasa = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showDaftarPuasaSheet = true
+                },
+                onOpenChecklistPuasa = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showChecklistPuasaSheet = true
+                },
+                onOpenRankingPuasa = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showRankingPuasaSheet = true
+                },
+                onOpenInputHaid = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showInputHaidDialog = true
+                },
+                onOpenDaftarHaid = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showDaftarHaidSheet = true
+                },
+                onOpenDaftarSuci = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showDaftarSuciSheet = true
+                },
+                onOpenFiqihHaid = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showFiqihHaidDialog = true
+                },
+                onOpenShiftMessages = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showShiftMessagesSheet = true
+                },
+                onOpenCreateShiftMessage = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showCreateShiftMessageDialog = true
+                },
+                onOpenShiftHistory = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showShiftHistorySheet = true
+                }
+            )
         }
     }
 

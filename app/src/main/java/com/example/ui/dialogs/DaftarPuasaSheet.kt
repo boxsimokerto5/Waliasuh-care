@@ -359,7 +359,8 @@ fun DaftarPuasaSheet(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f, fill = false),
+                            .weight(1f, fill = false)
+                            .testTag("list_daftar_puasa"),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         selectedSession?.let { sess ->

@@ -2185,7 +2185,11 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("filter_daftar_SMA").assertIsDisplayed()
     composeTestRule.onNodeWithTag("filter_daftar_SMP").assertIsDisplayed()
     composeTestRule.onNodeWithTag("filter_daftar_SD").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_daftar_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("ABIMANYU SATRIA"))
     composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_daftar_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("BUDI SANTOSO"))
     composeTestRule.onNodeWithText("BUDI SANTOSO").assertIsDisplayed()
 
     // Filter SMA only
@@ -2202,8 +2206,12 @@ class ExampleRobolectricTest {
 
     // Back to Semua + search filter
     composeTestRule.onNodeWithTag("filter_daftar_Semua").performClick()
+    composeTestRule.onNodeWithTag("list_daftar_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("input_search_daftar_puasa"))
     composeTestRule.onNodeWithTag("input_search_daftar_puasa").performTextInput("ABIMANYU")
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_daftar_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("ABIMANYU SATRIA"))
     composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
     composeTestRule.onNodeWithText("BUDI SANTOSO").assertDoesNotExist()
   }
@@ -2269,12 +2277,20 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("tab_checklist_sahur").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tab_checklist_berbuka").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_checklist_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("ABIMANYU SATRIA"))
     composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_checklist_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("CITRA LESTARI"))
     composeTestRule.onNodeWithText("CITRA LESTARI").assertIsDisplayed()
 
     // Filter Sudah on Sahur tab
+    composeTestRule.onNodeWithTag("list_checklist_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("filter_checklist_Sudah"))
     composeTestRule.onNodeWithTag("filter_checklist_Sudah").performClick()
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_checklist_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("ABIMANYU SATRIA"))
     composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertIsDisplayed()
     composeTestRule.onNodeWithText("CITRA LESTARI").assertDoesNotExist()
 
@@ -2286,11 +2302,116 @@ class ExampleRobolectricTest {
     // Switch to Berbuka tab -> only CITRA LESTARI is checked ("Sudah")
     composeTestRule.onNodeWithTag("tab_checklist_berbuka").performClick()
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_checklist_puasa")
+      .performScrollToNode(androidx.compose.ui.test.hasText("CITRA LESTARI"))
     composeTestRule.onNodeWithText("CITRA LESTARI").assertIsDisplayed()
     composeTestRule.onNodeWithText("ABIMANYU SATRIA").assertDoesNotExist()
 
     composeTestRule.onNodeWithTag("checklist_item_${recPending.id}").performClick()
     composeTestRule.waitForIdle()
     assertEquals(recPending.id, toggledBukaId)
+  }
+
+  @Test
+  fun `verify QuickMenuTiles displays all 8 super-app icons and triggers category hubs`() {
+    var openedHub: com.example.ui.components.DashboardCategoryHub? = null
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.components.QuickMenuTiles(
+          onOpenCategoryHub = { openedHub = it },
+          onNavigateToPlan = {},
+          onNavigateToDirectTreatment = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onShowPuskesmasInfo = {},
+          todayPlansCount = 3,
+          studentsCount = 342,
+          activeHaidCount = 4,
+          todayFastingCount = 28
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_berobat").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tindakan_langsung").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_rekam_medis").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_anak_asuh").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_puasa").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_haid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_pesan").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_puskesmas_info").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("category_puasa").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.PUASA, openedHub)
+
+    composeTestRule.onNodeWithTag("category_haid").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.HAID, openedHub)
+
+    composeTestRule.onNodeWithTag("category_berobat").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.BEROBAT, openedHub)
+
+    composeTestRule.onNodeWithTag("category_pesan").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.PESAN, openedHub)
+  }
+
+  @Test
+  fun `verify DashboardScreen opens slide-from-right CategoryHubOverlay and closes with top-left button`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = "Abisarwan Rafif",
+          activePlans = emptyList(),
+          students = emptyList(),
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {},
+          renderInlineCategoryHub = true
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    // Open Puasa Category Hub
+    composeTestRule.onNodeWithTag("category_puasa").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("category_hub_overlay_puasa").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_close_category_hub").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_quick_action_category_hub").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_input_puasa").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_daftar_puasa").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_checklist_puasa").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_ranking_puasa").assertIsDisplayed()
+
+    // Close using circular X button at top-left
+    composeTestRule.onNodeWithTag("btn_close_category_hub").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_hub_overlay_puasa").assertDoesNotExist()
+
+    // Open Haid Category Hub
+    composeTestRule.onNodeWithTag("category_haid").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_hub_overlay_haid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_input_haid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_daftar_haid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_daftar_suci").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_fiqih_haid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_close_category_hub").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_hub_overlay_haid").assertDoesNotExist()
   }
 }
