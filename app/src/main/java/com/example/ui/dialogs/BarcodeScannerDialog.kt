@@ -580,7 +580,8 @@ fun BarcodeScannerDialog(
                         items(filteredFemaleStudents, key = { it.id }) { student ->
                             Card(
                                 onClick = {
-                                    val codeToUse = if (student.nik.isNotBlank()) student.nik else if (student.nis.isNotBlank()) student.nis else student.id.toString()
+                                    val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+                                    val codeToUse = cleanNik.ifBlank { student.nis.ifBlank { student.id.toString() } }
                                     hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
                                     onScanned(codeToUse)
                                     if (!continuousScan) {
@@ -620,8 +621,9 @@ fun BarcodeScannerDialog(
                                             fontSize = 12.5.sp,
                                             color = titleTextColor
                                         )
+                                        val displayNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
                                         Text(
-                                            text = "${student.classGrade} • ${student.dormitory} • NIK: ${if (student.nik.isNotBlank()) student.nik else student.nis.ifBlank { student.id.toString() }}",
+                                            text = "${student.classGrade} • ${student.dormitory} • NIK: ${displayNik.ifBlank { student.nis.ifBlank { student.id.toString() } }}",
                                             fontSize = 10.5.sp,
                                             fontFamily = FontFamily.Monospace,
                                             color = avatarTextColor.copy(alpha = 0.85f)

@@ -110,6 +110,9 @@ class HealthRepository(
     suspend fun deleteStudentsBySchool(schoolId: String) =
         studentDao.deleteBySchoolId(schoolId)
 
+    suspend fun getAllStudentsList(): List<ChildStudent> =
+        studentDao.getAllStudentsList()
+
     suspend fun getStudentsBySchoolList(schoolId: String): List<ChildStudent> =
         studentDao.getStudentsBySchoolList(schoolId)
 
@@ -202,6 +205,9 @@ class HealthRepository(
         haidRecordDao?.insertAll(records)
     }
 
+    suspend fun getAllHaidRecordsList(): List<HaidRecord> =
+        haidRecordDao?.getAllRecordsList() ?: emptyList()
+
     suspend fun getHaidRecordsBySchoolList(schoolId: String): List<HaidRecord> =
         haidRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
 
@@ -264,6 +270,9 @@ class HealthRepository(
     suspend fun insertAllFastingRecords(records: List<FastingRecord>) {
         fastingRecordDao?.insertAll(records)
     }
+
+    suspend fun getAllFastingRecordsList(): List<FastingRecord> =
+        fastingRecordDao?.getAllRecordsList() ?: emptyList()
 
     suspend fun getFastingRecordsBySchoolList(schoolId: String): List<FastingRecord> =
         fastingRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()

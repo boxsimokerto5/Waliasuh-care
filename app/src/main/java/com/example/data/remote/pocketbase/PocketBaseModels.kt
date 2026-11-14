@@ -120,8 +120,8 @@ data class PbStudentDto(
             bloodType = bloodType?.ifBlank { "-" } ?: "-",
             emergencyContact = emergencyContact?.ifBlank { "Pengasuh Asrama" } ?: "Pengasuh Asrama",
             specialNotes = specialNotes ?: "",
-            nik = nik ?: "",
-            noKk = noKk ?: "",
+            nik = com.example.util.StudentCsvParser.cleanDigitsOnly(nik),
+            noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(noKk),
             birthPlace = birthPlace ?: "",
             birthDate = birthDate ?: "",
             motherName = motherName ?: "",
@@ -134,8 +134,10 @@ data class PbStudentDto(
 
     companion object {
         fun fromDomain(model: ChildStudent): PbStudentDto {
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.nik)
+            val cleanNoKk = com.example.util.StudentCsvParser.cleanDigitsOnly(model.noKk)
             val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
-                "${model.schoolId}:${model.nik}:${model.nis}:${model.name}"
+                "${model.schoolId}:$cleanNik:${model.nis}:${model.name}"
             )
             return PbStudentDto(
                 id = PocketBaseIdCodec.toPbId(safeId),
@@ -151,8 +153,8 @@ data class PbStudentDto(
                 bloodType = model.bloodType,
                 emergencyContact = model.emergencyContact,
                 specialNotes = model.specialNotes,
-                nik = model.nik,
-                noKk = model.noKk,
+                nik = cleanNik,
+                noKk = cleanNoKk,
                 birthPlace = model.birthPlace,
                 birthDate = model.birthDate,
                 motherName = model.motherName,
@@ -291,7 +293,7 @@ data class PbHaidRecordDto(
             id = PocketBaseIdCodec.resolveLocalId(localId, id),
             studentId = studentId,
             studentName = studentName,
-            studentNik = studentNik ?: "",
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
             studentNis = studentNis ?: "",
             studentClass = studentClass ?: "",
             studentDorm = studentDorm ?: "",
@@ -318,7 +320,7 @@ data class PbHaidRecordDto(
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 studentId = model.studentId,
                 studentName = model.studentName,
-                studentNik = model.studentNik,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
                 studentNis = model.studentNis,
                 studentClass = model.studentClass,
                 studentDorm = model.studentDorm,
@@ -588,7 +590,7 @@ data class PbFastingRecordDto(
             sessionDate = sessionDate ?: 0L,
             studentId = studentId,
             studentName = studentName,
-            studentNik = studentNik ?: "",
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
             studentNis = studentNis ?: "",
             studentClass = studentClass ?: "",
             studentDorm = studentDorm ?: "",
@@ -621,7 +623,7 @@ data class PbFastingRecordDto(
                 sessionDate = model.sessionDate,
                 studentId = model.studentId,
                 studentName = model.studentName,
-                studentNik = model.studentNik,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
                 studentNis = model.studentNis,
                 studentClass = model.studentClass,
                 studentDorm = model.studentDorm,

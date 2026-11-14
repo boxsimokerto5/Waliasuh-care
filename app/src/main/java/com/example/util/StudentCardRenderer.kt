@@ -135,7 +135,7 @@ object StudentCardRenderer {
     }
 
     fun resolveQrPayload(student: ChildStudent): String {
-        return student.nik.trim()
+        return StudentCsvParser.cleanDigitsOnly(student.nik)
             .ifBlank { student.nis.trim() }
             .ifBlank { student.id.toString() }
     }
@@ -495,7 +495,7 @@ object StudentCardRenderer {
         }
 
         drawFieldRow("NISN", student.nis.ifBlank { "-" })
-        drawFieldRow("NIK", student.nik.ifBlank { "-" }, useMono = true)
+        drawFieldRow("NIK", StudentCsvParser.cleanDigitsOnly(student.nik).ifBlank { "-" }, useMono = true)
         val kelasText = buildString {
             append(student.classGrade.ifBlank { "-" })
             if (student.dormitory.isNotBlank()) {

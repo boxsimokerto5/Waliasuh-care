@@ -86,10 +86,12 @@ object StudentClassifier {
     ): ChildStudent? {
         val q = rawCode.trim()
         if (q.isEmpty()) return null
+        val qDigits = StudentCsvParser.cleanDigitsOnly(q)
 
         // Prioritaskan kecocokan eksak NIK / NIS / ID sebelum pencarian nama parsial
         return students.firstOrNull {
-            (it.nik.isNotBlank() && it.nik.trim().equals(q, ignoreCase = true)) ||
+            val cleanNik = StudentCsvParser.cleanDigitsOnly(it.nik)
+            (cleanNik.isNotBlank() && (cleanNik.equals(q, ignoreCase = true) || (qDigits.length >= 6 && cleanNik == qDigits))) ||
                 (it.nis.isNotBlank() && it.nis.trim().equals(q, ignoreCase = true)) ||
                 it.id.toString() == q
         } ?: students.firstOrNull {

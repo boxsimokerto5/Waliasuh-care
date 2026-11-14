@@ -45,6 +45,9 @@ interface FastingRecordDao {
     @Query("SELECT * FROM fasting_records ORDER BY sessionDate DESC, createdAt DESC")
     fun getAllRecords(): Flow<List<FastingRecord>>
 
+    @Query("SELECT * FROM fasting_records ORDER BY sessionDate DESC, createdAt DESC")
+    suspend fun getAllRecordsList(): List<FastingRecord>
+
     @Query("SELECT * FROM fasting_records WHERE schoolId = :schoolId ORDER BY sessionDate DESC, createdAt DESC")
     suspend fun getRecordsBySchoolList(schoolId: String): List<FastingRecord>
 

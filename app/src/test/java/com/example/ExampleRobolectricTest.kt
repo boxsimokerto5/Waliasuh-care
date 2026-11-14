@@ -12,9 +12,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -1880,5 +1883,172 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     assertEquals(com.example.util.i18n.AppLanguage.INDONESIAN, vm.appLanguage.value)
     composeTestRule.onNodeWithText("Portal Superadmin").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify cleanDigitsOnly removes C1 mojibake and non-digit prefixes while preserving real NIK prefixes`() {
+    // Kasus nyata dari screenshot: C1 ISO-8859-1 mojibake (â\u0080\u008C -> tampil sebagai â▯▯)
+    assertEquals("3578150504110001", com.example.util.StudentCsvParser.cleanDigitsOnly("â\u0080\u008C3578150504110001"))
+    assertEquals("3578150504110001", com.example.util.StudentCsvParser.cleanDigitsOnly("â\u0080\u008B3578150504110001"))
+    assertEquals("3506150510180001", com.example.util.StudentCsvParser.cleanDigitsOnly("â€Œ3506150510180001"))
+    assertEquals("3506032804190001", com.example.util.StudentCsvParser.cleanDigitsOnly("\uFEFF\u200E\u200C'3506032804190001"))
+    assertEquals("1771057004190001", com.example.util.StudentCsvParser.cleanDigitsOnly("NIK: 1771-0570-0419-0001"))
+    assertEquals("9271010101010001", com.example.util.StudentCsvParser.cleanDigitsOnly("9271010101010001"))
+    assertEquals("0099412567", com.example.util.StudentCsvParser.cleanDigitsOnly("0099412567"))
+    assertEquals("3506200000000000", com.example.util.StudentCsvParser.cleanDigitsOnly("â\u0080\u008C3.5062E+15"))
+
+    // Pastikan NIS fallback berkode sekolah tetap terjaga
+    assertEquals("SRT1-KDR-12", com.example.util.StudentCsvParser.cleanNumericId("SRT1-KDR-12"))
+
+    val dirtyCsv = """
+      No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN
+      128,AFRIZAL SUYANTO,X-1,SMA X,"Muneng, Purwoasri, Kab. Kediri",L,â${'\u0080'}${'\u008C'}3578150504110001,â${'\u0080'}${'\u008B'}3506150510180001,SURABAYA,05-04-2011,DIAH RIFIANTI,114240555
+    """.trimIndent()
+    val parsed = com.example.util.StudentCsvParser.parseCsv(dirtyCsv, "SRT1-KDR")
+    assertEquals(1, parsed.size)
+    assertEquals("3578150504110001", parsed[0].nik)
+    assertEquals("3506150510180001", parsed[0].noKk)
+    assertEquals("114240555", parsed[0].nis)
+  }
+
+  @Test
+  fun `verify PocketBase DTO and Room startup cleanup heal pre-existing dirty NIK records`() = kotlinx.coroutines.runBlocking {
+    val dirtyDto = com.example.data.remote.pocketbase.PbStudentDto(
+      localId = 9001L,
+      schoolId = "SRT1-KDR",
+      name = "AFRIZAL SUYANTO",
+      nik = "â\u0080\u008C3578150504110001",
+      noKk = "\u200B3506150510180001"
+    )
+    val cleanDomain = dirtyDto.toDomainModel("SRT1-KDR")
+    assertEquals("3578150504110001", cleanDomain.nik)
+    assertEquals("3506150510180001", cleanDomain.noKk)
+
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.childStudentDao().deleteAll()
+    db.haidRecordDao().deleteAll()
+    db.fastingRecordDao().deleteBySchoolId("SRT1-KDR")
+
+    db.childStudentDao().insert(
+      com.example.data.model.ChildStudent(
+        id = 9001L,
+        name = "AFRIZAL SUYANTO",
+        nis = "114240555",
+        gender = "L",
+        age = 15,
+        dormitory = "Asrama Putra",
+        classGrade = "X-1",
+        nik = "â\u0080\u008C3578150504110001",
+        noKk = "â€‹3506150510180001",
+        schoolId = "SRT1-KDR"
+      )
+    )
+    db.haidRecordDao().insert(
+      com.example.data.model.HaidRecord(
+        id = 9002L,
+        studentId = 9001L,
+        studentName = "SITI TEST",
+        studentNik = "â\u0080\u008C3578150504110002",
+        startDate = 1000L,
+        schoolId = "SRT1-KDR"
+      )
+    )
+    db.fastingRecordDao().insert(
+      com.example.data.model.FastingRecord(
+        id = 9003L,
+        sessionId = 1L,
+        studentId = 9001L,
+        studentName = "AFRIZAL SUYANTO",
+        studentNik = "â\u0080\u008E3578150504110001",
+        schoolId = "SRT1-KDR"
+      )
+    )
+
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.sanitizeExistingIdentityDataInRoom()
+
+    val healedStudents = db.childStudentDao().getAllStudentsList()
+    assertEquals(1, healedStudents.size)
+    assertEquals("3578150504110001", healedStudents[0].nik)
+    assertEquals("3506150510180001", healedStudents[0].noKk)
+
+    val healedHaid = db.haidRecordDao().getAllRecordsList()
+    assertEquals("3578150504110002", healedHaid.first { it.id == 9002L }.studentNik)
+
+    val healedFasting = db.fastingRecordDao().getAllRecordsList()
+    assertEquals("3578150504110001", healedFasting.first { it.id == 9003L }.studentNik)
+  }
+
+  @Test
+  fun `verify AddStudentDialog and StudentDetailDialog strip non-digits and show clean NIK`() {
+    val dirtyStudent = com.example.data.model.ChildStudent(
+      id = 9100L,
+      name = "AFRIZAL SUYANTO",
+      nis = "114240555",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-1",
+      nik = "â\u0080\u008C3578150504110001",
+      noKk = "â€‹3506150510180001",
+      schoolId = "SRT1-KDR"
+    )
+
+    var savedStudent: com.example.data.model.ChildStudent? = null
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.AddStudentDialog(
+          initialStudent = dirtyStudent,
+          onDismiss = {},
+          onConfirmStudent = { savedStudent = it }
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("input_student_nik").performTextClearance()
+    composeTestRule.onNodeWithTag("input_student_nik").performTextInput("â\u0080\u008C3506123456780001")
+    composeTestRule.onNodeWithTag("confirm_add_student_button").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    assertNotNull(savedStudent)
+    assertEquals("3506123456780001", savedStudent!!.nik)
+    assertEquals("3506150510180001", savedStudent!!.noKk)
+  }
+
+  @Test
+  fun `verify StudentDetailDialog displays pure NIK digits even if record had dirty characters`() {
+    val dirtyStudent = com.example.data.model.ChildStudent(
+      id = 9101L,
+      name = "AFRIZAL SUYANTO",
+      nis = "114240555",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-1",
+      nik = "â\u0080\u008C3578150504110001",
+      noKk = "â€‹3506150510180001",
+      schoolId = "SRT1-KDR"
+    )
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.StudentDetailDialog(
+          student = dirtyStudent,
+          studentRecords = emptyList(),
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("3578150504110001").assertIsDisplayed()
+    composeTestRule.onNodeWithText("3506150510180001").assertIsDisplayed()
   }
 }

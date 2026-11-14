@@ -119,7 +119,9 @@ fun InputPuasaDialog(
         sessionRecords.map { it.studentId }.filter { it > 0L }.toSet()
     }
     val registeredStudentNiks = remember(sessionRecords) {
-        sessionRecords.mapNotNull { it.studentNik.trim().lowercase().takeIf(String::isNotBlank) }.toSet()
+        sessionRecords.mapNotNull {
+            com.example.util.StudentCsvParser.cleanDigitsOnly(it.studentNik).takeIf(String::isNotBlank)
+        }.toSet()
     }
     val registeredStudentNiss = remember(sessionRecords) {
         sessionRecords.mapNotNull { it.studentNis.trim().lowercase().takeIf(String::isNotBlank) }.toSet()
@@ -127,7 +129,8 @@ fun InputPuasaDialog(
 
     fun isStudentRegistered(student: ChildStudent): Boolean {
         if (student.id > 0L && student.id in registeredStudentIds) return true
-        if (student.nik.isNotBlank() && student.nik.trim().lowercase() in registeredStudentNiks) return true
+        val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+        if (cleanNik.isNotBlank() && cleanNik in registeredStudentNiks) return true
         if (student.nis.isNotBlank() && student.nis.trim().lowercase() in registeredStudentNiss) return true
         return false
     }
@@ -142,7 +145,7 @@ fun InputPuasaDialog(
                 s.name.lowercase().contains(q) ||
                     s.classGrade.lowercase().contains(q) ||
                     s.dormitory.lowercase().contains(q) ||
-                    s.nik.lowercase().contains(q) ||
+                    com.example.util.StudentCsvParser.cleanDigitsOnly(s.nik).contains(q) ||
                     s.nis.lowercase().contains(q)
             }.take(40)
         }

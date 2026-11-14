@@ -182,9 +182,14 @@ object TopOnAdManager {
                 if (earned) {
                     callback?.invoke()
                 } else if (callback != null) {
+                    val isEn = AppLanguageManager.getLanguage(appContext) == AppLanguage.ENGLISH
                     Toast.makeText(
                         appContext,
-                        "Tonton video iklan hingga selesai untuk $actionLabel.",
+                        if (isEn) {
+                            "Watch the video ad until the end to $actionLabel."
+                        } else {
+                            "Tonton video iklan hingga selesai untuk $actionLabel."
+                        },
                         Toast.LENGTH_SHORT
                     ).show()
                 }

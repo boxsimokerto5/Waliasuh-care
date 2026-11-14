@@ -604,9 +604,10 @@ fun DaftarHaidSheet(
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (rec.studentNik.isNotBlank()) {
+                                val cleanDetailNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rec.studentNik)
+                                if (cleanDetailNik.isNotBlank()) {
                                     Text(
-                                        text = "NIK: ${rec.studentNik}",
+                                        text = "NIK: $cleanDetailNik",
                                         fontSize = 11.sp,
                                         fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -457,8 +457,9 @@ fun StudentCardGeneratorSheet(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
+                                            val cleanCardNik = com.example.util.StudentCsvParser.cleanDigitsOnly(item.nik)
                                             Text(
-                                                text = "${palette.jenjang.label} (${item.classGrade}) • NIK: ${item.nik.ifBlank { "-" }}",
+                                                text = "${palette.jenjang.label} (${item.classGrade}) • NIK: ${cleanCardNik.ifBlank { "-" }}",
                                                 fontSize = 10.5.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1,

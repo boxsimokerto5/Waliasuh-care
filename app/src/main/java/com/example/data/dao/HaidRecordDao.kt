@@ -14,6 +14,9 @@ interface HaidRecordDao {
     @Query("SELECT * FROM haid_records ORDER BY startDate DESC")
     fun getAllRecords(): Flow<List<HaidRecord>>
 
+    @Query("SELECT * FROM haid_records ORDER BY startDate DESC")
+    suspend fun getAllRecordsList(): List<HaidRecord>
+
     @Query("SELECT * FROM haid_records WHERE endDate IS NULL OR status = 'HAID' ORDER BY startDate DESC")
     fun getActiveHaidRecords(): Flow<List<HaidRecord>>
 

@@ -14,6 +14,9 @@ interface ChildStudentDao {
     @Query("SELECT * FROM child_students ORDER BY name ASC")
     fun getAllStudents(): Flow<List<ChildStudent>>
 
+    @Query("SELECT * FROM child_students ORDER BY name ASC")
+    suspend fun getAllStudentsList(): List<ChildStudent>
+
     @Query("SELECT * FROM child_students WHERE id = :id")
     fun getStudentById(id: Long): Flow<ChildStudent?>
 

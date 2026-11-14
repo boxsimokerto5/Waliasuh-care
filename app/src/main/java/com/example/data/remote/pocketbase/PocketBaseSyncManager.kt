@@ -702,10 +702,16 @@ object PocketBaseSyncManager {
         val remoteRes = fetchAllPages { page ->
             service.listFastingRecords(page = page, perPage = 500, filter = filter)
         }
-        val remoteRecords = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+        val remoteDtos = remoteRes.getOrNull() ?: return
+        val remoteRecords = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
 
         val localById = localRecords.associateBy { it.id }
         val remoteById = remoteRecords.associateBy { it.id }
+        val dirtyRemoteIds = remoteDtos.mapNotNull { dto ->
+            val rawNik = dto.studentNik.orEmpty()
+            val cleanedNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawNik)
+            if (rawNik != cleanedNik) PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id) else null
+        }.toSet()
 
         val toInsertLocal = remoteRecords.filter { rem ->
             val loc = localById[rem.id]
@@ -715,7 +721,8 @@ object PocketBaseSyncManager {
             repository.insertAllFastingRecords(toInsertLocal)
         }
 
-        val toPushRemote = localRecords.filter { loc ->
+        val toPushRemote = remoteRecords.filter { it.id in dirtyRemoteIds } + localRecords.filter { loc ->
+            if (loc.id in dirtyRemoteIds) return@filter false
             val rem = remoteById[loc.id]
             rem == null || loc.updatedAt > rem.updatedAt
         }
@@ -833,14 +840,28 @@ object PocketBaseSyncManager {
                 service.listStudents(page = page, perPage = 500, filter = filter)
             }
             if (remoteStudentRes.isSuccess) {
-                val remoteStudents = (remoteStudentRes.getOrNull() ?: emptyList())
-                    .map { it.toDomainModel(cleanSchoolId) }
+                val remoteStudentDtos = remoteStudentRes.getOrNull() ?: emptyList()
+                val remoteStudents = remoteStudentDtos.map { it.toDomainModel(cleanSchoolId) }
                 if (remoteStudents.isNotEmpty()) {
                     repository.insertAllStudents(remoteStudents)
                     val remoteIds = remoteStudents.map { it.id }.toSet()
                     val staleLocalIds = localStudents.filter { it.id !in remoteIds }.map { it.id }
                     if (staleLocalIds.isNotEmpty()) {
                         repository.deleteStudentsByIds(staleLocalIds)
+                    }
+                    // Jika ada data siswa di cloud yang NIK/No. KK-nya masih kotor (misal ada mojibake â▯▯),
+                    // langsung unggah ulang versi bersihnya ke cloud agar tidak muncul lagi.
+                    val healedCloudStudents = remoteStudentDtos.zip(remoteStudents).mapNotNull { (dto, domain) ->
+                        val dirtyNik = dto.nik.orEmpty() != domain.nik
+                        val dirtyKk = dto.noKk.orEmpty() != domain.noKk
+                        if (dirtyNik || dirtyKk) domain else null
+                    }
+                    if (healedCloudStudents.isNotEmpty()) {
+                        val healedPairs = healedCloudStudents.map { s ->
+                            val dto = PbStudentDto.fromDomain(s)
+                            dto.id!! to dto
+                        }
+                        upsertBatchOrFallback(service, "child_students", healedPairs)
                     }
                     studentCount = remoteStudents.size
                 } else if (localStudents.isNotEmpty()) {
@@ -924,11 +945,16 @@ object PocketBaseSyncManager {
                     service.listHaidRecords(page = page, perPage = 500, filter = filter)
                 }
                 if (remoteHaidRes.isSuccess) {
-                    val remoteHaid = (remoteHaidRes.getOrNull() ?: emptyList())
-                        .map { it.toDomainModel(cleanSchoolId) }
+                    val remoteHaidDtos = remoteHaidRes.getOrNull() ?: emptyList()
+                    val remoteHaid = remoteHaidDtos.map { it.toDomainModel(cleanSchoolId) }
 
                     val localById = localHaid.associateBy { it.id }
                     val remoteById = remoteHaid.associateBy { it.id }
+                    val dirtyRemoteHaidIds = remoteHaidDtos.mapNotNull { dto ->
+                        val rawNik = dto.studentNik.orEmpty()
+                        val cleanedNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawNik)
+                        if (rawNik != cleanedNik) PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id) else null
+                    }.toSet()
 
                     val toInsertLocal = remoteHaid.filter { rem ->
                         val loc = localById[rem.id]
@@ -938,7 +964,8 @@ object PocketBaseSyncManager {
                         repository.insertAllHaidRecords(toInsertLocal)
                     }
 
-                    val toPushRemote = localHaid.filter { loc ->
+                    val toPushRemote = remoteHaid.filter { it.id in dirtyRemoteHaidIds } + localHaid.filter { loc ->
+                        if (loc.id in dirtyRemoteHaidIds) return@filter false
                         val rem = remoteById[loc.id]
                         rem == null || loc.updatedAt > rem.updatedAt
                     }

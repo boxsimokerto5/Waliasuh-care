@@ -135,6 +135,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            sanitizeExistingIdentityDataInRoom()
+        }
         if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(application)) {
             when (_currentUserRole.value) {
                 UserRole.ADMIN, UserRole.WALI -> {
@@ -159,6 +162,51 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
                 else -> Unit
+            }
+        }
+    }
+
+    /**
+     * Membersihkan data NIK / No. KK lama yang terlanjur menyimpan karakter sampah (misal â▯▯)
+     * di database lokal Room, lalu menyinkronkan versi bersihnya kembali ke cloud bila aktif.
+     */
+    suspend fun sanitizeExistingIdentityDataInRoom() {
+        val allStudents = repository.getAllStudentsList()
+        val dirtyStudents = allStudents.mapNotNull { student ->
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            val cleanKk = com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk)
+            if (cleanNik != student.nik || cleanKk != student.noKk) {
+                student.copy(nik = cleanNik, noKk = cleanKk)
+            } else null
+        }
+        if (dirtyStudents.isNotEmpty()) {
+            repository.insertAllStudents(dirtyStudents)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadStudents(getApplication(), dirtyStudents)
+            }
+        }
+
+        val allHaid = repository.getAllHaidRecordsList()
+        val dirtyHaid = allHaid.mapNotNull { rec ->
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rec.studentNik)
+            if (cleanNik != rec.studentNik) rec.copy(studentNik = cleanNik) else null
+        }
+        if (dirtyHaid.isNotEmpty()) {
+            repository.insertAllHaidRecords(dirtyHaid)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                dirtyHaid.forEach { PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), it) }
+            }
+        }
+
+        val allFasting = repository.getAllFastingRecordsList()
+        val dirtyFasting = allFasting.mapNotNull { rec ->
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rec.studentNik)
+            if (cleanNik != rec.studentNik) rec.copy(studentNik = cleanNik) else null
+        }
+        if (dirtyFasting.isNotEmpty()) {
+            repository.insertAllFastingRecords(dirtyFasting)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                dirtyFasting.forEach { PocketBaseSyncManager.uploadSingleFastingRecord(getApplication(), it) }
             }
         }
     }
@@ -594,9 +642,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             val existingInSession = repository.getFastingRecordsBySessionList(session.id)
+            val studentCleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
             val alreadyRegistered = existingInSession.any { rec ->
+                val recCleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rec.studentNik)
                 (student.id > 0L && rec.studentId == student.id) ||
-                    (student.nik.isNotBlank() && rec.studentNik.equals(student.nik, ignoreCase = true)) ||
+                    (studentCleanNik.isNotBlank() && recCleanNik == studentCleanNik) ||
                     (student.nis.isNotBlank() && rec.studentNis.equals(student.nis, ignoreCase = true))
             }
             val s = AppLanguageManager.getStrings(getApplication()).nav
@@ -615,7 +665,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 sessionDate = session.sessionDate,
                 studentId = student.id,
                 studentName = student.name,
-                studentNik = student.nik,
+                studentNik = studentCleanNik,
                 studentNis = student.nis,
                 studentClass = student.classGrade,
                 studentDorm = student.dormitory,
@@ -707,8 +757,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun findStudentByCode(code: String): ChildStudent? {
         val q = code.trim()
         if (q.isEmpty()) return null
+        val qDigits = com.example.util.StudentCsvParser.cleanDigitsOnly(q)
         return students.value.firstOrNull { student ->
-            (student.nik.isNotBlank() && student.nik.trim().equals(q, ignoreCase = true)) ||
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            (cleanNik.isNotBlank() && (cleanNik.equals(q, ignoreCase = true) || (qDigits.length >= 6 && cleanNik == qDigits))) ||
                 (student.nis.isNotBlank() && student.nis.trim().equals(q, ignoreCase = true)) ||
                 student.id.toString() == q
         }
@@ -757,13 +809,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.getStudentsBySchoolList(targetSchoolId)
             }
 
-            val existingByNik = existingList.filter { it.nik.isNotBlank() }.associateBy { it.nik.trim() }
+            val existingByNik = existingList
+                .mapNotNull { st ->
+                    com.example.util.StudentCsvParser.cleanDigitsOnly(st.nik)
+                        .takeIf { it.isNotBlank() }
+                        ?.let { it to st }
+                }
+                .toMap()
             val existingByNis = existingList.filter { it.nis.isNotBlank() }.associateBy { it.nis.trim() }
             val existingByName = existingList.groupBy { it.name.trim().lowercase() }
 
-            val stampedStudents = studentList.map { imported ->
+            val stampedStudents = studentList.map { rawImported ->
+                val imported = rawImported.copy(
+                    nik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawImported.nik),
+                    noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(rawImported.noKk)
+                )
                 val matchedExisting = if (!replace) {
-                    (imported.nik.takeIf { it.isNotBlank() }?.let { existingByNik[it.trim()] })
+                    (imported.nik.takeIf { it.isNotBlank() }?.let { existingByNik[it] })
                         ?: (imported.nis.takeIf { it.isNotBlank() }?.let { existingByNis[it.trim()] })
                         ?: existingByName[imported.name.trim().lowercase()]?.firstOrNull()
                 } else null
@@ -773,8 +835,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         id = matchedExisting.id,
                         schoolId = targetSchoolId,
                         nis = imported.nis.ifBlank { matchedExisting.nis },
-                        nik = imported.nik.ifBlank { matchedExisting.nik },
-                        noKk = imported.noKk.ifBlank { matchedExisting.noKk },
+                        nik = imported.nik.ifBlank { com.example.util.StudentCsvParser.cleanDigitsOnly(matchedExisting.nik) },
+                        noKk = imported.noKk.ifBlank { com.example.util.StudentCsvParser.cleanDigitsOnly(matchedExisting.noKk) },
                         birthPlace = imported.birthPlace.ifBlank { matchedExisting.birthPlace },
                         birthDate = imported.birthDate.ifBlank { matchedExisting.birthDate },
                         motherName = imported.motherName.ifBlank { matchedExisting.motherName },
@@ -1332,8 +1394,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 bloodType = if (bloodType.isBlank()) "-" else bloodType.trim(),
                 emergencyContact = emergencyContact.trim(),
                 specialNotes = specialNotes.trim(),
-                nik = nik.trim(),
-                noKk = noKk.trim(),
+                nik = com.example.util.StudentCsvParser.cleanDigitsOnly(nik),
+                noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(noKk),
                 birthPlace = birthPlace.trim(),
                 birthDate = birthDate.trim(),
                 motherName = motherName.trim(),
@@ -1351,10 +1413,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateStudent(student: ChildStudent, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
-            repository.updateStudent(student)
+            val sanitizedStudent = student.copy(
+                nik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
+                noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk)
+            )
+            repository.updateStudent(sanitizedStudent)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                PocketBaseSyncManager.uploadSingleStudent(getApplication(), student)
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), sanitizedStudent)
             }
         }
     }

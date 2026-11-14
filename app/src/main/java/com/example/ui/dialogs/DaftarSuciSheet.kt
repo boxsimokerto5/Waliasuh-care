@@ -66,9 +66,10 @@ import java.util.Date
 import java.util.Locale
 
 private fun studentIdentityKey(record: HaidRecord): String {
+    val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(record.studentNik)
     return when {
         record.studentId > 0L -> "id:${record.studentId}"
-        record.studentNik.isNotBlank() -> "nik:${record.studentNik.trim().lowercase()}"
+        cleanNik.isNotBlank() -> "nik:$cleanNik"
         record.studentNis.isNotBlank() -> "nis:${record.studentNis.trim().lowercase()}"
         else -> "name:${record.studentName.trim().lowercase()}"
     }
@@ -530,9 +531,10 @@ fun DaftarSuciSheet(
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (rec.studentNik.isNotBlank()) {
+                                val cleanSuciNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rec.studentNik)
+                                if (cleanSuciNik.isNotBlank()) {
                                     Text(
-                                        text = "NIK: ${rec.studentNik}",
+                                        text = "NIK: $cleanSuciNik",
                                         fontSize = 11.sp,
                                         fontFamily = FontFamily.Monospace,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -77,8 +77,10 @@ import java.util.Date
 import java.util.Locale
 
 private fun matchHaidRecordToStudent(record: HaidRecord, student: ChildStudent): Boolean {
+    val recNik = com.example.util.StudentCsvParser.cleanDigitsOnly(record.studentNik)
+    val stuNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
     return (student.id > 0L && record.studentId == student.id) ||
-        (record.studentNik.isNotBlank() && student.nik.isNotBlank() && record.studentNik.equals(student.nik, ignoreCase = true)) ||
+        (recNik.isNotBlank() && stuNik.isNotBlank() && recNik == stuNik) ||
         (record.studentNis.isNotBlank() && student.nis.isNotBlank() && record.studentNis.equals(student.nis, ignoreCase = true))
 }
 
@@ -364,8 +366,9 @@ fun InputHaidDialog(
                                         fontSize = 11.sp,
                                         color = Color(0xFF9D174D)
                                     )
+                                    val cleanHaidNik = com.example.util.StudentCsvParser.cleanDigitsOnly(s.nik)
                                     Text(
-                                        text = "NIK: ${s.nik.ifBlank { s.nis.ifBlank { "ID #" + s.id } }}",
+                                        text = "NIK: ${cleanHaidNik.ifBlank { s.nis.ifBlank { "ID #" + s.id } }}",
                                         fontSize = 10.5.sp,
                                         fontFamily = FontFamily.Monospace,
                                         color = Color(0xFFBE185D)
@@ -614,7 +617,7 @@ fun InputHaidDialog(
                         val record = HaidRecord(
                             studentId = student.id,
                             studentName = student.name,
-                            studentNik = student.nik,
+                            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
                             studentNis = student.nis,
                             studentClass = student.classGrade,
                             studentDorm = student.dormitory,

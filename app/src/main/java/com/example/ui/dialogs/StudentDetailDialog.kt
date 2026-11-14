@@ -106,6 +106,8 @@ fun StudentDetailDialog(
     val resolvedJenjang = student.jenjang.ifBlank {
         StudentCsvParser.deriveJenjang(student.classGrade)
     }
+    val cleanNik = remember(student.nik) { StudentCsvParser.cleanDigitsOnly(student.nik) }
+    val cleanNoKk = remember(student.noKk) { StudentCsvParser.cleanDigitsOnly(student.noKk) }
 
     fun copyValue(label: String, value: String) {
         if (value.isBlank() || value == "-") return
@@ -333,20 +335,20 @@ fun StudentDetailDialog(
 
                             ProfileDetailRow(
                                 label = "NIK",
-                                value = student.nik.ifBlank { "-" },
+                                value = cleanNik.ifBlank { "-" },
                                 isMonospace = true,
                                 copyContentDescPrefix = if (isEn) "Copy" else "Salin",
-                                onCopy = if (student.nik.isNotBlank()) {
-                                    { copyValue("NIK", student.nik) }
+                                onCopy = if (cleanNik.isNotBlank()) {
+                                    { copyValue("NIK", cleanNik) }
                                 } else null
                             )
                             ProfileDetailRow(
                                 label = if (isEn) "KK No." else "No. KK",
-                                value = student.noKk.ifBlank { "-" },
+                                value = cleanNoKk.ifBlank { "-" },
                                 isMonospace = true,
                                 copyContentDescPrefix = if (isEn) "Copy" else "Salin",
-                                onCopy = if (student.noKk.isNotBlank()) {
-                                    { copyValue(if (isEn) "KK No." else "No. KK", student.noKk) }
+                                onCopy = if (cleanNoKk.isNotBlank()) {
+                                    { copyValue(if (isEn) "KK No." else "No. KK", cleanNoKk) }
                                 } else null
                             )
                             ProfileDetailRow(

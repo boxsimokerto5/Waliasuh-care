@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
@@ -43,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
@@ -83,8 +85,8 @@ fun AddStudentDialog(
     var roomNumber by remember { mutableStateOf(initialStudent?.roomNumber ?: "") }
 
     // Data Kependudukan Lengkap
-    var nik by remember { mutableStateOf(initialStudent?.nik ?: "") }
-    var noKk by remember { mutableStateOf(initialStudent?.noKk ?: "") }
+    var nik by remember { mutableStateOf(StudentCsvParser.cleanDigitsOnly(initialStudent?.nik)) }
+    var noKk by remember { mutableStateOf(StudentCsvParser.cleanDigitsOnly(initialStudent?.noKk)) }
     var birthPlace by remember { mutableStateOf(initialStudent?.birthPlace ?: "") }
     var birthDate by remember { mutableStateOf(initialStudent?.birthDate ?: "") }
     var motherName by remember { mutableStateOf(initialStudent?.motherName ?: "") }
@@ -264,21 +266,27 @@ fun AddStudentDialog(
                 ) {
                     OutlinedTextField(
                         value = nik,
-                        onValueChange = { nik = it },
+                        onValueChange = { raw -> nik = raw.filter { it.isDigit() } },
                         label = { Text(if (isEn) "NIK (16 Digits)" else "NIK (16 Digit)", fontSize = 12.sp) },
                         placeholder = { Text("3506xxxxxxxxxxxx", fontSize = 12.sp) },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("input_student_nik")
                     )
                     OutlinedTextField(
                         value = noKk,
-                        onValueChange = { noKk = it },
+                        onValueChange = { raw -> noKk = raw.filter { it.isDigit() } },
                         label = { Text(if (isEn) "KK No." else "No. KK", fontSize = 12.sp) },
                         placeholder = { Text("3506xxxxxxxxxxxx", fontSize = 12.sp) },
                         singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("input_student_no_kk")
                     )
                 }
 
@@ -445,8 +453,8 @@ fun AddStudentDialog(
                                     bloodType = if (bloodType.isBlank()) "-" else bloodType.trim(),
                                     emergencyContact = resolvedContact,
                                     specialNotes = specialNotes.trim(),
-                                    nik = StudentCsvParser.cleanNumericId(nik),
-                                    noKk = StudentCsvParser.cleanNumericId(noKk),
+                                    nik = StudentCsvParser.cleanDigitsOnly(nik),
+                                    noKk = StudentCsvParser.cleanDigitsOnly(noKk),
                                     birthPlace = birthPlace.trim(),
                                     birthDate = birthDate.trim(),
                                     motherName = motherName.trim(),

@@ -36,31 +36,57 @@ object StudentCsvParser {
     }
 
     /**
-     * Membersihkan BOM, karakter zero-width tersembunyi (\u200B-\u200F), mojibake UTF-8/Latin1,
-     * spasi ganda, dan tanda petik luar.
+     * Membersihkan BOM, karakter zero-width tersembunyi (\u200B-\u200F, \u2060),
+     * karakter kontrol rusak (C1 \u0080-\u009F yang muncul sebagai ▯▯), mojibake UTF-8/Latin1,
+     * serta spasi dan tanda petik luar.
      */
     fun cleanText(raw: String?): String {
         if (raw == null) return ""
         return raw
             .replace("\uFEFF", "")
             .replace("ï»¿", "")
-            .replace("\u200B", "")
-            .replace("\u200C", "")
-            .replace("\u200D", "")
-            .replace("\u200E", "")
-            .replace("\u200F", "")
+            .replace(Regex("[\\u200B-\\u200F\\u202A-\\u202E\\u2060-\\u206F\\u00AD]"), "")
             .replace("\u00A0", " ")
+            .replace(Regex("â[\\u0080-\\u009F€]+[^0-9A-Za-z\\s,;\"-]?"), "")
             .replace("â€Œ", "")
             .replace("â€‹", "")
+            .replace("â€Ž", "")
             .replace("â€", "")
+            .replace(Regex("[\\u0080-\\u009F]"), "")
             .trim()
             .removeSurrounding("\"")
             .trim()
     }
 
     /**
+     * Membersihkan NIK & No. KK menjadi angka murni (0-9).
+     * Mengonversi notasi ilmiah Excel (misal 3.5062E+15) terlebih dahulu bila ada,
+     * lalu membuang seluruh karakter non-angka (mojibake â▯▯, petik, spasi, huruf, simbol)
+     * tanpa mengubah digit awal asli (misal 350, 357, 177, 927, atau awalan daerah lain).
+     */
+    fun cleanDigitsOnly(raw: String?): String {
+        val cleaned = cleanText(raw)
+            .replace("'", "")
+            .replace("`", "")
+            .replace(" ", "")
+        if (cleaned.isBlank()) return ""
+
+        val sciCandidate = cleaned.replace(',', '.')
+        if (sciCandidate.contains("E+", ignoreCase = true) || sciCandidate.contains("E-", ignoreCase = true)) {
+            val numericSci = sciCandidate.replace(Regex("[^0-9eE+.-]"), "")
+            try {
+                return BigDecimal(numericSci).toBigInteger().toString().filter { it.isDigit() }
+            } catch (_: Exception) {
+                // fallback ambil angka murni
+            }
+        }
+        return cleaned.filter { it.isDigit() }
+    }
+
+    /**
      * Membersihkan angka identitas (NIK, NO KK, NISN) dari karakter tak terlihat, tanda petik Excel ('),
-     * spasi di tengah angka, serta mengonversi notasi eksponensial Excel (misal 3.5062E+15).
+     * mojibake, spasi di tengah angka, serta mengonversi notasi eksponensial Excel (misal 3.5062E+15).
+     * Untuk NIS fallback bawaan sistem yang berformat kode sekolah (misal SRT1-KDR-1), formatnya tetap dijaga.
      */
     fun cleanNumericId(raw: String?): String {
         val cleaned = cleanText(raw)
@@ -71,13 +97,18 @@ object StudentCsvParser {
 
         val sciCandidate = cleaned.replace(',', '.')
         if (sciCandidate.contains("E+", ignoreCase = true) || sciCandidate.contains("E-", ignoreCase = true)) {
+            val numericSci = sciCandidate.replace(Regex("[^0-9eE+.-]"), "")
             try {
-                return BigDecimal(sciCandidate).toBigInteger().toString()
+                return BigDecimal(numericSci).toBigInteger().toString().filter { it.isDigit() }
             } catch (_: Exception) {
-                // fallback ke string bersih
+                // fallback ke logika di bawah
             }
         }
-        return cleaned
+
+        if (cleaned.matches(Regex("^[A-Za-z][A-Za-z0-9]*-[A-Za-z0-9-]+$"))) {
+            return cleaned
+        }
+        return cleaned.filter { it.isDigit() }
     }
 
     /**
@@ -408,8 +439,8 @@ object StudentCsvParser {
                 else -> "Asrama Putra"
             }
 
-            val nik = cleanNumericId(tokens.getOrNull(idxNik))
-            val noKk = cleanNumericId(tokens.getOrNull(idxNoKk))
+            val nik = cleanDigitsOnly(tokens.getOrNull(idxNik))
+            val noKk = cleanDigitsOnly(tokens.getOrNull(idxNoKk))
             val birthPlace = cleanText(tokens.getOrNull(idxBirthPlace))
             val birthDate = cleanText(tokens.getOrNull(idxBirthDate))
             val motherName = cleanText(tokens.getOrNull(idxMother))
@@ -487,8 +518,8 @@ object StudentCsvParser {
                 escapeCsvField(jenjang),
                 escapeCsvField(student.address),
                 escapeCsvField(gender),
-                escapeCsvField(student.nik),
-                escapeCsvField(student.noKk),
+                escapeCsvField(cleanDigitsOnly(student.nik)),
+                escapeCsvField(cleanDigitsOnly(student.noKk)),
                 escapeCsvField(student.birthPlace),
                 escapeCsvField(student.birthDate),
                 escapeCsvField(student.motherName),
