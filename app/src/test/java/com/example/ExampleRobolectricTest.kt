@@ -2367,7 +2367,8 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("category_puasa").assertIsDisplayed()
     composeTestRule.onNodeWithTag("category_haid").assertIsDisplayed()
     composeTestRule.onNodeWithTag("category_pesan").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertDoesNotExist()
     composeTestRule.onNodeWithTag("tile_puskesmas_info").assertIsDisplayed()
 
     composeTestRule.onNodeWithTag("category_puasa").performClick()
@@ -2381,6 +2382,9 @@ class ExampleRobolectricTest {
 
     composeTestRule.onNodeWithTag("category_pesan").performClick()
     assertEquals(com.example.ui.components.DashboardCategoryHub.PESAN, openedHub)
+
+    composeTestRule.onNodeWithTag("category_mengaji").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.MENGAJI, openedHub)
   }
 
   @Test
@@ -2499,7 +2503,8 @@ class ExampleRobolectricTest {
 
     // Super-app icons remain unobstructed
     composeTestRule.onNodeWithTag("category_berobat").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertDoesNotExist()
 
     // Clicking the relocated "+ Rencana" button opens CreatePlanDialog cleanly
     composeTestRule.onNodeWithTag("fab_dashboard_add").performClick()
@@ -2793,7 +2798,7 @@ class ExampleRobolectricTest {
 
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("tile_quick_input_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertDoesNotExist()
     composeTestRule.onNodeWithTag("category_mengaji").performClick()
     assertEquals(com.example.ui.components.DashboardCategoryHub.MENGAJI, openedHub)
 
