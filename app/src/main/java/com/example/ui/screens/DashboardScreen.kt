@@ -90,6 +90,7 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.dialogs.ChecklistPuasaSheet
+import com.example.ui.dialogs.CreateFastingSessionDialog
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.CreateShiftMessageDialog
 import com.example.ui.dialogs.DaftarHaidSheet
@@ -864,6 +865,7 @@ fun DashboardScreen(
                 onOpenDaftarPuasa = { modalState.showDaftarPuasaSheet = true },
                 onOpenChecklistPuasa = { modalState.showChecklistPuasaSheet = true },
                 onOpenRankingPuasa = { modalState.showRankingPuasaSheet = true },
+                onOpenCreatePuasaSession = { modalState.showCreatePuasaSessionDialog = true },
                 onOpenInputHaid = { modalState.showInputHaidDialog = true },
                 onOpenDaftarHaid = { modalState.showDaftarHaidSheet = true },
                 onOpenDaftarSuci = { modalState.showDaftarSuciSheet = true },
@@ -1360,7 +1362,51 @@ fun DashboardScreen(
             onRegisterStudent = { session, student, onResult ->
                 viewModel.registerStudentForFasting(session, student, onResult)
             },
+            onCreateSession = { title, dateMillis, description, onCreated ->
+                viewModel.createFastingSession(
+                    title = title,
+                    sessionDate = dateMillis,
+                    description = description,
+                    onComplete = onCreated
+                )
+            },
             onDismiss = { modalState.showInputPuasaDialog = false }
+        )
+    }
+
+    if (modalState.showCreatePuasaSessionDialog) {
+        CreateFastingSessionDialog(
+            onDismiss = { modalState.showCreatePuasaSessionDialog = false },
+            onConfirm = { title, dateMillis, description ->
+                viewModel.createFastingSession(
+                    title = title,
+                    sessionDate = dateMillis,
+                    description = description
+                ) { created ->
+                    if (created != null) {
+                        Toast.makeText(
+                            context,
+                            if (isEn) {
+                                "Puasa session \"${created.title}\" created!"
+                            } else {
+                                "Sesi puasa \"${created.title}\" berhasil dibuat!"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            if (isEn) {
+                                "Please log in first to create a Puasa session."
+                            } else {
+                                "Silakan login terlebih dahulu untuk membuat sesi puasa."
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                modalState.showCreatePuasaSessionDialog = false
+            }
         )
     }
 

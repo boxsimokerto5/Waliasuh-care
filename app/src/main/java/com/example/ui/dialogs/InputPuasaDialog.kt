@@ -26,6 +26,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddCircleOutline
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
@@ -80,6 +81,7 @@ fun InputPuasaDialog(
     students: List<ChildStudent>,
     fastingRecords: List<FastingRecord>,
     onRegisterStudent: (FastingSession, ChildStudent, (Boolean, String) -> Unit) -> Unit,
+    onCreateSession: ((title: String, dateMillis: Long, description: String, onCreated: (FastingSession?) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -102,11 +104,12 @@ fun InputPuasaDialog(
 
     var searchQuery by remember { mutableStateOf("") }
     var showBarcodeScanner by remember { mutableStateOf(false) }
+    var showCreateSessionDialog by remember { mutableStateOf(false) }
     var lastFeedback by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var scannerFloatingFeedback by remember { mutableStateOf<ScannerFloatingFeedback?>(null) }
 
     LaunchedEffect(availableSessions) {
-        if (selectedSessionId == null && availableSessions.isNotEmpty()) {
+        if ((selectedSessionId == null || availableSessions.none { it.id == selectedSessionId }) && availableSessions.isNotEmpty()) {
             selectedSessionId = availableSessions.first().id
         }
     }
@@ -274,32 +277,55 @@ fun InputPuasaDialog(
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7)),
-                        border = BorderStroke(1.dp, Color(0xFFFCD34D))
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDFA)),
+                        border = BorderStroke(1.dp, Color(0xFF99F6E4))
                     ) {
                         Column(
                             modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
                                 text = if (isEn) "No Puasa Sessions Available Yet" else "Belum Ada Sesi Puasa Tersedia",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF92400E)
+                                color = Color(0xFF134E4A)
                             )
                             Text(
                                 text = if (isEn) {
-                                    "Puasa sessions (e.g., Puasa Senin Kamis) are created via Admin Sekolah in the 'Sesi Puasa' tab."
+                                    "Wali Asuh can directly create a new Puasa session below (e.g., Puasa Senin Kamis). Deleting sessions can only be done via School Admin."
                                 } else {
-                                    "Pembuatan sesi puasa dilakukan melalui akun Admin Sekolah di tab 'Sesi Puasa'."
+                                    "Wali Asuh dapat langsung membuat sesi puasa baru di bawah ini (misal: Puasa Senin Kamis). Penghapusan sesi hanya dapat dilakukan melalui halaman Admin."
                                 },
                                 fontSize = 11.5.sp,
-                                color = Color(0xFF78350F)
+                                color = Color(0xFF0F766E)
                             )
+                            if (onCreateSession != null) {
+                                Button(
+                                    onClick = { showCreateSessionDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = tealPrimary),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_create_fasting_session_empty")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isEn) "Create New Puasa Session" else "Buat Sesi Puasa Baru",
+                                        fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 } else {
-                    // Pemilih Sesi Ringkas (1 baris tanpa kartu duplikat)
+                    // Pemilih Sesi Ringkas (1 baris + tombol buat sesi baru oleh Wali Asuh)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -340,6 +366,33 @@ fun InputPuasaDialog(
                                     .heightIn(min = 34.dp)
                                     .testTag("chip_session_input_${session.id}")
                             )
+                        }
+
+                        if (onCreateSession != null) {
+                            OutlinedButton(
+                                onClick = { showCreateSessionDialog = true },
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, tealPrimary),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                modifier = Modifier
+                                    .heightIn(min = 34.dp)
+                                    .testTag("btn_create_fasting_session_inline")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = if (isEn) "Create New Session" else "Buat Sesi Baru",
+                                    tint = tealPrimary,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isEn) "New Session" else "Sesi Baru",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = tealPrimary,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
 
@@ -715,6 +768,39 @@ fun InputPuasaDialog(
             continuousScan = true,
             sessionParticipantCount = sessionRecords.size,
             floatingFeedback = scannerFloatingFeedback
+        )
+    }
+
+    if (showCreateSessionDialog && onCreateSession != null) {
+        CreateFastingSessionDialog(
+            onDismiss = { showCreateSessionDialog = false },
+            onConfirm = { title, dateMillis, description ->
+                onCreateSession(title, dateMillis, description) { created ->
+                    if (created != null) {
+                        selectedSessionId = created.id
+                        Toast.makeText(
+                            context,
+                            if (isEn) {
+                                "Puasa session \"${created.title}\" created!"
+                            } else {
+                                "Sesi puasa \"${created.title}\" berhasil dibuat!"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    } else {
+                        Toast.makeText(
+                            context,
+                            if (isEn) {
+                                "Please log in first to create a Puasa session."
+                            } else {
+                                "Silakan login terlebih dahulu untuk membuat sesi puasa."
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+                showCreateSessionDialog = false
+            }
         )
     }
 }

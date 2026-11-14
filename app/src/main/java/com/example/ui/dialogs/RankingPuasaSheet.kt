@@ -390,9 +390,9 @@ fun RankingPuasaSheet(
                         ) {
                             Text(
                                 text = if (isEn) {
-                                    "No Puasa sessions have been created by Admin Sekolah yet."
+                                    "No Puasa session history yet. Create one via Input Puasa or School Admin."
                                 } else {
-                                    "Belum ada riwayat sesi puasa yang dibuat oleh Admin Sekolah."
+                                    "Belum ada riwayat sesi puasa. Buat sesi melalui menu Input Puasa atau Admin Sekolah."
                                 },
                                 fontSize = 12.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant

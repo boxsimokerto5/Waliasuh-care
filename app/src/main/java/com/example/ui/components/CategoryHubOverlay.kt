@@ -89,6 +89,7 @@ fun CategoryHubOverlay(
     onOpenDaftarPuasa: () -> Unit,
     onOpenChecklistPuasa: () -> Unit,
     onOpenRankingPuasa: () -> Unit,
+    onOpenCreatePuasaSession: () -> Unit = {},
     onOpenInputHaid: () -> Unit,
     onOpenDaftarHaid: () -> Unit,
     onOpenDaftarSuci: () -> Unit,
@@ -363,7 +364,8 @@ fun CategoryHubOverlay(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .widthIn(max = 640.dp)
-                                .navigationBarsPadding(),
+                                .navigationBarsPadding()
+                                .testTag("list_category_hub_content"),
                             contentPadding = PaddingValues(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 28.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -387,7 +389,8 @@ fun CategoryHubOverlay(
                                     onOpenInputPuasa = onOpenInputPuasa,
                                     onOpenDaftarPuasa = onOpenDaftarPuasa,
                                     onOpenChecklistPuasa = onOpenChecklistPuasa,
-                                    onOpenRankingPuasa = onOpenRankingPuasa
+                                    onOpenRankingPuasa = onOpenRankingPuasa,
+                                    onOpenCreatePuasaSession = onOpenCreatePuasaSession
                                 )
                                 DashboardCategoryHub.HAID -> haidCategoryItems(
                                     isEn = isEn,

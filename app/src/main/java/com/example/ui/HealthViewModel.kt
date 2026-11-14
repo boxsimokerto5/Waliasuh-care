@@ -579,14 +579,21 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         description: String = "",
         onComplete: (FastingSession?) -> Unit = {}
     ) {
-        if (_currentUserRole.value != UserRole.ADMIN && _currentUserRole.value != UserRole.SUPERADMIN) {
+        val role = _currentUserRole.value
+        if (role == UserRole.NOT_LOGGED_IN) {
             onComplete(null)
             return
         }
         viewModelScope.launch {
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             val now = System.currentTimeMillis()
-            val creator = _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
+            val creator = when (role) {
+                UserRole.ADMIN, UserRole.SUPERADMIN ->
+                    _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
+                UserRole.WALI ->
+                    _waliName.value.ifBlank { "Wali Asuh" }
+                UserRole.NOT_LOGGED_IN -> "Wali Asuh"
+            }
             val newSession = FastingSession(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
                 title = title.trim(),

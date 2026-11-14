@@ -32,6 +32,7 @@ class DashboardModalState {
     var showDaftarSuciSheet by mutableStateOf(false)
     var showFiqihHaidDialog by mutableStateOf(false)
     var showInputPuasaDialog by mutableStateOf(false)
+    var showCreatePuasaSessionDialog by mutableStateOf(false)
     var showDaftarPuasaSheet by mutableStateOf(false)
     var showChecklistPuasaSheet by mutableStateOf(false)
     var showRankingPuasaSheet by mutableStateOf(false)

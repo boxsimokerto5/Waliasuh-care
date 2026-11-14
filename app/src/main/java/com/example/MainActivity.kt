@@ -564,6 +564,10 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.showRankingPuasaSheet = true
                 },
+                onOpenCreatePuasaSession = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showCreatePuasaSessionDialog = true
+                },
                 onOpenInputHaid = {
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.showInputHaidDialog = true

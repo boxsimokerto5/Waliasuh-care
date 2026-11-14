@@ -2403,6 +2403,9 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("tile_daftar_puasa").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_checklist_puasa").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_ranking_puasa").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_hub_create_puasa_session"))
+    composeTestRule.onNodeWithTag("btn_hub_create_puasa_session").assertIsDisplayed()
 
     // Close using circular X button at top-left
     composeTestRule.onNodeWithTag("btn_close_category_hub").performClick()
@@ -2974,5 +2977,100 @@ class ExampleRobolectricTest {
     }
     assertNotNull(updatedStudent)
     assertEquals("Ngancar", updatedStudent?.district)
+  }
+
+  @Test
+  fun `verify Wali Asuh can create fasting session but only Admin can delete it`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.fastingSessionDao().deleteBySchoolId("SRT1-KDR")
+
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.setWaliName("Ustadzah Fatimah")
+    vm.switchRoleToWali()
+
+    var createdSession: com.example.data.model.FastingSession? = null
+    vm.createFastingSession(
+      title = "Puasa Senin Kamis",
+      sessionDate = 1794800000000L,
+      description = "Sahur jam 03.30"
+    ) { createdSession = it }
+
+    var ticks = 0
+    while (ticks < 20 && createdSession == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    assertNotNull(createdSession)
+    assertEquals("Puasa Senin Kamis", createdSession?.title)
+    assertEquals("Ustadzah Fatimah", createdSession?.createdBy)
+
+    val persistedAfterCreate = db.fastingSessionDao().getSessionsBySchoolList("SRT1-KDR")
+    assertEquals(1, persistedAfterCreate.size)
+
+    // Wali Asuh CANNOT delete session
+    vm.deleteFastingSession(createdSession!!)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    kotlinx.coroutines.delay(150)
+    val persistedAfterWaliDelete = db.fastingSessionDao().getSessionsBySchoolList("SRT1-KDR")
+    assertEquals(1, persistedAfterWaliDelete.size)
+
+    // Admin CAN delete session
+    vm.switchRoleToAdmin()
+    var adminDeletedCallback = false
+    vm.deleteFastingSession(createdSession!!) { adminDeletedCallback = true }
+    ticks = 0
+    while (ticks < 20 && (!adminDeletedCallback || db.fastingSessionDao().getSessionsBySchoolList("SRT1-KDR").isNotEmpty())) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    org.junit.Assert.assertTrue(adminDeletedCallback)
+    org.junit.Assert.assertTrue(db.fastingSessionDao().getSessionsBySchoolList("SRT1-KDR").isEmpty())
+  }
+
+  @Test
+  fun `verify InputPuasaDialog lets Wali Asuh create session directly when empty`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    var createdTitle: String? = null
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.InputPuasaDialog(
+          sessions = emptyList(),
+          students = emptyList(),
+          fastingRecords = emptyList(),
+          onRegisterStudent = { _, _, _ -> },
+          onCreateSession = { title, dateMillis, description, onCreated ->
+            createdTitle = title
+            onCreated(
+              com.example.data.model.FastingSession(
+                id = 505L,
+                title = title,
+                sessionDate = dateMillis,
+                description = description,
+                isActive = true,
+                createdBy = "Wali Asuh",
+                schoolId = "SRT1-KDR"
+              )
+            )
+          },
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_create_fasting_session_empty").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("input_fasting_session_title").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_save_fasting_session").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals("Puasa Senin Kamis", createdTitle)
   }
 }
