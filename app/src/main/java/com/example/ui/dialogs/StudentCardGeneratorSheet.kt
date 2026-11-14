@@ -259,9 +259,10 @@ fun StudentCardGeneratorSheet(
                             Text(
                                 text = resolvedSchoolName,
                                 fontSize = 11.5.sp,
+                                lineHeight = 14.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = MaterialTheme.colorScheme.primary,
-                                maxLines = 1,
+                                maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
                         }
@@ -333,16 +334,16 @@ fun StudentCardGeneratorSheet(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            ColorLegendPill("SMA (10-12): Abu-abu", Color(0xFF475569))
-                            ColorLegendPill("SMP (7-9): Biru", Color(0xFF1D4ED8))
-                            ColorLegendPill("SD (1-5): Merah", Color(0xFFDC2626))
+                            ColorLegendPill("Header SMA (10-12): Abu-abu", Color(0xFF475569))
+                            ColorLegendPill("Header SMP (7-9): Biru", Color(0xFF1D4ED8))
+                            ColorLegendPill("Header SD (1-5): Merah", Color(0xFFDC2626))
                         }
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            ColorLegendPill("Garis Putra: Hijau Menyala", Color(0xFF00C853))
-                            ColorLegendPill("Garis Putri: Pink Menyala", Color(0xFFFF1E99))
+                            ColorLegendPill("Aksen Putra: Hijau Emerald", Color(0xFF10B981))
+                            ColorLegendPill("Aksen Putri: Pink Rose", Color(0xFFEC4899))
                         }
                     }
                 }

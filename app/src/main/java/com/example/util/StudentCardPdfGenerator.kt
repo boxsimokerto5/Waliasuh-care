@@ -211,7 +211,7 @@ object StudentCardPdfGenerator {
 
                 // Footer Legend & Disclaimer Independen
                 canvas.drawText(
-                    "Warna Kartu: SMA (Abu-abu) • SMP (Biru) • SD (Merah)  |  Garis Pemanis: Putra (Hijau Menyala) • Putri (Pink Menyala)",
+                    "Header Jenjang: SMA (Abu-abu) • SMP (Biru) • SD (Merah)  |  Aksen Kartu: Putra (Hijau) • Putri (Pink)",
                     A4_WIDTH_PT / 2f,
                     A4_HEIGHT_PT - 25f,
                     footerPaint

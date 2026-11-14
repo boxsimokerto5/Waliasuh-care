@@ -64,69 +64,69 @@ fun StudentIdCardPreview(
     val startColor = Color(palette.gradientStartArgb)
     val midColor = Color(palette.gradientMidArgb)
     val endColor = Color(palette.gradientEndArgb)
-    val headerBg = Color(palette.headerOverlayArgb).copy(alpha = 0.88f)
-    val neonColor = Color(palette.trimNeonArgb)
-    val glowColor = Color(palette.trimSoftGlowArgb)
+    val accentColor = Color(palette.trimNeonArgb)
+    val softGlowColor = Color(palette.trimSoftGlowArgb)
     val genderBadgeBg = Color(palette.genderBadgeBgArgb)
+    val genderBadgeText = Color(palette.genderBadgeTextArgb)
     val cleanSchool = schoolName.trim().ifBlank { "Wali Asuh Care School" }.uppercase()
 
     Card(
         modifier = modifier
             .fillMaxWidth()
             .aspectRatio(1.586f)
-            .border(width = 2.5.dp, color = neonColor, shape = RoundedCornerShape(16.dp)),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
-        colors = CardDefaults.cardColors(containerColor = startColor)
+            .border(width = 1.5.dp, color = accentColor, shape = RoundedCornerShape(14.dp)),
+        shape = RoundedCornerShape(14.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.linearGradient(
-                        colors = listOf(startColor, midColor, endColor)
-                    )
-                )
+                .background(Color.White)
         ) {
-            // Ornamen geometris halus latar belakang kartu
+            // Watermark geometris lembut bernuansa jenjang di latar putih
             Canvas(modifier = Modifier.fillMaxSize()) {
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.10f),
+                    color = midColor.copy(alpha = 0.05f),
                     radius = size.height * 0.34f,
-                    center = Offset(size.width * 0.88f, size.height * 0.18f)
+                    center = Offset(size.width * 0.90f, size.height * 0.85f)
                 )
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.06f),
-                    radius = size.height * 0.28f,
-                    center = Offset(size.width * 0.12f, size.height * 0.94f)
+                    color = midColor.copy(alpha = 0.04f),
+                    radius = size.height * 0.24f,
+                    center = Offset(size.width * 0.10f, size.height * 0.95f)
                 )
             }
 
             Column(modifier = Modifier.fillMaxSize()) {
-                // Garis Pemanis Atas Menyala (Hijau Menyala / Pink Menyala)
+                // Strip pemanis paling atas
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(5.dp)
-                        .background(neonColor)
+                        .height(3.dp)
+                        .background(accentColor)
                 )
 
-                // Header Nama Sekolah & Badge Jenjang + Gender
+                // Header Sekolah Berwarna Jenjang (3 Logo + Nama Sekolah 2 baris utuh + Subjudul)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(headerBg)
-                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(startColor, midColor, endColor)
+                            )
+                        )
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(3.5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(23.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .size(21.dp)
+                                .clip(RoundedCornerShape(5.dp))
                                 .background(Color.White)
                                 .padding(2.dp),
                             contentAlignment = Alignment.Center
@@ -144,15 +144,15 @@ fun StudentIdCardPreview(
                             contentDescription = "Logo Wali Asuh Care",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier
-                                .size(24.dp)
+                                .size(22.dp)
                                 .clip(CircleShape)
                                 .background(Color.White)
                         )
 
                         Box(
                             modifier = Modifier
-                                .size(23.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .size(21.dp)
+                                .clip(RoundedCornerShape(5.dp))
                                 .background(Color.White)
                                 .padding(2.dp),
                             contentAlignment = Alignment.Center
@@ -166,77 +166,60 @@ fun StudentIdCardPreview(
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(7.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = cleanSchool,
                             color = Color.White,
-                            fontSize = 10.sp,
+                            fontSize = if (cleanSchool.length > 36) 8.8.sp else 9.6.sp,
+                            lineHeight = 11.sp,
                             fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
+                        Spacer(modifier = Modifier.height(1.dp))
                         Text(
                             text = "KARTU IDENTITAS ANAK ASUH",
-                            color = glowColor,
-                            fontSize = 7.sp,
+                            color = softGlowColor,
+                            fontSize = 6.6.sp,
                             fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.6.sp,
+                            letterSpacing = 0.5.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(50))
-                            .background(genderBadgeBg)
-                            .border(1.2.dp, neonColor, RoundedCornerShape(50))
-                            .padding(horizontal = 7.dp, vertical = 3.dp)
-                    ) {
-                        Text(
-                            text = "${palette.jenjang.label} • ${palette.genderLabel}",
-                            color = neonColor,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            maxLines = 1
                         )
                     }
                 }
 
-                // Garis Pemanis Bawah Header
+                // Garis pemanis pembatas header & body putih
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(2.5.dp)
-                        .background(glowColor.copy(alpha = 0.78f))
+                        .height(2.dp)
+                        .background(accentColor)
                 )
 
-                // Isi Utama Kartu: Sisi Kiri (Garis Vertikal + Biodata) & Sisi Kanan (QR Code Besar)
+                // Isi Utama Putih Bersih: Sisi Kiri (Aksen Vertikal + Biodata) & Sisi Kanan (Micro-Pill + QR)
                 Row(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                 ) {
-                    // Garis pemanis vertikal sisi kiri
                     Box(
                         modifier = Modifier
-                            .width(5.dp)
+                            .width(4.dp)
                             .fillMaxHeight()
-                            .background(neonColor)
+                            .background(accentColor)
                     )
 
                     Row(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .padding(horizontal = 9.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Kolom Biodata
+                        // Kolom Kiri: Nama Siswa + Garis Aksen + Biodata (termasuk NIK utuh)
                         Column(
                             modifier = Modifier
                                 .weight(1f)
@@ -245,27 +228,32 @@ fun StudentIdCardPreview(
                         ) {
                             Text(
                                 text = student.name.trim().uppercase(),
-                                color = Color.White,
-                                fontSize = 13.sp,
-                                lineHeight = 15.sp,
+                                color = Color(0xFF0F172A),
+                                fontSize = 12.sp,
+                                lineHeight = 14.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
 
                             Box(
                                 modifier = Modifier
-                                    .width(54.dp)
-                                    .height(2.5.dp)
+                                    .width(42.dp)
+                                    .height(2.dp)
                                     .clip(RoundedCornerShape(2.dp))
-                                    .background(neonColor)
+                                    .background(accentColor)
                             )
 
-                            Spacer(modifier = Modifier.height(6.dp))
+                            Spacer(modifier = Modifier.height(5.dp))
 
                             CardFieldLine(label = "NISN", value = student.nis.ifBlank { "-" })
+                            CardFieldLine(
+                                label = "NIK",
+                                value = student.nik.ifBlank { "-" },
+                                useMonospace = true
+                            )
                             val kelasInfo = buildString {
                                 append(student.classGrade.ifBlank { "-" })
                                 if (student.dormitory.isNotBlank()) {
@@ -277,21 +265,41 @@ fun StudentIdCardPreview(
                             CardFieldLine(
                                 label = "Alamat",
                                 value = student.address.trim().ifBlank { "-" },
-                                maxLines = 2
+                                maxLines = 2,
+                                isMutedValue = true
                             )
                         }
 
-                        // Kolom Kanan: QR Code Besar (Berisi NIK)
+                        // Kolom Kanan: Micro-Pill Jenjang • Gender (mungil & manis) + QR Code + Caption
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(92.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(50))
+                                    .background(genderBadgeBg)
+                                    .border(0.9.dp, accentColor, RoundedCornerShape(50))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "${palette.jenjang.label} • ${palette.genderLabel}",
+                                    color = genderBadgeText,
+                                    fontSize = 6.8.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    maxLines = 1
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(4.dp))
+
+                            Box(
+                                modifier = Modifier
+                                    .size(78.dp)
+                                    .clip(RoundedCornerShape(8.dp))
                                     .background(Color.White)
-                                    .border(1.8.dp, neonColor, RoundedCornerShape(10.dp))
+                                    .border(1.2.dp, accentColor, RoundedCornerShape(8.dp))
                                     .padding(4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
@@ -307,29 +315,21 @@ fun StudentIdCardPreview(
                                     )
                                 }
                             }
-                            Spacer(modifier = Modifier.height(3.dp))
+
+                            Spacer(modifier = Modifier.height(2.5.dp))
+
                             Text(
-                                text = "NIK: ${student.nik.ifBlank { student.nis.ifBlank { student.id.toString() } }}",
-                                color = Color.White,
-                                fontSize = 7.5.sp,
-                                fontFamily = FontFamily.Monospace,
+                                text = "SCAN QR NIK",
+                                color = Color(0xFF64748B),
+                                fontSize = 6.3.sp,
                                 fontWeight = FontWeight.Bold,
+                                letterSpacing = 0.5.sp,
                                 textAlign = TextAlign.Center,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.width(96.dp)
+                                maxLines = 1
                             )
                         }
                     }
                 }
-
-                // Garis Pemanis Bawah Menyala
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .background(neonColor)
-                )
             }
         }
     }
@@ -339,7 +339,9 @@ fun StudentIdCardPreview(
 private fun CardFieldLine(
     label: String,
     value: String,
-    maxLines: Int = 1
+    maxLines: Int = 1,
+    useMonospace: Boolean = false,
+    isMutedValue: Boolean = false
 ) {
     Row(
         modifier = Modifier
@@ -349,21 +351,22 @@ private fun CardFieldLine(
     ) {
         Text(
             text = label,
-            color = Color.White.copy(alpha = 0.80f),
-            fontSize = 8.8.sp,
-            modifier = Modifier.width(38.dp)
+            color = Color(0xFF64748B),
+            fontSize = 8.4.sp,
+            modifier = Modifier.width(34.dp)
         )
         Text(
             text = ": ",
-            color = Color.White.copy(alpha = 0.85f),
-            fontSize = 8.8.sp
+            color = Color(0xFF64748B),
+            fontSize = 8.4.sp
         )
         Text(
             text = value,
-            color = Color.White,
-            fontSize = 9.sp,
-            lineHeight = 11.sp,
-            fontWeight = FontWeight.SemiBold,
+            color = if (isMutedValue) Color(0xFF334155) else Color(0xFF0F172A),
+            fontSize = if (useMonospace) 8.2.sp else 8.6.sp,
+            lineHeight = 10.5.sp,
+            fontFamily = if (useMonospace) FontFamily.Monospace else FontFamily.Default,
+            fontWeight = if (isMutedValue) FontWeight.Medium else FontWeight.SemiBold,
             maxLines = maxLines,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)

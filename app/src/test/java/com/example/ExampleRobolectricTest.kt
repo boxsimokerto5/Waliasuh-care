@@ -1312,18 +1312,18 @@ class ExampleRobolectricTest {
 
     val smaPalette = com.example.util.StudentCardRenderer.resolvePalette(smaMale)
     assertEquals(com.example.util.CardJenjang.SMA, smaPalette.jenjang)
-    assertEquals(0xFF475569.toInt(), smaPalette.gradientMidArgb) // Abu-abu
-    assertEquals(0xFF00FF66.toInt(), smaPalette.trimNeonArgb)    // Putra -> Hijau menyala
+    assertEquals(0xFF475569.toInt(), smaPalette.gradientMidArgb) // Header Abu-abu
+    assertEquals(0xFF10B981.toInt(), smaPalette.trimNeonArgb)    // Putra -> Hijau Emerald
 
     val smpPalette = com.example.util.StudentCardRenderer.resolvePalette(smpFemale)
     assertEquals(com.example.util.CardJenjang.SMP, smpPalette.jenjang)
-    assertEquals(0xFF1D4ED8.toInt(), smpPalette.gradientMidArgb) // Biru
-    assertEquals(0xFFFF1E99.toInt(), smpPalette.trimNeonArgb)    // Putri -> Pink menyala
+    assertEquals(0xFF1D4ED8.toInt(), smpPalette.gradientMidArgb) // Header Biru
+    assertEquals(0xFFEC4899.toInt(), smpPalette.trimNeonArgb)    // Putri -> Pink Rose
 
     val sdPalette = com.example.util.StudentCardRenderer.resolvePalette(sdFemale)
     assertEquals(com.example.util.CardJenjang.SD, sdPalette.jenjang)
-    assertEquals(0xFFB91C1C.toInt(), sdPalette.gradientMidArgb)  // Merah
-    assertEquals(0xFFFF1E99.toInt(), sdPalette.trimNeonArgb)     // Putri -> Pink menyala
+    assertEquals(0xFFB91C1C.toInt(), sdPalette.gradientMidArgb)  // Header Merah
+    assertEquals(0xFFEC4899.toInt(), sdPalette.trimNeonArgb)     // Putri -> Pink Rose
 
     val qrBitmap = com.example.util.StudentCardRenderer.generateQrBitmap(
       com.example.util.StudentCardRenderer.resolveQrPayload(smaMale),
