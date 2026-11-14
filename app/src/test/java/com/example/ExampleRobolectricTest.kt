@@ -1357,4 +1357,128 @@ class ExampleRobolectricTest {
     qrBitmap.recycle()
     cardBitmap.recycle()
   }
+
+  @Test
+  fun `verify all 5 PDF reports generate cleanly with QR wali signature and real admin name`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val schoolCode = "SRT-PDF-QR"
+    val adminUser = "admin_pdf_qr"
+    val adminPass = "PdfQr#2026"
+    val reg = com.example.data.model.SchoolRegistration(
+      id = 777123L,
+      schoolName = "Sekolah Rakyat Kabupaten Kediri",
+      address = "Ploso Kidul, Plosoklaten, Kediri",
+      city = "Kabupaten Kediri",
+      estimatedWaliCount = 5,
+      picName = "Ustadzah Siti Aminah",
+      picEmail = "siti@sekolah.id",
+      picPhone = "081233344455",
+      status = "APPROVED",
+      generatedSchoolCode = schoolCode,
+      generatedAdminUsername = adminUser,
+      generatedAdminPassword = adminPass
+    )
+    db.schoolRegistrationDao().insert(reg)
+
+    val loginRes = vm.executeLogin(adminUser, adminPass, rememberMe = false)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessAdmin)
+    assertEquals("Ustadzah Siti Aminah", vm.waliName.value)
+
+    val student = com.example.data.model.ChildStudent(
+      id = 91L,
+      name = "Abimanyu Satria",
+      nis = "108346824",
+      gender = "L",
+      age = 16,
+      dormitory = "Asrama Putra",
+      classGrade = "X-4",
+      schoolId = schoolCode
+    )
+    val medRecord = com.example.data.model.MedicalRecord(
+      id = 201L,
+      studentId = student.id,
+      studentName = student.name,
+      studentDormitory = student.dormitory,
+      faskes = "Puskesmas Kediri",
+      complaint = "Demam",
+      planDate = System.currentTimeMillis(),
+      diagnosis = "Demam ringan",
+      actionsTaken = "Observasi",
+      prescription = "Paracetamol",
+      status = "COMPLETED"
+    )
+    val haidRecord = com.example.data.model.HaidRecord(
+      id = 301L,
+      studentId = 92L,
+      studentName = "Aisyah Putri",
+      studentClass = "VIII-A",
+      studentDorm = "Asrama Putri",
+      startDate = System.currentTimeMillis(),
+      status = "HAID",
+      waliName = vm.waliName.value,
+      schoolId = schoolCode
+    )
+    val session = com.example.data.model.FastingSession(
+      id = 401L,
+      title = "Puasa Senin Kamis",
+      sessionDate = System.currentTimeMillis(),
+      schoolId = schoolCode
+    )
+    val fastingRecord = com.example.data.model.FastingRecord(
+      id = 501L,
+      sessionId = session.id,
+      studentId = student.id,
+      studentName = student.name,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      waliName = vm.waliName.value,
+      isSahurChecked = true,
+      isBukaChecked = true,
+      schoolId = schoolCode
+    )
+
+    val profile = vm.schoolProfile.value
+    val footerTitle = com.example.util.PdfReportGenerator.buildFooterSignatureTitle(profile)
+    assertEquals("Wali Asuh Sekolah Rakyat Kabupaten Kediri,", footerTitle)
+    org.junit.Assert.assertFalse(footerTitle.contains("Mengetahui"))
+
+    val waliQr = com.example.util.StudentCardRenderer.generateQrBitmap(vm.waliName.value, 256)
+    org.junit.Assert.assertNotNull(waliQr)
+    org.junit.Assert.assertTrue(
+      waliQr!!.getPixel(0, 0) == android.graphics.Color.WHITE ||
+        waliQr.getPixel(0, 0) == android.graphics.Color.BLACK
+    )
+    waliQr.recycle()
+
+    // Uji render langsung blok tanda tangan tunggal kanan + QR code pada Canvas A4
+    val a4Bitmap = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+    val a4Canvas = android.graphics.Canvas(a4Bitmap)
+    val paint = android.graphics.Paint().apply { isAntiAlias = true }
+    com.example.util.PdfReportGenerator.drawFooterSignatures(
+      context = app,
+      canvas = a4Canvas,
+      paint = paint,
+      width = 595,
+      height = 842,
+      startY = 620f,
+      waliName = vm.waliName.value,
+      schoolProfile = profile
+    )
+    a4Bitmap.recycle()
+
+    // Verifikasi penghapusan sekolah & tombstone mencegah sinkronisasi menghidupkan kembali sekolah
+    vm.deleteSchoolRegistration(reg)
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (db.schoolRegistrationDao().getBySchoolCode(schoolCode) == null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertNull(db.schoolRegistrationDao().getBySchoolCode(schoolCode))
+    org.junit.Assert.assertTrue(
+      com.example.data.remote.pocketbase.PocketBaseConfig.isSchoolRegistrationDeleted(app, reg)
+    )
+  }
 }

@@ -242,6 +242,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             city = profile.city.trim().ifBlank { "Indonesia" }
         )
         persistSchoolProfile(cleanProfile, markCustomized = true, updatedAt = now)
+        if (_currentUserRole.value == UserRole.ADMIN && cleanProfile.adminName.isNotBlank()) {
+            _waliName.value = cleanProfile.adminName
+            if (authPrefs.getString("saved_role", "") == "ADMIN") {
+                authPrefs.edit().putString("saved_wali_name", cleanProfile.adminName).apply()
+            }
+        }
         if (cleanProfile.tenantCode.isNotBlank()) {
             viewModelScope.launch {
                 if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
@@ -1513,10 +1519,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (!_schoolProfile.value.tenantCode.equals("SRT1-KDR", ignoreCase = true)) {
                     persistSchoolProfile(SchoolProfile(), markCustomized = false)
                 }
+                val pilotDisplayName = pilotOverride?.picName?.trim()?.takeIf { it.isNotBlank() }
+                    ?: _schoolProfile.value.adminName.trim().takeIf { it.isNotBlank() }
+                    ?: "Eko Wahyudi"
+                _waliName.value = pilotDisplayName
                 if (rememberMe) {
                     authPrefs.edit()
                         .putString("saved_role", "ADMIN")
                         .putString("saved_username", "ekowahyudiadmin")
+                        .putString("saved_wali_name", pilotDisplayName)
                         .apply()
                 }
                 if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
@@ -1583,10 +1594,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             _currentUserRole.value = UserRole.ADMIN
             _currentUsername.value = matchedSchool.generatedAdminUsername
             persistSchoolProfile(buildProfileForSchool(matchedSchool), markCustomized = false)
+            val adminDisplayName = _schoolProfile.value.adminName.trim()
+                .ifBlank { matchedSchool.picName.trim().ifBlank { matchedSchool.generatedAdminUsername } }
+            _waliName.value = adminDisplayName
             if (rememberMe) {
                 authPrefs.edit()
                     .putString("saved_role", "ADMIN")
                     .putString("saved_username", matchedSchool.generatedAdminUsername)
+                    .putString("saved_wali_name", adminDisplayName)
                     .apply()
             }
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
@@ -1710,6 +1725,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             val newId = repository.insertSchoolRegistration(reg)
             val saved = reg.copy(id = newId)
+            PocketBaseConfig.clearSchoolRegistrationDeletedTokens(getApplication(), saved)
             onComplete(saved)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
@@ -1796,17 +1812,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch {
+            PocketBaseConfig.markSchoolRegistrationDeleted(getApplication(), registration)
             if (registration.generatedSchoolCode.isNotBlank()) {
                 repository.deleteStudentsBySchool(registration.generatedSchoolCode)
                 repository.deleteWaliAccountsBySchool(registration.generatedSchoolCode)
-                if (!isUnitTestEnvironment()) {
-                    PocketBaseSyncManager.deleteAllSchoolData(getApplication(), registration.generatedSchoolCode)
-                }
+                repository.deleteSchoolRegistrationsByCode(registration.generatedSchoolCode)
+            }
+            if (registration.id > 0L) {
+                repository.deleteSchoolRegistrationById(registration.id)
             }
             repository.deleteSchoolRegistration(registration)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                PocketBaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), registration.id)
+                if (registration.generatedSchoolCode.isNotBlank()) {
+                    PocketBaseSyncManager.deleteAllSchoolData(getApplication(), registration.generatedSchoolCode)
+                }
+                PocketBaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), registration)
             }
         }
     }
@@ -2168,16 +2189,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             // 2. Bersihkan seluruh data sekolah + registrasi akun admin di PocketBase
+            if (existingReg != null) {
+                PocketBaseConfig.markSchoolRegistrationDeleted(getApplication(), existingReg)
+            }
             if (!isUnitTestEnvironment()) {
                 if (targetSchoolId.isNotBlank()) {
                     PocketBaseSyncManager.deleteAllSchoolData(getApplication(), targetSchoolId)
                 }
                 if (existingReg != null) {
-                    PocketBaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), existingReg.id)
+                    PocketBaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), existingReg)
                 }
             }
 
             // 3. Hapus entri pendaftaran sekolah dari Room lokal
+            if (targetSchoolId.isNotBlank()) {
+                repository.deleteSchoolRegistrationsByCode(targetSchoolId)
+            }
             if (existingReg != null) {
                 repository.deleteSchoolRegistration(existingReg)
             }

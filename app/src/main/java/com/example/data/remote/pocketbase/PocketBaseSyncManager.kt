@@ -444,11 +444,57 @@ object PocketBaseSyncManager {
         }
 
     suspend fun deleteRemoteSchoolRegistration(context: Context, regId: Long) =
+        deleteRemoteSchoolRegistration(
+            context,
+            SchoolRegistration(
+                id = regId,
+                schoolName = "",
+                address = "",
+                city = "",
+                estimatedWaliCount = 0,
+                picName = "",
+                picEmail = "",
+                picPhone = ""
+            )
+        )
+
+    suspend fun deleteRemoteSchoolRegistration(context: Context, reg: SchoolRegistration) =
         withContext(Dispatchers.IO) {
+            PocketBaseConfig.markSchoolRegistrationDeleted(context, reg)
             if (!PocketBaseConfig.isConfigured(context)) return@withContext
             try {
                 val service = PocketBaseClient.getService(context) ?: return@withContext
-                service.deleteRecord("school_registrations", PocketBaseIdCodec.toPbId(regId))
+                if (reg.id > 0L) {
+                    runCatching {
+                        service.deleteRecord("school_registrations", PocketBaseIdCodec.toPbId(reg.id))
+                    }
+                }
+                val remoteRegs = fetchAllPages { page ->
+                    service.listSchoolRegistrations(page = page, perPage = 500)
+                }.getOrNull().orEmpty()
+
+                val targetCode = reg.generatedSchoolCode.trim()
+                val targetName = reg.schoolName.trim()
+                val targetPhone = reg.picPhone.trim()
+                val matchingIds = remoteRegs.filter { dto ->
+                    val domain = dto.toDomainModel()
+                    val idMatch = reg.id > 0L && (
+                        dto.localId == reg.id ||
+                        domain.id == reg.id ||
+                        dto.id == PocketBaseIdCodec.toPbId(reg.id)
+                    )
+                    val codeMatch = targetCode.isNotBlank() &&
+                        domain.generatedSchoolCode.trim().equals(targetCode, ignoreCase = true)
+                    val sigMatch = targetName.isNotBlank() &&
+                        domain.schoolName.trim().equals(targetName, ignoreCase = true) &&
+                        domain.picPhone.trim() == targetPhone &&
+                        (reg.submissionDate <= 0L || domain.submissionDate == reg.submissionDate)
+                    idMatch || codeMatch || sigMatch
+                }.mapNotNull { it.id?.takeIf { id -> id.isNotBlank() } }.distinct()
+
+                for (remoteId in matchingIds) {
+                    runCatching { service.deleteRecord("school_registrations", remoteId) }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteSchoolRegistration ke PocketBase", e)
             }
@@ -502,9 +548,26 @@ object PocketBaseSyncManager {
             val remoteRegsResult = fetchAllPages { page ->
                 service.listSchoolRegistrations(page = page, perPage = 500)
             }
-            val remoteRegs = remoteRegsResult.getOrNull()?.map { it.toDomainModel() }.orEmpty()
-            if (remoteRegs.isNotEmpty()) {
-                repository.insertAllSchoolRegistrations(remoteRegs)
+            val remoteDtos = remoteRegsResult.getOrNull().orEmpty()
+            val activeRegs = mutableListOf<SchoolRegistration>()
+            for (dto in remoteDtos) {
+                val domain = dto.toDomainModel()
+                if (PocketBaseConfig.isSchoolRegistrationDeleted(context, domain)) {
+                    dto.id?.takeIf { it.isNotBlank() }?.let { remoteId ->
+                        runCatching { service.deleteRecord("school_registrations", remoteId) }
+                    }
+                    if (domain.generatedSchoolCode.isNotBlank()) {
+                        runCatching { repository.deleteSchoolRegistrationsByCode(domain.generatedSchoolCode) }
+                    }
+                    if (domain.id > 0L) {
+                        runCatching { repository.deleteSchoolRegistrationById(domain.id) }
+                    }
+                } else {
+                    activeRegs.add(domain)
+                }
+            }
+            if (activeRegs.isNotEmpty()) {
+                repository.insertAllSchoolRegistrations(activeRegs)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Silent error sync school_registrations", e)
@@ -514,7 +577,10 @@ object PocketBaseSyncManager {
             val remoteWaliResult = fetchAllPages { page ->
                 service.listWaliAccounts(page = page, perPage = 500)
             }
-            val remoteWali = remoteWaliResult.getOrNull()?.map { it.toDomainModel() }.orEmpty()
+            val remoteWali = remoteWaliResult.getOrNull()
+                ?.map { it.toDomainModel() }
+                ?.filterNot { PocketBaseConfig.isSchoolCodeDeleted(context, it.schoolId) }
+                .orEmpty()
             if (remoteWali.isNotEmpty()) {
                 repository.insertAllWaliAccounts(remoteWali)
             }

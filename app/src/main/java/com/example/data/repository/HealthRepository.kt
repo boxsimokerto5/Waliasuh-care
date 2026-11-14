@@ -148,6 +148,13 @@ class HealthRepository(
     suspend fun deleteSchoolRegistration(registration: SchoolRegistration) =
         registrationDao.delete(registration)
 
+    suspend fun deleteSchoolRegistrationById(id: Long) =
+        registrationDao.deleteById(id)
+
+    suspend fun deleteSchoolRegistrationsByCode(code: String) {
+        if (code.isNotBlank()) registrationDao.deleteBySchoolCode(code)
+    }
+
     suspend fun getSchoolRegistrationById(id: Long): SchoolRegistration? =
         registrationDao.getById(id)
 

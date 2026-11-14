@@ -38,6 +38,9 @@ interface SchoolRegistrationDao {
     @Query("DELETE FROM school_registrations WHERE id = :id")
     suspend fun deleteById(id: Long)
 
+    @Query("DELETE FROM school_registrations WHERE generatedSchoolCode = :code")
+    suspend fun deleteBySchoolCode(code: String)
+
     @Query("SELECT * FROM school_registrations ORDER BY submissionDate DESC")
     suspend fun getAllRegistrationsList(): List<SchoolRegistration>
 

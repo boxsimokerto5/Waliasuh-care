@@ -80,6 +80,7 @@ fun StudentDetailDialog(
     student: ChildStudent,
     studentRecords: List<MedicalRecord>,
     schoolProfile: SchoolProfile = SchoolProfile(),
+    waliName: String = "Wali Asuh",
     onEditStudent: ((ChildStudent) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -593,6 +594,7 @@ fun StudentDetailDialog(
         PrintPdfDialog(
             student = student,
             allRecords = studentRecords,
+            waliName = waliName,
             schoolProfile = schoolProfile,
             onDismiss = { showPrintPdfDialog = false }
         )

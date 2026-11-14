@@ -113,7 +113,7 @@ object PdfReportGenerator {
             }
 
             // 6. Tanda Tangan & Validasi
-            if (currentY > pageHeight - 110f) {
+            if (currentY > pageHeight - 140f) {
                 document.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
@@ -474,7 +474,7 @@ object PdfReportGenerator {
         return startY + boxHeight
     }
 
-    private fun drawFooterSignatures(
+    internal fun drawFooterSignatures(
         context: Context,
         canvas: Canvas,
         paint: Paint,
@@ -484,29 +484,54 @@ object PdfReportGenerator {
         waliName: String,
         schoolProfile: SchoolProfile = SchoolProfile()
     ) {
-        val y = (startY + 15f).coerceAtMost(height - 92f)
+        val y = (startY + 15f).coerceAtMost(height - 122f)
         val todayDate = SimpleDateFormat("d MMMM yyyy", Locale("id", "ID")).format(Date())
         val cityLabel = schoolProfile.city.trim().ifBlank { "Indonesia" }
+        val effectiveWaliName = waliName.trim().ifBlank { "Wali Asuh" }
+        val rightX = width - 50f
 
+        paint.style = Paint.Style.FILL
+        paint.textAlign = Paint.Align.RIGHT
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.textSize = 8.5f
         paint.color = Color.rgb(71, 85, 105)
 
-        // Kiri: Petugas Pengasuh
-        canvas.drawText("$cityLabel, $todayDate", 50f, y, paint)
-        canvas.drawText("Petugas / Pengasuh Asrama,", 50f, y + 12f, paint)
-        canvas.drawText("( ................................................ )", 50f, y + 52f, paint)
+        // Satu Entitas Kanan: Tanggal, Wali Asuh <Nama Sekolah>, Barcode QR Nama Penginput, Nama Wali Asuh
+        canvas.drawText("$cityLabel, $todayDate", rightX, y, paint)
 
-        // Kanan: Wali Asuh Kesehatan
         val footerSignTitle = buildFooterSignatureTitle(schoolProfile)
-        paint.textAlign = Paint.Align.RIGHT
-        canvas.drawText("Mengetahui,", width - 50f, y, paint)
         paint.textSize = if (footerSignTitle.length > 44) 7.5f else 8.5f
-        canvas.drawText(footerSignTitle, width - 50f, y + 12f, paint)
-        paint.textSize = 8.5f
+        canvas.drawText(footerSignTitle, rightX, y + 12f, paint)
+
+        val qrSize = 54f
+        val qrRight = rightX
+        val qrLeft = qrRight - qrSize
+        val qrTop = y + 18f
+        val qrBottom = qrTop + qrSize
+
+        val qrBitmap = StudentCardRenderer.generateQrBitmap(effectiveWaliName, 256)
+        if (qrBitmap != null) {
+            val frameRect = RectF(qrLeft - 2f, qrTop - 2f, qrRight + 2f, qrBottom + 2f)
+            paint.color = Color.WHITE
+            paint.style = Paint.Style.FILL
+            canvas.drawRoundRect(frameRect, 4f, 4f, paint)
+
+            paint.color = Color.rgb(203, 213, 225)
+            paint.style = Paint.Style.STROKE
+            paint.strokeWidth = 0.8f
+            canvas.drawRoundRect(frameRect, 4f, 4f, paint)
+            paint.style = Paint.Style.FILL
+
+            val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(qrBitmap, null, RectF(qrLeft, qrTop, qrRight, qrBottom), bmpPaint)
+            qrBitmap.recycle()
+        }
+
+        val nameY = qrBottom + 13f
+        paint.textSize = 9f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.color = Color.rgb(15, 118, 110)
-        canvas.drawText("( $waliName )", width - 50f, y + 52f, paint)
+        canvas.drawText(effectiveWaliName, rightX, nameY, paint)
 
         // Catatan kaki halus di bagian paling bawah lembar A4
         paint.textAlign = Paint.Align.CENTER
@@ -654,7 +679,7 @@ object PdfReportGenerator {
             }
 
             // 5. Tanda Tangan
-            if (currentY > pageHeight - 110f) {
+            if (currentY > pageHeight - 140f) {
                 document.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
@@ -946,7 +971,7 @@ object PdfReportGenerator {
             }
 
             // 5. Tanda Tangan & Disclaimer Footer
-            if (currentY > pageHeight - 110f) {
+            if (currentY > pageHeight - 140f) {
                 document.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
@@ -1240,7 +1265,7 @@ object PdfReportGenerator {
                 currentY += 14f
             }
 
-            if (currentY > pageHeight - 110f) {
+            if (currentY > pageHeight - 140f) {
                 document.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
@@ -1453,7 +1478,7 @@ object PdfReportGenerator {
                 currentY += 14f
             }
 
-            if (currentY > pageHeight - 110f) {
+            if (currentY > pageHeight - 140f) {
                 document.finishPage(page)
                 pageNumber++
                 pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()

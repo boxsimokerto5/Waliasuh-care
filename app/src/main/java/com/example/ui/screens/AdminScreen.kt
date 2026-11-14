@@ -143,6 +143,7 @@ fun AdminScreen(
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val schoolRegistrations by viewModel.schoolRegistrations.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
+    val waliName by viewModel.waliName.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
@@ -1352,6 +1353,7 @@ fun AdminScreen(
             student = student,
             studentRecords = allRecords.filter { it.studentId == student.id },
             schoolProfile = schoolProfile,
+            waliName = schoolProfile.adminName.ifBlank { waliName },
             onEditStudent = { toEdit ->
                 selectedDetailStudent = null
                 studentToEdit = toEdit

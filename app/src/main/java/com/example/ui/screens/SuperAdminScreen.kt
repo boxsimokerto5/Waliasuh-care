@@ -184,11 +184,12 @@ fun SuperAdminScreen(
                 reg.picPhone.contains(searchQuery, ignoreCase = true) ||
                 reg.generatedSchoolCode.contains(searchQuery, ignoreCase = true)
 
+        val normStatus = reg.status.trim().uppercase()
         val matchStatus = when (selectedStatusFilter) {
-            "PENDING" -> reg.status == "PENDING"
-            "APPROVED" -> reg.status == "APPROVED"
-            "SUSPENDED" -> reg.status == "SUSPENDED"
-            "REJECTED" -> reg.status == "REJECTED"
+            "PENDING" -> normStatus == "PENDING"
+            "APPROVED" -> normStatus == "APPROVED"
+            "SUSPENDED" -> normStatus == "SUSPENDED"
+            "REJECTED" -> normStatus == "REJECTED"
             else -> true
         }
 
@@ -196,10 +197,10 @@ fun SuperAdminScreen(
     }
 
     val totalCount = registrations.size
-    val pendingCount = registrations.count { it.status == "PENDING" }
-    val approvedCount = registrations.count { it.status == "APPROVED" }
-    val suspendedCount = registrations.count { it.status == "SUSPENDED" }
-    val rejectedCount = registrations.count { it.status == "REJECTED" }
+    val pendingCount = registrations.count { it.status.trim().uppercase() == "PENDING" }
+    val approvedCount = registrations.count { it.status.trim().uppercase() == "APPROVED" }
+    val suspendedCount = registrations.count { it.status.trim().uppercase() == "SUSPENDED" }
+    val rejectedCount = registrations.count { it.status.trim().uppercase() == "REJECTED" }
 
     fun sendAccessCardViaWhatsApp(reg: SchoolRegistration) {
         val message = """
@@ -936,6 +937,10 @@ fun SuperAdminScreen(
             onCopyCredentials = { copyAdminCredentials(target) },
             onSendWaCard = { sendAccessCardViaWhatsApp(target) },
             onContactWa = { contactPicViaWhatsApp(target.picName, target.schoolName, target.picPhone) },
+            onDelete = {
+                selectedSchoolForDetail = null
+                schoolToDelete = target
+            },
             onDismiss = { selectedSchoolForDetail = null }
         )
     }
@@ -999,15 +1004,16 @@ fun SuperadminRegistrationItemCard(
     modifier: Modifier = Modifier
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
+    val normalizedStatus = registration.status.trim().uppercase()
 
-    val statusColor = when (registration.status) {
+    val statusColor = when (normalizedStatus) {
         "APPROVED" -> Color(0xFF16A34A)
         "SUSPENDED" -> Color(0xFFEA580C)
         "REJECTED" -> Color(0xFFDC2626)
         else -> Color(0xFFD97706)
     }
 
-    val statusLabel = when (registration.status) {
+    val statusLabel = when (normalizedStatus) {
         "APPROVED" -> "DISETUJUI"
         "SUSPENDED" -> "DITANGGUHKAN / SUSPENDED"
         "REJECTED" -> "DITOLAK"
@@ -1091,7 +1097,7 @@ fun SuperadminRegistrationItemCard(
             }
 
             // TAMPILAN JIKA STATUS APPROVED: KARTU AKSES DIGITAL + TOMBOL SUSPEND & HAPUS
-            if (registration.status == "APPROVED") {
+            if (normalizedStatus == "APPROVED") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1235,7 +1241,7 @@ fun SuperadminRegistrationItemCard(
             }
 
             // TAMPILAN JIKA STATUS SUSPENDED: BANNER & TOMBOL BUKA SUSPEND / HAPUS
-            if (registration.status == "SUSPENDED") {
+            if (normalizedStatus == "SUSPENDED") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1301,7 +1307,7 @@ fun SuperadminRegistrationItemCard(
             }
 
             // TAMPILAN JIKA STATUS REJECTED: ALASAN PENOLAKAN + TOMBOL HAPUS
-            if (registration.status == "REJECTED") {
+            if (normalizedStatus == "REJECTED") {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1338,8 +1344,8 @@ fun SuperadminRegistrationItemCard(
                 }
             }
 
-            // AKSI BUTTONS UNTUK STATUS PENDING
-            if (registration.status == "PENDING") {
+            // AKSI BUTTONS UNTUK STATUS PENDING ATAU STATUS LAINNYA
+            if (normalizedStatus == "PENDING") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1387,6 +1393,20 @@ fun SuperadminRegistrationItemCard(
                         Text("Setujui", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
+            } else if (normalizedStatus !in setOf("APPROVED", "SUSPENDED", "REJECTED")) {
+                OutlinedButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .testTag("btn_delete_school_${registration.id}"),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error)
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(15.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Hapus Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         }
     }
@@ -1408,8 +1428,12 @@ fun SuperadminReportsView(
 
     // Seluruh sekolah tenant resmi yang telah disetujui / aktif (memakai ID Sekolah resmi)
     val approvedSchools = registrations
-        .filter { it.status == "APPROVED" || it.status == "SUSPENDED" }
+        .filter {
+            val st = it.status.trim().uppercase()
+            st == "APPROVED" || st == "SUSPENDED"
+        }
         .map { reg ->
+            val normStatus = reg.status.trim().uppercase()
             val schoolWalies = waliAccounts.filter { it.schoolId == reg.generatedSchoolCode }
             val effectiveWaliCount = if (schoolWalies.isNotEmpty()) schoolWalies.size else reg.estimatedWaliCount
             val waliNames = schoolWalies.map { "${it.name} (${it.dormitory})" }
@@ -1424,7 +1448,7 @@ fun SuperadminReportsView(
                 picName = reg.picName,
                 picPhone = reg.picPhone,
                 isPrimaryPilot = false,
-                status = if (reg.status == "SUSPENDED") "Disuspend" else "Terdaftar & Aktif",
+                status = if (normStatus == "SUSPENDED") "Disuspend" else "Terdaftar & Aktif",
                 originalRegistration = reg
             )
         }
@@ -1436,7 +1460,7 @@ fun SuperadminReportsView(
         String.format("%.1f", totalWaliAccounts.toDouble() / totalActiveSchools)
     } else "0"
     val totalStudentsCount = students.count { s -> approvedSchools.any { it.schoolCode == s.schoolId } }
-    val pendingRegistrationsCount = registrations.count { it.status == "PENDING" }
+    val pendingRegistrationsCount = registrations.count { it.status.trim().uppercase() == "PENDING" }
 
     // Filter pencarian
     val filteredSchools = allSchools.filter { item ->
@@ -1721,7 +1745,10 @@ fun SuperadminReportsView(
                 }
             }
         } else {
-            items(filteredSchools, key = { it.schoolCode }) { schoolItem ->
+            items(
+                filteredSchools,
+                key = { "${it.schoolCode}_${it.originalRegistration?.id ?: 0L}" }
+            ) { schoolItem ->
                 SuperadminReportSchoolCard(
                     school = schoolItem,
                     onContactWa = {
