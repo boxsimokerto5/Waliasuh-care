@@ -2637,17 +2637,59 @@ class ExampleRobolectricTest {
       )
     )
 
-    val pdfFile = com.example.util.PdfReportGenerator.generateKartuMengajiPdf(
+    // Render single-page Kartu Mengaji onto A4 Canvas (verifies header, bio, 6 columns, and guardian QR signature)
+    val singlePageBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKartuMengajiPages(
       context = context,
       student = student,
       records = records,
       periodLabel = "November 2026",
       waliName = "Ustadzah Amina",
-      schoolProfile = com.example.data.model.SchoolProfile()
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        singlePageBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
     )
-    assertNotNull(pdfFile)
-    org.junit.Assert.assertTrue(pdfFile!!.exists())
-    org.junit.Assert.assertTrue(pdfFile.length() > 0L)
+    assertEquals(1, singlePageBitmaps.size)
+    singlePageBitmaps.forEach { it.recycle() }
+
+    // Render multi-page Kartu Mengaji (30 sessions) to verify automatic pagination & continued table headers
+    val manyRecords = (1..30).map { idx ->
+      com.example.data.model.MengajiRecord(
+        id = idx.toLong(),
+        studentId = student.id,
+        studentName = student.name,
+        sessionDate = 1794800000000L + idx * 86_400_000L,
+        bookType = "Iqro'",
+        jilidOrJuz = "Jilid 4",
+        pageOrVerse = "Hal. $idx",
+        startPage = idx,
+        fluencyStatus = if (idx % 3 == 0) {
+          com.example.data.model.MengajiHelper.FLUENCY_TIDAK_LANCAR
+        } else {
+          com.example.data.model.MengajiHelper.FLUENCY_LANCAR
+        },
+        waliName = "Ustadzah Amina"
+      )
+    }
+    val multiPageBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKartuMengajiPages(
+      context = context,
+      student = student,
+      records = manyRecords,
+      periodLabel = "November 2026",
+      waliName = "Ustadzah Amina",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        multiPageBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
+    )
+    org.junit.Assert.assertTrue(multiPageBitmaps.size >= 2)
+    multiPageBitmaps.forEach { it.recycle() }
 
     val waText = com.example.util.PdfReportGenerator.buildKartuMengajiWaSummary(
       student = student,

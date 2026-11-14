@@ -48,6 +48,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -99,6 +100,7 @@ fun StudentDetailDialog(
     var showPrintPdfDialog by remember { mutableStateOf(false) }
     var showCardGeneratorForStudent by remember { mutableStateOf(false) }
     var showInlineKartuMengaji by remember { mutableStateOf(false) }
+    var showAllMengajiHistory by remember { mutableStateOf(false) }
     val orderedMengajiRecords = remember(mengajiRecords, student) {
         MengajiHelper.recordsForStudent(mengajiRecords, student)
     }
@@ -590,7 +592,12 @@ fun StudentDetailDialog(
                         )
                     }
 
-                    orderedMengajiRecords.take(5).forEach { rec ->
+                    val displayedMengaji = if (showAllMengajiHistory) {
+                        orderedMengajiRecords
+                    } else {
+                        orderedMengajiRecords.take(5)
+                    }
+                    displayedMengaji.forEach { rec ->
                         val isFluent = MengajiHelper.isFluent(rec.fluencyStatus)
                         Card(
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -643,6 +650,30 @@ fun StudentDetailDialog(
                                     )
                                 }
                             }
+                        }
+                    }
+
+                    if (orderedMengajiRecords.size > 5) {
+                        TextButton(
+                            onClick = { showAllMengajiHistory = !showAllMengajiHistory },
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .testTag("btn_student_toggle_all_mengaji")
+                        ) {
+                            Text(
+                                text = if (showAllMengajiHistory) {
+                                    if (isEn) "Show less" else "Ringkas riwayat mengaji"
+                                } else {
+                                    if (isEn) {
+                                        "Show all ${orderedMengajiRecords.size} sessions"
+                                    } else {
+                                        "Lihat semua (${orderedMengajiRecords.size} setoran)"
+                                    }
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = emeraldPrimary
+                            )
                         }
                     }
                 }

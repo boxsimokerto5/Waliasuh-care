@@ -1879,6 +1879,260 @@ object PdfReportGenerator {
         }
     }
 
+    internal fun renderKartuMengajiPages(
+        context: Context,
+        student: ChildStudent,
+        records: List<MengajiRecord>,
+        periodLabel: String,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        pageWidth: Int = 595,
+        pageHeight: Int = 842,
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCurrentCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+
+        val paint = Paint().apply { isAntiAlias = true }
+        val dateFmt = SimpleDateFormat("d MMM yyyy", lang.locale)
+        val orderedRecords = records.sortedWith(compareBy<MengajiRecord> { it.sessionDate }.thenBy { it.createdAt })
+
+        var currentY = 35f
+
+        // 1. Kop Surat Resmi (Unit Bimbingan Spiritual)
+        currentY = drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = UNIT_BIMBINGAN_SPIRITUAL
+        )
+
+        // 2. Judul Kartu Mengaji & Periode
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 13.5f
+        paint.color = Color.rgb(15, 118, 110)
+        canvas.drawText(
+            if (isEn) "STUDENT QURAN / MENGAJI PROGRESS CARD" else "KARTU PRESTASI & KENDALI MENGAJI SISWA",
+            pageWidth / 2f,
+            currentY + 12f,
+            paint
+        )
+        currentY += 26f
+
+        paint.textSize = 10f
+        paint.color = Color.rgb(15, 23, 42)
+        val periodDisplay = if (isEn) "Period: $periodLabel" else "Periode: $periodLabel"
+        canvas.drawText(periodDisplay.uppercase(lang.locale), pageWidth / 2f, currentY, paint)
+        currentY += 14f
+        paint.textAlign = Paint.Align.LEFT
+
+        // 3. Kotak Identitas Siswa & Statistik Mengaji Bulan Ini
+        val boxLeft = 35f
+        val boxRight = pageWidth - 35f
+        val boxTop = currentY
+        val bioHeight = 76f
+        paint.color = Color.rgb(240, 253, 250)
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + bioHeight), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(153, 246, 228)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + bioHeight), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+
+        val jenjangResolved = student.jenjang.ifBlank { FastingJenjangHelper.resolveJenjang(student) }
+        val fluentCount = orderedRecords.count { MengajiHelper.isFluent(it.fluencyStatus) }
+        val notFluentCount = orderedRecords.size - fluentCount
+        val latestPos = orderedRecords.lastOrNull()?.let { MengajiHelper.formatCompactPosition(it) } ?: "-"
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9.5f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            if (isEn) "Student: ${student.name}" else "Nama Siswa: ${student.name}",
+            boxLeft + 10f,
+            boxTop + 18f,
+            paint
+        )
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.5f
+        paint.color = Color.rgb(51, 65, 85)
+        canvas.drawText(
+            "NIS: ${student.nis.ifBlank { "-" }}  |  ${if (isEn) "Level/Class" else "Jenjang/Kelas"}: $jenjangResolved • ${student.classGrade.ifBlank { "-" }}  |  Asrama: ${student.dormitory.ifBlank { "-" }}",
+            boxLeft + 10f,
+            boxTop + 34f,
+            paint
+        )
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.color = Color.rgb(15, 118, 110)
+        canvas.drawText(
+            if (isEn) "Latest Position: $latestPos" else "Posisi Bacaan Terakhir: $latestPos",
+            boxLeft + 10f,
+            boxTop + 50f,
+            paint
+        )
+        paint.textSize = 8.5f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            if (isEn) {
+                "Sessions: ${orderedRecords.size}   |   Fluent (Lancar): $fluentCount   |   Needs Practice (Tidak Lancar): $notFluentCount"
+            } else {
+                "Total Setoran: ${orderedRecords.size} Kali   |   Lancar: $fluentCount   |   Tidak Lancar: $notFluentCount"
+            },
+            boxLeft + 10f,
+            boxTop + 65f,
+            paint
+        )
+
+        currentY = boxTop + bioHeight + 14f
+
+        // Kolom tabel: No (30) | Tanggal (78) | Jilid / Kitab (122) | Halaman (95) | Keterangan (100) | Paraf Wali (100)
+        val colNo = boxLeft
+        val colTgl = boxLeft + 30f
+        val colJilid = boxLeft + 108f
+        val colHal = boxLeft + 230f
+        val colKet = boxLeft + 325f
+        val colWali = boxLeft + 425f
+
+        fun drawKartuTableHeader(startYPos: Float): Float {
+            val hTop = startYPos
+            val hHeight = 25f
+            paint.color = Color.rgb(204, 251, 241)
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(45, 212, 191)
+            paint.strokeWidth = 0.9f
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+            listOf(colTgl, colJilid, colHal, colKet, colWali).forEach { x ->
+                canvas.drawLine(x, hTop, x, hTop + hHeight, paint)
+            }
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(17, 94, 89)
+            val textY = hTop + 16f
+            canvas.drawText("No", colNo + 7f, textY, paint)
+            canvas.drawText(if (isEn) "Date" else "Tanggal", colTgl + 6f, textY, paint)
+            canvas.drawText(if (isEn) "Volume / Book" else "Jilid / Kitab", colJilid + 6f, textY, paint)
+            canvas.drawText(if (isEn) "Page / Verse" else "Halaman", colHal + 6f, textY, paint)
+            canvas.drawText(if (isEn) "Status" else "Keterangan", colKet + 6f, textY, paint)
+            canvas.drawText(if (isEn) "Guardian Sign" else "Paraf Wali", colWali + 6f, textY, paint)
+            return hTop + hHeight
+        }
+
+        if (orderedRecords.isEmpty()) {
+            val emptyTop = currentY
+            val emptyH = 44f
+            paint.color = Color.rgb(248, 250, 252)
+            canvas.drawRoundRect(RectF(boxLeft, emptyTop, boxRight, emptyTop + emptyH), 6f, 6f, paint)
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) "No mengaji records found for this period." else "Belum ada catatan mengaji pada periode ini.",
+                pageWidth / 2f,
+                emptyTop + 26f,
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+            currentY = emptyTop + emptyH + 16f
+        } else {
+            currentY = drawKartuTableHeader(currentY)
+            val rowHeight = 23f
+            orderedRecords.forEachIndexed { idx, rec ->
+                if (currentY > pageHeight - 135f) {
+                    finishCurrentCanvas()
+                    pageNumber++
+                    canvas = startNewCanvas(pageNumber)
+                    currentY = 40f
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 9f
+                    paint.color = Color.rgb(100, 116, 139)
+                    canvas.drawText(
+                        if (isEn) {
+                            "Continued Mengaji Card (${student.name}) - Page $pageNumber"
+                        } else {
+                            "Lanjutan Kartu Mengaji (${student.name}) - Halaman $pageNumber"
+                        },
+                        boxLeft,
+                        currentY,
+                        paint
+                    )
+                    currentY += 12f
+                    currentY = drawKartuTableHeader(currentY)
+                }
+
+                val rTop = currentY
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(203, 213, 225)
+                paint.strokeWidth = 0.6f
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                listOf(colTgl, colJilid, colHal, colKet, colWali).forEach { x ->
+                    canvas.drawLine(x, rTop, x, rTop + rowHeight, paint)
+                }
+                paint.style = Paint.Style.FILL
+
+                val textY = rTop + 15f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8.2f
+                paint.color = Color.rgb(15, 23, 42)
+                canvas.drawText("${idx + 1}.", colNo + 7f, textY, paint)
+
+                val dateCell = dateFmt.format(Date(rec.sessionDate))
+                canvas.drawText(dateCell, colTgl + 5f, textY, paint)
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                val jilidDisplay = listOf(rec.bookType.trim(), rec.jilidOrJuz.trim())
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .joinToString(" • ")
+                val jilidCell = TextUtils.ellipsize(jilidDisplay, TextPaint(paint), 112f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(jilidCell, colJilid + 5f, textY, paint)
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                val halCell = TextUtils.ellipsize(rec.pageOrVerse.ifBlank { "-" }, TextPaint(paint), 85f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(halCell, colHal + 5f, textY, paint)
+
+                val isFluent = MengajiHelper.isFluent(rec.fluencyStatus)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.color = if (isFluent) Color.rgb(21, 128, 61) else Color.rgb(185, 28, 28)
+                val statusLabel = MengajiHelper.fluencyLabel(rec.fluencyStatus, isEn)
+                val ketCell = TextUtils.ellipsize(statusLabel, TextPaint(paint), 90f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(ketCell, colKet + 5f, textY, paint)
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.color = Color.rgb(51, 65, 85)
+                val waliCell = TextUtils.ellipsize(rec.waliName.ifBlank { waliName }, TextPaint(paint), 90f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(waliCell, colWali + 5f, textY, paint)
+
+                currentY = rTop + rowHeight
+            }
+            currentY += 16f
+        }
+
+        if (currentY > pageHeight - 140f) {
+            finishCurrentCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 40f
+        }
+
+        drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCurrentCanvas()
+    }
+
     /**
      * Membuat dokumen PDF resmi Kartu Kendali Mengaji Bulanan Siswa (No, Tanggal, Jilid, Halaman,
      * Keterangan Lancar/Tidak Lancar, dan Tanda Tangan Wali Asuh).
@@ -1892,255 +2146,31 @@ object PdfReportGenerator {
         schoolProfile: SchoolProfile = SchoolProfile()
     ): File? {
         try {
-            val lang = AppLanguageManager.getLanguage(context)
-            val isEn = lang == AppLanguage.ENGLISH
             val document = PdfDocument()
             val pageWidth = 595
             val pageHeight = 842
+            var activePage: PdfDocument.Page? = null
 
-            var pageNumber = 1
-            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
-            var page = document.startPage(pageInfo)
-            var canvas = page.canvas
-
-            val paint = Paint().apply { isAntiAlias = true }
-            val dateFmt = SimpleDateFormat("d MMM yyyy", lang.locale)
-            val orderedRecords = records.sortedWith(compareBy<MengajiRecord> { it.sessionDate }.thenBy { it.createdAt })
-
-            var currentY = 35f
-
-            // 1. Kop Surat Resmi (Unit Bimbingan Spiritual)
-            currentY = drawHeader(
+            renderKartuMengajiPages(
                 context = context,
-                canvas = canvas,
-                paint = paint,
-                width = pageWidth,
-                startY = currentY,
+                student = student,
+                records = records,
+                periodLabel = periodLabel,
+                waliName = waliName,
                 schoolProfile = schoolProfile,
-                unitTitle = UNIT_BIMBINGAN_SPIRITUAL
-            )
-
-            // 2. Judul Kartu Mengaji & Periode
-            paint.textAlign = Paint.Align.CENTER
-            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            paint.textSize = 13.5f
-            paint.color = Color.rgb(15, 118, 110)
-            canvas.drawText(
-                if (isEn) "STUDENT QURAN / MENGAJI PROGRESS CARD" else "KARTU PRESTASI & KENDALI MENGAJI SISWA",
-                pageWidth / 2f,
-                currentY + 12f,
-                paint
-            )
-            currentY += 26f
-
-            paint.textSize = 10f
-            paint.color = Color.rgb(15, 23, 42)
-            val periodDisplay = if (isEn) "Period: $periodLabel" else "Periode: $periodLabel"
-            canvas.drawText(periodDisplay.uppercase(lang.locale), pageWidth / 2f, currentY, paint)
-            currentY += 14f
-            paint.textAlign = Paint.Align.LEFT
-
-            // 3. Kotak Identitas Siswa & Statistik Mengaji Bulan Ini
-            val boxLeft = 35f
-            val boxRight = pageWidth - 35f
-            val boxTop = currentY
-            val bioHeight = 76f
-            paint.color = Color.rgb(240, 253, 250)
-            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + bioHeight), 6f, 6f, paint)
-            paint.style = Paint.Style.STROKE
-            paint.color = Color.rgb(153, 246, 228)
-            paint.strokeWidth = 1f
-            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + bioHeight), 6f, 6f, paint)
-            paint.style = Paint.Style.FILL
-
-            val jenjangResolved = student.jenjang.ifBlank { FastingJenjangHelper.resolveJenjang(student) }
-            val fluentCount = orderedRecords.count { MengajiHelper.isFluent(it.fluencyStatus) }
-            val notFluentCount = orderedRecords.size - fluentCount
-            val latestPos = orderedRecords.lastOrNull()?.let { MengajiHelper.formatCompactPosition(it) } ?: "-"
-
-            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            paint.textSize = 9.5f
-            paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText(
-                if (isEn) "Student: ${student.name}" else "Nama Siswa: ${student.name}",
-                boxLeft + 10f,
-                boxTop + 18f,
-                paint
-            )
-            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            paint.textSize = 8.5f
-            paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText(
-                "NIS: ${student.nis.ifBlank { "-" }}  |  ${if (isEn) "Level/Class" else "Jenjang/Kelas"}: $jenjangResolved • ${student.classGrade.ifBlank { "-" }}  |  Asrama: ${student.dormitory.ifBlank { "-" }}",
-                boxLeft + 10f,
-                boxTop + 34f,
-                paint
-            )
-            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            paint.color = Color.rgb(15, 118, 110)
-            canvas.drawText(
-                if (isEn) "Latest Position: $latestPos" else "Posisi Bacaan Terakhir: $latestPos",
-                boxLeft + 10f,
-                boxTop + 50f,
-                paint
-            )
-            paint.textSize = 8.5f
-            paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText(
-                if (isEn) {
-                    "Sessions: ${orderedRecords.size}   |   Fluent (Lancar): $fluentCount   |   Needs Practice (Tidak Lancar): $notFluentCount"
-                } else {
-                    "Total Setoran: ${orderedRecords.size} Kali   |   Lancar: $fluentCount   |   Tidak Lancar: $notFluentCount"
+                pageWidth = pageWidth,
+                pageHeight = pageHeight,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, num).create()
+                    val started = document.startPage(pageInfo)
+                    activePage = started
+                    started.canvas
                 },
-                boxLeft + 10f,
-                boxTop + 65f,
-                paint
+                finishCurrentCanvas = {
+                    activePage?.let { document.finishPage(it) }
+                    activePage = null
+                }
             )
-
-            currentY = boxTop + bioHeight + 14f
-
-            // Kolom tabel: No (30) | Tanggal (78) | Jilid / Kitab (122) | Halaman (95) | Keterangan (100) | Paraf Wali (100)
-            val colNo = boxLeft
-            val colTgl = boxLeft + 30f
-            val colJilid = boxLeft + 108f
-            val colHal = boxLeft + 230f
-            val colKet = boxLeft + 325f
-            val colWali = boxLeft + 425f
-
-            fun drawKartuTableHeader(startYPos: Float): Float {
-                val hTop = startYPos
-                val hHeight = 25f
-                paint.color = Color.rgb(204, 251, 241)
-                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
-                paint.style = Paint.Style.STROKE
-                paint.color = Color.rgb(45, 212, 191)
-                paint.strokeWidth = 0.9f
-                canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
-                listOf(colTgl, colJilid, colHal, colKet, colWali).forEach { x ->
-                    canvas.drawLine(x, hTop, x, hTop + hHeight, paint)
-                }
-                paint.style = Paint.Style.FILL
-
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                paint.textSize = 8.5f
-                paint.color = Color.rgb(17, 94, 89)
-                val textY = hTop + 16f
-                canvas.drawText("No", colNo + 7f, textY, paint)
-                canvas.drawText(if (isEn) "Date" else "Tanggal", colTgl + 6f, textY, paint)
-                canvas.drawText(if (isEn) "Volume / Book" else "Jilid / Kitab", colJilid + 6f, textY, paint)
-                canvas.drawText(if (isEn) "Page / Verse" else "Halaman", colHal + 6f, textY, paint)
-                canvas.drawText(if (isEn) "Status" else "Keterangan", colKet + 6f, textY, paint)
-                canvas.drawText(if (isEn) "Guardian Sign" else "Paraf Wali", colWali + 6f, textY, paint)
-                return hTop + hHeight
-            }
-
-            if (orderedRecords.isEmpty()) {
-                val emptyTop = currentY
-                val emptyH = 44f
-                paint.color = Color.rgb(248, 250, 252)
-                canvas.drawRoundRect(RectF(boxLeft, emptyTop, boxRight, emptyTop + emptyH), 6f, 6f, paint)
-                paint.textAlign = Paint.Align.CENTER
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-                paint.textSize = 9.5f
-                paint.color = Color.rgb(100, 116, 139)
-                canvas.drawText(
-                    if (isEn) "No mengaji records found for this period." else "Belum ada catatan mengaji pada periode ini.",
-                    pageWidth / 2f,
-                    emptyTop + 26f,
-                    paint
-                )
-                paint.textAlign = Paint.Align.LEFT
-                currentY = emptyTop + emptyH + 16f
-            } else {
-                currentY = drawKartuTableHeader(currentY)
-                val rowHeight = 23f
-                orderedRecords.forEachIndexed { idx, rec ->
-                    if (currentY > pageHeight - 135f) {
-                        document.finishPage(page)
-                        pageNumber++
-                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
-                        page = document.startPage(pageInfo)
-                        canvas = page.canvas
-                        currentY = 40f
-
-                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                        paint.textSize = 9f
-                        paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText(
-                            if (isEn) {
-                                "Continued Mengaji Card (${student.name}) - Page $pageNumber"
-                            } else {
-                                "Lanjutan Kartu Mengaji (${student.name}) - Halaman $pageNumber"
-                            },
-                            boxLeft,
-                            currentY,
-                            paint
-                        )
-                        currentY += 12f
-                        currentY = drawKartuTableHeader(currentY)
-                    }
-
-                    val rTop = currentY
-                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
-                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
-                    paint.style = Paint.Style.STROKE
-                    paint.color = Color.rgb(203, 213, 225)
-                    paint.strokeWidth = 0.6f
-                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
-                    listOf(colTgl, colJilid, colHal, colKet, colWali).forEach { x ->
-                        canvas.drawLine(x, rTop, x, rTop + rowHeight, paint)
-                    }
-                    paint.style = Paint.Style.FILL
-
-                    val textY = rTop + 15f
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    paint.textSize = 8.2f
-                    paint.color = Color.rgb(15, 23, 42)
-                    canvas.drawText("${idx + 1}.", colNo + 7f, textY, paint)
-
-                    val dateCell = dateFmt.format(Date(rec.sessionDate))
-                    canvas.drawText(dateCell, colTgl + 5f, textY, paint)
-
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    val jilidDisplay = listOf(rec.bookType.trim(), rec.jilidOrJuz.trim())
-                        .filter { it.isNotBlank() }
-                        .distinct()
-                        .joinToString(" • ")
-                    val jilidCell = TextUtils.ellipsize(jilidDisplay, TextPaint(paint), 112f, TextUtils.TruncateAt.END).toString()
-                    canvas.drawText(jilidCell, colJilid + 5f, textY, paint)
-
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    val halCell = TextUtils.ellipsize(rec.pageOrVerse.ifBlank { "-" }, TextPaint(paint), 85f, TextUtils.TruncateAt.END).toString()
-                    canvas.drawText(halCell, colHal + 5f, textY, paint)
-
-                    val isFluent = MengajiHelper.isFluent(rec.fluencyStatus)
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    paint.color = if (isFluent) Color.rgb(21, 128, 61) else Color.rgb(185, 28, 28)
-                    val statusLabel = MengajiHelper.fluencyLabel(rec.fluencyStatus, isEn)
-                    val ketCell = TextUtils.ellipsize(statusLabel, TextPaint(paint), 90f, TextUtils.TruncateAt.END).toString()
-                    canvas.drawText(ketCell, colKet + 5f, textY, paint)
-
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    paint.color = Color.rgb(51, 65, 85)
-                    val waliCell = TextUtils.ellipsize(rec.waliName.ifBlank { waliName }, TextPaint(paint), 124f, TextUtils.TruncateAt.END).toString()
-                    canvas.drawText(waliCell, colWali + 5f, textY, paint)
-
-                    currentY = rTop + rowHeight
-                }
-                currentY += 16f
-            }
-
-            if (currentY > pageHeight - 140f) {
-                document.finishPage(page)
-                pageNumber++
-                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
-                page = document.startPage(pageInfo)
-                canvas = page.canvas
-                currentY = 40f
-            }
-
-            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
-            document.finishPage(page)
 
             val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
             val cleanStudent = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
