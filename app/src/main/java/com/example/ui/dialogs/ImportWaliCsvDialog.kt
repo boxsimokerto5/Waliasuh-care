@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.WaliAccount
 import com.example.ui.theme.WaliPrimary
 import com.example.util.PasswordGenerator
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,6 +77,7 @@ fun ImportWaliCsvDialog(
     onImportConfirm: (accountList: List<WaliAccount>, replace: Boolean) -> Unit
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
     var csvText by remember { mutableStateOf("") }
     var uploadedFileName by remember { mutableStateOf<String?>(null) }
     var replaceExisting by remember { mutableStateOf(false) }
@@ -172,9 +174,17 @@ fun ImportWaliCsvDialog(
                 context.contentResolver.openOutputStream(uri)?.use { os ->
                     os.write(waliTemplateCsv.toByteArray(Charsets.UTF_8))
                 }
-                Toast.makeText(context, "Template CSV Wali Asuh berhasil diunduh!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Wali Asuh CSV template downloaded!" else "Template CSV Wali Asuh berhasil diunduh!",
+                    Toast.LENGTH_SHORT
+                ).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Gagal mengunduh template: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to download template: ${e.message}" else "Gagal mengunduh template: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -191,13 +201,26 @@ fun ImportWaliCsvDialog(
                     uploadedFileName = uri.lastPathSegment ?: "file_wali.csv"
                     parsedAccounts = parseCsv(content)
                     parseError = null
-                    Toast.makeText(context, "File CSV berhasil dimuat: ${parsedAccounts.size} akun terdeteksi!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "CSV file loaded: ${parsedAccounts.size} accounts detected!"
+                        } else {
+                            "File CSV berhasil dimuat: ${parsedAccounts.size} akun terdeteksi!"
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
                 } else {
-                    Toast.makeText(context, "File CSV kosong.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) "CSV file is empty." else "File CSV kosong.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } catch (e: Exception) {
-                parseError = "Gagal membaca file: ${e.message}"
-                Toast.makeText(context, "Gagal membaca file: ${e.message}", Toast.LENGTH_SHORT).show()
+                val errMsg = if (isEn) "Failed to read file: ${e.message}" else "Gagal membaca file: ${e.message}"
+                parseError = errMsg
+                Toast.makeText(context, errMsg, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -205,16 +228,28 @@ fun ImportWaliCsvDialog(
     fun copyTemplateToClipboard() {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("Template CSV Wali Asuh", waliTemplateCsv))
-        Toast.makeText(context, "Format template CSV wali asuh disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            if (isEn) "Wali Asuh CSV template copied to clipboard!" else "Format template CSV wali asuh disalin ke clipboard!",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun shareTemplate() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Template CSV Akun Wali Asuh - $schoolName")
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEn) "Wali Asuh Account CSV Template - $schoolName" else "Template CSV Akun Wali Asuh - $schoolName"
+            )
             putExtra(Intent.EXTRA_TEXT, waliTemplateCsv)
         }
-        context.startActivity(Intent.createChooser(intent, "Bagikan Template CSV Wali Asuh"))
+        context.startActivity(
+            Intent.createChooser(
+                intent,
+                if (isEn) "Share Wali Asuh CSV Template" else "Bagikan Template CSV Wali Asuh"
+            )
+        )
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -253,13 +288,17 @@ fun ImportWaliCsvDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Impor Akun Wali Asuh (CSV)",
+                            text = if (isEn) "Import Wali Asuh Accounts (CSV)" else "Impor Akun Wali Asuh (CSV)",
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Unggah file CSV atau gunakan template resmi ber-ID sekolah",
+                            text = if (isEn) {
+                                "Upload a CSV file or use the official template with school ID"
+                            } else {
+                                "Unggah file CSV atau gunakan template resmi ber-ID sekolah"
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -304,7 +343,11 @@ fun ImportWaliCsvDialog(
                                     color = Color(0xFF166534)
                                 )
                                 Text(
-                                    text = "Akun wali terkunci ke ID: $currentSchoolId (Aman & Tidak Bercampur)",
+                                    text = if (isEn) {
+                                        "Wali Asuh accounts locked to ID: $currentSchoolId (Safe & Isolated)"
+                                    } else {
+                                        "Akun wali terkunci ke ID: $currentSchoolId (Aman & Tidak Bercampur)"
+                                    },
                                     fontSize = 11.sp,
                                     color = Color(0xFF15803D)
                                 )
@@ -349,14 +392,18 @@ fun ImportWaliCsvDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Template CSV Akun Wali Standar",
+                                text = if (isEn) "Standard Wali Asuh Account CSV Template" else "Template CSV Akun Wali Standar",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Text(
-                            text = "Format kolom: Nama Lengkap, Asrama (Putra/Putri), No WhatsApp, Username (opsional), Password (opsional).",
+                            text = if (isEn) {
+                                "Column format: Nama Lengkap, Asrama (Asrama Putra/Asrama Putri), No WhatsApp, Username (optional), Password (optional)."
+                            } else {
+                                "Format kolom: Nama Lengkap, Asrama (Putra/Putri), No WhatsApp, Username (opsional), Password (opsional)."
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -389,7 +436,7 @@ fun ImportWaliCsvDialog(
                             ) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Salin Format", fontSize = 11.sp)
+                                Text(if (isEn) "Copy Format" else "Salin Format", fontSize = 11.sp)
                             }
 
                             OutlinedButton(
@@ -401,7 +448,7 @@ fun ImportWaliCsvDialog(
                             ) {
                                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Bagikan", fontSize = 11.sp)
+                                Text(if (isEn) "Share" else "Bagikan", fontSize = 11.sp)
                             }
                         }
                     }
@@ -445,25 +492,33 @@ fun ImportWaliCsvDialog(
 
                         if (uploadedFileName != null) {
                             Text(
-                                text = "File Berhasil Dipilih: $uploadedFileName",
+                                text = if (isEn) "File Selected: $uploadedFileName" else "File Berhasil Dipilih: $uploadedFileName",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF15803D)
                             )
                             Text(
-                                text = "${parsedAccounts.size} akun wali siap diimpor ke $schoolName",
+                                text = if (isEn) {
+                                    "${parsedAccounts.size} Wali Asuh accounts ready to import into $schoolName"
+                                } else {
+                                    "${parsedAccounts.size} akun wali siap diimpor ke $schoolName"
+                                },
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF166534)
                             )
                         } else {
                             Text(
-                                text = "Pilih & Upload File CSV Wali dari Perangkat",
+                                text = if (isEn) "Select & Upload Wali Asuh CSV from Device" else "Pilih & Upload File CSV Wali dari Perangkat",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Ketuk untuk memilih file .csv hasil pengisian template wali asuh",
+                                text = if (isEn) {
+                                    "Tap to choose the completed .csv Wali Asuh template"
+                                } else {
+                                    "Ketuk untuk memilih file .csv hasil pengisian template wali asuh"
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -481,7 +536,14 @@ fun ImportWaliCsvDialog(
                         ) {
                             Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (uploadedFileName != null) "Ganti File CSV" else "Pilih File (.csv)", fontSize = 12.sp)
+                            Text(
+                                text = if (uploadedFileName != null) {
+                                    if (isEn) "Change CSV File" else "Ganti File CSV"
+                                } else {
+                                    if (isEn) "Choose File (.csv)" else "Pilih File (.csv)"
+                                },
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
@@ -489,7 +551,11 @@ fun ImportWaliCsvDialog(
                 // 4. PREVIEW & EDIT MANUAL
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Atau Masukkan / Edit Teks CSV Secara Manual:",
+                        text = if (isEn) {
+                            "Or Enter / Edit CSV Text Manually:"
+                        } else {
+                            "Atau Masukkan / Edit Teks CSV Secara Manual:"
+                        },
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -506,7 +572,7 @@ fun ImportWaliCsvDialog(
                                 parseError = e.message
                             }
                         },
-                        label = { Text("Isi Data CSV Akun Wali") },
+                        label = { Text(if (isEn) "Wali Asuh Account CSV Content" else "Isi Data CSV Akun Wali") },
                         placeholder = { Text("Ahmad Fauzi, Asrama Putra, 081234567890\nSari Devi, Asrama Putri, 081234567891") },
                         minLines = 3,
                         maxLines = 6,
@@ -525,7 +591,11 @@ fun ImportWaliCsvDialog(
                             .padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(
-                            text = "✅ Terdeteksi ${parsedAccounts.size} akun wali asuh siap diimpor untuk ID $currentSchoolId",
+                            text = if (isEn) {
+                                "✅ Detected ${parsedAccounts.size} Wali Asuh accounts ready to import for ID $currentSchoolId"
+                            } else {
+                                "✅ Terdeteksi ${parsedAccounts.size} akun wali asuh siap diimpor untuk ID $currentSchoolId"
+                            },
                             fontSize = 12.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF15803D)
@@ -535,7 +605,7 @@ fun ImportWaliCsvDialog(
 
                 if (parseError != null) {
                     Text(
-                        text = "Error parsing: $parseError",
+                        text = if (isEn) "Parsing error: $parseError" else "Error parsing: $parseError",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -552,7 +622,11 @@ fun ImportWaliCsvDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Gantikan (hapus) seluruh akun wali lama sekolah $currentSchoolId sebelum impor",
+                        text = if (isEn) {
+                            "Replace (delete) all existing Wali Asuh accounts for school $currentSchoolId before importing"
+                        } else {
+                            "Gantikan (hapus) seluruh akun wali lama sekolah $currentSchoolId sebelum impor"
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -571,7 +645,7 @@ fun ImportWaliCsvDialog(
                             .weight(1f)
                             .height(46.dp)
                     ) {
-                        Text("Tutup")
+                        Text(if (isEn) "Close" else "Tutup")
                     }
 
                     Button(
@@ -588,7 +662,13 @@ fun ImportWaliCsvDialog(
                     ) {
                         Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Impor (${parsedAccounts.size}) Akun")
+                        Text(
+                            if (isEn) {
+                                "Import (${parsedAccounts.size}) Accounts"
+                            } else {
+                                "Impor (${parsedAccounts.size}) Akun"
+                            }
+                        )
                     }
                 }
             }

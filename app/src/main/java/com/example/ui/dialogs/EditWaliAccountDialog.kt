@@ -51,6 +51,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.WaliAccount
 import com.example.ui.theme.WaliPrimary
 import com.example.util.PasswordGenerator
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,6 +60,7 @@ fun EditWaliAccountDialog(
     onDismiss: () -> Unit,
     onConfirm: (updatedAccount: WaliAccount) -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     var name by remember { mutableStateOf(account.name) }
     var username by remember { 
         mutableStateOf(
@@ -105,7 +107,7 @@ fun EditWaliAccountDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Ubah Akun Wali Asuh",
+                        text = if (isEn) "Edit Wali Asuh Account" else "Ubah Akun Wali Asuh",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -113,7 +115,11 @@ fun EditWaliAccountDialog(
                 }
 
                 Text(
-                    text = "Edit data akun untuk ${account.name}. Pastikan username dan password tepat agar wali asuh dapat login.",
+                    text = if (isEn) {
+                        "Edit account details for ${account.name}. Ensure the username and password are accurate so the Wali Asuh can log in."
+                    } else {
+                        "Edit data akun untuk ${account.name}. Pastikan username dan password tepat agar wali asuh dapat login."
+                    },
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -134,7 +140,7 @@ fun EditWaliAccountDialog(
                         name = it
                         errorMessage = null
                     },
-                    label = { Text("Nama Lengkap Wali Asuh *") },
+                    label = { Text(if (isEn) "Wali Asuh Full Name *" else "Nama Lengkap Wali Asuh *") },
                     leadingIcon = {
                         Icon(Icons.Default.Person, contentDescription = null, tint = WaliPrimary)
                     },
@@ -152,8 +158,8 @@ fun EditWaliAccountDialog(
                         username = it
                         errorMessage = null
                     },
-                    label = { Text("Username Login Aplikasi *") },
-                    placeholder = { Text("Contoh: saridevi") },
+                    label = { Text(if (isEn) "App Login Username *" else "Username Login Aplikasi *") },
+                    placeholder = { Text(if (isEn) "Example: saridevi" else "Contoh: saridevi") },
                     leadingIcon = {
                         Icon(Icons.Default.AccountCircle, contentDescription = null, tint = WaliPrimary)
                     },
@@ -167,7 +173,7 @@ fun EditWaliAccountDialog(
                 // Pilihan Asrama Binaan
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Tugas Asrama:",
+                        text = if (isEn) "Asrama Assignment:" else "Tugas Asrama:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -177,10 +183,11 @@ fun EditWaliAccountDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("Asrama Putra", "Asrama Putri", "Umum").forEach { dorm ->
+                            val label = if (isEn && dorm == "Umum") "General" else dorm
                             FilterChip(
                                 selected = selectedDormitory == dorm,
                                 onClick = { selectedDormitory = dorm },
-                                label = { Text(dorm, fontSize = 11.sp) },
+                                label = { Text(label, fontSize = 11.sp) },
                                 modifier = Modifier.height(30.dp)
                             )
                         }
@@ -191,8 +198,8 @@ fun EditWaliAccountDialog(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Nomor WhatsApp (Opsional)") },
-                    placeholder = { Text("Contoh: 08123456789") },
+                    label = { Text(if (isEn) "WhatsApp Number (Optional)" else "Nomor WhatsApp (Opsional)") },
+                    placeholder = { Text(if (isEn) "Example: 08123456789" else "Contoh: 08123456789") },
                     leadingIcon = {
                         Icon(Icons.Default.Phone, contentDescription = null, tint = WaliPrimary)
                     },
@@ -211,7 +218,7 @@ fun EditWaliAccountDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Password Login Aplikasi:",
+                            text = if (isEn) "App Login Password:" else "Password Login Aplikasi:",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -222,7 +229,7 @@ fun EditWaliAccountDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Casino,
-                                contentDescription = "Acak Ulang Password",
+                                contentDescription = if (isEn) "Regenerate Random Password" else "Acak Ulang Password",
                                 tint = WaliPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -232,7 +239,7 @@ fun EditWaliAccountDialog(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password Akun") },
+                        label = { Text(if (isEn) "Account Password" else "Password Akun") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = WaliPrimary)
                         },
@@ -240,7 +247,11 @@ fun EditWaliAccountDialog(
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (passwordVisible) "Sembunyikan" else "Lihat",
+                                    contentDescription = if (passwordVisible) {
+                                        if (isEn) "Hide" else "Sembunyikan"
+                                    } else {
+                                        if (isEn) "Show" else "Lihat"
+                                    },
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -265,17 +276,17 @@ fun EditWaliAccountDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Batal")
+                        Text(if (isEn) "Cancel" else "Batal")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             if (name.isBlank()) {
-                                errorMessage = "Nama wali asuh tidak boleh kosong."
+                                errorMessage = if (isEn) "Wali Asuh name cannot be empty." else "Nama wali asuh tidak boleh kosong."
                             } else if (username.isBlank()) {
-                                errorMessage = "Username tidak boleh kosong."
+                                errorMessage = if (isEn) "Username cannot be empty." else "Username tidak boleh kosong."
                             } else if (password.isBlank()) {
-                                errorMessage = "Password tidak boleh kosong."
+                                errorMessage = if (isEn) "Password cannot be empty." else "Password tidak boleh kosong."
                             } else {
                                 onConfirm(
                                     account.copy(
@@ -291,7 +302,7 @@ fun EditWaliAccountDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("btn_update_wali_account")
                     ) {
-                        Text("Simpan Perubahan")
+                        Text(if (isEn) "Save Changes" else "Simpan Perubahan")
                     }
                 }
             }

@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.HealthAndSafety
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.School
@@ -78,6 +79,8 @@ import com.example.ui.HealthViewModel
 import com.example.ui.LoginResult
 import com.example.ui.dialogs.SchoolRegistrationDialog
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -89,6 +92,8 @@ fun LoginScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
 
     var username by remember { mutableStateOf("") }
@@ -119,7 +124,47 @@ fun LoginScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        onClick = {
+                            val nextLang = if (appLanguage == AppLanguage.ENGLISH) {
+                                AppLanguage.INDONESIAN
+                            } else {
+                                AppLanguage.ENGLISH
+                            }
+                            viewModel.setAppLanguage(nextLang)
+                        },
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.75f),
+                        border = BorderStroke(1.dp, WaliPrimary.copy(alpha = 0.35f)),
+                        modifier = Modifier
+                            .height(48.dp)
+                            .testTag("btn_login_toggle_language")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = if (isEn) "Switch Language" else "Ganti Bahasa",
+                                tint = WaliPrimary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = if (appLanguage == AppLanguage.ENGLISH) "EN • English" else "ID • Indonesia",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WaliPrimary
+                            )
+                        }
+                    }
+                }
 
                 // Hero Logo & Title
                 ElevatedCard(
@@ -129,7 +174,7 @@ fun LoginScreen(
                 ) {
                     Image(
                         painter = painterResource(id = R.drawable.logo_sr_care),
-                        contentDescription = "Logo Wali Asuh Care",
+                        contentDescription = if (isEn) "Wali Asuh Care Logo" else "Logo Wali Asuh Care",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
@@ -145,13 +190,22 @@ fun LoginScreen(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "Platform Kesehatan Sekolah & Asrama Terpadu",
+                        text = if (isEn) {
+                            "Integrated School & Asrama Health Platform"
+                        } else {
+                            "Platform Kesehatan Sekolah & Asrama Terpadu"
+                        },
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = WaliPrimary
+                        color = WaliPrimary,
+                        textAlign = TextAlign.Center
                     )
                     Text(
-                        text = "Sistem Rujukan & Pemantauan Kesehatan Anak Asuh",
+                        text = if (isEn) {
+                            "Referral & Student Health Monitoring System"
+                        } else {
+                            "Sistem Rujukan & Pemantauan Kesehatan Anak Asuh"
+                        },
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
@@ -172,13 +226,17 @@ fun LoginScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Masuk ke Akun",
+                            text = if (isEn) "Sign In to Account" else "Masuk ke Akun",
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Silakan masukkan username dan password yang diberikan oleh Administrator.",
+                            text = if (isEn) {
+                                "Please enter the username and password provided by the Administrator."
+                            } else {
+                                "Silakan masukkan username dan password yang diberikan oleh Administrator."
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 16.sp
@@ -210,7 +268,7 @@ fun LoginScreen(
                                 errorMessage = null
                             },
                             label = { Text("Username") },
-                            placeholder = { Text("Nama Wali atau Admin") },
+                            placeholder = { Text(if (isEn) "Wali Asuh or Admin name" else "Nama Wali atau Admin") },
                             leadingIcon = {
                                 Icon(Icons.Default.Person, contentDescription = null, tint = WaliPrimary)
                             },
@@ -236,7 +294,11 @@ fun LoginScreen(
                                 IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                     Icon(
                                         imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (passwordVisible) "Sembunyikan password" else "Lihat password",
+                                        contentDescription = if (passwordVisible) {
+                                            if (isEn) "Hide password" else "Sembunyikan password"
+                                        } else {
+                                            if (isEn) "Show password" else "Lihat password"
+                                        },
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -261,7 +323,7 @@ fun LoginScreen(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = "Ingat akun saya di perangkat ini",
+                                text = if (isEn) "Remember my account on this device" else "Ingat akun saya di perangkat ini",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -276,15 +338,27 @@ fun LoginScreen(
                                     isLoading = false
                                     when (result) {
                                         is LoginResult.SuccessSuperAdmin -> {
-                                            Toast.makeText(context, "Selamat datang di Portal Superadmin!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Welcome to the Superadmin Portal!" else "Selamat datang di Portal Superadmin!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                             onLoginSuccessSuperAdmin?.invoke()
                                         }
                                         is LoginResult.SuccessAdmin -> {
-                                            Toast.makeText(context, "Selamat datang, Administrator!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Welcome, Administrator!" else "Selamat datang, Administrator!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                             onLoginSuccessAdmin()
                                         }
                                         is LoginResult.SuccessWali -> {
-                                            Toast.makeText(context, "Selamat bertugas, ${result.account.name}!", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Welcome aboard, ${result.account.name}!" else "Selamat bertugas, ${result.account.name}!",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                             onLoginSuccessWali(result.account.name)
                                         }
                                         is LoginResult.Error -> {
@@ -305,7 +379,11 @@ fun LoginScreen(
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = if (isLoading) "Memproses..." else "Masuk ke Aplikasi",
+                                    text = if (isLoading) {
+                                        if (isEn) "Signing in..." else "Memproses..."
+                                    } else {
+                                        if (isEn) "Sign In" else "Masuk ke Aplikasi"
+                                    },
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -346,13 +424,17 @@ fun LoginScreen(
                             Spacer(modifier = Modifier.width(10.dp))
                             Column {
                                 Text(
-                                    text = "Sekolah belum terdaftar?",
+                                    text = if (isEn) "School not registered yet?" else "Sekolah belum terdaftar?",
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Silakan klik untuk mengisi formulir pendaftaran",
+                                    text = if (isEn) {
+                                        "Tap to fill out the registration form"
+                                    } else {
+                                        "Silakan klik untuk mengisi formulir pendaftaran"
+                                    },
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -368,7 +450,11 @@ fun LoginScreen(
                 }
 
                 Text(
-                    text = "Aplikasi Kesehatan Sekolah & Asrama Terpadu\nSilakan gunakan kredensial resmi yang diterbitkan oleh Administrator.",
+                    text = if (isEn) {
+                        "Integrated School & Asrama Health Application\nPlease use official credentials issued by the Administrator."
+                    } else {
+                        "Aplikasi Kesehatan Sekolah & Asrama Terpadu\nSilakan gunakan kredensial resmi yang diterbitkan oleh Administrator."
+                    },
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -391,7 +477,7 @@ fun LoginScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Outlined.Info,
-                            contentDescription = "Informasi status aplikasi",
+                            contentDescription = if (isEn) "Application status information" else "Informasi status aplikasi",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(15.dp)
                         )

@@ -66,6 +66,7 @@ import com.example.data.remote.pocketbase.PocketBaseSchemaProvider
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -74,6 +75,8 @@ fun PocketBaseConfigDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
 
     var urlInput by remember { mutableStateOf(PocketBaseConfig.getBaseUrl(context)) }
 
@@ -120,13 +123,17 @@ fun PocketBaseConfigDialog(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Koneksi Server PocketBase",
+                            text = if (isEn) "PocketBase Server Connection" else "Koneksi Server PocketBase",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Sinkronisasi Cloud & Checklist Online antar Wali Asuh",
+                            text = if (isEn) {
+                                "Cloud Sync & Online Checklists across Wali Asuh"
+                            } else {
+                                "Sinkronisasi Cloud & Checklist Online antar Wali Asuh"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -150,7 +157,11 @@ fun PocketBaseConfigDialog(
                             )
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (isConfigured) "Terkoneksi" else "Belum Diatur",
+                                text = if (isConfigured) {
+                                    if (isEn) "Connected" else "Terkoneksi"
+                                } else {
+                                    if (isEn) "Not Configured" else "Belum Diatur"
+                                },
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = if (isConfigured) Color(0xFF065F46) else Color.Gray
@@ -180,7 +191,7 @@ fun PocketBaseConfigDialog(
                 OutlinedTextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
-                    label = { Text("URL Server PocketBase") },
+                    label = { Text(if (isEn) "PocketBase Server URL" else "URL Server PocketBase") },
                     placeholder = { Text(PocketBaseConfig.EMBEDDED_URL) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
@@ -211,11 +222,11 @@ fun PocketBaseConfigDialog(
                                 strokeWidth = 2.dp
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Memeriksa...")
+                            Text(if (isEn) "Checking..." else "Memeriksa...")
                         } else {
                             Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Simpan & Uji Koneksi")
+                            Text(if (isEn) "Save & Test Connection" else "Simpan & Uji Koneksi")
                         }
                     }
 
@@ -224,18 +235,30 @@ fun PocketBaseConfigDialog(
                             PocketBaseConfig.resetToDefaultUrl(context)
                             urlInput = PocketBaseConfig.EMBEDDED_URL
                             PocketBaseClient.invalidateCache()
-                            Toast.makeText(context, "URL dikembalikan ke server default.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                if (isEn) "URL restored to default server." else "URL dikembalikan ke server default.",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         },
                         enabled = !isSyncing,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Restore, contentDescription = "Reset URL", modifier = Modifier.size(18.dp))
+                        Icon(
+                            imageVector = Icons.Default.Restore,
+                            contentDescription = if (isEn) "Reset URL" else "Reset URL",
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
 
                 if (lastSync > 0) {
                     Text(
-                        text = "Terakhir disinkronkan: ${DateUtils.formatDateTime(lastSync)}",
+                        text = if (isEn) {
+                            "Last synced: ${DateUtils.formatDateTime(lastSync, appStrings.language)}"
+                        } else {
+                            "Terakhir disinkronkan: ${DateUtils.formatDateTime(lastSync, appStrings.language)}"
+                        },
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -256,7 +279,13 @@ fun PocketBaseConfigDialog(
                 ) {
                     Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Sinkronkan Semua Data Sekolah ($activeSchoolId)")
+                    Text(
+                        if (isEn) {
+                            "Sync All School Data ($activeSchoolId)"
+                        } else {
+                            "Sinkronkan Semua Data Sekolah ($activeSchoolId)"
+                        }
+                    )
                 }
 
                 OutlinedButton(
@@ -272,7 +301,14 @@ fun PocketBaseConfigDialog(
                 ) {
                     Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Unggah $activeSchoolStudentsCount Data Siswa ${schoolProfile.shortName.ifBlank { activeSchoolId }}")
+                    val targetSchool = schoolProfile.shortName.ifBlank { activeSchoolId }
+                    Text(
+                        if (isEn) {
+                            "Upload $activeSchoolStudentsCount Students ($targetSchool)"
+                        } else {
+                            "Unggah $activeSchoolStudentsCount Data Siswa $targetSchool"
+                        }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -289,7 +325,11 @@ fun PocketBaseConfigDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Skema Koleksi PocketBase (${PocketBaseSchemaProvider.COLLECTIONS.size} Tabel)",
+                                    text = if (isEn) {
+                                        "PocketBase Collections Schema (${PocketBaseSchemaProvider.COLLECTIONS.size} Tables)"
+                                    } else {
+                                        "Skema Koleksi PocketBase (${PocketBaseSchemaProvider.COLLECTIONS.size} Tabel)"
+                                    },
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -306,12 +346,20 @@ fun PocketBaseConfigDialog(
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                     val clip = ClipData.newPlainText("PocketBase Collections JSON", schemaJsonText)
                                     clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "JSON skema 9 koleksi PocketBase berhasil disalin!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) {
+                                            "9 PocketBase collections schema JSON copied!"
+                                        } else {
+                                            "JSON skema 9 koleksi PocketBase berhasil disalin!"
+                                        },
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Salin JSON Skema",
+                                    contentDescription = if (isEn) "Copy Schema JSON" else "Salin JSON Skema",
                                     tint = WaliPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
@@ -325,7 +373,11 @@ fun PocketBaseConfigDialog(
                             Icon(imageVector = Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (showSchemaInfo) "Sembunyikan JSON Koleksi" else "Lihat JSON Skema 9 Koleksi",
+                                text = if (showSchemaInfo) {
+                                    if (isEn) "Hide Collections JSON" else "Sembunyikan JSON Koleksi"
+                                } else {
+                                    if (isEn) "View 9 Collections Schema JSON" else "Lihat JSON Skema 9 Koleksi"
+                                },
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -362,7 +414,7 @@ fun PocketBaseConfigDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Selesai")
+                        Text(if (isEn) "Done" else "Selesai")
                     }
                 }
             }

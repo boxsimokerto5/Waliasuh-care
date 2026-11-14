@@ -12,6 +12,8 @@ import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
 import com.example.data.repository.HealthRepository
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.AppLanguageManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -172,39 +174,73 @@ object PocketBaseSyncManager {
      * Menguji koneksi ke PocketBase dan memverifikasi akses ke koleksi.
      */
     suspend fun testConnection(context: Context): Result<String> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         if (!PocketBaseConfig.isConfigured(context)) {
-            return@withContext Result.failure(Exception("URL server PocketBase belum diisi."))
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server URL is empty." else "URL server PocketBase belum diisi.")
+            )
         }
 
         val service = PocketBaseClient.getService(context)
-            ?: return@withContext Result.failure(Exception("Gagal membuat koneksi ke PocketBase."))
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Failed to create PocketBase connection." else "Gagal membuat koneksi ke PocketBase.")
+            )
 
         try {
             val health = service.getHealth()
             if (!health.isSuccessful) {
-                val err = health.errorBody()?.string() ?: "Status HTTP: ${health.code()}"
-                return@withContext Result.failure(Exception("Server belum siap (${health.code()}): $err"))
+                val err = health.errorBody()?.string() ?: "HTTP Status: ${health.code()}"
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) "Server not ready (${health.code()}): $err" else "Server belum siap (${health.code()}): $err"
+                    )
+                )
             }
 
             val studentResp = service.listStudents(page = 1, perPage = 1)
             if (studentResp.isSuccessful) {
                 val totalStudents = studentResp.body()?.totalItems ?: 0
-                Result.success("Koneksi PocketBase berhasil! Server sehat & ditemukan $totalStudents siswa di cloud.")
+                Result.success(
+                    if (isEn) {
+                        "PocketBase connection succeeded! Server healthy & found $totalStudents students in cloud."
+                    } else {
+                        "Koneksi PocketBase berhasil! Server sehat & ditemukan $totalStudents siswa di cloud."
+                    }
+                )
             } else {
-                val errorBody = studentResp.errorBody()?.string() ?: "Status HTTP: ${studentResp.code()}"
-                Result.failure(Exception("Respon koleksi PocketBase (${studentResp.code()}): $errorBody"))
+                val errorBody = studentResp.errorBody()?.string() ?: "HTTP Status: ${studentResp.code()}"
+                Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "PocketBase collection response (${studentResp.code()}): $errorBody"
+                        } else {
+                            "Respon koleksi PocketBase (${studentResp.code()}): $errorBody"
+                        }
+                    )
+                )
             }
         } catch (e: Exception) {
             Log.e(TAG, "Gagal uji koneksi PocketBase", e)
-            Result.failure(Exception("Gagal menghubungi server PocketBase: ${e.localizedMessage}"))
+            Result.failure(
+                Exception(
+                    if (isEn) {
+                        "Failed to reach PocketBase server: ${e.localizedMessage}"
+                    } else {
+                        "Gagal menghubungi server PocketBase: ${e.localizedMessage}"
+                    }
+                )
+            )
         }
     }
 
     // --- Child Students ---
     suspend fun uploadStudents(context: Context, students: List<ChildStudent>): Result<Int> =
         withContext(Dispatchers.IO) {
+            val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
             val service = PocketBaseClient.getService(context)
-                ?: return@withContext Result.failure(Exception("PocketBase belum terkonfigurasi."))
+                ?: return@withContext Result.failure(
+                    Exception(if (isEn) "PocketBase is not configured yet." else "PocketBase belum terkonfigurasi.")
+                )
 
             if (students.isEmpty()) return@withContext Result.success(0)
 
@@ -751,11 +787,16 @@ object PocketBaseSyncManager {
         localProfileUpdatedAt: Long = 0L,
         onRemoteSchoolProfileUpdated: ((SchoolProfile, Long) -> Unit)? = null
     ): Result<String> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         if (!PocketBaseConfig.isConfigured(context)) {
-            return@withContext Result.failure(Exception("Server PocketBase belum terkonfigurasi."))
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured yet." else "Server PocketBase belum terkonfigurasi.")
+            )
         }
         val service = PocketBaseClient.getService(context)
-            ?: return@withContext Result.failure(Exception("Gagal membuat layanan PocketBase."))
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Failed to create PocketBase service." else "Gagal membuat layanan PocketBase.")
+            )
 
         val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
         val filter = buildSchoolFilter(cleanSchoolId)
@@ -926,7 +967,13 @@ object PocketBaseSyncManager {
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
-            Result.success("Sinkronisasi PocketBase selesai! $studentCount siswa, $recordCount rekam medis, & $haidCount data haid terhubung.")
+            Result.success(
+                if (isEn) {
+                    "PocketBase sync complete! $studentCount students, $recordCount medical records, & $haidCount menstruation logs connected."
+                } else {
+                    "Sinkronisasi PocketBase selesai! $studentCount siswa, $recordCount rekam medis, & $haidCount data haid terhubung."
+                }
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Error syncAllSchoolData", e)
             Result.failure(e)

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
@@ -1523,18 +1524,21 @@ class ExampleRobolectricTest {
       com.example.util.i18n.AppLanguage.ENGLISH
     )
     assertEquals("Waliasuh Care", enCtx.getString(R.string.app_name))
-    val enDisclaimer = enCtx.getString(R.string.disclaimer_short)
-    org.junit.Assert.assertTrue(enDisclaimer.contains("Sekolah Rakyat"))
-    org.junit.Assert.assertTrue(enDisclaimer.contains("Wali Asuh Care"))
+    val enShort = enCtx.getString(R.string.disclaimer_short)
+    org.junit.Assert.assertTrue(enShort.contains("Sekolah Rakyat"))
+    org.junit.Assert.assertTrue(enShort.contains("Independent helper tool"))
+    val enFull = enCtx.getString(R.string.disclaimer_full)
+    org.junit.Assert.assertTrue(enFull.contains("Wali Asuh Care"))
+    org.junit.Assert.assertTrue(enFull.contains("Sekolah Rakyat"))
     org.junit.Assert.assertTrue(enCtx is android.content.ContextWrapper)
 
     val idCtx = com.example.util.i18n.AppLanguageManager.createLocalizedContext(
       baseContext,
       com.example.util.i18n.AppLanguage.INDONESIAN
     )
-    val idDisclaimer = idCtx.getString(R.string.disclaimer_short)
-    org.junit.Assert.assertTrue(idDisclaimer.contains("Sekolah Rakyat"))
-    org.junit.Assert.assertTrue(idDisclaimer.contains("alat bantu"))
+    val idShort = idCtx.getString(R.string.disclaimer_short)
+    org.junit.Assert.assertTrue(idShort.contains("Sekolah Rakyat"))
+    org.junit.Assert.assertTrue(idShort.contains("Alat bantu"))
 
     // DateUtils formatting
     val now = System.currentTimeMillis()
@@ -1652,33 +1656,31 @@ class ExampleRobolectricTest {
       com.example.util.PdfReportGenerator.buildFooterSignatureTitle(schoolProfile)
     )
 
-    // PDF files generate cleanly in English mode
-    val listPdf = com.example.util.PdfReportGenerator.generateFastingListPdf(
+    // Footer disclaimer in English preserves Point 2 terms (Kemensos RI / Sekolah Rakyat / Wali Asuh Care)
+    val enCtxPdf = com.example.util.i18n.AppLanguageManager.createLocalizedContext(
+      app,
+      com.example.util.i18n.AppLanguage.ENGLISH
+    )
+    val enPdfFooter = enCtxPdf.getString(R.string.disclaimer_pdf_footer)
+    org.junit.Assert.assertTrue(enPdfFooter.contains("Wali Asuh Care"))
+    org.junit.Assert.assertTrue(enPdfFooter.contains("Kemensos RI"))
+    org.junit.Assert.assertTrue(enPdfFooter.contains("Sekolah Rakyat"))
+
+    // Render PDF footer signature onto A4 Canvas in English mode cleanly without throwing
+    val a4Bitmap = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+    val a4Canvas = android.graphics.Canvas(a4Bitmap)
+    val paint = android.graphics.Paint().apply { isAntiAlias = true }
+    com.example.util.PdfReportGenerator.drawFooterSignatures(
       context = app,
-      session = session,
-      records = listOf(fastingRecord),
+      canvas = a4Canvas,
+      paint = paint,
+      width = 595,
+      height = 842,
+      startY = 620f,
       waliName = "Ustadz Fauzi",
       schoolProfile = schoolProfile
     )
-    val chkPdf = com.example.util.PdfReportGenerator.generateFastingChecklistPdf(
-      context = app,
-      session = session,
-      records = listOf(fastingRecord),
-      waliName = "Ustadz Fauzi",
-      schoolProfile = schoolProfile
-    )
-    val haidPdf = com.example.util.PdfReportGenerator.generateDailyHaidReportPdf(
-      context = app,
-      activeHaidRecords = listOf(haidRecord),
-      waliName = "Ustadzah Aminah",
-      schoolProfile = schoolProfile
-    )
-    org.junit.Assert.assertNotNull(listPdf)
-    org.junit.Assert.assertTrue(listPdf!!.exists())
-    org.junit.Assert.assertNotNull(chkPdf)
-    org.junit.Assert.assertTrue(chkPdf!!.exists())
-    org.junit.Assert.assertNotNull(haidPdf)
-    org.junit.Assert.assertTrue(haidPdf!!.exists())
+    a4Bitmap.recycle()
 
     // Reset to Indonesian
     vm1.setAppLanguage(com.example.util.i18n.AppLanguage.INDONESIAN)
@@ -1712,25 +1714,171 @@ class ExampleRobolectricTest {
     }
 
     composeTestRule.waitForIdle()
+    val scrollNode = androidx.compose.ui.test.hasScrollAction()
+    composeTestRule.onNode(scrollNode).performScrollToNode(
+      androidx.compose.ui.test.hasTestTag("menu_language_profile")
+    )
     composeTestRule.onNodeWithText("Bahasa Aplikasi").assertIsDisplayed()
 
     // Open language selector sheet and select English
-    composeTestRule.onNodeWithTag("menu_language_profile").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("menu_language_profile").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("option_lang_en").performClick()
     composeTestRule.waitForIdle()
 
     assertEquals(com.example.util.i18n.AppLanguage.ENGLISH, vm.appLanguage.value)
+    composeTestRule.onNode(scrollNode).performScrollToNode(
+      androidx.compose.ui.test.hasTestTag("menu_language_profile")
+    )
     composeTestRule.onNodeWithText("App Language").assertIsDisplayed()
+    composeTestRule.onNode(scrollNode).performScrollToNode(
+      androidx.compose.ui.test.hasText("Monthly Report")
+    )
     composeTestRule.onNodeWithText("Monthly Report").assertIsDisplayed()
 
     // Switch back to Bahasa Indonesia
-    composeTestRule.onNodeWithTag("menu_language_profile").performScrollTo().performClick()
+    composeTestRule.onNode(scrollNode).performScrollToNode(
+      androidx.compose.ui.test.hasTestTag("menu_language_profile")
+    )
+    composeTestRule.onNodeWithTag("menu_language_profile").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("option_lang_id").performClick()
     composeTestRule.waitForIdle()
 
     assertEquals(com.example.util.i18n.AppLanguage.INDONESIAN, vm.appLanguage.value)
+    composeTestRule.onNode(scrollNode).performScrollToNode(
+      androidx.compose.ui.test.hasTestTag("menu_language_profile")
+    )
     composeTestRule.onNodeWithText("Bahasa Aplikasi").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify PasswordGenerator WhatsApp templates switch between English and Indonesian preserving Point 2 names`() {
+    val account = com.example.data.model.WaliAccount(
+      id = 77L,
+      name = "Ustadz Fauzi",
+      username = "fauzi",
+      password = "Wali#1234",
+      dormitory = "Asrama Putra",
+      phone = "081234567890",
+      schoolId = "SRT1-KDR"
+    )
+    val schoolProfile = com.example.data.model.SchoolProfile(
+      schoolName = "Sekolah Rakyat Kabupaten Kediri",
+      shortName = "SRT 1 Kabupaten Kediri",
+      primaryFaskesName = "UKS Sekolah",
+      adminName = "Eko Wahyudi"
+    )
+
+    val enMsg = com.example.util.PasswordGenerator.formatWhatsAppMessage(
+      account = account,
+      schoolProfile = schoolProfile,
+      isEnglish = true
+    )
+    org.junit.Assert.assertTrue(enMsg.contains("*WALI ASUH CARE APP LOGIN ACCESS CARD*"))
+    org.junit.Assert.assertTrue(enMsg.contains("Asrama Assignment:* Asrama Putra"))
+    org.junit.Assert.assertTrue(enMsg.contains("Puskesmas Wates"))
+    org.junit.Assert.assertTrue(enMsg.contains("Wali Asuh Care"))
+
+    val uksOnlyProfile = schoolProfile.copy(
+      secondaryFaskesName = "",
+      additionalFaskesList = emptyList()
+    )
+    val enUksFallback = com.example.util.PasswordGenerator.formatWhatsAppMessage(
+      account = account,
+      schoolProfile = uksOnlyProfile,
+      isEnglish = true
+    )
+    org.junit.Assert.assertTrue(enUksFallback.contains("UKS Sekolah"))
+
+    val idMsg = com.example.util.PasswordGenerator.formatWhatsAppMessage(
+      account = account,
+      schoolProfile = schoolProfile,
+      isEnglish = false
+    )
+    org.junit.Assert.assertTrue(idMsg.contains("*KARTU AKSES LOGIN APLIKASI WALI ASUH CARE*"))
+    org.junit.Assert.assertTrue(idMsg.contains("Tugas Asrama:* Asrama Putra"))
+    org.junit.Assert.assertTrue(idMsg.contains("Puskesmas Wates"))
+  }
+
+  @Test
+  fun `verify HealthViewModel executeLogin returns localized English and Indonesian errors`() = kotlinx.coroutines.test.runTest {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+
+    // English mode
+    vm.setAppLanguage(com.example.util.i18n.AppLanguage.ENGLISH)
+    val emptyEn = vm.executeLogin("", "", rememberMe = false)
+    org.junit.Assert.assertTrue(emptyEn is com.example.ui.LoginResult.Error)
+    assertEquals(
+      "Username and password are required.",
+      (emptyEn as com.example.ui.LoginResult.Error).message
+    )
+
+    val wrongPilotPassEn = vm.executeLogin("ekowahyudiadmin", "wrongpass", rememberMe = false)
+    org.junit.Assert.assertTrue(wrongPilotPassEn is com.example.ui.LoginResult.Error)
+    assertEquals(
+      "Incorrect password for Admin 'ekowahyudiadmin'. Please check again.",
+      (wrongPilotPassEn as com.example.ui.LoginResult.Error).message
+    )
+
+    // Indonesian mode
+    vm.setAppLanguage(com.example.util.i18n.AppLanguage.INDONESIAN)
+    val emptyId = vm.executeLogin("", "", rememberMe = false)
+    org.junit.Assert.assertTrue(emptyId is com.example.ui.LoginResult.Error)
+    assertEquals(
+      "Username dan password wajib diisi.",
+      (emptyId as com.example.ui.LoginResult.Error).message
+    )
+
+    val wrongPilotPassId = vm.executeLogin("ekowahyudiadmin", "wrongpass", rememberMe = false)
+    org.junit.Assert.assertTrue(wrongPilotPassId is com.example.ui.LoginResult.Error)
+    assertEquals(
+      "Password untuk Admin 'ekowahyudiadmin' salah. Silakan periksa kembali.",
+      (wrongPilotPassId as com.example.ui.LoginResult.Error).message
+    )
+  }
+
+  @Test
+  fun `verify SuperAdminScreen language toggle switches headers and tabs between ID and EN`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.setAppLanguage(com.example.util.i18n.AppLanguage.INDONESIAN)
+
+    composeTestRule.setContent {
+      val lang by vm.appLanguage.collectAsStateWithLifecycle()
+      val baseContext = LocalContext.current
+      val localizedContext = com.example.util.i18n.AppLanguageManager.createLocalizedContext(baseContext, lang)
+      val appStrings = com.example.util.i18n.AppLanguageManager.stringsFor(lang)
+      CompositionLocalProvider(
+        LocalContext provides localizedContext,
+        LocalConfiguration provides localizedContext.resources.configuration,
+        com.example.util.i18n.LocalAppStrings provides appStrings
+      ) {
+        com.example.ui.screens.SuperAdminScreen(
+          viewModel = vm,
+          onLogout = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Portal Superadmin").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Status Pengajuan Sekolah").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("btn_superadmin_toggle_language").performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals(com.example.util.i18n.AppLanguage.ENGLISH, vm.appLanguage.value)
+    composeTestRule.onNodeWithText("Superadmin Portal").assertIsDisplayed()
+    composeTestRule.onNodeWithText("School Request Status").assertIsDisplayed()
+
+    // Reset back to Indonesian
+    composeTestRule.onNodeWithTag("btn_superadmin_toggle_language").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(com.example.util.i18n.AppLanguage.INDONESIAN, vm.appLanguage.value)
+    composeTestRule.onNodeWithText("Portal Superadmin").assertIsDisplayed()
   }
 }

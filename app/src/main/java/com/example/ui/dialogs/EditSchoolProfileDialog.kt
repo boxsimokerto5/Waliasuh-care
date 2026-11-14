@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.FaskesContactInfo
 import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 private data class FaskesDraft(
     val name: String = "",
@@ -69,6 +70,7 @@ fun EditSchoolProfileDialog(
     onDismiss: () -> Unit,
     onSave: (SchoolProfile) -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     var schoolName by remember { mutableStateOf(currentProfile.schoolName) }
     var shortName by remember { mutableStateOf(currentProfile.shortName) }
     var adminName by remember { mutableStateOf(currentProfile.adminName) }
@@ -145,13 +147,17 @@ fun EditSchoolProfileDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Profil Sekolah & Faskes",
+                            text = if (isEn) "School & Facility Profile" else "Profil Sekolah & Faskes",
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Sesuaikan identitas sekolah, faskes rujukan, alamat & telepon",
+                            text = if (isEn) {
+                                "Customize school identity, referral facilities, address & phone"
+                            } else {
+                                "Sesuaikan identitas sekolah, faskes rujukan, alamat & telepon"
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -161,7 +167,7 @@ fun EditSchoolProfileDialog(
                 OutlinedTextField(
                     value = schoolName,
                     onValueChange = { schoolName = it },
-                    label = { Text("Nama Lengkap Sekolah / Yayasan") },
+                    label = { Text(if (isEn) "Full School / Foundation Name" else "Nama Lengkap Sekolah / Yayasan") },
                     leadingIcon = { Icon(Icons.Default.School, contentDescription = null) },
                     singleLine = true,
                     modifier = Modifier
@@ -176,7 +182,7 @@ fun EditSchoolProfileDialog(
                     OutlinedTextField(
                         value = shortName,
                         onValueChange = { shortName = it },
-                        label = { Text("Nama Singkat") },
+                        label = { Text(if (isEn) "Short Name" else "Nama Singkat") },
                         singleLine = true,
                         modifier = Modifier
                             .weight(1f)
@@ -188,11 +194,11 @@ fun EditSchoolProfileDialog(
                         onValueChange = {},
                         readOnly = true,
                         enabled = false,
-                        label = { Text("Kode Tenant (Terkunci)") },
+                        label = { Text(if (isEn) "Tenant Code (Locked)" else "Kode Tenant (Terkunci)") },
                         trailingIcon = {
                             Icon(
                                 imageVector = Icons.Default.Lock,
-                                contentDescription = "Kode Tenant Terkunci",
+                                contentDescription = if (isEn) "Tenant Code Locked" else "Kode Tenant Terkunci",
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                                 modifier = Modifier.size(18.dp)
                             )
@@ -225,7 +231,11 @@ fun EditSchoolProfileDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Kode Tenant dikunci oleh sistem untuk mencegah error relasi database siswa & wali.",
+                        text = if (isEn) {
+                            "Tenant Code is locked by the system to prevent student & Wali Asuh database relation errors."
+                        } else {
+                            "Kode Tenant dikunci oleh sistem untuk mencegah error relasi database siswa & wali."
+                        },
                         fontSize = 11.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                     )
@@ -238,7 +248,7 @@ fun EditSchoolProfileDialog(
                     OutlinedTextField(
                         value = city,
                         onValueChange = { city = it },
-                        label = { Text("Kota / Kabupaten") },
+                        label = { Text(if (isEn) "City / Regency" else "Kota / Kabupaten") },
                         leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier
@@ -249,7 +259,7 @@ fun EditSchoolProfileDialog(
                     OutlinedTextField(
                         value = adminName,
                         onValueChange = { adminName = it },
-                        label = { Text("Nama Admin Utama") },
+                        label = { Text(if (isEn) "Primary Admin Name" else "Nama Admin Utama") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
                         singleLine = true,
                         modifier = Modifier
@@ -261,12 +271,21 @@ fun EditSchoolProfileDialog(
                 OutlinedTextField(
                     value = address,
                     onValueChange = { address = it },
-                    label = { Text("Alamat Lengkap Sekolah (Tampil di Kop Surat)") },
-                    placeholder = { Text("Jl. ..., Kec. ..., Kab./Kota ..., Kode Pos ...", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Full School Address (Shown on Letterhead)" else "Alamat Lengkap Sekolah (Tampil di Kop Surat)") },
+                    placeholder = {
+                        Text(
+                            text = if (isEn) "St. ..., District ..., City/Regency ..., Postal Code ..." else "Jl. ..., Kec. ..., Kab./Kota ..., Kode Pos ...",
+                            fontSize = 12.sp
+                        )
+                    },
                     leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null) },
                     supportingText = {
                         Text(
-                            text = "Alamat ini otomatis digunakan pada seluruh kop surat laporan PDF.",
+                            text = if (isEn) {
+                                "This address is automatically used on all PDF report letterheads."
+                            } else {
+                                "Alamat ini otomatis digunakan pada seluruh kop surat laporan PDF."
+                            },
                             fontSize = 11.sp
                         )
                     },
@@ -292,14 +311,18 @@ fun EditSchoolProfileDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Daftar Fasilitas Kesehatan (Faskes)",
+                                text = if (isEn) "Health Facilities List (Faskes)" else "Daftar Fasilitas Kesehatan (Faskes)",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Text(
-                            text = "Nama, alamat, dan nomor telepon faskes akan otomatis tampil pada menu Puskesmas Saya & Info Faskes untuk seluruh Wali Asuh di sekolah ini.",
+                            text = if (isEn) {
+                                "Facility name, address, and phone number will automatically appear in the Puskesmas & Facility Info menu for all Wali Asuh in this school."
+                            } else {
+                                "Nama, alamat, dan nomor telepon faskes akan otomatis tampil pada menu Puskesmas Saya & Info Faskes untuk seluruh Wali Asuh di sekolah ini."
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -307,8 +330,8 @@ fun EditSchoolProfileDialog(
 
                     // Faskes 1: Utama (UKS Sekolah)
                     FaskesEditorCard(
-                        title = "Faskes 1 • Utama (Internal)",
-                        nameLabel = "Nama Faskes Utama",
+                        title = if (isEn) "Faskes 1 • Primary (Internal)" else "Faskes 1 • Utama (Internal)",
+                        nameLabel = if (isEn) "Primary Facility Name" else "Nama Faskes Utama",
                         namePlaceholder = "UKS Sekolah",
                         name = primaryFaskesName,
                         onNameChange = { primaryFaskesName = it },
@@ -318,14 +341,15 @@ fun EditSchoolProfileDialog(
                         onPhoneChange = { primaryFaskesPhone = it },
                         nameTestTag = "primary_faskes_input",
                         addressTestTag = "primary_faskes_address_input",
-                        phoneTestTag = "primary_faskes_phone_input"
+                        phoneTestTag = "primary_faskes_phone_input",
+                        isEn = isEn
                     )
 
                     // Faskes 2: Rujukan Pertama
                     FaskesEditorCard(
-                        title = "Faskes 2 • Rujukan Pertama",
-                        nameLabel = "Nama Puskesmas / Klinik Rujukan",
-                        namePlaceholder = "misal: Puskesmas Kecamatan",
+                        title = if (isEn) "Faskes 2 • First Referral" else "Faskes 2 • Rujukan Pertama",
+                        nameLabel = if (isEn) "Referral Puskesmas / Clinic Name" else "Nama Puskesmas / Klinik Rujukan",
+                        namePlaceholder = if (isEn) "e.g.: Puskesmas Kecamatan" else "misal: Puskesmas Kecamatan",
                         name = secondaryFaskesName,
                         onNameChange = { secondaryFaskesName = it },
                         address = secondaryFaskesAddress,
@@ -334,15 +358,16 @@ fun EditSchoolProfileDialog(
                         onPhoneChange = { secondaryFaskesPhone = it },
                         nameTestTag = "secondary_faskes_input",
                         addressTestTag = "secondary_faskes_address_input",
-                        phoneTestTag = "secondary_faskes_phone_input"
+                        phoneTestTag = "secondary_faskes_phone_input",
+                        isEn = isEn
                     )
 
                     // Faskes Tambahan (Faskes 3, Faskes 4, dst.)
                     additionalFaskes.forEachIndexed { index, draft ->
                         FaskesEditorCard(
-                            title = "Faskes ${index + 3} • Rujukan Tambahan",
-                            nameLabel = "Nama Faskes Rujukan",
-                            namePlaceholder = "misal: RSUD / Puskesmas 2 / Klinik",
+                            title = if (isEn) "Faskes ${index + 3} • Additional Referral" else "Faskes ${index + 3} • Rujukan Tambahan",
+                            nameLabel = if (isEn) "Referral Facility Name" else "Nama Faskes Rujukan",
+                            namePlaceholder = if (isEn) "e.g.: Hospital / Puskesmas 2 / Clinic" else "misal: RSUD / Puskesmas 2 / Klinik",
                             name = draft.name,
                             onNameChange = { additionalFaskes[index] = draft.copy(name = it) },
                             address = draft.address,
@@ -352,6 +377,7 @@ fun EditSchoolProfileDialog(
                             nameTestTag = "additional_faskes_input_$index",
                             addressTestTag = "additional_faskes_address_input_$index",
                             phoneTestTag = "additional_faskes_phone_input_$index",
+                            isEn = isEn,
                             onRemove = { additionalFaskes.removeAt(index) }
                         )
                     }
@@ -368,7 +394,11 @@ fun EditSchoolProfileDialog(
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Tambah Faskes Rujukan (${additionalFaskes.size + 3})",
+                            text = if (isEn) {
+                                "Add Referral Facility (${additionalFaskes.size + 3})"
+                            } else {
+                                "Tambah Faskes Rujukan (${additionalFaskes.size + 3})"
+                            },
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.SemiBold
                         )
@@ -387,7 +417,7 @@ fun EditSchoolProfileDialog(
                             .weight(1f)
                             .heightIn(min = 48.dp)
                     ) {
-                        Text("Batal")
+                        Text(if (isEn) "Cancel" else "Batal")
                     }
 
                     Button(
@@ -447,7 +477,7 @@ fun EditSchoolProfileDialog(
                             .heightIn(min = 48.dp)
                             .testTag("save_school_profile_button")
                     ) {
-                        Text("Simpan")
+                        Text(if (isEn) "Save" else "Simpan")
                     }
                 }
             }
@@ -469,6 +499,7 @@ private fun FaskesEditorCard(
     nameTestTag: String,
     addressTestTag: String,
     phoneTestTag: String,
+    isEn: Boolean,
     onRemove: (() -> Unit)? = null
 ) {
     Card(
@@ -503,7 +534,7 @@ private fun FaskesEditorCard(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Delete,
-                            contentDescription = "Hapus $title",
+                            contentDescription = if (isEn) "Delete $title" else "Hapus $title",
                             tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(18.dp)
                         )
@@ -533,8 +564,13 @@ private fun FaskesEditorCard(
             OutlinedTextField(
                 value = address,
                 onValueChange = onAddressChange,
-                label = { Text("Alamat Faskes (opsional)", fontSize = 12.sp) },
-                placeholder = { Text("Jl. ..., Kec. ..., Kab./Kota ...", fontSize = 12.sp) },
+                label = { Text(if (isEn) "Facility Address (optional)" else "Alamat Faskes (opsional)", fontSize = 12.sp) },
+                placeholder = {
+                    Text(
+                        if (isEn) "St. ..., District ..., City/Regency ..." else "Jl. ..., Kec. ..., Kab./Kota ...",
+                        fontSize = 12.sp
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.LocationOn,
@@ -551,8 +587,13 @@ private fun FaskesEditorCard(
             OutlinedTextField(
                 value = phone,
                 onValueChange = onPhoneChange,
-                label = { Text("No. Telepon / IGD (opsional)", fontSize = 12.sp) },
-                placeholder = { Text("misal: (0354) 441012 / 08...", fontSize = 12.sp) },
+                label = { Text(if (isEn) "Phone / ER Number (optional)" else "No. Telepon / IGD (opsional)", fontSize = 12.sp) },
+                placeholder = {
+                    Text(
+                        if (isEn) "e.g.: (0354) 441012 / 08..." else "misal: (0354) 441012 / 08...",
+                        fontSize = 12.sp
+                    )
+                },
                 leadingIcon = {
                     Icon(
                         imageVector = Icons.Default.Call,

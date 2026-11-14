@@ -73,6 +73,7 @@ import com.example.data.model.ChildStudent
 import com.example.ui.theme.WaliPrimary
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -83,6 +84,7 @@ fun ImportStudentsCsvDialog(
     onImportConfirm: (studentList: List<ChildStudent>, replace: Boolean) -> Unit
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
     var csvText by remember { mutableStateOf("") }
     var uploadedFileName by remember { mutableStateOf<String?>(null) }
     var replaceExisting by remember { mutableStateOf(false) }
@@ -101,9 +103,17 @@ fun ImportStudentsCsvDialog(
                     val contentWithBom = "\uFEFF$studentTemplateCsv"
                     os.write(contentWithBom.toByteArray(Charsets.UTF_8))
                 }
-                Toast.makeText(context, "Template CSV Siswa standar berhasil diunduh!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Standard Student CSV template downloaded!" else "Template CSV Siswa standar berhasil diunduh!",
+                    Toast.LENGTH_SHORT
+                ).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Gagal mengunduh template: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to download template: ${e.message}" else "Gagal mengunduh template: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -123,15 +133,24 @@ fun ImportStudentsCsvDialog(
                     parseError = null
                     Toast.makeText(
                         context,
-                        "File CSV berhasil dimuat: ${parsedStudents.size} siswa terdeteksi!",
+                        if (isEn) {
+                            "CSV file loaded: ${parsedStudents.size} students detected!"
+                        } else {
+                            "File CSV berhasil dimuat: ${parsedStudents.size} siswa terdeteksi!"
+                        },
                         Toast.LENGTH_SHORT
                     ).show()
                 } else {
-                    Toast.makeText(context, "File CSV kosong.", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) "CSV file is empty." else "File CSV kosong.",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
             } catch (e: Exception) {
-                parseError = "Gagal membaca file: ${e.message}"
-                Toast.makeText(context, "Gagal membaca file: ${e.message}", Toast.LENGTH_SHORT).show()
+                val errMsg = if (isEn) "Failed to read file: ${e.message}" else "Gagal membaca file: ${e.message}"
+                parseError = errMsg
+                Toast.makeText(context, errMsg, Toast.LENGTH_SHORT).show()
             }
         }
     }
@@ -139,16 +158,28 @@ fun ImportStudentsCsvDialog(
     fun copyTemplateToClipboard() {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText("Template CSV Siswa", studentTemplateCsv))
-        Toast.makeText(context, "Format template CSV siswa disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            if (isEn) "Student CSV template copied to clipboard!" else "Format template CSV siswa disalin ke clipboard!",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     fun shareTemplate() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "Template CSV Data Siswa - $schoolName")
+            putExtra(
+                Intent.EXTRA_SUBJECT,
+                if (isEn) "Student Data CSV Template - $schoolName" else "Template CSV Data Siswa - $schoolName"
+            )
             putExtra(Intent.EXTRA_TEXT, studentTemplateCsv)
         }
-        context.startActivity(Intent.createChooser(intent, "Bagikan Template CSV Siswa"))
+        context.startActivity(
+            Intent.createChooser(
+                intent,
+                if (isEn) "Share Student CSV Template" else "Bagikan Template CSV Siswa"
+            )
+        )
     }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -187,13 +218,17 @@ fun ImportStudentsCsvDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Impor Data Siswa (CSV)",
+                            text = if (isEn) "Import Student Data (CSV)" else "Impor Data Siswa (CSV)",
                             fontSize = 19.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Unggah file CSV atau gunakan template resmi ber-ID sekolah",
+                            text = if (isEn) {
+                                "Upload a CSV file or use the official template with school ID"
+                            } else {
+                                "Unggah file CSV atau gunakan template resmi ber-ID sekolah"
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -238,7 +273,11 @@ fun ImportStudentsCsvDialog(
                                     color = Color(0xFF166534)
                                 )
                                 Text(
-                                    text = "Data terkunci ke ID: $currentSchoolId (Aman & Tidak Bercampur)",
+                                    text = if (isEn) {
+                                        "Data locked to ID: $currentSchoolId (Safe & Isolated)"
+                                    } else {
+                                        "Data terkunci ke ID: $currentSchoolId (Aman & Tidak Bercampur)"
+                                    },
                                     fontSize = 11.sp,
                                     color = Color(0xFF15803D)
                                 )
@@ -283,14 +322,22 @@ fun ImportStudentsCsvDialog(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Template CSV Siswa Standar (12 Kolom Lengkap)",
+                                text = if (isEn) {
+                                    "Standard Student CSV Template (12 Complete Columns)"
+                                } else {
+                                    "Template CSV Siswa Standar (12 Kolom Lengkap)"
+                                },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                         Text(
-                            text = "Format resmi 12 kolom: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN. Otomatis membersihkan karakter tersembunyi, baris judul Excel, & koma pada alamat.",
+                            text = if (isEn) {
+                                "Official 12-column format: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN. Automatically cleans hidden characters, Excel title rows, & commas in addresses."
+                            } else {
+                                "Format resmi 12 kolom: No, Nama, Kelas, Jenjang, Alamat, Jenis Kelamin, NIK, NO KK, TEMPAT LAHIR, TANGGAL LAHIR, NAMA IBU, NISN. Otomatis membersihkan karakter tersembunyi, baris judul Excel, & koma pada alamat."
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -311,7 +358,11 @@ fun ImportStudentsCsvDialog(
                             ) {
                                 Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Download Template", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    if (isEn) "Download Template" else "Download Template",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
 
                             OutlinedButton(
@@ -323,7 +374,7 @@ fun ImportStudentsCsvDialog(
                             ) {
                                 Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Salin Format", fontSize = 11.sp)
+                                Text(if (isEn) "Copy Format" else "Salin Format", fontSize = 11.sp)
                             }
 
                             OutlinedButton(
@@ -335,7 +386,7 @@ fun ImportStudentsCsvDialog(
                             ) {
                                 Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Bagikan", fontSize = 11.sp)
+                                Text(if (isEn) "Share" else "Bagikan", fontSize = 11.sp)
                             }
                         }
                     }
@@ -379,25 +430,33 @@ fun ImportStudentsCsvDialog(
 
                         if (uploadedFileName != null) {
                             Text(
-                                text = "File Berhasil Dipilih: $uploadedFileName",
+                                text = if (isEn) "File Selected: $uploadedFileName" else "File Berhasil Dipilih: $uploadedFileName",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF15803D)
                             )
                             Text(
-                                text = "${parsedStudents.size} data siswa siap diimpor ke $schoolName",
+                                text = if (isEn) {
+                                    "${parsedStudents.size} students ready to import into $schoolName"
+                                } else {
+                                    "${parsedStudents.size} data siswa siap diimpor ke $schoolName"
+                                },
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF166534)
                             )
                         } else {
                             Text(
-                                text = "Pilih & Upload File CSV dari Perangkat",
+                                text = if (isEn) "Select & Upload CSV File from Device" else "Pilih & Upload File CSV dari Perangkat",
                                 fontSize = 13.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Ketuk untuk memilih file .csv hasil pengisian template",
+                                text = if (isEn) {
+                                    "Tap to choose the completed .csv template file"
+                                } else {
+                                    "Ketuk untuk memilih file .csv hasil pengisian template"
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -415,7 +474,14 @@ fun ImportStudentsCsvDialog(
                         ) {
                             Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text(if (uploadedFileName != null) "Ganti File CSV" else "Pilih File (.csv)", fontSize = 12.sp)
+                            Text(
+                                text = if (uploadedFileName != null) {
+                                    if (isEn) "Change CSV File" else "Ganti File CSV"
+                                } else {
+                                    if (isEn) "Choose File (.csv)" else "Pilih File (.csv)"
+                                },
+                                fontSize = 12.sp
+                            )
                         }
                     }
                 }
@@ -424,7 +490,11 @@ fun ImportStudentsCsvDialog(
                 // 4. PREVIEW & EDIT MANUAL
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Atau Masukkan / Edit Teks CSV Secara Manual:",
+                        text = if (isEn) {
+                            "Or Enter / Edit CSV Text Manually:"
+                        } else {
+                            "Atau Masukkan / Edit Teks CSV Secara Manual:"
+                        },
                         fontSize = 12.5.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface
@@ -441,7 +511,7 @@ fun ImportStudentsCsvDialog(
                                 parseError = e.message
                             }
                         },
-                        label = { Text("Isi Teks CSV") },
+                        label = { Text(if (isEn) "CSV Text Content" else "Isi Teks CSV") },
                         placeholder = { Text(StudentCsvParser.STANDARD_HEADER) },
                         minLines = 3,
                         maxLines = 6,
@@ -472,7 +542,11 @@ fun ImportStudentsCsvDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "✅ ${parsedStudents.size} Data Siswa Valid",
+                                text = if (isEn) {
+                                    "✅ ${parsedStudents.size} Valid Student Records"
+                                } else {
+                                    "✅ ${parsedStudents.size} Data Siswa Valid"
+                                },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF15803D)
@@ -484,7 +558,12 @@ fun ImportStudentsCsvDialog(
                                         .background(Color(0xFFDBEAFE))
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
-                                    Text("Putra: $countPutra", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1E40AF))
+                                    Text(
+                                        if (isEn) "Boys: $countPutra" else "Putra: $countPutra",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF1E40AF)
+                                    )
                                 }
                                 Box(
                                     modifier = Modifier
@@ -492,13 +571,22 @@ fun ImportStudentsCsvDialog(
                                         .background(Color(0xFFFCE7F3))
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
-                                    Text("Putri: $countPutri", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF9D174D))
+                                    Text(
+                                        if (isEn) "Girls: $countPutri" else "Putri: $countPutri",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF9D174D)
+                                    )
                                 }
                             }
                         }
 
                         Text(
-                            text = "Kelengkapan Terbaca: NIK ($countWithNik/${parsedStudents.size}) • No. KK ($countWithKk/${parsedStudents.size})",
+                            text = if (isEn) {
+                                "Completeness Detected: NIK ($countWithNik/${parsedStudents.size}) • Family Card No. ($countWithKk/${parsedStudents.size})"
+                            } else {
+                                "Kelengkapan Terbaca: NIK ($countWithNik/${parsedStudents.size}) • No. KK ($countWithKk/${parsedStudents.size})"
+                            },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF166534)
@@ -551,20 +639,24 @@ fun ImportStudentsCsvDialog(
                                         color = Color(0xFF334155)
                                     )
                                     Text(
-                                        text = "NISN: ${sample.nis.ifBlank { "-" }} • TTL: ${sample.birthPlace.ifBlank { "-" }}, ${sample.birthDate.ifBlank { "-" }} (${sample.age} thn)",
+                                        text = if (isEn) {
+                                            "NISN: ${sample.nis.ifBlank { "-" }} • Birth: ${sample.birthPlace.ifBlank { "-" }}, ${sample.birthDate.ifBlank { "-" }} (${sample.age} yrs)"
+                                        } else {
+                                            "NISN: ${sample.nis.ifBlank { "-" }} • TTL: ${sample.birthPlace.ifBlank { "-" }}, ${sample.birthDate.ifBlank { "-" }} (${sample.age} thn)"
+                                        },
                                         fontSize = 10.sp,
                                         color = Color(0xFF475569)
                                     )
                                     if (sample.motherName.isNotBlank()) {
                                         Text(
-                                            text = "Ibu: ${sample.motherName}",
+                                            text = if (isEn) "Mother: ${sample.motherName}" else "Ibu: ${sample.motherName}",
                                             fontSize = 10.sp,
                                             color = Color(0xFF475569)
                                         )
                                     }
                                     if (sample.address.isNotBlank()) {
                                         Text(
-                                            text = "Alamat: ${sample.address}",
+                                            text = if (isEn) "Address: ${sample.address}" else "Alamat: ${sample.address}",
                                             fontSize = 10.sp,
                                             color = Color(0xFF64748B),
                                             maxLines = 2
@@ -578,7 +670,7 @@ fun ImportStudentsCsvDialog(
 
                 if (parseError != null) {
                     Text(
-                        text = "Error parsing: $parseError",
+                        text = if (isEn) "Parsing error: $parseError" else "Error parsing: $parseError",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.error
                     )
@@ -595,7 +687,11 @@ fun ImportStudentsCsvDialog(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "Gantikan (hapus) seluruh siswa lama sekolah $currentSchoolId sebelum impor",
+                        text = if (isEn) {
+                            "Replace (delete) all existing students for school $currentSchoolId before importing"
+                        } else {
+                            "Gantikan (hapus) seluruh siswa lama sekolah $currentSchoolId sebelum impor"
+                        },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -614,7 +710,7 @@ fun ImportStudentsCsvDialog(
                             .weight(1f)
                             .height(46.dp)
                     ) {
-                        Text("Tutup")
+                        Text(if (isEn) "Close" else "Tutup")
                     }
 
                     Button(
@@ -631,7 +727,13 @@ fun ImportStudentsCsvDialog(
                     ) {
                         Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Impor (${parsedStudents.size}) Siswa")
+                        Text(
+                            if (isEn) {
+                                "Import (${parsedStudents.size}) Students"
+                            } else {
+                                "Impor (${parsedStudents.size}) Siswa"
+                            }
+                        )
                     }
                 }
             }

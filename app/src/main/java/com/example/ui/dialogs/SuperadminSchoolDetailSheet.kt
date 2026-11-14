@@ -87,6 +87,7 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -101,6 +102,8 @@ fun SuperadminSchoolDetailSheet(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val schoolCode = registration.generatedSchoolCode.trim()
@@ -124,21 +127,22 @@ fun SuperadminSchoolDetailSheet(
         schoolStudents.size - maleCount
     }
 
-    val studentsByDormitory = remember(schoolStudents) {
-        schoolStudents.groupBy { it.dormitory.ifBlank { "Belum diatur" } }
+    val studentsByDormitory = remember(schoolStudents, isEn) {
+        schoolStudents.groupBy { it.dormitory.ifBlank { if (isEn) "Not assigned" else "Belum diatur" } }
             .toList()
             .sortedByDescending { it.second.size }
     }
-    val studentsByJenjang = remember(schoolStudents) {
+    val studentsByJenjang = remember(schoolStudents, isEn) {
         schoolStudents.groupBy { student ->
             student.jenjang.ifBlank { StudentCsvParser.deriveJenjang(student.classGrade) }
-                .ifBlank { "Lainnya" }
+                .ifBlank { if (isEn) "Other" else "Lainnya" }
         }.toList().sortedByDescending { it.second.size }
     }
-    val waliesByDormitory = remember(schoolWalies) {
-        schoolWalies.groupBy { it.dormitory.ifBlank { "Umum" } }
-            .toList()
-            .sortedByDescending { it.second.size }
+    val waliesByDormitory = remember(schoolWalies, isEn) {
+        schoolWalies.groupBy {
+            val d = it.dormitory.ifBlank { "Umum" }
+            if (isEn && d.equals("Umum", ignoreCase = true)) "General" else d
+        }.toList().sortedByDescending { it.second.size }
     }
 
     var passwordVisible by remember(registration.id) { mutableStateOf(false) }
@@ -163,17 +167,21 @@ fun SuperadminSchoolDetailSheet(
         else -> Color(0xFFD97706)
     }
     val statusLabel = when (registration.status) {
-        "APPROVED" -> "DISETUJUI & AKTIF"
-        "SUSPENDED" -> "DITANGGUHKAN / SUSPENDED"
-        "REJECTED" -> "DITOLAK"
-        else -> "MENUNGGU PERSETUJUAN"
+        "APPROVED" -> if (isEn) "APPROVED & ACTIVE" else "DISETUJUI & AKTIF"
+        "SUSPENDED" -> if (isEn) "SUSPENDED" else "DITANGGUHKAN / SUSPENDED"
+        "REJECTED" -> if (isEn) "REJECTED" else "DITOLAK"
+        else -> if (isEn) "PENDING APPROVAL" else "MENUNGGU PERSETUJUAN"
     }
 
     fun copyPlainText(label: String, value: String) {
         if (value.isBlank()) return
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(label, value))
-        Toast.makeText(context, "$label berhasil disalin", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+            context,
+            if (isEn) "$label copied successfully" else "$label berhasil disalin",
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     ModalBottomSheet(
@@ -277,7 +285,7 @@ fun SuperadminSchoolDetailSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = "Tutup detail sekolah"
+                            contentDescription = if (isEn) "Close school details" else "Tutup detail sekolah"
                         )
                     }
                 }
@@ -288,12 +296,12 @@ fun SuperadminSchoolDetailSheet(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     SchoolDetailMetricCard(
-                        title = "Total Siswa Asuh",
+                        title = if (isEn) "Total Foster Students" else "Total Siswa Asuh",
                         mainValue = "${schoolStudents.size}",
                         subtitle = if (schoolStudents.isEmpty()) {
-                            "Belum ada data siswa"
+                            if (isEn) "No student data yet" else "Belum ada data siswa"
                         } else {
-                            "Putra: $maleCount • Putri: $femaleCount"
+                            if (isEn) "Boys: $maleCount • Girls: $femaleCount" else "Putra: $maleCount • Putri: $femaleCount"
                         },
                         accentColor = Color(0xFF2563EB),
                         modifier = Modifier
@@ -301,9 +309,13 @@ fun SuperadminSchoolDetailSheet(
                             .testTag("detail_total_students_card")
                     )
                     SchoolDetailMetricCard(
-                        title = "Akun Wali Asuh",
+                        title = if (isEn) "Wali Asuh Accounts" else "Akun Wali Asuh",
                         mainValue = "${schoolWalies.size}",
-                        subtitle = "Estimasi daftar: ${registration.estimatedWaliCount} wali",
+                        subtitle = if (isEn) {
+                            "Est. registered: ${registration.estimatedWaliCount} Wali Asuh"
+                        } else {
+                            "Estimasi daftar: ${registration.estimatedWaliCount} wali"
+                        },
                         accentColor = Color(0xFF16A34A),
                         modifier = Modifier
                             .weight(1f)
@@ -327,7 +339,7 @@ fun SuperadminSchoolDetailSheet(
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Text(
-                                text = "Sebaran Data Sekolah",
+                                text = if (isEn) "School Data Distribution" else "Sebaran Data Sekolah",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -336,7 +348,7 @@ fun SuperadminSchoolDetailSheet(
                             if (studentsByDormitory.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
-                                        text = "Siswa per Asrama",
+                                        text = if (isEn) "Students per Asrama" else "Siswa per Asrama",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -347,7 +359,7 @@ fun SuperadminSchoolDetailSheet(
                                     ) {
                                         studentsByDormitory.forEach { (dorm, list) ->
                                             DistributionChip(
-                                                label = "$dorm: ${list.size} siswa",
+                                                label = if (isEn) "$dorm: ${list.size} students" else "$dorm: ${list.size} siswa",
                                                 color = Color(0xFF2563EB)
                                             )
                                         }
@@ -358,7 +370,7 @@ fun SuperadminSchoolDetailSheet(
                             if (studentsByJenjang.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
-                                        text = "Siswa per Jenjang",
+                                        text = if (isEn) "Students per Education Level" else "Siswa per Jenjang",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -369,7 +381,7 @@ fun SuperadminSchoolDetailSheet(
                                     ) {
                                         studentsByJenjang.forEach { (jenjang, list) ->
                                             DistributionChip(
-                                                label = "$jenjang: ${list.size} siswa",
+                                                label = if (isEn) "$jenjang: ${list.size} students" else "$jenjang: ${list.size} siswa",
                                                 color = Color(0xFF7C3AED)
                                             )
                                         }
@@ -380,7 +392,7 @@ fun SuperadminSchoolDetailSheet(
                             if (waliesByDormitory.isNotEmpty()) {
                                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                     Text(
-                                        text = "Wali Asuh per Asrama",
+                                        text = if (isEn) "Wali Asuh per Asrama" else "Wali Asuh per Asrama",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -391,7 +403,7 @@ fun SuperadminSchoolDetailSheet(
                                     ) {
                                         waliesByDormitory.forEach { (dorm, list) ->
                                             DistributionChip(
-                                                label = "$dorm: ${list.size} wali",
+                                                label = if (isEn) "$dorm: ${list.size} Wali Asuh" else "$dorm: ${list.size} wali",
                                                 color = Color(0xFF16A34A)
                                             )
                                         }
@@ -416,7 +428,7 @@ fun SuperadminSchoolDetailSheet(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Informasi Sekolah & Penanggung Jawab",
+                            text = if (isEn) "School & Person in Charge Information" else "Informasi Sekolah & Penanggung Jawab",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -424,45 +436,54 @@ fun SuperadminSchoolDetailSheet(
 
                         DetailInfoRow(
                             icon = Icons.Default.LocationOn,
-                            label = "Wilayah / Kota",
-                            value = registration.city.ifBlank { "-" }
+                            label = if (isEn) "Region / City" else "Wilayah / Kota",
+                            value = registration.city.ifBlank { "-" },
+                            isEn = isEn
                         )
                         DetailInfoRow(
                             icon = Icons.Default.School,
-                            label = "Alamat Lengkap",
-                            value = registration.address.ifBlank { "-" }
+                            label = if (isEn) "Full Address" else "Alamat Lengkap",
+                            value = registration.address.ifBlank { "-" },
+                            isEn = isEn
                         )
                         DetailInfoRow(
                             icon = Icons.Default.Person,
-                            label = "Penanggung Jawab",
-                            value = registration.picName.ifBlank { "-" }
+                            label = if (isEn) "Person in Charge (PIC)" else "Penanggung Jawab",
+                            value = registration.picName.ifBlank { "-" },
+                            isEn = isEn
                         )
+                        val picPhoneLabel = if (isEn) "PIC Phone" else "Nomor PJ"
                         DetailInfoRow(
                             icon = Icons.Default.Phone,
-                            label = "No. HP / WhatsApp",
+                            label = if (isEn) "Phone / WhatsApp No." else "No. HP / WhatsApp",
                             value = registration.picPhone.ifBlank { "-" },
+                            isEn = isEn,
                             onCopy = if (registration.picPhone.isNotBlank()) {
-                                { copyPlainText("Nomor PJ", registration.picPhone) }
+                                { copyPlainText(picPhoneLabel, registration.picPhone) }
                             } else null
                         )
+                        val picEmailLabel = if (isEn) "PIC Email" else "Email PJ"
                         DetailInfoRow(
                             icon = Icons.Default.Email,
-                            label = "Email PJ",
+                            label = picEmailLabel,
                             value = registration.picEmail.ifBlank { "-" },
+                            isEn = isEn,
                             onCopy = if (registration.picEmail.isNotBlank()) {
-                                { copyPlainText("Email PJ", registration.picEmail) }
+                                { copyPlainText(picEmailLabel, registration.picEmail) }
                             } else null
                         )
                         DetailInfoRow(
                             icon = Icons.Default.CalendarToday,
-                            label = "Tanggal Pengajuan",
-                            value = DateUtils.formatFullDate(registration.submissionDate)
+                            label = if (isEn) "Submission Date" else "Tanggal Pengajuan",
+                            value = DateUtils.formatFullDate(registration.submissionDate, appStrings.language),
+                            isEn = isEn
                         )
                         if (registration.approvedDate > 0L) {
                             DetailInfoRow(
                                 icon = Icons.Default.Verified,
-                                label = "Tanggal Disetujui",
-                                value = DateUtils.formatFullDate(registration.approvedDate)
+                                label = if (isEn) "Approved Date" else "Tanggal Disetujui",
+                                value = DateUtils.formatFullDate(registration.approvedDate, appStrings.language),
+                                isEn = isEn
                             )
                         }
 
@@ -479,7 +500,7 @@ fun SuperadminSchoolDetailSheet(
                                 Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Hubungi Penanggung Jawab via WhatsApp",
+                                    text = if (isEn) "Contact PIC via WhatsApp" else "Hubungi Penanggung Jawab via WhatsApp",
                                     fontSize = 12.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -507,7 +528,11 @@ fun SuperadminSchoolDetailSheet(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Sekolah ini berstatus SUSPENDED. Seluruh user Admin & Wali Asuh pada kode $schoolCode diblokir sementara untuk login.",
+                                text = if (isEn) {
+                                    "This school is SUSPENDED. All Admin & Wali Asuh users under code $schoolCode are temporarily blocked from logging in."
+                                } else {
+                                    "Sekolah ini berstatus SUSPENDED. Seluruh user Admin & Wali Asuh pada kode $schoolCode diblokir sementara untuk login."
+                                },
                                 fontSize = 12.sp,
                                 color = Color(0xFF9A3412)
                             )
@@ -524,7 +549,7 @@ fun SuperadminSchoolDetailSheet(
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             Text(
-                                text = "Alasan Penolakan",
+                                text = if (isEn) "Rejection Reason" else "Alasan Penolakan",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFB91C1C)
@@ -563,7 +588,7 @@ fun SuperadminSchoolDetailSheet(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "KREDENSIAL ADMIN SEKOLAH",
+                                        text = if (isEn) "SCHOOL ADMIN CREDENTIALS" else "KREDENSIAL ADMIN SEKOLAH",
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp,
                                         color = Color(0xFF15803D)
@@ -613,7 +638,11 @@ fun SuperadminSchoolDetailSheet(
                                     ) {
                                         Icon(
                                             imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = if (passwordVisible) "Sembunyikan password" else "Tampilkan password",
+                                            contentDescription = if (passwordVisible) {
+                                                if (isEn) "Hide password" else "Sembunyikan password"
+                                            } else {
+                                                if (isEn) "Show password" else "Tampilkan password"
+                                            },
                                             tint = Color(0xFF15803D),
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -634,7 +663,7 @@ fun SuperadminSchoolDetailSheet(
                                 ) {
                                     Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Salin Akun", fontSize = 12.sp)
+                                    Text(if (isEn) "Copy Account" else "Salin Akun", fontSize = 12.sp)
                                 }
                                 Button(
                                     onClick = onSendWaCard,
@@ -646,7 +675,11 @@ fun SuperadminSchoolDetailSheet(
                                 ) {
                                     Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(15.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Kirim Kartu ke WA", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        if (isEn) "Send Card via WA" else "Kirim Kartu ke WA",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
                         }
@@ -686,7 +719,11 @@ fun SuperadminSchoolDetailSheet(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Daftar Lengkap Wali Asuh (${schoolWalies.size})",
+                                        text = if (isEn) {
+                                            "Full Wali Asuh List (${schoolWalies.size})"
+                                        } else {
+                                            "Daftar Lengkap Wali Asuh (${schoolWalies.size})"
+                                        },
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -694,7 +731,11 @@ fun SuperadminSchoolDetailSheet(
                                 }
                                 Icon(
                                     imageVector = if (isWaliListExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = if (isWaliListExpanded) "Sembunyikan daftar wali asuh" else "Tampilkan daftar wali asuh",
+                                    contentDescription = if (isWaliListExpanded) {
+                                        if (isEn) "Hide Wali Asuh list" else "Sembunyikan daftar wali asuh"
+                                    } else {
+                                        if (isEn) "Show Wali Asuh list" else "Tampilkan daftar wali asuh"
+                                    },
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -708,6 +749,9 @@ fun SuperadminSchoolDetailSheet(
                                 ) {
                                     HorizontalDivider()
                                     schoolWalies.forEachIndexed { index, wali ->
+                                        val dormDisplay = wali.dormitory.ifBlank { "Umum" }.let { d ->
+                                            if (isEn && d.equals("Umum", ignoreCase = true)) "General" else d
+                                        }
                                         Surface(
                                             shape = RoundedCornerShape(10.dp),
                                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -728,7 +772,7 @@ fun SuperadminSchoolDetailSheet(
                                                         color = MaterialTheme.colorScheme.onSurface
                                                     )
                                                     Text(
-                                                        text = "${wali.dormitory.ifBlank { "Umum" }} • User: ${wali.username}" +
+                                                        text = "$dormDisplay • User: ${wali.username}" +
                                                             if (wali.phone.isNotBlank()) " • ${wali.phone}" else "",
                                                         fontSize = 11.sp,
                                                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -776,7 +820,11 @@ fun SuperadminSchoolDetailSheet(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Daftar Lengkap Siswa (${schoolStudents.size})",
+                                        text = if (isEn) {
+                                            "Full Student List (${schoolStudents.size})"
+                                        } else {
+                                            "Daftar Lengkap Siswa (${schoolStudents.size})"
+                                        },
                                         fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -784,7 +832,11 @@ fun SuperadminSchoolDetailSheet(
                                 }
                                 Icon(
                                     imageVector = if (isStudentListExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                                    contentDescription = if (isStudentListExpanded) "Sembunyikan daftar siswa" else "Tampilkan daftar siswa",
+                                    contentDescription = if (isStudentListExpanded) {
+                                        if (isEn) "Hide student list" else "Sembunyikan daftar siswa"
+                                    } else {
+                                        if (isEn) "Show student list" else "Tampilkan daftar siswa"
+                                    },
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -800,14 +852,23 @@ fun SuperadminSchoolDetailSheet(
                                     OutlinedTextField(
                                         value = studentFilterQuery,
                                         onValueChange = { studentFilterQuery = it },
-                                        placeholder = { Text("Cari nama siswa, NIS, kelas, atau asrama...", fontSize = 12.sp) },
+                                        placeholder = {
+                                            Text(
+                                                if (isEn) "Search student name, NIS, class, or Asrama..." else "Cari nama siswa, NIS, kelas, atau asrama...",
+                                                fontSize = 12.sp
+                                            )
+                                        },
                                         leadingIcon = {
                                             Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
                                         },
                                         trailingIcon = {
                                             if (studentFilterQuery.isNotBlank()) {
                                                 IconButton(onClick = { studentFilterQuery = "" }) {
-                                                    Icon(Icons.Default.Close, contentDescription = "Hapus pencarian siswa", modifier = Modifier.size(16.dp))
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = if (isEn) "Clear student search" else "Hapus pencarian siswa",
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
                                                 }
                                             }
                                         },
@@ -818,14 +879,23 @@ fun SuperadminSchoolDetailSheet(
 
                                     if (filteredStudents.isEmpty()) {
                                         Text(
-                                            text = "Tidak ada siswa yang cocok dengan \"$studentFilterQuery\".",
+                                            text = if (isEn) {
+                                                "No students match \"$studentFilterQuery\"."
+                                            } else {
+                                                "Tidak ada siswa yang cocok dengan \"$studentFilterQuery\"."
+                                            },
                                             fontSize = 12.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.padding(vertical = 8.dp)
                                         )
                                     } else {
                                         filteredStudents.forEachIndexed { index, student ->
-                                            val genderLabel = if (StudentClassifier.isMaleStudent(student)) "L" else "P"
+                                            val isMale = StudentClassifier.isMaleStudent(student)
+                                            val genderLabel = if (isEn) {
+                                                if (isMale) "M" else "F"
+                                            } else {
+                                                if (isMale) "L" else "P"
+                                            }
                                             val jenjangLabel = student.jenjang.ifBlank {
                                                 StudentCsvParser.deriveJenjang(student.classGrade)
                                             }
@@ -858,7 +928,9 @@ fun SuperadminSchoolDetailSheet(
                                                                 append("NIS: ${student.nis.ifBlank { "-" }}")
                                                                 if (classInfo.isNotBlank()) append(" • $classInfo")
                                                                 if (student.dormitory.isNotBlank()) append(" • ${student.dormitory}")
-                                                                if (student.roomNumber.isNotBlank()) append(" (Kamar ${student.roomNumber})")
+                                                                if (student.roomNumber.isNotBlank()) {
+                                                                    append(if (isEn) " (Room ${student.roomNumber})" else " (Kamar ${student.roomNumber})")
+                                                                }
                                                             },
                                                             fontSize = 11.sp,
                                                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -870,7 +942,7 @@ fun SuperadminSchoolDetailSheet(
                                                             .size(26.dp)
                                                             .clip(CircleShape)
                                                             .background(
-                                                                if (genderLabel == "L") Color(0xFFDBEAFE)
+                                                                if (isMale) Color(0xFFDBEAFE)
                                                                 else Color(0xFFFCE7F3)
                                                             ),
                                                         contentAlignment = Alignment.Center
@@ -879,7 +951,7 @@ fun SuperadminSchoolDetailSheet(
                                                             text = genderLabel,
                                                             fontSize = 11.sp,
                                                             fontWeight = FontWeight.Bold,
-                                                            color = if (genderLabel == "L") Color(0xFF1D4ED8) else Color(0xFFBE185D)
+                                                            color = if (isMale) Color(0xFF1D4ED8) else Color(0xFFBE185D)
                                                         )
                                                     }
                                                 }
@@ -906,7 +978,11 @@ fun SuperadminSchoolDetailSheet(
                     ) {
                         Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Hapus Sekolah Permanen", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            if (isEn) "Delete School Permanently" else "Hapus Sekolah Permanen",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
             }
@@ -978,6 +1054,7 @@ private fun DetailInfoRow(
     icon: ImageVector,
     label: String,
     value: String,
+    isEn: Boolean = false,
     onCopy: (() -> Unit)? = null
 ) {
     Row(
@@ -1011,7 +1088,7 @@ private fun DetailInfoRow(
             ) {
                 Icon(
                     imageVector = Icons.Default.ContentCopy,
-                    contentDescription = "Salin $label",
+                    contentDescription = if (isEn) "Copy $label" else "Salin $label",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(16.dp)
                 )

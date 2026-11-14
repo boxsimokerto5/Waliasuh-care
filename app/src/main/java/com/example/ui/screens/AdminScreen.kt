@@ -125,6 +125,8 @@ import com.example.ui.dialogs.ImportWaliCsvDialog
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
+import com.example.util.i18n.AppLanguage
+import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -137,6 +139,9 @@ fun AdminScreen(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
+    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
@@ -208,11 +213,19 @@ fun AdminScreen(
                 }
                 Toast.makeText(
                     context,
-                    "Berhasil mengekspor ${schoolStudents.size} data siswa ke CSV!",
+                    if (isEn) {
+                        "Successfully exported ${schoolStudents.size} student records to CSV!"
+                    } else {
+                        "Berhasil mengekspor ${schoolStudents.size} data siswa ke CSV!"
+                    },
                     Toast.LENGTH_LONG
                 ).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Gagal mengekspor CSV siswa: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to export student CSV: ${e.message}" else "Gagal mengekspor CSV siswa: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -228,11 +241,19 @@ fun AdminScreen(
                 }
                 Toast.makeText(
                     context,
-                    "Berhasil mengekspor ${schoolAccounts.size} akun wali ke CSV!",
+                    if (isEn) {
+                        "Successfully exported ${schoolAccounts.size} Wali Asuh accounts to CSV!"
+                    } else {
+                        "Berhasil mengekspor ${schoolAccounts.size} akun wali ke CSV!"
+                    },
                     Toast.LENGTH_LONG
                 ).show()
             } catch (e: Exception) {
-                Toast.makeText(context, "Gagal mengekspor CSV wali: ${e.message}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to export Wali Asuh CSV: ${e.message}" else "Gagal mengekspor CSV wali: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
             }
         }
     }
@@ -277,28 +298,53 @@ fun AdminScreen(
 
     fun shareAllAccountsSummary() {
         if (schoolAccounts.isEmpty()) {
-            Toast.makeText(context, "Belum ada akun wali asuh untuk dibagikan.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (isEn) "No Wali Asuh accounts to share yet." else "Belum ada akun wali asuh untuk dibagikan.",
+                Toast.LENGTH_SHORT
+            ).show()
             return
         }
         val sb = StringBuilder()
-        sb.appendLine("*DAFTAR KARTU AKSES WALI ASUH*")
-        sb.appendLine("_${schoolProfile.schoolName} [${activeSchoolCode}]_")
-        sb.appendLine("Tanggal: ${DateUtils.formatFullDate(System.currentTimeMillis())}")
-        sb.appendLine("Total: ${schoolAccounts.size} Akun Terdaftar")
-        sb.appendLine("----------------------------------------")
-        schoolAccounts.forEachIndexed { index, acc ->
-            val effectiveUser = acc.username.ifBlank {
-                acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+        if (isEn) {
+            sb.appendLine("*WALI ASUH ACCESS CARDS LIST*")
+            sb.appendLine("_${schoolProfile.schoolName} [${activeSchoolCode}]_")
+            sb.appendLine("Date: ${DateUtils.formatFullDate(System.currentTimeMillis(), appLanguage)}")
+            sb.appendLine("Total: ${schoolAccounts.size} Registered Accounts")
+            sb.appendLine("----------------------------------------")
+            schoolAccounts.forEachIndexed { index, acc ->
+                val effectiveUser = acc.username.ifBlank {
+                    acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+                }
+                sb.appendLine("${index + 1}. *${acc.name}* (${acc.dormitory})")
+                sb.appendLine("   • Username: $effectiveUser")
+                sb.appendLine("   • Password: ${acc.password}")
+                if (acc.phone.isNotBlank()) {
+                    sb.appendLine("   • WA: ${acc.phone}")
+                }
+                sb.appendLine("")
             }
-            sb.appendLine("${index + 1}. *${acc.name}* (${acc.dormitory})")
-            sb.appendLine("   • Username: $effectiveUser")
-            sb.appendLine("   • Password: ${acc.password}")
-            if (acc.phone.isNotBlank()) {
-                sb.appendLine("   • WA: ${acc.phone}")
+            sb.appendLine("_Managed by Administrator (${schoolProfile.adminName})_")
+        } else {
+            sb.appendLine("*DAFTAR KARTU AKSES WALI ASUH*")
+            sb.appendLine("_${schoolProfile.schoolName} [${activeSchoolCode}]_")
+            sb.appendLine("Tanggal: ${DateUtils.formatFullDate(System.currentTimeMillis(), appLanguage)}")
+            sb.appendLine("Total: ${schoolAccounts.size} Akun Terdaftar")
+            sb.appendLine("----------------------------------------")
+            schoolAccounts.forEachIndexed { index, acc ->
+                val effectiveUser = acc.username.ifBlank {
+                    acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
+                }
+                sb.appendLine("${index + 1}. *${acc.name}* (${acc.dormitory})")
+                sb.appendLine("   • Username: $effectiveUser")
+                sb.appendLine("   • Password: ${acc.password}")
+                if (acc.phone.isNotBlank()) {
+                    sb.appendLine("   • WA: ${acc.phone}")
+                }
+                sb.appendLine("")
             }
-            sb.appendLine("")
+            sb.appendLine("_Dikelola oleh Administrator (${schoolProfile.adminName})_")
         }
-        sb.appendLine("_Dikelola oleh Administrator (${schoolProfile.adminName})_")
         val summaryText = sb.toString().trim()
 
         val intent = Intent(Intent.ACTION_SEND).apply {
@@ -306,11 +352,25 @@ fun AdminScreen(
             putExtra(Intent.EXTRA_TEXT, summaryText)
         }
         try {
-            context.startActivity(Intent.createChooser(intent, "Bagikan Rekap Akun Wali Asuh"))
+            context.startActivity(
+                Intent.createChooser(
+                    intent,
+                    if (isEn) "Share Wali Asuh Account Summary" else "Bagikan Rekap Akun Wali Asuh"
+                )
+            )
         } catch (e: Exception) {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Rekap Akun Wali Asuh", summaryText))
-            Toast.makeText(context, "Rekap akun disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+            clipboard.setPrimaryClip(
+                ClipData.newPlainText(
+                    if (isEn) "Wali Asuh Account Summary" else "Rekap Akun Wali Asuh",
+                    summaryText
+                )
+            )
+            Toast.makeText(
+                context,
+                if (isEn) "Account summary copied to clipboard!" else "Rekap akun disalin ke clipboard!",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -330,7 +390,7 @@ fun AdminScreen(
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Portal Administrator",
+                                text = if (isEn) "Administrator Portal" else "Portal Administrator",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
@@ -346,6 +406,35 @@ fun AdminScreen(
                     }
                 },
                 actions = {
+                    TextButton(
+                        onClick = {
+                            val nextLang = if (appLanguage == AppLanguage.ENGLISH) {
+                                AppLanguage.INDONESIAN
+                            } else {
+                                AppLanguage.ENGLISH
+                            }
+                            viewModel.setAppLanguage(nextLang)
+                        },
+                        modifier = Modifier
+                            .size(width = 52.dp, height = 48.dp)
+                            .testTag("btn_admin_toggle_language")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color.White.copy(alpha = 0.18f))
+                                .border(1.dp, Color.White.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
+                                .padding(horizontal = 7.dp, vertical = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = appLanguage.shortBadge,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
                     // Tombol Bagikan Rekap Seluruh Akun
                     IconButton(
                         onClick = { shareAllAccountsSummary() },
@@ -353,7 +442,7 @@ fun AdminScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Share,
-                            contentDescription = "Bagikan Rekap Seluruh Akun",
+                            contentDescription = if (isEn) "Share All Accounts Summary" else "Bagikan Rekap Seluruh Akun",
                             tint = Color.White
                         )
                     }
@@ -364,7 +453,7 @@ fun AdminScreen(
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                            contentDescription = "Keluar / Logout",
+                            contentDescription = if (isEn) "Sign Out / Logout" else "Keluar / Logout",
                             tint = Color.White
                         )
                     }
@@ -397,18 +486,18 @@ fun AdminScreen(
                             else -> Icons.Default.Add
                         },
                         contentDescription = when (selectedAdminTab) {
-                            0 -> "Tambah Siswa"
-                            2 -> "Buat Sesi Puasa"
-                            else -> "Tambah Wali Asuh"
+                            0 -> if (isEn) "Add Student" else "Tambah Siswa"
+                            2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
+                            else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
                         },
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
                         text = when (selectedAdminTab) {
-                            0 -> "Tambah Siswa"
-                            2 -> "Buat Sesi Puasa"
-                            else -> "Tambah Wali Asuh"
+                            0 -> if (isEn) "Add Student" else "Tambah Siswa"
+                            2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
+                            else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
                         },
                         fontWeight = FontWeight.Bold,
                         fontSize = 13.sp
@@ -467,7 +556,7 @@ fun AdminScreen(
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column {
                                         Text(
-                                            text = "Pengaturan Sekolah & Multi-Tenant",
+                                            text = if (isEn) "School & Multi-Tenant Settings" else "Pengaturan Sekolah & Multi-Tenant",
                                             fontSize = 14.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurface
@@ -491,7 +580,11 @@ fun AdminScreen(
                             }
 
                             Text(
-                                text = "Kustomisasi nama sekolah, alamat kop surat, faskes rujukan, serta impor/ekspor data anak asuh & wali asuh secara massal menggunakan file CSV.",
+                                text = if (isEn) {
+                                    "Customize school name, letterhead address, referral health facilities, and bulk import/export student & Wali Asuh data via CSV files."
+                                } else {
+                                    "Kustomisasi nama sekolah, alamat kop surat, faskes rujukan, serta impor/ekspor data anak asuh & wali asuh secara massal menggunakan file CSV."
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -510,8 +603,8 @@ fun AdminScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(18.dp), tint = WaliPrimary)
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text("Profil Sekolah", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("Nama, Alamat & Faskes", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(if (isEn) "School Profile" else "Profil Sekolah", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(if (isEn) "Name, Address & Facility" else "Nama, Alamat & Faskes", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                     }
                                 }
 
@@ -524,8 +617,8 @@ fun AdminScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF16A34A))
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text("Import Siswa", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("${schoolStudents.size} Terdaftar", fontSize = 9.sp, color = Color(0xFF16A34A))
+                                        Text(if (isEn) "Import Students" else "Import Siswa", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(if (isEn) "${schoolStudents.size} Registered" else "${schoolStudents.size} Terdaftar", fontSize = 9.sp, color = Color(0xFF16A34A))
                                     }
                                 }
 
@@ -538,8 +631,8 @@ fun AdminScreen(
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF2563EB))
                                         Spacer(modifier = Modifier.height(2.dp))
-                                        Text("Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text("${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
+                                        Text(if (isEn) "Import Wali" else "Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                        Text(if (isEn) "${schoolAccounts.size} Accounts" else "${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
                                     }
                                 }
                             }
@@ -552,7 +645,11 @@ fun AdminScreen(
                                 OutlinedButton(
                                     onClick = {
                                         if (schoolStudents.isEmpty()) {
-                                            Toast.makeText(context, "Belum ada data siswa untuk diekspor.", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "No student data to export yet." else "Belum ada data siswa untuk diekspor.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         } else {
                                             val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                                             val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
@@ -566,7 +663,7 @@ fun AdminScreen(
                                     Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F766E))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Export Siswa (.csv)",
+                                        text = if (isEn) "Export Students (.csv)" else "Export Siswa (.csv)",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -578,7 +675,11 @@ fun AdminScreen(
                                 OutlinedButton(
                                     onClick = {
                                         if (schoolAccounts.isEmpty()) {
-                                            Toast.makeText(context, "Belum ada akun wali asuh untuk diekspor.", Toast.LENGTH_SHORT).show()
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "No Wali Asuh accounts to export yet." else "Belum ada akun wali asuh untuk diekspor.",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         } else {
                                             val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
                                             val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
@@ -592,7 +693,7 @@ fun AdminScreen(
                                     Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF1D4ED8))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Export Wali (.csv)",
+                                        text = if (isEn) "Export Wali (.csv)" else "Export Wali (.csv)",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface,
@@ -613,7 +714,12 @@ fun AdminScreen(
                             ) {
                                 Icon(Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(16.dp), tint = WaliPrimary)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Ganti Password Admin Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = WaliPrimary)
+                                Text(
+                                    text = if (isEn) "Change School Admin Password" else "Ganti Password Admin Sekolah",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = WaliPrimary
+                                )
                             }
 
                             // Tombol Sinkronkan Data Sekolah ke Cloud (PocketBase)
@@ -638,11 +744,23 @@ fun AdminScreen(
                                         strokeWidth = 2.dp
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Menyinkronkan ke Cloud PocketBase...", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = if (isEn) "Syncing to PocketBase Cloud..." else "Menyinkronkan ke Cloud PocketBase...",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 } else {
-                                    Icon(Icons.Default.CloudSync, contentDescription = "Sinkron Cloud", modifier = Modifier.size(16.dp))
+                                    Icon(
+                                        Icons.Default.CloudSync,
+                                        contentDescription = if (isEn) "Cloud Sync" else "Sinkron Cloud",
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Sinkronkan Semua Data Sekolah ke Cloud", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = if (isEn) "Sync All School Data to Cloud" else "Sinkronkan Semua Data Sekolah ke Cloud",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             }
 
@@ -659,7 +777,12 @@ fun AdminScreen(
                             ) {
                                 Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Bersihkan Data Siswa & Wali Sekolah Ini (Reset ke 0)", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.error)
+                                Text(
+                                    text = if (isEn) "Clear School Students & Wali Data (Reset to 0)" else "Bersihkan Data Siswa & Wali Sekolah Ini (Reset ke 0)",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.error
+                                )
                             }
 
                             // Tombol Hapus Akun Admin & Seluruh Data Sekolah Permanen (Kebijakan Google Play)
@@ -680,13 +803,13 @@ fun AdminScreen(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.DeleteForever,
-                                    contentDescription = "Hapus Akun Admin Sekolah Permanen",
+                                    contentDescription = if (isEn) "Delete School Admin Account Permanently" else "Hapus Akun Admin Sekolah Permanen",
                                     modifier = Modifier.size(16.dp),
                                     tint = MaterialTheme.colorScheme.error
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Hapus Akun Admin & Data Sekolah Permanen",
+                                    text = if (isEn) "Permanently Delete Admin Account & School Data" else "Hapus Akun Admin & Data Sekolah Permanen",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.error
@@ -717,7 +840,7 @@ fun AdminScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Siswa (${schoolStudents.size})",
+                                        text = if (isEn) "Students (${schoolStudents.size})" else "Siswa (${schoolStudents.size})",
                                         fontSize = 11.5.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -761,7 +884,7 @@ fun AdminScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Sesi Puasa (${schoolFastingSessions.size})",
+                                        text = if (isEn) "Puasa (${schoolFastingSessions.size})" else "Sesi Puasa (${schoolFastingSessions.size})",
                                         fontSize = 11.5.sp,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
@@ -797,7 +920,7 @@ fun AdminScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Kelola Master Data Siswa",
+                                        text = if (isEn) "Manage Master Student Data" else "Kelola Master Data Siswa",
                                         fontSize = 15.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -809,7 +932,7 @@ fun AdminScreen(
                                             .padding(horizontal = 8.dp, vertical = 3.dp)
                                     ) {
                                         Text(
-                                            text = "${schoolStudents.size} Siswa Terdaftar",
+                                            text = if (isEn) "${schoolStudents.size} Registered Students" else "${schoolStudents.size} Siswa Terdaftar",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF16A34A)
@@ -818,7 +941,11 @@ fun AdminScreen(
                                 }
 
                                 Text(
-                                    text = "Daftar lengkap anak asuh sekolah ini. Admin dapat mencari anak, melihat riwayat medis, mendaftarkan anak baru, atau menghapus satu anak yang keluar/pindah.",
+                                    text = if (isEn) {
+                                        "Complete list of students in this school. Admin can search students, view medical records, register new students, or delete transferred/graduated students."
+                                    } else {
+                                        "Daftar lengkap anak asuh sekolah ini. Admin dapat mencari anak, melihat riwayat medis, mendaftarkan anak baru, atau menghapus satu anak yang keluar/pindah."
+                                    },
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -833,8 +960,8 @@ fun AdminScreen(
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
-                                            Text("Siswa Putra", fontSize = 10.5.sp, color = Color(0xFF0369A1))
-                                            Text("$studentPutraCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
+                                            Text(if (isEn) "Male Students" else "Siswa Putra", fontSize = 10.5.sp, color = Color(0xFF0369A1))
+                                            Text(if (isEn) "$studentPutraCount Students" else "$studentPutraCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
                                         }
                                     }
                                     Card(
@@ -843,8 +970,8 @@ fun AdminScreen(
                                         shape = RoundedCornerShape(8.dp)
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
-                                            Text("Siswa Putri", fontSize = 10.5.sp, color = Color(0xFFBE185D))
-                                            Text("$studentPutriCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE185D))
+                                            Text(if (isEn) "Female Students" else "Siswa Putri", fontSize = 10.5.sp, color = Color(0xFFBE185D))
+                                            Text(if (isEn) "$studentPutriCount Students" else "$studentPutriCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE185D))
                                         }
                                     }
                                 }
@@ -858,7 +985,12 @@ fun AdminScreen(
                             OutlinedTextField(
                                 value = studentSearchQuery,
                                 onValueChange = { studentSearchQuery = it },
-                                placeholder = { Text("Cari nama, NIK, KK, NISN, kelas, ibu...", fontSize = 12.sp) },
+                                placeholder = {
+                                    Text(
+                                        text = if (isEn) "Search name, NIK, KK, NISN, class, mother..." else "Cari nama, NIK, KK, NISN, kelas, ibu...",
+                                        fontSize = 12.sp
+                                    )
+                                },
                                 leadingIcon = {
                                     Icon(Icons.Default.Search, contentDescription = null, tint = WaliPrimary, modifier = Modifier.size(18.dp))
                                 },
@@ -881,9 +1013,9 @@ fun AdminScreen(
                                         onClick = { selectedStudentGenderFilter = filterOpt },
                                         label = {
                                             val labelText = when (filterOpt) {
-                                                "Putra" -> "Putra ($studentPutraCount)"
-                                                "Putri" -> "Putri ($studentPutriCount)"
-                                                else -> "Semua (${schoolStudents.size})"
+                                                "Putra" -> if (isEn) "Male ($studentPutraCount)" else "Putra ($studentPutraCount)"
+                                                "Putri" -> if (isEn) "Female ($studentPutriCount)" else "Putri ($studentPutriCount)"
+                                                else -> if (isEn) "All (${schoolStudents.size})" else "Semua (${schoolStudents.size})"
                                             }
                                             Text(labelText, fontSize = 11.sp)
                                         },
@@ -909,7 +1041,19 @@ fun AdminScreen(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (studentSearchQuery.isNotBlank()) "Siswa dengan kata kunci '$studentSearchQuery' tidak ditemukan." else "Belum ada data siswa di sekolah ini. Anda dapat mengimpor file CSV siswa atau menekan '+ Tambah Siswa'.",
+                                        text = if (studentSearchQuery.isNotBlank()) {
+                                            if (isEn) {
+                                                "No student found matching '$studentSearchQuery'."
+                                            } else {
+                                                "Siswa dengan kata kunci '$studentSearchQuery' tidak ditemukan."
+                                            }
+                                        } else {
+                                            if (isEn) {
+                                                "No students in this school yet. You can import a student CSV file or press '+ Add Student'."
+                                            } else {
+                                                "Belum ada data siswa di sekolah ini. Anda dapat mengimpor file CSV siswa atau menekan '+ Tambah Siswa'."
+                                            }
+                                        },
                                         fontSize = 12.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -950,7 +1094,7 @@ fun AdminScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Kelola Akun Wali Asuh",
+                                    text = if (isEn) "Manage Wali Asuh Accounts" else "Kelola Akun Wali Asuh",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -962,7 +1106,7 @@ fun AdminScreen(
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Text(
-                                        text = "${schoolAccounts.size} Wali Terdaftar",
+                                        text = if (isEn) "${schoolAccounts.size} Registered Wali" else "${schoolAccounts.size} Wali Terdaftar",
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = WaliPrimary
@@ -971,7 +1115,11 @@ fun AdminScreen(
                             }
 
                             Text(
-                                text = "Setiap wali asuh memiliki Kartu Akun login resmi dengan username & password acak yang dapat dibagikan langsung ke WhatsApp.",
+                                text = if (isEn) {
+                                    "Each Wali Asuh receives an official Access Card with a random username & password that can be shared directly via WhatsApp."
+                                } else {
+                                    "Setiap wali asuh memiliki Kartu Akun login resmi dengan username & password acak yang dapat dibagikan langsung ke WhatsApp."
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -987,7 +1135,7 @@ fun AdminScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         Text("Asrama Putra", fontSize = 10.5.sp, color = Color(0xFF0369A1))
-                                        Text("$putraCount Akun", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
+                                        Text(if (isEn) "$putraCount Accounts" else "$putraCount Akun", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
                                     }
                                 }
                                 Card(
@@ -997,7 +1145,7 @@ fun AdminScreen(
                                 ) {
                                     Column(modifier = Modifier.padding(8.dp)) {
                                         Text("Asrama Putri", fontSize = 10.5.sp, color = Color(0xFFBE185D))
-                                        Text("$putriCount Akun", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE185D))
+                                        Text(if (isEn) "$putriCount Accounts" else "$putriCount Akun", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE185D))
                                     }
                                 }
                             }
@@ -1011,7 +1159,7 @@ fun AdminScreen(
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
-                            placeholder = { Text("Cari nama wali asuh...", fontSize = 12.sp) },
+                            placeholder = { Text(if (isEn) "Search Wali Asuh name..." else "Cari nama wali asuh...", fontSize = 12.sp) },
                             leadingIcon = {
                                 Icon(Icons.Default.Search, contentDescription = null, tint = WaliPrimary, modifier = Modifier.size(18.dp))
                             },
@@ -1029,10 +1177,14 @@ fun AdminScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             listOf("Semua", "Putra", "Putri").forEach { dormFilter ->
+                                val chipLabel = when (dormFilter) {
+                                    "Semua" -> if (isEn) "All" else "Semua"
+                                    else -> dormFilter
+                                }
                                 FilterChip(
                                     selected = selectedFilterDormitory == dormFilter,
                                     onClick = { selectedFilterDormitory = dormFilter },
-                                    label = { Text(dormFilter, fontSize = 11.sp) },
+                                    label = { Text(chipLabel, fontSize = 11.sp) },
                                     modifier = Modifier.height(28.dp)
                                 )
                             }
@@ -1055,7 +1207,19 @@ fun AdminScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (searchQuery.isNotBlank()) "Wali asuh dengan kata kunci '$searchQuery' tidak ditemukan." else "Belum ada akun wali asuh yang terdaftar. Tekan tombol '+ Tambah Wali Asuh' untuk mendaftarkan.",
+                                    text = if (searchQuery.isNotBlank()) {
+                                        if (isEn) {
+                                            "No Wali Asuh found matching '$searchQuery'."
+                                        } else {
+                                            "Wali asuh dengan kata kunci '$searchQuery' tidak ditemukan."
+                                        }
+                                    } else {
+                                        if (isEn) {
+                                            "No Wali Asuh accounts registered yet. Press '+ Add Wali Asuh' to register."
+                                        } else {
+                                            "Belum ada akun wali asuh yang terdaftar. Tekan tombol '+ Tambah Wali Asuh' untuk mendaftarkan."
+                                        }
+                                    },
                                     fontSize = 12.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1072,10 +1236,14 @@ fun AdminScreen(
                                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                                 val clip = ClipData.newPlainText(label, text)
                                 clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "$label berhasil disalin!", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "$label copied!" else "$label berhasil disalin!",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             },
                             onShareWhatsApp = {
-                                val message = PasswordGenerator.formatWhatsAppMessage(account, schoolProfile)
+                                val message = PasswordGenerator.formatWhatsAppMessage(account, schoolProfile, isEn)
                                 val intent = Intent(Intent.ACTION_VIEW).apply {
                                     val url = if (account.phone.isNotBlank()) {
                                         val cleanPhone = if (account.phone.startsWith("0")) "62" + account.phone.substring(1) else account.phone
@@ -1094,13 +1262,22 @@ fun AdminScreen(
                                         putExtra(Intent.EXTRA_TEXT, message)
                                         type = "text/plain"
                                     }
-                                    context.startActivity(Intent.createChooser(sendIntent, "Bagikan Akun Wali Asuh"))
+                                    context.startActivity(
+                                        Intent.createChooser(
+                                            sendIntent,
+                                            if (isEn) "Share Wali Asuh Account" else "Bagikan Akun Wali Asuh"
+                                        )
+                                    )
                                 }
                             },
                             onEdit = { accountToEdit = account },
                             onResetPassword = {
                                 viewModel.resetWaliPassword(account) { newPass ->
-                                    Toast.makeText(context, "Password baru untuk ${account.name}: $newPass", Toast.LENGTH_LONG).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "New password for ${account.name}: $newPass" else "Password baru untuk ${account.name}: $newPass",
+                                        Toast.LENGTH_LONG
+                                    ).show()
                                 }
                             },
                             onDelete = { accountToDelete = account }
@@ -1130,7 +1307,7 @@ fun AdminScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "Manajemen Sesi Puasa Siswa",
+                                    text = if (isEn) "Student Puasa Session Management" else "Manajemen Sesi Puasa Siswa",
                                     fontSize = 15.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSurface
@@ -1142,7 +1319,11 @@ fun AdminScreen(
                                         .padding(horizontal = 8.dp, vertical = 3.dp)
                                 ) {
                                     Text(
-                                        text = "${schoolFastingSessions.count { it.isActive }} Sesi Aktif",
+                                        text = if (isEn) {
+                                            "${schoolFastingSessions.count { it.isActive }} Active"
+                                        } else {
+                                            "${schoolFastingSessions.count { it.isActive }} Sesi Aktif"
+                                        },
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = Color(0xFF0F766E)
@@ -1151,7 +1332,11 @@ fun AdminScreen(
                             }
 
                             Text(
-                                text = "Hanya Admin Sekolah yang dapat membuat sesi puasa (contoh: Puasa Senin Kamis, 27 Oktober 2026). Wali Asuh akan menggunakan sesi aktif ini untuk scan kartu siswa dan checklist sahur/buka.",
+                                text = if (isEn) {
+                                    "Only School Administrators can create Puasa sessions (e.g., Puasa Senin Kamis). Wali Asuh use these active sessions to scan student cards and mark sahur/buka checklists."
+                                } else {
+                                    "Hanya Admin Sekolah yang dapat membuat sesi puasa (contoh: Puasa Senin Kamis, 27 Oktober 2026). Wali Asuh akan menggunakan sesi aktif ini untuk scan kartu siswa dan checklist sahur/buka."
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1166,7 +1351,11 @@ fun AdminScreen(
                             ) {
                                 Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Buat Sesi Puasa Baru", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    text = if (isEn) "Create New Puasa Session" else "Buat Sesi Puasa Baru",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
                             }
                         }
                     }
@@ -1186,7 +1375,11 @@ fun AdminScreen(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = "Belum ada sesi puasa. Tekan '+ Buat Sesi Puasa Baru' untuk membuka sesi pendataan puasa siswa.",
+                                    text = if (isEn) {
+                                        "No Puasa sessions yet. Press '+ Create New Puasa Session' to start tracking student Puasa attendance."
+                                    } else {
+                                        "Belum ada sesi puasa. Tekan '+ Buat Sesi Puasa Baru' untuk membuka sesi pendataan puasa siswa."
+                                    },
                                     fontSize = 12.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -1225,7 +1418,7 @@ fun AdminScreen(
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
-                                            text = DateUtils.formatFullDate(session.sessionDate),
+                                            text = DateUtils.formatFullDate(session.sessionDate, appLanguage),
                                             fontSize = 11.5.sp,
                                             color = Color(0xFF0F766E),
                                             fontWeight = FontWeight.SemiBold
@@ -1234,7 +1427,11 @@ fun AdminScreen(
 
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
-                                            text = if (session.isActive) "Aktif" else "Selesai",
+                                            text = if (session.isActive) {
+                                                if (isEn) "Active" else "Aktif"
+                                            } else {
+                                                if (isEn) "Finished" else "Selesai"
+                                            },
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (session.isActive) Color(0xFF15803D) else Color(0xFF64748B)
@@ -1263,7 +1460,11 @@ fun AdminScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
-                                        text = "Peserta: ${recs.size} Siswa ($sma SMA • $smp SMP • $sd SD)",
+                                        text = if (isEn) {
+                                            "Participants: ${recs.size} Students ($sma SMA • $smp SMP • $sd SD)"
+                                        } else {
+                                            "Peserta: ${recs.size} Siswa ($sma SMA • $smp SMP • $sd SD)"
+                                        },
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = MaterialTheme.colorScheme.onSurface
@@ -1275,7 +1476,7 @@ fun AdminScreen(
                                     ) {
                                         Icon(
                                             imageVector = Icons.Default.DeleteOutline,
-                                            contentDescription = "Hapus Sesi Puasa",
+                                            contentDescription = if (isEn) "Delete Puasa Session" else "Hapus Sesi Puasa",
                                             tint = MaterialTheme.colorScheme.error,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -1296,7 +1497,11 @@ fun AdminScreen(
             onDismiss = { showAddDialog = false },
             onConfirm = { name, username, dormitory, phone, password ->
                 viewModel.addWaliAccount(name, username, dormitory, phone, password) {
-                    Toast.makeText(context, "Kartu akun untuk $name berhasil dibuat!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Access card for $name created!" else "Kartu akun untuk $name berhasil dibuat!",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
                 showAddDialog = false
             }
@@ -1328,7 +1533,15 @@ fun AdminScreen(
                     roomNumber = newStudent.roomNumber,
                     jenjang = newStudent.jenjang
                 )
-                Toast.makeText(context, "Siswa ${newStudent.name} berhasil didaftarkan ke ${schoolProfile.shortName}!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(
+                    context,
+                    if (isEn) {
+                        "Student ${newStudent.name} registered to ${schoolProfile.shortName}!"
+                    } else {
+                        "Siswa ${newStudent.name} berhasil didaftarkan ke ${schoolProfile.shortName}!"
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
                 showAddStudentDialog = false
             }
         )
@@ -1341,7 +1554,11 @@ fun AdminScreen(
             onDismiss = { studentToEdit = null },
             onConfirmStudent = { updated ->
                 viewModel.updateStudent(updated) {
-                    Toast.makeText(context, "Profil ${updated.name} berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Profile for ${updated.name} updated!" else "Profil ${updated.name} berhasil diperbarui!",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
                 studentToEdit = null
             }
@@ -1375,7 +1592,7 @@ fun AdminScreen(
             },
             title = {
                 Text(
-                    text = "Hapus Data Siswa?",
+                    text = if (isEn) "Delete Student Data?" else "Hapus Data Siswa?",
                     fontWeight = FontWeight.Bold,
                     fontSize = 17.sp
                 )
@@ -1383,7 +1600,7 @@ fun AdminScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(
-                        text = "Apakah Anda yakin ingin menghapus data siswa:",
+                        text = if (isEn) "Are you sure you want to delete this student's data:" else "Apakah Anda yakin ingin menghapus data siswa:",
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -1400,14 +1617,22 @@ fun AdminScreen(
                                 color = MaterialTheme.colorScheme.error
                             )
                             Text(
-                                text = "NIS: ${student.nis.ifBlank { "-" }} • ${student.dormitory} • Kelas ${student.classGrade}",
+                                text = if (isEn) {
+                                    "NIS: ${student.nis.ifBlank { "-" }} • ${student.dormitory} • Class ${student.classGrade}"
+                                } else {
+                                    "NIS: ${student.nis.ifBlank { "-" }} • ${student.dormitory} • Kelas ${student.classGrade}"
+                                },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
                     Text(
-                        text = "Tindakan ini permanen. Siswa akan dihapus dari sekolah ini dan seluruh riwayat berobat/rencana terkait akan dibersihkan.",
+                        text = if (isEn) {
+                            "This action is permanent. The student will be removed from this school and all related medical records/plans will be cleared."
+                        } else {
+                            "Tindakan ini permanen. Siswa akan dihapus dari sekolah ini dan seluruh riwayat berobat/rencana terkait akan dibersihkan."
+                        },
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1418,18 +1643,22 @@ fun AdminScreen(
                     onClick = {
                         val studentName = student.name
                         viewModel.deleteStudent(student)
-                        Toast.makeText(context, "Siswa $studentName berhasil dihapus dari sistem.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Student $studentName deleted from system." else "Siswa $studentName berhasil dihapus dari sistem.",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         studentToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                     modifier = Modifier.testTag("btn_confirm_delete_student")
                 ) {
-                    Text("Hapus Siswa", fontWeight = FontWeight.Bold)
+                    Text(if (isEn) "Delete Student" else "Hapus Siswa", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { studentToDelete = null }) {
-                    Text("Batal")
+                    Text(appStrings.cancel)
                 }
             }
         )
@@ -1441,7 +1670,11 @@ fun AdminScreen(
             onDismiss = { accountToEdit = null },
             onConfirm = { updated ->
                 viewModel.updateWaliAccount(updated) {
-                    Toast.makeText(context, "Akun ${updated.name} berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Account ${updated.name} updated!" else "Akun ${updated.name} berhasil diperbarui!",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
                 accountToEdit = null
             }
@@ -1451,25 +1684,35 @@ fun AdminScreen(
     accountToDelete?.let { account ->
         AlertDialog(
             onDismissRequest = { accountToDelete = null },
-            title = { Text("Hapus Akun Wali Asuh?") },
+            title = { Text(if (isEn) "Delete Wali Asuh Account?" else "Hapus Akun Wali Asuh?") },
             text = {
-                Text("Akun login untuk '${account.name}' (${account.dormitory}) akan dihapus. Wali asuh tidak dapat masuk ke aplikasi dengan akun ini lagi.")
+                Text(
+                    if (isEn) {
+                        "Login account for '${account.name}' (${account.dormitory}) will be deleted. This Wali Asuh will no longer be able to sign in with this account."
+                    } else {
+                        "Akun login untuk '${account.name}' (${account.dormitory}) akan dihapus. Wali asuh tidak dapat masuk ke aplikasi dengan akun ini lagi."
+                    }
+                )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         viewModel.deleteWaliAccount(account)
-                        Toast.makeText(context, "Akun ${account.name} dihapus.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Account ${account.name} deleted." else "Akun ${account.name} dihapus.",
+                            Toast.LENGTH_SHORT
+                        ).show()
                         accountToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Hapus")
+                    Text(appStrings.delete)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { accountToDelete = null }) {
-                    Text("Batal")
+                    Text(appStrings.cancel)
                 }
             }
         )
@@ -1478,8 +1721,16 @@ fun AdminScreen(
     if (showExitConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showExitConfirmDialog = false },
-            title = { Text("Keluar dari Portal Admin?") },
-            text = { Text("Apakah Anda yakin ingin keluar (logout) dari sesi Administrator Sekolah?") },
+            title = { Text(if (isEn) "Leave Admin Portal?" else "Keluar dari Portal Admin?") },
+            text = {
+                Text(
+                    if (isEn) {
+                        "Are you sure you want to sign out (logout) from the School Administrator session?"
+                    } else {
+                        "Apakah Anda yakin ingin keluar (logout) dari sesi Administrator Sekolah?"
+                    }
+                )
+            },
             confirmButton = {
                 Button(
                     onClick = {
@@ -1488,12 +1739,12 @@ fun AdminScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Logout")
+                    Text(appStrings.nav.logoutBtn)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showExitConfirmDialog = false }) {
-                    Text("Batal")
+                    Text(appStrings.cancel)
                 }
             }
         )
@@ -1505,7 +1756,11 @@ fun AdminScreen(
             onDismiss = { showEditSchoolDialog = false },
             onSave = { updated ->
                 viewModel.updateSchoolProfile(updated) {
-                    Toast.makeText(context, "Profil sekolah & faskes berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) "School & facility profile saved!" else "Profil sekolah & faskes berhasil disimpan!",
+                        Toast.LENGTH_SHORT
+                    ).show()
                 }
                 showEditSchoolDialog = false
             }
@@ -1571,7 +1826,15 @@ fun AdminScreen(
             onImportConfirm = { studentList, replace ->
                 viewModel.saveImportedStudents(studentList, replace, activeSchoolCode) { count ->
                     showImportStudentsDialog = false
-                    Toast.makeText(context, "Berhasil mengimpor $count siswa ke database $activeSchoolCode!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "Successfully imported $count students into $activeSchoolCode database!"
+                        } else {
+                            "Berhasil mengimpor $count siswa ke database $activeSchoolCode!"
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         )
@@ -1581,10 +1844,14 @@ fun AdminScreen(
         AlertDialog(
             onDismissRequest = { showClearDataConfirmDialog = false },
             icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Bersihkan Data Sekolah Ini?") },
+            title = { Text(if (isEn) "Clear This School's Data?" else "Bersihkan Data Sekolah Ini?") },
             text = {
                 Text(
-                    "Tindakan ini akan menghapus seluruh data siswa dan akun wali asuh yang terdaftar pada sekolah ${schoolProfile.schoolName} (${activeSchoolCode}). Data akan di-reset menjadi 0 dan bersih total."
+                    if (isEn) {
+                        "This will delete all student records and Wali Asuh accounts registered under ${schoolProfile.schoolName} (${activeSchoolCode}). Data will be reset to 0."
+                    } else {
+                        "Tindakan ini akan menghapus seluruh data siswa dan akun wali asuh yang terdaftar pada sekolah ${schoolProfile.schoolName} (${activeSchoolCode}). Data akan di-reset menjadi 0 dan bersih total."
+                    }
                 )
             },
             confirmButton = {
@@ -1592,17 +1859,25 @@ fun AdminScreen(
                     onClick = {
                         viewModel.clearSchoolData(activeSchoolCode) {
                             showClearDataConfirmDialog = false
-                            Toast.makeText(context, "Seluruh data siswa dan wali untuk $activeSchoolCode telah dihapus bersih!", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                if (isEn) {
+                                    "All student and Wali Asuh data for $activeSchoolCode cleared!"
+                                } else {
+                                    "Seluruh data siswa dan wali untuk $activeSchoolCode telah dihapus bersih!"
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Ya, Bersihkan Semua", color = Color.White)
+                    Text(if (isEn) "Yes, Clear All" else "Ya, Bersihkan Semua", color = Color.White)
                 }
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { showClearDataConfirmDialog = false }) {
-                    Text("Batal")
+                    Text(appStrings.cancel)
                 }
             }
         )
@@ -1618,9 +1893,25 @@ fun AdminScreen(
                     description = description
                 ) { created ->
                     if (created != null) {
-                        Toast.makeText(context, "Sesi puasa \"${created.title}\" berhasil dibuat!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            if (isEn) {
+                                "Puasa session \"${created.title}\" created!"
+                            } else {
+                                "Sesi puasa \"${created.title}\" berhasil dibuat!"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
                     } else {
-                        Toast.makeText(context, "Hanya Admin Sekolah yang dapat membuat sesi puasa.", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(
+                            context,
+                            if (isEn) {
+                                "Only School Administrators can create Puasa sessions."
+                            } else {
+                                "Hanya Admin Sekolah yang dapat membuat sesi puasa."
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
                     }
                 }
                 showCreateFastingSessionDialog = false
@@ -1632,26 +1923,36 @@ fun AdminScreen(
         AlertDialog(
             onDismissRequest = { fastingSessionToDelete = null },
             icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
-            title = { Text("Hapus Sesi Puasa?", fontWeight = FontWeight.Bold) },
+            title = { Text(if (isEn) "Delete Puasa Session?" else "Hapus Sesi Puasa?", fontWeight = FontWeight.Bold) },
             text = {
-                Text("Sesi \"${session.title}\" beserta data peserta puasa di dalamnya akan dihapus.")
+                Text(
+                    if (isEn) {
+                        "Session \"${session.title}\" and all Puasa participant records inside it will be deleted."
+                    } else {
+                        "Sesi \"${session.title}\" beserta data peserta puasa di dalamnya akan dihapus."
+                    }
+                )
             },
             confirmButton = {
                 Button(
                     onClick = {
                         viewModel.deleteFastingSession(session) {
-                            Toast.makeText(context, "Sesi \"${session.title}\" dihapus.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Session \"${session.title}\" deleted." else "Sesi \"${session.title}\" dihapus.",
+                                Toast.LENGTH_SHORT
+                            ).show()
                         }
                         fastingSessionToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
-                    Text("Hapus")
+                    Text(appStrings.delete)
                 }
             },
             dismissButton = {
                 OutlinedButton(onClick = { fastingSessionToDelete = null }) {
-                    Text("Batal")
+                    Text(appStrings.cancel)
                 }
             }
         )
@@ -1665,7 +1966,15 @@ fun AdminScreen(
             onImportConfirm = { accountList, replace ->
                 viewModel.saveImportedWaliAccounts(accountList, replace, activeSchoolCode) { count ->
                     showImportWaliDialog = false
-                    Toast.makeText(context, "Berhasil mengimpor $count akun wali asuh ke database $activeSchoolCode!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "Successfully imported $count Wali Asuh accounts into $activeSchoolCode database!"
+                        } else {
+                            "Berhasil mengimpor $count akun wali asuh ke database $activeSchoolCode!"
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
                 }
             }
         )
@@ -1687,6 +1996,7 @@ fun WaliAccountCardItem(
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     var passwordVisible by remember { mutableStateOf(false) }
 
     val isPutri = account.dormitory.contains("Putri", ignoreCase = true)
@@ -1724,14 +2034,14 @@ fun WaliAccountCardItem(
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(
-                            text = "KARTU AKSES WALI ASUH",
+                            text = if (isEn) "WALI ASUH ACCESS CARD" else "KARTU AKSES WALI ASUH",
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = schoolName.ifBlank { "Sekolah Anda" },
+                            text = schoolName.ifBlank { if (isEn) "Your School" else "Sekolah Anda" },
                             fontSize = 9.5.sp,
                             color = Color.White.copy(alpha = 0.9f),
                             maxLines = 1,
@@ -1799,7 +2109,7 @@ fun WaliAccountCardItem(
                             )
                         } else {
                             Text(
-                                text = "Wali Asuh Aktif • ${account.dormitory}",
+                                text = if (isEn) "Active Wali Asuh • ${account.dormitory}" else "Wali Asuh Aktif • ${account.dormitory}",
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1847,7 +2157,7 @@ fun WaliAccountCardItem(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Salin Username",
+                                    contentDescription = if (isEn) "Copy Username" else "Salin Username",
                                     tint = dormAccentColor,
                                     modifier = Modifier.size(15.dp)
                                 )
@@ -1883,7 +2193,11 @@ fun WaliAccountCardItem(
                                 ) {
                                     Icon(
                                         imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                        contentDescription = if (passwordVisible) "Sembunyikan" else "Lihat",
+                                        contentDescription = if (passwordVisible) {
+                                            if (isEn) "Hide" else "Sembunyikan"
+                                        } else {
+                                            if (isEn) "Show" else "Lihat"
+                                        },
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.size(15.dp)
                                     )
@@ -1894,7 +2208,7 @@ fun WaliAccountCardItem(
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.ContentCopy,
-                                        contentDescription = "Salin Password",
+                                        contentDescription = if (isEn) "Copy Password" else "Salin Password",
                                         tint = dormAccentColor,
                                         modifier = Modifier.size(15.dp)
                                     )
@@ -1904,7 +2218,11 @@ fun WaliAccountCardItem(
 
                         // Keterangan status sinkronisasi
                         Text(
-                            text = "✓ Password tersinkron otomatis dari profil wali asuh",
+                            text = if (isEn) {
+                                "✓ Password auto-synced with Wali Asuh profile"
+                            } else {
+                                "✓ Password tersinkron otomatis dari profil wali asuh"
+                            },
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = dormAccentColor.copy(alpha = 0.85f)
@@ -1929,7 +2247,7 @@ fun WaliAccountCardItem(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DeleteOutline,
-                                contentDescription = "Hapus Akun",
+                                contentDescription = if (isEn) "Delete Account" else "Hapus Akun",
                                 tint = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -1941,7 +2259,7 @@ fun WaliAccountCardItem(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Akun",
+                                contentDescription = if (isEn) "Edit Account" else "Edit Akun",
                                 tint = dormAccentColor,
                                 modifier = Modifier.size(17.dp)
                             )
@@ -1959,7 +2277,7 @@ fun WaliAccountCardItem(
                                 modifier = Modifier.size(14.dp)
                             )
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Acak Password", fontSize = 10.5.sp)
+                            Text(if (isEn) "Reset Pass" else "Acak Password", fontSize = 10.5.sp)
                         }
                     }
 
@@ -1982,7 +2300,7 @@ fun WaliAccountCardItem(
                             modifier = Modifier.size(14.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Kirim Akun ke WA", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Send to WA" else "Kirim Akun ke WA", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -1996,6 +2314,7 @@ fun AdminStudentCardItem(
     onViewDetail: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     val isPutri = StudentClassifier.isFemaleStudent(student)
     val accentColor = if (isPutri) Color(0xFFBE185D) else Color(0xFF0369A1)
 
@@ -2036,7 +2355,11 @@ fun AdminStudentCardItem(
                                 .padding(horizontal = 5.dp, vertical = 1.5.dp)
                         ) {
                             Text(
-                                text = if (isPutri) "Putri" else "Putra",
+                                text = if (isEn) {
+                                    if (isPutri) "Female" else "Male"
+                                } else {
+                                    if (isPutri) "Putri" else "Putra"
+                                },
                                 fontSize = 9.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = accentColor
@@ -2076,7 +2399,7 @@ fun AdminStudentCardItem(
                         }
                         if (student.classGrade.isNotBlank()) {
                             Text(
-                                text = "Kelas ${student.classGrade}",
+                                text = if (isEn) "Class ${student.classGrade}" else "Kelas ${student.classGrade}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -2097,9 +2420,13 @@ fun AdminStudentCardItem(
                     if (ttlSummary.isNotBlank() || student.motherName.isNotBlank()) {
                         Text(
                             text = buildString {
-                                if (ttlSummary.isNotBlank()) append("TTL: $ttlSummary (${student.age} Th)")
+                                if (ttlSummary.isNotBlank()) {
+                                    append(if (isEn) "Birth: $ttlSummary (${student.age} yrs)" else "TTL: $ttlSummary (${student.age} Th)")
+                                }
                                 if (ttlSummary.isNotBlank() && student.motherName.isNotBlank()) append(" • ")
-                                if (student.motherName.isNotBlank()) append("Ibu: ${student.motherName}")
+                                if (student.motherName.isNotBlank()) {
+                                    append(if (isEn) "Mother: ${student.motherName}" else "Ibu: ${student.motherName}")
+                                }
                             },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2110,7 +2437,7 @@ fun AdminStudentCardItem(
 
                     if (student.address.isNotBlank()) {
                         Text(
-                            text = "Alamat: ${student.address}",
+                            text = if (isEn) "Address: ${student.address}" else "Alamat: ${student.address}",
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -2120,7 +2447,9 @@ fun AdminStudentCardItem(
 
                     if (student.dormitory.isNotBlank()) {
                         Text(
-                            text = "🏠 ${student.dormitory}${if (student.roomNumber.isNotBlank()) " • Kamar ${student.roomNumber}" else ""}",
+                            text = "🏠 ${student.dormitory}${if (student.roomNumber.isNotBlank()) {
+                                if (isEn) " • Room ${student.roomNumber}" else " • Kamar ${student.roomNumber}"
+                            } else ""}",
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -2145,7 +2474,7 @@ fun AdminStudentCardItem(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "⚠️ Alergi: ${student.allergies}",
+                                text = if (isEn) "⚠️ Allergy: ${student.allergies}" else "⚠️ Alergi: ${student.allergies}",
                                 fontSize = 10.sp,
                                 color = Color(0xFFDC2626),
                                 fontWeight = FontWeight.Medium
@@ -2160,7 +2489,7 @@ fun AdminStudentCardItem(
                                 .padding(horizontal = 6.dp, vertical = 2.dp)
                         ) {
                             Text(
-                                text = "🩸 Gol: ${student.bloodType}",
+                                text = if (isEn) "🩸 Blood: ${student.bloodType}" else "🩸 Gol: ${student.bloodType}",
                                 fontSize = 10.sp,
                                 color = Color(0xFF2563EB),
                                 fontWeight = FontWeight.Medium
@@ -2191,7 +2520,12 @@ fun AdminStudentCardItem(
                         tint = WaliPrimary
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Detail & Rekam Medis", fontSize = 10.5.sp, color = WaliPrimary, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        text = if (isEn) "Details & Medical Record" else "Detail & Rekam Medis",
+                        fontSize = 10.5.sp,
+                        color = WaliPrimary,
+                        fontWeight = FontWeight.SemiBold
+                    )
                 }
 
                 Button(
@@ -2213,7 +2547,12 @@ fun AdminStudentCardItem(
                         tint = MaterialTheme.colorScheme.error
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Hapus Siswa", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                    Text(
+                        text = if (isEn) "Delete Student" else "Hapus Siswa",
+                        fontSize = 10.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error
+                    )
                 }
             }
         }
@@ -2226,6 +2565,8 @@ fun CreateFastingSessionDialog(
     onDismiss: () -> Unit,
     onConfirm: (title: String, dateMillis: Long, description: String) -> Unit
 ) {
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
     var title by remember { mutableStateOf("Puasa Senin Kamis") }
     var description by remember { mutableStateOf("") }
     var selectedDateMillis by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -2245,13 +2586,13 @@ fun CreateFastingSessionDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Default.RestaurantMenu, contentDescription = null, tint = Color(0xFF0F766E))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Buat Sesi Puasa Baru", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Text(if (isEn) "Create New Puasa Session" else "Buat Sesi Puasa Baru", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text(
-                    text = "Pilih cepat jenis puasa:",
+                    text = if (isEn) "Quick select Puasa type:" else "Pilih cepat jenis puasa:",
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -2273,8 +2614,8 @@ fun CreateFastingSessionDialog(
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
-                    label = { Text("Nama Sesi Puasa *") },
-                    placeholder = { Text("Contoh: Puasa Senin Kamis") },
+                    label = { Text(if (isEn) "Puasa Session Name *" else "Nama Sesi Puasa *") },
+                    placeholder = { Text(if (isEn) "Example: Puasa Senin Kamis" else "Contoh: Puasa Senin Kamis") },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier
@@ -2293,7 +2634,7 @@ fun CreateFastingSessionDialog(
                     Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F766E))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Tanggal: ${DateUtils.formatFullDate(selectedDateMillis)}",
+                        text = "${if (isEn) "Date" else "Tanggal"}: ${DateUtils.formatFullDate(selectedDateMillis, appStrings.language)}",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -2303,8 +2644,12 @@ fun CreateFastingSessionDialog(
                 OutlinedTextField(
                     value = description,
                     onValueChange = { description = it },
-                    label = { Text("Keterangan (Opsional)") },
-                    placeholder = { Text("Contoh: Sahur pukul 03.30 WIB di dapur umum") },
+                    label = { Text(if (isEn) "Notes (Optional)" else "Keterangan (Opsional)") },
+                    placeholder = {
+                        Text(
+                            if (isEn) "Example: Sahur at 03:30 WIB in common kitchen" else "Contoh: Sahur pukul 03.30 WIB di dapur umum"
+                        )
+                    },
                     maxLines = 2,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -2322,12 +2667,12 @@ fun CreateFastingSessionDialog(
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
                 modifier = Modifier.testTag("btn_save_fasting_session")
             ) {
-                Text("Buat Sesi", fontWeight = FontWeight.Bold)
+                Text(if (isEn) "Create Session" else "Buat Sesi", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
-                Text("Batal")
+                Text(appStrings.cancel)
             }
         }
     )
@@ -2341,12 +2686,12 @@ fun CreateFastingSessionDialog(
                     datePickerState.selectedDateMillis?.let { selectedDateMillis = it }
                     showDatePicker = false
                 }) {
-                    Text("Pilih")
+                    Text(if (isEn) "Select" else "Pilih")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDatePicker = false }) {
-                    Text("Batal")
+                    Text(appStrings.cancel)
                 }
             }
         ) {

@@ -50,14 +50,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.WaliPrimary
 import com.example.util.PasswordGenerator
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddWaliAccountDialog(
-    schoolName: String = "Sekolah Anda",
+    schoolName: String = "",
     onDismiss: () -> Unit,
     onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String) -> Unit
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
+    val resolvedSchoolName = schoolName.ifBlank { if (isEn) "Your School" else "Sekolah Anda" }
     var name by remember { mutableStateOf("") }
     var username by remember { mutableStateOf("") }
     var userEditedUsername by remember { mutableStateOf(false) }
@@ -99,7 +102,7 @@ fun AddWaliAccountDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Tambah Akun Wali Asuh",
+                        text = if (isEn) "Add Wali Asuh Account" else "Tambah Akun Wali Asuh",
                         fontWeight = FontWeight.Bold,
                         fontSize = 17.sp,
                         color = MaterialTheme.colorScheme.onSurface
@@ -107,7 +110,11 @@ fun AddWaliAccountDialog(
                 }
 
                 Text(
-                    text = "Daftarkan akun login wali asuh untuk $schoolName. Username & password akan ditampilkan di Kartu Akses untuk login ke aplikasi.",
+                    text = if (isEn) {
+                        "Register a Wali Asuh login account for $resolvedSchoolName. The username & password will be shown on the Access Card for app login."
+                    } else {
+                        "Daftarkan akun login wali asuh untuk $resolvedSchoolName. Username & password akan ditampilkan di Kartu Akses untuk login ke aplikasi."
+                    },
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -131,8 +138,8 @@ fun AddWaliAccountDialog(
                         }
                         errorMessage = null
                     },
-                    label = { Text("Nama Lengkap Wali Asuh *") },
-                    placeholder = { Text("Contoh: Sari Devi, M.Pd") },
+                    label = { Text(if (isEn) "Wali Asuh Full Name *" else "Nama Lengkap Wali Asuh *") },
+                    placeholder = { Text(if (isEn) "Example: Sari Devi, M.Pd" else "Contoh: Sari Devi, M.Pd") },
                     leadingIcon = {
                         Icon(Icons.Default.Person, contentDescription = null, tint = WaliPrimary)
                     },
@@ -151,8 +158,8 @@ fun AddWaliAccountDialog(
                         userEditedUsername = true
                         errorMessage = null
                     },
-                    label = { Text("Username Login Aplikasi *") },
-                    placeholder = { Text("Contoh: saridevi") },
+                    label = { Text(if (isEn) "App Login Username *" else "Username Login Aplikasi *") },
+                    placeholder = { Text(if (isEn) "Example: saridevi" else "Contoh: saridevi") },
                     leadingIcon = {
                         Icon(Icons.Default.AccountCircle, contentDescription = null, tint = WaliPrimary)
                     },
@@ -166,7 +173,7 @@ fun AddWaliAccountDialog(
                 // Pilihan Asrama Binaan
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Tugas Asrama:",
+                        text = if (isEn) "Asrama Assignment:" else "Tugas Asrama:",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -176,10 +183,11 @@ fun AddWaliAccountDialog(
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         listOf("Asrama Putra", "Asrama Putri", "Umum").forEach { dorm ->
+                            val label = if (isEn && dorm == "Umum") "General" else dorm
                             FilterChip(
                                 selected = selectedDormitory == dorm,
                                 onClick = { selectedDormitory = dorm },
-                                label = { Text(dorm, fontSize = 11.sp) },
+                                label = { Text(label, fontSize = 11.sp) },
                                 modifier = Modifier.height(30.dp)
                             )
                         }
@@ -190,8 +198,8 @@ fun AddWaliAccountDialog(
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Nomor WhatsApp (Opsional)") },
-                    placeholder = { Text("Contoh: 08123456789") },
+                    label = { Text(if (isEn) "WhatsApp Number (Optional)" else "Nomor WhatsApp (Opsional)") },
+                    placeholder = { Text(if (isEn) "Example: 08123456789" else "Contoh: 08123456789") },
                     leadingIcon = {
                         Icon(Icons.Default.Phone, contentDescription = null, tint = WaliPrimary)
                     },
@@ -210,7 +218,7 @@ fun AddWaliAccountDialog(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Password Login Aplikasi:",
+                            text = if (isEn) "App Login Password:" else "Password Login Aplikasi:",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
@@ -221,7 +229,7 @@ fun AddWaliAccountDialog(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Casino,
-                                contentDescription = "Acak Ulang Password",
+                                contentDescription = if (isEn) "Regenerate Random Password" else "Acak Ulang Password",
                                 tint = WaliPrimary,
                                 modifier = Modifier.size(18.dp)
                             )
@@ -231,7 +239,7 @@ fun AddWaliAccountDialog(
                     OutlinedTextField(
                         value = password,
                         onValueChange = { password = it },
-                        label = { Text("Password Acak Otomatis") },
+                        label = { Text(if (isEn) "Auto-Generated Password" else "Password Acak Otomatis") },
                         leadingIcon = {
                             Icon(Icons.Default.Lock, contentDescription = null, tint = WaliPrimary)
                         },
@@ -239,7 +247,11 @@ fun AddWaliAccountDialog(
                             IconButton(onClick = { passwordVisible = !passwordVisible }) {
                                 Icon(
                                     imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = if (passwordVisible) "Sembunyikan" else "Lihat",
+                                    contentDescription = if (passwordVisible) {
+                                        if (isEn) "Hide" else "Sembunyikan"
+                                    } else {
+                                        if (isEn) "Show" else "Lihat"
+                                    },
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
@@ -264,17 +276,17 @@ fun AddWaliAccountDialog(
                         onClick = onDismiss,
                         shape = RoundedCornerShape(10.dp)
                     ) {
-                        Text("Batal")
+                        Text(if (isEn) "Cancel" else "Batal")
                     }
                     Spacer(modifier = Modifier.width(8.dp))
                     Button(
                         onClick = {
                             if (name.isBlank()) {
-                                errorMessage = "Nama wali asuh tidak boleh kosong."
+                                errorMessage = if (isEn) "Wali Asuh name cannot be empty." else "Nama wali asuh tidak boleh kosong."
                             } else if (username.isBlank()) {
-                                errorMessage = "Username tidak boleh kosong."
+                                errorMessage = if (isEn) "Username cannot be empty." else "Username tidak boleh kosong."
                             } else if (password.isBlank()) {
-                                errorMessage = "Password tidak boleh kosong."
+                                errorMessage = if (isEn) "Password cannot be empty." else "Password tidak boleh kosong."
                             } else {
                                 onConfirm(name.trim(), username.trim().lowercase(), selectedDormitory, phone.trim(), password.trim())
                             }
@@ -282,7 +294,7 @@ fun AddWaliAccountDialog(
                         shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.testTag("btn_save_wali_account")
                     ) {
-                        Text("Simpan & Buat Kartu")
+                        Text(if (isEn) "Save & Create Card" else "Simpan & Buat Kartu")
                     }
                 }
             }

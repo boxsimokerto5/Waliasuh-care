@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 /**
  * Splash Screen Beranimasi Kartun Panda Dokter Berlari.
@@ -77,6 +78,7 @@ fun SplashScreen(
     onFinish: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEn = LocalAppStrings.current.isEnglish
     // Progress Animatable dari 0f ke 1f selama 9.000 ms (9 detik)
     val progressAnimatable = remember { Animatable(0f) }
 
@@ -138,10 +140,18 @@ fun SplashScreen(
     )
 
     // Pesan status rotasi berdasarkan progres 9 detik (berganti tiap 3 detik)
-    val statusMessage = when {
-        currentProgress < 0.35f -> "🐼 Menyiapkan sistem pemantauan kesehatan anak asuh..."
-        currentProgress < 0.70f -> "🏥 Menghubungkan integrasi layanan kesehatan & rujukan faskes..."
-        else -> "✨ Siaga melayani dan menjaga kesehatan seluruh siswa asrama!"
+    val statusMessage = if (isEn) {
+        when {
+            currentProgress < 0.35f -> "🐼 Preparing student health monitoring system..."
+            currentProgress < 0.70f -> "🏥 Connecting health services & referral facilities..."
+            else -> "✨ Ready to care for and protect every Asrama student's health!"
+        }
+    } else {
+        when {
+            currentProgress < 0.35f -> "🐼 Menyiapkan sistem pemantauan kesehatan anak asuh..."
+            currentProgress < 0.70f -> "🏥 Menghubungkan integrasi layanan kesehatan & rujukan faskes..."
+            else -> "✨ Siaga melayani dan menjaga kesehatan seluruh siswa asrama!"
+        }
     }
 
     Scaffold(
@@ -184,14 +194,14 @@ fun SplashScreen(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = "Lewati",
+                            text = if (isEn) "Skip" else "Lewati",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
                             color = WaliPrimary
                         )
                         Icon(
                             imageVector = Icons.Default.FastForward,
-                            contentDescription = "Lewati Splash",
+                            contentDescription = if (isEn) "Skip Splash" else "Lewati Splash",
                             tint = WaliPrimary,
                             modifier = Modifier.size(16.dp)
                         )
@@ -246,7 +256,7 @@ fun SplashScreen(
                         ) {
                             Image(
                                 painter = painterResource(id = R.drawable.logo_sr_care),
-                                contentDescription = "Logo Resmi Wali Asuh Care",
+                                contentDescription = if (isEn) "Official Wali Asuh Care Logo" else "Logo Resmi Wali Asuh Care",
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(CircleShape),
@@ -308,10 +318,15 @@ fun SplashScreen(
                 )
 
                 Text(
-                    text = "Platform Kesehatan Sekolah & Asrama Terpadu",
+                    text = if (isEn) {
+                        "Integrated School & Asrama Health Platform"
+                    } else {
+                        "Platform Kesehatan Sekolah & Asrama Terpadu"
+                    },
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = WaliPrimary
+                    color = WaliPrimary,
+                    textAlign = TextAlign.Center
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -334,7 +349,11 @@ fun SplashScreen(
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = "Layanan Pemantauan Kesehatan & Rujukan Faskes",
+                            text = if (isEn) {
+                                "Health Monitoring & Referral Facility Service"
+                            } else {
+                                "Layanan Pemantauan Kesehatan & Rujukan Faskes"
+                            },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Medium,
                             color = Color(0xFF334155)
@@ -370,7 +389,11 @@ fun SplashScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Memuat sistem... ${(currentProgress * 100).toInt()}%",
+                            text = if (isEn) {
+                                "Loading system... ${(currentProgress * 100).toInt()}%"
+                            } else {
+                                "Memuat sistem... ${(currentProgress * 100).toInt()}%"
+                            },
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF475569)

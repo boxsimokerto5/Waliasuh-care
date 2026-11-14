@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,6 +72,7 @@ fun ChangeAdminPasswordDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
     var currentPasswordVisible by remember { mutableStateOf(false) }
     var newPassword by remember { mutableStateOf("") }
     var newPasswordVisible by remember { mutableStateOf(false) }
@@ -121,13 +123,17 @@ fun ChangeAdminPasswordDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = "Ganti Password Admin Sekolah",
+                            text = if (isEn) "Change School Admin Password" else "Ganti Password Admin Sekolah",
                             fontWeight = FontWeight.Bold,
                             fontSize = 17.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Username dikunci agar identitas sekolah tetap konsisten",
+                            text = if (isEn) {
+                                "Username is locked to keep school identity consistent"
+                            } else {
+                                "Username dikunci agar identitas sekolah tetap konsisten"
+                            },
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -157,13 +163,17 @@ fun ChangeAdminPasswordDialog(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(
-                                text = "Tersinkronisasi ke Portal Superadmin",
+                                text = if (isEn) "Synced to Superadmin Portal" else "Tersinkronisasi ke Portal Superadmin",
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0369A1)
                             )
                             Text(
-                                text = "Password baru Anda akan otomatis tersinkronisasi ke PocketBase dan tetap dapat dipantau oleh Superadmin untuk keperluan bantuan/pemulihan akun sekolah.",
+                                text = if (isEn) {
+                                    "Your new password will automatically sync to PocketBase and remain visible to Superadmin for school account support/recovery."
+                                } else {
+                                    "Password baru Anda akan otomatis tersinkronisasi ke PocketBase dan tetap dapat dipantau oleh Superadmin untuk keperluan bantuan/pemulihan akun sekolah."
+                                },
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF0C4A6E),
                                 lineHeight = 16.sp
@@ -199,7 +209,7 @@ fun ChangeAdminPasswordDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Sekolah:",
+                                    text = if (isEn) "School:" else "Sekolah:",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -226,7 +236,7 @@ fun ChangeAdminPasswordDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Username (Terkunci):",
+                                    text = if (isEn) "Username (Locked):" else "Username (Terkunci):",
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -255,7 +265,7 @@ fun ChangeAdminPasswordDialog(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Password Saat Ini:",
+                                        text = if (isEn) "Current Password:" else "Password Saat Ini:",
                                         fontSize = 12.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -274,7 +284,11 @@ fun ChangeAdminPasswordDialog(
                                     ) {
                                         Icon(
                                             imageVector = if (currentPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                            contentDescription = if (currentPasswordVisible) "Sembunyikan" else "Lihat",
+                                            contentDescription = if (currentPasswordVisible) {
+                                                if (isEn) "Hide" else "Sembunyikan"
+                                            } else {
+                                                if (isEn) "Show" else "Lihat"
+                                            },
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                             modifier = Modifier.size(16.dp)
                                         )
@@ -307,8 +321,8 @@ fun ChangeAdminPasswordDialog(
                         newPassword = it
                         errorMessage = null
                     },
-                    label = { Text("Password Baru *") },
-                    placeholder = { Text("Masukkan password baru") },
+                    label = { Text(if (isEn) "New Password *" else "Password Baru *") },
+                    placeholder = { Text(if (isEn) "Enter new password" else "Masukkan password baru") },
                     leadingIcon = {
                         Icon(Icons.Default.Lock, contentDescription = null, tint = WaliPrimary)
                     },
@@ -316,7 +330,11 @@ fun ChangeAdminPasswordDialog(
                         IconButton(onClick = { newPasswordVisible = !newPasswordVisible }) {
                             Icon(
                                 imageVector = if (newPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (newPasswordVisible) "Sembunyikan" else "Lihat",
+                                contentDescription = if (newPasswordVisible) {
+                                    if (isEn) "Hide" else "Sembunyikan"
+                                } else {
+                                    if (isEn) "Show" else "Lihat"
+                                },
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -325,7 +343,14 @@ fun ChangeAdminPasswordDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     supportingText = {
-                        Text("Minimal 6 karakter. Username login tetap '$adminUsername'.", fontSize = 11.sp)
+                        Text(
+                            text = if (isEn) {
+                                "Minimum 6 characters. Login username remains '$adminUsername'."
+                            } else {
+                                "Minimal 6 karakter. Username login tetap '$adminUsername'."
+                            },
+                            fontSize = 11.sp
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -339,8 +364,8 @@ fun ChangeAdminPasswordDialog(
                         confirmPassword = it
                         errorMessage = null
                     },
-                    label = { Text("Ulangi Password Baru *") },
-                    placeholder = { Text("Ketik ulang password baru") },
+                    label = { Text(if (isEn) "Repeat New Password *" else "Ulangi Password Baru *") },
+                    placeholder = { Text(if (isEn) "Retype new password" else "Ketik ulang password baru") },
                     leadingIcon = {
                         Icon(Icons.Default.LockReset, contentDescription = null, tint = WaliPrimary)
                     },
@@ -348,7 +373,11 @@ fun ChangeAdminPasswordDialog(
                         IconButton(onClick = { confirmPasswordVisible = !confirmPasswordVisible }) {
                             Icon(
                                 imageVector = if (confirmPasswordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = if (confirmPasswordVisible) "Sembunyikan" else "Lihat",
+                                contentDescription = if (confirmPasswordVisible) {
+                                    if (isEn) "Hide" else "Sembunyikan"
+                                } else {
+                                    if (isEn) "Show" else "Lihat"
+                                },
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -373,7 +402,7 @@ fun ChangeAdminPasswordDialog(
                         shape = RoundedCornerShape(10.dp),
                         enabled = !isSubmitting
                     ) {
-                        Text("Batal")
+                        Text(if (isEn) "Cancel" else "Batal")
                     }
                     Spacer(modifier = Modifier.width(10.dp))
                     Button(
@@ -382,15 +411,15 @@ fun ChangeAdminPasswordDialog(
                             val cleanConfirm = confirmPassword.trim()
 
                             if (cleanNewPass.isBlank()) {
-                                errorMessage = "Silakan masukkan password baru."
+                                errorMessage = if (isEn) "Please enter a new password." else "Silakan masukkan password baru."
                                 return@Button
                             }
                             if (cleanNewPass.length < 6) {
-                                errorMessage = "Password baru minimal 6 karakter."
+                                errorMessage = if (isEn) "New password must be at least 6 characters." else "Password baru minimal 6 karakter."
                                 return@Button
                             }
                             if (cleanNewPass != cleanConfirm) {
-                                errorMessage = "Konfirmasi password tidak cocok. Silakan periksa kembali."
+                                errorMessage = if (isEn) "Password confirmation does not match. Please check again." else "Konfirmasi password tidak cocok. Silakan periksa kembali."
                                 return@Button
                             }
 
@@ -416,7 +445,13 @@ fun ChangeAdminPasswordDialog(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text(if (isSubmitting) "Menyimpan..." else "Simpan Password")
+                        Text(
+                            if (isSubmitting) {
+                                if (isEn) "Saving..." else "Menyimpan..."
+                            } else {
+                                if (isEn) "Save Password" else "Simpan Password"
+                            }
+                        )
                     }
                 }
             }

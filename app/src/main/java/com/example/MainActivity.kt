@@ -105,45 +105,59 @@ class MainActivity : ComponentActivity() {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
             val viewModel: HealthViewModel = viewModel()
             val userRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+            val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+            val baseContext = LocalContext.current
+            val localizedContext = remember(baseContext, appLanguage) {
+                AppLanguageManager.createLocalizedContext(baseContext, appLanguage)
+            }
+            val appStrings = remember(appLanguage) {
+                AppLanguageManager.stringsFor(appLanguage)
+            }
             var showSplashScreen by rememberSaveable { mutableStateOf(true) }
 
-            MyApplicationTheme(darkTheme = isDarkTheme) {
-                if (showSplashScreen) {
-                    SplashScreen(
-                        onFinish = { showSplashScreen = false }
-                    )
-                } else {
-                    when {
-                        userRole == UserRole.NOT_LOGGED_IN -> {
-                            LoginScreen(
-                                viewModel = viewModel,
-                                onLoginSuccessAdmin = {},
-                                onLoginSuccessWali = { _ -> },
-                                onLoginSuccessSuperAdmin = {}
-                            )
-                        }
-                        userRole == UserRole.SUPERADMIN -> {
-                            SuperAdminScreen(
-                                viewModel = viewModel,
-                                onLogout = { viewModel.logout() }
-                            )
-                        }
-                        userRole == UserRole.ADMIN -> {
-                            AdminScreen(
-                                viewModel = viewModel,
-                                onLogout = { viewModel.logout() }
-                            )
-                        }
-                        else -> {
-                            WaliAsuhCareApp(
-                                isDarkTheme = isDarkTheme,
-                                onToggleTheme = { isDarkTheme = !isDarkTheme },
-                                initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
-                                viewModel = viewModel,
-                                onLogout = {
-                                    viewModel.logout()
-                                }
-                            )
+            CompositionLocalProvider(
+                LocalContext provides localizedContext,
+                LocalConfiguration provides localizedContext.resources.configuration,
+                LocalAppStrings provides appStrings
+            ) {
+                MyApplicationTheme(darkTheme = isDarkTheme) {
+                    if (showSplashScreen) {
+                        SplashScreen(
+                            onFinish = { showSplashScreen = false }
+                        )
+                    } else {
+                        when {
+                            userRole == UserRole.NOT_LOGGED_IN -> {
+                                LoginScreen(
+                                    viewModel = viewModel,
+                                    onLoginSuccessAdmin = {},
+                                    onLoginSuccessWali = { _ -> },
+                                    onLoginSuccessSuperAdmin = {}
+                                )
+                            }
+                            userRole == UserRole.SUPERADMIN -> {
+                                SuperAdminScreen(
+                                    viewModel = viewModel,
+                                    onLogout = { viewModel.logout() }
+                                )
+                            }
+                            userRole == UserRole.ADMIN -> {
+                                AdminScreen(
+                                    viewModel = viewModel,
+                                    onLogout = { viewModel.logout() }
+                                )
+                            }
+                            else -> {
+                                WaliAsuhCareApp(
+                                    isDarkTheme = isDarkTheme,
+                                    onToggleTheme = { isDarkTheme = !isDarkTheme },
+                                    initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
+                                    viewModel = viewModel,
+                                    onLogout = {
+                                        viewModel.logout()
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -161,28 +175,13 @@ fun WaliAsuhCareApp(
     viewModel: HealthViewModel = viewModel(),
     onLogout: () -> Unit = {}
 ) {
-    val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
-    val baseContext = LocalContext.current
-    val localizedContext = remember(baseContext, appLanguage) {
-        AppLanguageManager.createLocalizedContext(baseContext, appLanguage)
-    }
-    val appStrings = remember(appLanguage) {
-        AppLanguageManager.stringsFor(appLanguage)
-    }
-
-    CompositionLocalProvider(
-        LocalContext provides localizedContext,
-        LocalConfiguration provides localizedContext.resources.configuration,
-        LocalAppStrings provides appStrings
-    ) {
-        WaliAsuhCareAppContent(
-            isDarkTheme = isDarkTheme,
-            onToggleTheme = onToggleTheme,
-            initialScreen = initialScreen,
-            viewModel = viewModel,
-            onLogout = onLogout
-        )
-    }
+    WaliAsuhCareAppContent(
+        isDarkTheme = isDarkTheme,
+        onToggleTheme = onToggleTheme,
+        initialScreen = initialScreen,
+        viewModel = viewModel,
+        onLogout = onLogout
+    )
 }
 
 @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)

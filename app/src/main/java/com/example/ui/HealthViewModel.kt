@@ -1386,16 +1386,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun testCloudConnection(onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             _isSyncing.value = true
             val result = PocketBaseSyncManager.testConnection(getApplication())
             _isSyncing.value = false
             refreshCloudConfig()
             if (result.isSuccess) {
-                val msg = result.getOrNull() ?: "Koneksi PocketBase Berhasil!"
+                val msg = result.getOrNull() ?: if (isEn) "PocketBase connection succeeded!" else "Koneksi PocketBase Berhasil!"
                 _cloudSyncMessage.value = msg
                 onResult(true, msg)
             } else {
-                val err = result.exceptionOrNull()?.message ?: "Gagal terhubung ke server PocketBase."
+                val err = result.exceptionOrNull()?.message ?: if (isEn) "Failed to connect to PocketBase server." else "Gagal terhubung ke server PocketBase."
                 _cloudSyncMessage.value = err
                 onResult(false, err)
             }
@@ -1404,6 +1405,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun syncAllWithCloud(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             _isSyncing.value = true
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
@@ -1420,11 +1422,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             _isSyncing.value = false
             refreshCloudConfig()
             if (result.isSuccess) {
-                val msg = result.getOrNull() ?: "Sinkronisasi Berhasil!"
+                val msg = result.getOrNull() ?: if (isEn) "Sync succeeded!" else "Sinkronisasi Berhasil!"
                 _cloudSyncMessage.value = msg
                 onResult(true, msg)
             } else {
-                val err = result.exceptionOrNull()?.message ?: "Gagal sinkronisasi dengan PocketBase."
+                val err = result.exceptionOrNull()?.message ?: if (isEn) "Failed to sync with PocketBase." else "Gagal sinkronisasi dengan PocketBase."
                 _cloudSyncMessage.value = err
                 onResult(false, err)
             }
@@ -1433,24 +1435,40 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshSuperadminCloudData(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             if (!PocketBaseConfig.isConfigured(getApplication())) {
-                onResult(false, "Server PocketBase belum terkonfigurasi.")
+                onResult(false, if (isEn) "PocketBase server is not configured yet." else "Server PocketBase belum terkonfigurasi.")
                 return@launch
             }
             _isSyncing.value = true
             try {
                 PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                 _isSyncing.value = false
-                onResult(true, "Data sekolah, akun admin, & wali terbaru berhasil dimuat dari PocketBase.")
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Latest school, admin & Wali Asuh data loaded from PocketBase."
+                    } else {
+                        "Data sekolah, akun admin, & wali terbaru berhasil dimuat dari PocketBase."
+                    }
+                )
             } catch (e: Exception) {
                 _isSyncing.value = false
-                onResult(false, "Gagal memuat data dari PocketBase: ${e.localizedMessage}")
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Failed to load data from PocketBase: ${e.localizedMessage}"
+                    } else {
+                        "Gagal memuat data dari PocketBase: ${e.localizedMessage}"
+                    }
+                )
             }
         }
     }
 
     fun uploadAllStudentsToCloud(onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             _isSyncing.value = true
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             val studentList = students.value
@@ -1463,13 +1481,21 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     getProfileUpdatedAt(activeSchool).takeIf { it > 0L } ?: System.currentTimeMillis()
                 )
                 val count = result.getOrNull() ?: 0
-                val msg = "Berhasil mengunggah $count data siswa ($activeSchool) ke PocketBase!"
+                val msg = if (isEn) {
+                    "Successfully uploaded $count student records ($activeSchool) to PocketBase!"
+                } else {
+                    "Berhasil mengunggah $count data siswa ($activeSchool) ke PocketBase!"
+                }
                 _isSyncing.value = false
                 _cloudSyncMessage.value = msg
                 onResult(true, msg)
             } else {
                 _isSyncing.value = false
-                val err = result.exceptionOrNull()?.message ?: "Gagal upload data siswa ke PocketBase."
+                val err = result.exceptionOrNull()?.message ?: if (isEn) {
+                    "Failed to upload student data to PocketBase."
+                } else {
+                    "Gagal upload data siswa ke PocketBase."
+                }
                 _cloudSyncMessage.value = err
                 onResult(false, err)
             }
@@ -1478,11 +1504,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- Authentication & Role Management ---
     suspend fun executeLogin(user: String, pass: String, rememberMe: Boolean = false): LoginResult {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
         val cleanUser = user.trim()
         val cleanPass = pass.trim()
 
         if (cleanUser.isEmpty() || cleanPass.isEmpty()) {
-            return LoginResult.Error("Username dan password wajib diisi.")
+            return LoginResult.Error(
+                if (isEn) "Username and password are required." else "Username dan password wajib diisi."
+            )
         }
 
         // 0. Cek Kredensial Superadmin Resmi
@@ -1522,7 +1551,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 ?: "Woyowoyo12@"
 
             if (pilotOverride?.status == "SUSPENDED") {
-                return LoginResult.Error("Maaf akun sedang disuspend oleh admin")
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Sorry, this account is currently suspended by the admin."
+                    } else {
+                        "Maaf akun sedang disuspend oleh admin"
+                    }
+                )
             }
 
             if (cleanPass == expectedPilotPassword) {
@@ -1559,7 +1594,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 return LoginResult.SuccessAdmin
             }
-            return LoginResult.Error("Password untuk Admin 'ekowahyudiadmin' salah. Silakan periksa kembali.")
+            return LoginResult.Error(
+                if (isEn) {
+                    "Incorrect password for Admin 'ekowahyudiadmin'. Please check again."
+                } else {
+                    "Password untuk Admin 'ekowahyudiadmin' salah. Silakan periksa kembali."
+                }
+            )
         }
 
         // Helper mencari admin sekolah & akun wali di database lokal
@@ -1598,10 +1639,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         // 2. Cek Akun Admin Sekolah Terdaftar / Baru
         if (matchedSchool != null && matchedSchool.generatedAdminPassword == cleanPass) {
             if (matchedSchool.status == "SUSPENDED") {
-                return LoginResult.Error("Maaf akun sedang disuspend oleh admin")
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Sorry, this account is currently suspended by the admin."
+                    } else {
+                        "Maaf akun sedang disuspend oleh admin"
+                    }
+                )
             }
             if (matchedSchool.status != "APPROVED") {
-                return LoginResult.Error("Pengajuan pendaftaran sekolah ini belum disetujui (Status: ${matchedSchool.status}).")
+                return LoginResult.Error(
+                    if (isEn) {
+                        "This school registration has not been approved yet (Status: ${matchedSchool.status})."
+                    } else {
+                        "Pengajuan pendaftaran sekolah ini belum disetujui (Status: ${matchedSchool.status})."
+                    }
+                )
             }
             _currentUserRole.value = UserRole.ADMIN
             _currentUsername.value = matchedSchool.generatedAdminUsername
@@ -1636,7 +1689,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         // 3. Cek Akun Wali Asuh
         if (account != null) {
             if (account.password.trim() != cleanPass) {
-                return LoginResult.Error("Password untuk akun '${account.name}' salah. Silakan periksa kembali huruf besar/kecil.")
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Incorrect password for '${account.name}'. Please check capitalization and try again."
+                    } else {
+                        "Password untuk akun '${account.name}' salah. Silakan periksa kembali huruf besar/kecil."
+                    }
+                )
             }
 
             // Cek apakah sekolah akun wali asuh ini sedang disuspend
@@ -1645,7 +1704,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     it.generatedSchoolCode.equals(account.schoolId, ignoreCase = true)
                 }
             if (matchedSchoolWali != null && matchedSchoolWali.status == "SUSPENDED") {
-                return LoginResult.Error("Maaf akun sedang disuspend oleh admin")
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Sorry, this account is currently suspended by the admin."
+                    } else {
+                        "Maaf akun sedang disuspend oleh admin"
+                    }
+                )
             }
 
             _currentUserRole.value = UserRole.WALI
@@ -1700,7 +1765,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return LoginResult.SuccessWali(account)
         }
 
-        return LoginResult.Error("Username '$cleanUser' tidak ditemukan. Pastikan akun telah didaftarkan oleh Administrator.")
+        return LoginResult.Error(
+            if (isEn) {
+                "Username '$cleanUser' was not found. Make sure the account has been registered by an Administrator."
+            } else {
+                "Username '$cleanUser' tidak ditemukan. Pastikan akun telah didaftarkan oleh Administrator."
+            }
+        )
     }
 
     fun login(user: String, pass: String, rememberMe: Boolean = false, onResult: (LoginResult) -> Unit) {
@@ -1779,9 +1850,16 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onComplete: (SchoolRegistration) -> Unit = {}
     ) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             val updated = registration.copy(
                 status = "REJECTED",
-                rejectionReason = reason.trim().ifBlank { "Data pendaftaran belum memenuhi kelengkapan berkas." }
+                rejectionReason = reason.trim().ifBlank {
+                    if (isEn) {
+                        "Registration data does not meet document requirements."
+                    } else {
+                        "Data pendaftaran belum memenuhi kelengkapan berkas."
+                    }
+                }
             )
             repository.updateSchoolRegistration(updated)
             onComplete(updated)
@@ -1850,9 +1928,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             val cleanPass = newPassword.trim()
             if (cleanPass.length < 6) {
-                onResult(false, "Password baru minimal 6 karakter.")
+                onResult(
+                    false,
+                    if (isEn) "New password must be at least 6 characters." else "Password baru minimal 6 karakter."
+                )
                 return@launch
             }
 
@@ -1886,7 +1968,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
                 }
-                onResult(true, "Password admin berhasil diperbarui & tersinkron ke Superadmin!")
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Admin password updated & synced to Superadmin!"
+                    } else {
+                        "Password admin berhasil diperbarui & tersinkron ke Superadmin!"
+                    }
+                )
             } else if (activeUsername.equals("ekowahyudiadmin", ignoreCase = true) ||
                 activeTenantCode.equals("SRT1-KDR", ignoreCase = true)
             ) {
@@ -1917,9 +2006,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
                 }
-                onResult(true, "Password admin berhasil diperbarui & tersinkron ke Superadmin!")
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Admin password updated & synced to Superadmin!"
+                    } else {
+                        "Password admin berhasil diperbarui & tersinkron ke Superadmin!"
+                    }
+                )
             } else {
-                onResult(false, "Data akun admin sekolah tidak ditemukan. Silakan sinkronkan data terlebih dahulu.")
+                onResult(
+                    false,
+                    if (isEn) {
+                        "School admin account data not found. Please sync your data first."
+                    } else {
+                        "Data akun admin sekolah tidak ditemukan. Silakan sinkronkan data terlebih dahulu."
+                    }
+                )
             }
         }
     }
@@ -2150,9 +2253,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             val cleanPass = passwordConfirmation.trim()
             if (cleanPass.isBlank()) {
-                onResult(false, "Masukkan password Admin Sekolah untuk konfirmasi.")
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Enter the School Admin password to confirm."
+                    } else {
+                        "Masukkan password Admin Sekolah untuk konfirmasi."
+                    }
+                )
                 return@launch
             }
 
@@ -2177,7 +2288,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 activeTenantCode.equals("SRT1-KDR", ignoreCase = true)
 
             if (existingReg == null && !isPilotAdmin) {
-                onResult(false, "Data akun admin sekolah tidak ditemukan.")
+                onResult(
+                    false,
+                    if (isEn) "School admin account data not found." else "Data akun admin sekolah tidak ditemukan."
+                )
                 return@launch
             }
 
@@ -2185,7 +2299,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 ?: if (isPilotAdmin) "Woyowoyo12@" else ""
 
             if (expectedPassword.isNotBlank() && cleanPass != expectedPassword) {
-                onResult(false, "Password Admin Sekolah salah. Penghapusan akun dibatalkan.")
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Incorrect School Admin password. Account deletion cancelled."
+                    } else {
+                        "Password Admin Sekolah salah. Penghapusan akun dibatalkan."
+                    }
+                )
                 return@launch
             }
 
@@ -2228,7 +2349,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             _schoolProfile.value = SchoolProfile()
             _waliName.value = "Wali Asuh"
             logout()
-            onResult(true, "Akun Admin Sekolah dan seluruh data sekolah berhasil dihapus permanen.")
+            onResult(
+                true,
+                if (isEn) {
+                    "School Admin account and all school data permanently deleted."
+                } else {
+                    "Akun Admin Sekolah dan seluruh data sekolah berhasil dihapus permanen."
+                }
+            )
         }
     }
 

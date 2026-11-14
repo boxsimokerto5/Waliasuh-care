@@ -406,7 +406,7 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Privacy Policy",
+                    title = s.nav.profilePrivacyTitle,
                     subtitle = if (isEn) "Privacy policy, student data & device permissions" else "Kebijakan privasi, data siswa & izin perangkat",
                     icon = Icons.Default.PrivacyTip,
                     iconBg = Color(0xFFCCFBF1),
@@ -418,7 +418,7 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Terms & Service",
+                    title = s.nav.profileTermsTitle,
                     subtitle = if (isEn) "Terms, conditions & usage disclaimer" else "Syarat, ketentuan & disclaimer penggunaan",
                     icon = Icons.Default.Gavel,
                     iconBg = Color(0xFFF3E8FF),
@@ -430,7 +430,7 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = "Contact Us",
+                    title = if (isEn) "Contact Us" else "Hubungi Kami",
                     subtitle = if (isEn) "Contact developer support (Email & WhatsApp)" else "Hubungi pengembang (Email & WhatsApp dukungan)",
                     icon = Icons.Default.SupportAgent,
                     iconBg = Color(0xFFDCFCE7),

@@ -65,6 +65,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.SchoolRegistration
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,6 +83,8 @@ fun SchoolRegistrationDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
+    val appStrings = LocalAppStrings.current
+    val isEn = appStrings.isEnglish
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     var schoolName by remember { mutableStateOf("") }
@@ -103,8 +106,26 @@ fun SchoolRegistrationDialog(
         val sPic = reg?.picName ?: picName.trim()
         val sEmail = reg?.picEmail ?: picEmail.trim()
         val sPhone = reg?.picPhone ?: picPhone.trim()
+        val formattedDate = DateUtils.formatFullDate(System.currentTimeMillis(), appStrings.language)
 
-        val text = """
+        val text = if (isEn) {
+            """
+            *NEW SCHOOL REGISTRATION REQUEST - WALIASUH CARE*
+            --------------------------------------------------
+            🏫 *School/Foundation Name:* $sName
+            📍 *Address:* $sAddr
+            🏙️ *City/Regency:* $sCity
+            👥 *Estimated Wali Asuh Count:* $sWali people
+            
+            👤 *Person in Charge (PIC):* $sPic
+            ✉️ *Email:* $sEmail
+            📱 *WhatsApp No.:* $sPhone
+            📅 *Date:* $formattedDate
+            --------------------------------------------------
+            Hello Superadmin Wali Asuh Care, I have completed the school registration form above and attached a screenshot of the registration proof. Please verify and issue our school admin access account. Thank you!
+            """.trimIndent()
+        } else {
+            """
             *PENGAJUAN PENDAFTARAN SEKOLAH BARU - WALIASUH CARE*
             --------------------------------------------------
             🏫 *Nama Sekolah/Yayasan:* $sName
@@ -115,10 +136,11 @@ fun SchoolRegistrationDialog(
             👤 *Nama Penanggung Jawab:* $sPic
             ✉️ *Email:* $sEmail
             📱 *No. WhatsApp:* $sPhone
-            📅 *Tanggal:* ${DateUtils.formatFullDate(System.currentTimeMillis())}
+            📅 *Tanggal:* $formattedDate
             --------------------------------------------------
             Halo Superadmin Wali Asuh Care, saya telah melengkapi formulir pendaftaran sekolah di atas dan melampirkan screenshot bukti pendaftaran. Mohon untuk diverifikasi dan diterbitkan akun akses admin sekolah kami. Terima kasih!
-        """.trimIndent()
+            """.trimIndent()
+        }
 
         val superadminWaNumber = "6285755735676"
         val uri = Uri.parse("https://api.whatsapp.com/send?phone=$superadminWaNumber&text=${Uri.encode(text)}")
@@ -127,8 +149,21 @@ fun SchoolRegistrationDialog(
             context.startActivity(intent)
         } catch (e: Exception) {
             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            clipboard.setPrimaryClip(ClipData.newPlainText("Pendaftaran Sekolah", text))
-            Toast.makeText(context, "Format pesan telah disalin. Silakan kirim ke WA 085755735676", Toast.LENGTH_LONG).show()
+            clipboard.setPrimaryClip(
+                ClipData.newPlainText(
+                    if (isEn) "School Registration" else "Pendaftaran Sekolah",
+                    text
+                )
+            )
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Message copied. Please send to WhatsApp 085755735676"
+                } else {
+                    "Format pesan telah disalin. Silakan kirim ke WA 085755735676"
+                },
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -166,16 +201,21 @@ fun SchoolRegistrationDialog(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column {
                         Text(
-                            text = if (submittedRegistration == null) "Pendaftaran Sekolah Baru" else "Pengajuan Berhasil Dikirim!",
+                            text = if (submittedRegistration == null) {
+                                if (isEn) "New School Registration" else "Pendaftaran Sekolah Baru"
+                            } else {
+                                if (isEn) "Request Submitted Successfully!" else "Pengajuan Berhasil Dikirim!"
+                            },
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = if (submittedRegistration == null)
-                                "Ajukan sekolah atau yayasan asrama Anda untuk bergabung"
-                            else
-                                "Ikuti petunjuk di bawah untuk verifikasi Superadmin",
+                            text = if (submittedRegistration == null) {
+                                if (isEn) "Apply to register your school or Asrama foundation" else "Ajukan sekolah atau yayasan asrama Anda untuk bergabung"
+                            } else {
+                                if (isEn) "Follow the instructions below for Superadmin verification" else "Ikuti petunjuk di bawah untuk verifikasi Superadmin"
+                            },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -207,7 +247,7 @@ fun SchoolRegistrationDialog(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "FORMULIR BUKTI PENDAFTARAN",
+                                    text = if (isEn) "REGISTRATION PROOF FORM" else "FORMULIR BUKTI PENDAFTARAN",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
                                     color = WaliPrimary
@@ -215,29 +255,33 @@ fun SchoolRegistrationDialog(
                             }
 
                             Text(
-                                text = "Sekolah: ${reg.schoolName}",
+                                text = if (isEn) "School: ${reg.schoolName}" else "Sekolah: ${reg.schoolName}",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 16.sp,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Kota/Kabupaten: ${reg.city}\nAlamat: ${reg.address}",
+                                text = if (isEn) {
+                                    "City/Regency: ${reg.city}\nAddress: ${reg.address}"
+                                } else {
+                                    "Kota/Kabupaten: ${reg.city}\nAlamat: ${reg.address}"
+                                },
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "PJ: ${reg.picName} (${reg.picPhone})",
+                                text = if (isEn) "PIC: ${reg.picName} (${reg.picPhone})" else "PJ: ${reg.picName} (${reg.picPhone})",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Estimasi Wali Asuh: ${reg.estimatedWaliCount} Orang",
+                                text = if (isEn) "Estimated Wali Asuh: ${reg.estimatedWaliCount} People" else "Estimasi Wali Asuh: ${reg.estimatedWaliCount} Orang",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "Status: MENUNGGU PERSETUJUAN SUPERADMIN",
+                                text = if (isEn) "Status: PENDING SUPERADMIN APPROVAL" else "Status: MENUNGGU PERSETUJUAN SUPERADMIN",
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFD97706)
@@ -264,14 +308,18 @@ fun SchoolRegistrationDialog(
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "INSTRUKSI PENTING",
+                                    text = if (isEn) "IMPORTANT INSTRUCTION" else "INSTRUKSI PENTING",
                                     fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = Color(0xFF92400E)
                                 )
                             }
                             Text(
-                                text = "Silakan SCREENSHOT halaman ini, dan kirim ke nomor WhatsApp 085755735676 untuk diproses dan disetujui oleh Superadmin.",
+                                text = if (isEn) {
+                                    "Please SCREENSHOT this page and send it to WhatsApp 085755735676 for processing and approval by the Superadmin."
+                                } else {
+                                    "Silakan SCREENSHOT halaman ini, dan kirim ke nomor WhatsApp 085755735676 untuk diproses dan disetujui oleh Superadmin."
+                                },
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF78350F)
@@ -296,7 +344,7 @@ fun SchoolRegistrationDialog(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Kirim ke WA Superadmin (085755735676)",
+                            text = if (isEn) "Send to Superadmin WA (085755735676)" else "Kirim ke WA Superadmin (085755735676)",
                             color = Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 13.5.sp
@@ -309,7 +357,7 @@ fun SchoolRegistrationDialog(
                             .fillMaxWidth()
                             .height(48.dp)
                     ) {
-                        Text("Tutup & Kembali ke Login")
+                        Text(if (isEn) "Close & Back to Login" else "Tutup & Kembali ke Login")
                     }
                 } else {
                     // FORMULIR PENGISIAN
@@ -319,8 +367,8 @@ fun SchoolRegistrationDialog(
                             schoolName = it
                             errorMessage = null
                         },
-                        label = { Text("Nama Sekolah / Yayasan Lengkap *") },
-                        placeholder = { Text("Contoh: SMP IT Nurul Fikri") },
+                        label = { Text(if (isEn) "Full School / Foundation Name *" else "Nama Sekolah / Yayasan Lengkap *") },
+                        placeholder = { Text(if (isEn) "Example: SMP IT Nurul Fikri" else "Contoh: SMP IT Nurul Fikri") },
                         leadingIcon = { Icon(Icons.Default.School, contentDescription = null, tint = WaliPrimary) },
                         singleLine = true,
                         modifier = Modifier
@@ -334,8 +382,8 @@ fun SchoolRegistrationDialog(
                             city = it
                             errorMessage = null
                         },
-                        label = { Text("Kota / Kabupaten *") },
-                        placeholder = { Text("Contoh: Kabupaten Kediri / Kota Malang") },
+                        label = { Text(if (isEn) "City / Regency *" else "Kota / Kabupaten *") },
+                        placeholder = { Text(if (isEn) "Example: Kediri Regency / Malang City" else "Contoh: Kabupaten Kediri / Kota Malang") },
                         leadingIcon = { Icon(Icons.Default.LocationOn, contentDescription = null, tint = WaliPrimary) },
                         singleLine = true,
                         modifier = Modifier
@@ -349,8 +397,8 @@ fun SchoolRegistrationDialog(
                             address = it
                             errorMessage = null
                         },
-                        label = { Text("Alamat Lengkap Sekolah / Panti *") },
-                        placeholder = { Text("Contoh: Jl. Merdeka No. 12, Kec. Wates") },
+                        label = { Text(if (isEn) "Full School / Boarding Address *" else "Alamat Lengkap Sekolah / Panti *") },
+                        placeholder = { Text(if (isEn) "Example: Jl. Merdeka No. 12, Kec. Wates" else "Contoh: Jl. Merdeka No. 12, Kec. Wates") },
                         minLines = 2,
                         maxLines = 3,
                         modifier = Modifier
@@ -364,8 +412,8 @@ fun SchoolRegistrationDialog(
                             estimatedWaliText = it.filter { ch -> ch.isDigit() }
                             errorMessage = null
                         },
-                        label = { Text("Jumlah Wali Asuh (Estimasi) *") },
-                        placeholder = { Text("Contoh: 6") },
+                        label = { Text(if (isEn) "Estimated Number of Wali Asuh *" else "Jumlah Wali Asuh (Estimasi) *") },
+                        placeholder = { Text(if (isEn) "Example: 6" else "Contoh: 6") },
                         leadingIcon = { Icon(Icons.Default.Group, contentDescription = null, tint = WaliPrimary) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
@@ -380,8 +428,8 @@ fun SchoolRegistrationDialog(
                             picName = it
                             errorMessage = null
                         },
-                        label = { Text("Nama Penanggung Jawab (PJ) *") },
-                        placeholder = { Text("Contoh: Ustadz Ahmad Fauzi, S.Pd") },
+                        label = { Text(if (isEn) "Person in Charge (PIC) Name *" else "Nama Penanggung Jawab (PJ) *") },
+                        placeholder = { Text(if (isEn) "Example: Ustadz Ahmad Fauzi, S.Pd" else "Contoh: Ustadz Ahmad Fauzi, S.Pd") },
                         leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = WaliPrimary) },
                         singleLine = true,
                         modifier = Modifier
@@ -395,8 +443,8 @@ fun SchoolRegistrationDialog(
                             picEmail = it
                             errorMessage = null
                         },
-                        label = { Text("Email Penanggung Jawab *") },
-                        placeholder = { Text("Contoh: ahmad.fauzi@gmail.com") },
+                        label = { Text(if (isEn) "Person in Charge Email *" else "Email Penanggung Jawab *") },
+                        placeholder = { Text(if (isEn) "Example: ahmad.fauzi@gmail.com" else "Contoh: ahmad.fauzi@gmail.com") },
                         leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = WaliPrimary) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                         singleLine = true,
@@ -411,8 +459,8 @@ fun SchoolRegistrationDialog(
                             picPhone = it
                             errorMessage = null
                         },
-                        label = { Text("Nomor Telepon / WhatsApp Aktif *") },
-                        placeholder = { Text("Contoh: 081234567890") },
+                        label = { Text(if (isEn) "Active Phone / WhatsApp Number *" else "Nomor Telepon / WhatsApp Aktif *") },
+                        placeholder = { Text(if (isEn) "Example: 081234567890" else "Contoh: 081234567890") },
                         leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = WaliPrimary) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
@@ -439,7 +487,11 @@ fun SchoolRegistrationDialog(
                             )
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Setelah mengisi formulir, silakan screenshot halaman ini dan kirim ke nomor WhatsApp 085755735676 untuk percepatan persetujuan.",
+                                text = if (isEn) {
+                                    "After filling out the form, please screenshot this page and send it to WhatsApp 085755735676 to speed up approval."
+                                } else {
+                                    "Setelah mengisi formulir, silakan screenshot halaman ini dan kirim ke nomor WhatsApp 085755735676 untuk percepatan persetujuan."
+                                },
                                 fontSize = 12.sp,
                                 color = Color(0xFF78350F),
                                 lineHeight = 17.sp
@@ -467,13 +519,17 @@ fun SchoolRegistrationDialog(
                                 .weight(1f)
                                 .height(48.dp)
                         ) {
-                            Text("Batal")
+                            Text(if (isEn) "Cancel" else "Batal")
                         }
 
                         Button(
                             onClick = {
                                 if (schoolName.isBlank() || city.isBlank() || address.isBlank() || picName.isBlank() || picPhone.isBlank()) {
-                                    errorMessage = "Mohon lengkapi seluruh kolom bertanda bintang (*)"
+                                    errorMessage = if (isEn) {
+                                        "Please complete all required fields marked with (*)"
+                                    } else {
+                                        "Mohon lengkapi seluruh kolom bertanda bintang (*)"
+                                    }
                                     return@Button
                                 }
                                 val count = estimatedWaliText.toIntOrNull() ?: 1
@@ -487,7 +543,11 @@ fun SchoolRegistrationDialog(
                                     picPhone.trim()
                                 ) { saved ->
                                     submittedRegistration = saved
-                                    Toast.makeText(context, "Pengajuan berhasil dikirim ke antrean Superadmin!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Registration request sent to Superadmin queue!" else "Pengajuan berhasil dikirim ke antrean Superadmin!",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
                                 }
                             },
                             modifier = Modifier
@@ -496,7 +556,10 @@ fun SchoolRegistrationDialog(
                                 .testTag("btn_submit_registration"),
                             colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary)
                         ) {
-                            Text("Kirim Pengajuan", fontWeight = FontWeight.Bold)
+                            Text(
+                                if (isEn) "Submit Request" else "Kirim Pengajuan",
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
