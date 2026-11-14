@@ -298,7 +298,7 @@ private fun PrivacyPolicyContent() {
 
         LegalSectionCard(
             title = "2. Tujuan Penggunaan & Penyimpanan Data",
-            body = "• Data disimpan secara lokal di perangkat (Room) dan disinkronkan melalui koneksi terenkripsi (HTTPS) ke database cloud multi-tenant (Supabase) yang terisolasi per kode sekolah (school_id).\n" +
+            body = "• Data disimpan secara lokal di perangkat (Room) dan disinkronkan melalui koneksi terenkripsi (HTTPS) ke database cloud multi-tenant (PocketBase) yang terisolasi per kode sekolah (school_id).\n" +
                 "• Data semata-mata digunakan untuk mendukung dokumentasi perawatan, pelaporan wali asuh, dan administrasi internal sekolah terdaftar."
         )
 
@@ -370,7 +370,7 @@ private fun ContactUsContent(context: Context) {
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "Butuh bantuan pendaftaran sekolah, kendala sinkronisasi Supabase, laporan bug, atau permintaan penghapusan data? Hubungi tim pengembang melalui kanal resmi berikut:",
+            text = "Butuh bantuan pendaftaran sekolah, kendala sinkronisasi PocketBase, laporan bug, atau permintaan penghapusan data? Hubungi tim pengembang melalui kanal resmi berikut:",
             fontSize = 12.5.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             lineHeight = 18.sp

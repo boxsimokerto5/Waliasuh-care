@@ -615,10 +615,10 @@ fun AdminScreen(
                                 Text("Ganti Password Admin Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold, color = WaliPrimary)
                             }
 
-                            // Tombol Sinkronkan Data Sekolah ke Cloud (Supabase)
+                            // Tombol Sinkronkan Data Sekolah ke Cloud (PocketBase)
                             Button(
                                 onClick = {
-                                    viewModel.syncAllWithSupabase { success, msg ->
+                                    viewModel.syncAllWithCloud { success, msg ->
                                         Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                     }
                                 },
@@ -637,7 +637,7 @@ fun AdminScreen(
                                         strokeWidth = 2.dp
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Menyinkronkan ke Cloud Supabase...", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    Text("Menyinkronkan ke Cloud PocketBase...", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                 } else {
                                     Icon(Icons.Default.CloudSync, contentDescription = "Sinkron Cloud", modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))

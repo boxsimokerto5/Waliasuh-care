@@ -5,6 +5,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,15 +20,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudDone
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.CloudUpload
+import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.ContentCopy
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -41,12 +44,12 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -54,37 +57,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.border
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.material.icons.filled.Code
-import androidx.compose.material3.TextButton
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.example.data.remote.supabase.SupabaseClient
-import com.example.data.remote.supabase.SupabaseConfig
-import com.example.data.remote.supabase.SupabaseSchemaProvider
+import com.example.data.remote.pocketbase.PocketBaseClient
+import com.example.data.remote.pocketbase.PocketBaseConfig
+import com.example.data.remote.pocketbase.PocketBaseSchemaProvider
 import com.example.ui.HealthViewModel
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SupabaseConfigDialog(
+fun PocketBaseConfigDialog(
     viewModel: HealthViewModel,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
 
-    var urlInput by remember { mutableStateOf(SupabaseConfig.getSupabaseUrl(context)) }
-    var keyInput by remember { mutableStateOf(SupabaseConfig.getSupabaseKey(context)) }
-    var showKey by remember { mutableStateOf(false) }
+    var urlInput by remember { mutableStateOf(PocketBaseConfig.getBaseUrl(context)) }
 
-    val isConfigured by viewModel.isSupabaseConfigured.collectAsStateWithLifecycle()
+    val isConfigured by viewModel.isCloudConfigured.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
@@ -95,10 +88,10 @@ fun SupabaseConfigDialog(
 
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var isSuccessStatus by remember { mutableStateOf(true) }
-    var showSqlSchema by remember { mutableStateOf(false) }
+    var showSchemaInfo by remember { mutableStateOf(false) }
 
-    val lastSync = SupabaseConfig.getLastSyncTime(context)
-    val sqlSchemaText = SupabaseSchemaProvider.FULL_SQL_SCHEMA
+    val lastSync = PocketBaseConfig.getLastSyncTime(context)
+    val schemaSummaryText = PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -120,27 +113,25 @@ fun SupabaseConfigDialog(
                     .padding(bottom = 28.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Koneksi Database Supabase",
+                            text = "Koneksi Server PocketBase",
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Sinkronisasi Cloud PostgreSQL antar Wali Asuh",
+                            text = "Sinkronisasi Cloud & Checklist Online antar Wali Asuh",
                             fontSize = 11.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
-                    // Connection Status Badge
                     Card(
                         colors = CardDefaults.cardColors(
                             containerColor = if (isConfigured) Color(0xFF10B981).copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
@@ -170,7 +161,6 @@ fun SupabaseConfigDialog(
 
                 HorizontalDivider()
 
-                // Status Message Banner (if any)
                 if (statusMessage != null) {
                     Card(
                         colors = CardDefaults.cardColors(
@@ -187,63 +177,59 @@ fun SupabaseConfigDialog(
                     }
                 }
 
-                // Project URL Input
                 OutlinedTextField(
                     value = urlInput,
                     onValueChange = { urlInput = it },
-                    label = { Text("Project URL Supabase") },
-                    placeholder = { Text("https://xyzproject.supabase.co") },
+                    label = { Text("URL Server PocketBase") },
+                    placeholder = { Text(PocketBaseConfig.EMBEDDED_URL) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(10.dp)
                 )
 
-                // Anon Key Input
-                OutlinedTextField(
-                    value = keyInput,
-                    onValueChange = { keyInput = it },
-                    label = { Text("Anon / Public API Key") },
-                    placeholder = { Text("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...") },
-                    singleLine = true,
-                    visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
-                        IconButton(onClick = { showKey = !showKey }) {
-                            Icon(
-                                imageVector = if (showKey) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                contentDescription = "Tampilkan Kunci"
-                            )
-                        }
-                    },
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
-                )
-
-                // Save & Test Button
-                Button(
-                    onClick = {
-                        SupabaseConfig.saveCredentials(context, urlInput, keyInput)
-                        SupabaseClient.invalidateCache()
-                        viewModel.testSupabaseConnection { success, msg ->
-                            isSuccessStatus = success
-                            statusMessage = msg
-                        }
-                    },
-                    enabled = !isSyncing && urlInput.isNotBlank() && keyInput.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            color = Color.White,
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Memeriksa Koneksi...")
-                    } else {
-                        Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Simpan & Uji Koneksi Supabase")
+                    Button(
+                        onClick = {
+                            PocketBaseConfig.saveBaseUrl(context, urlInput)
+                            PocketBaseClient.invalidateCache()
+                            viewModel.testCloudConnection { success, msg ->
+                                isSuccessStatus = success
+                                statusMessage = msg
+                            }
+                        },
+                        enabled = !isSyncing && urlInput.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        if (isSyncing) {
+                            CircularProgressIndicator(
+                                color = Color.White,
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Memeriksa...")
+                        } else {
+                            Icon(imageVector = Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Simpan & Uji Koneksi")
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            PocketBaseConfig.resetToDefaultUrl(context)
+                            urlInput = PocketBaseConfig.EMBEDDED_URL
+                            PocketBaseClient.invalidateCache()
+                            Toast.makeText(context, "URL dikembalikan ke server default.", Toast.LENGTH_SHORT).show()
+                        },
+                        enabled = !isSyncing,
+                        shape = RoundedCornerShape(10.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Restore, contentDescription = "Reset URL", modifier = Modifier.size(18.dp))
                     }
                 }
 
@@ -257,10 +243,9 @@ fun SupabaseConfigDialog(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                // Action 1: Two-way full multi-tenant sync
                 OutlinedButton(
                     onClick = {
-                        viewModel.syncAllWithSupabase { success, msg ->
+                        viewModel.syncAllWithCloud { success, msg ->
                             isSuccessStatus = success
                             statusMessage = msg
                         }
@@ -274,10 +259,9 @@ fun SupabaseConfigDialog(
                     Text("Sinkronkan Semua Data Sekolah ($activeSchoolId)")
                 }
 
-                // Action 2: Upload active school's students & wali to Supabase
                 OutlinedButton(
                     onClick = {
-                        viewModel.uploadAllStudentsToSupabase { success, msg ->
+                        viewModel.uploadAllStudentsToCloud { success, msg ->
                             isSuccessStatus = success
                             statusMessage = msg
                         }
@@ -288,12 +272,11 @@ fun SupabaseConfigDialog(
                 ) {
                     Icon(imageVector = Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Unggah $activeSchoolStudentsCount Data Siswa ${schoolProfile.shortName.ifBlank { activeSchoolId }} ke Supabase")
+                    Text("Unggah $activeSchoolStudentsCount Data Siswa ${schoolProfile.shortName.ifBlank { activeSchoolId }}")
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
 
-                // SQL Script Section (Synced with SupabaseSchemaProvider)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
                     shape = RoundedCornerShape(10.dp)
@@ -306,13 +289,13 @@ fun SupabaseConfigDialog(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Skrip SQL Editor Supabase (${SupabaseSchemaProvider.TABLES.size} Tabel)",
+                                    text = "Skema Koleksi PocketBase (${PocketBaseSchemaProvider.COLLECTIONS.size} Tabel)",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Text(
-                                    text = "Skema ${SupabaseSchemaProvider.SCHEMA_VERSION}",
+                                    text = PocketBaseSchemaProvider.SCHEMA_VERSION,
                                     fontSize = 10.5.sp,
                                     color = WaliPrimary,
                                     fontWeight = FontWeight.SemiBold
@@ -321,40 +304,34 @@ fun SupabaseConfigDialog(
                             IconButton(
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val clip = ClipData.newPlainText("SQL Schema", sqlSchemaText)
+                                    val clip = ClipData.newPlainText("PocketBase Schema", schemaSummaryText)
                                     clipboard.setPrimaryClip(clip)
-                                    Toast.makeText(context, "Skrip SQL lengkap berhasil disalin!", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Info skema PocketBase berhasil disalin!", Toast.LENGTH_SHORT).show()
                                 }
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.ContentCopy,
-                                    contentDescription = "Salin Skrip SQL",
+                                    contentDescription = "Salin Info Skema",
                                     tint = WaliPrimary,
                                     modifier = Modifier.size(18.dp)
                                 )
                             }
                         }
 
-                        Text(
-                            text = "Salin dan tempel di menu SQL Editor Supabase untuk membuat/memperbarui tabel child_students, medical_records, haid_records, wali_accounts, shift_messages, & school_registrations.",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-
                         TextButton(
-                            onClick = { showSqlSchema = !showSqlSchema },
+                            onClick = { showSchemaInfo = !showSchemaInfo },
                             modifier = Modifier.padding(0.dp)
                         ) {
                             Icon(imageVector = Icons.Default.Code, contentDescription = null, modifier = Modifier.size(15.dp))
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (showSqlSchema) "Sembunyikan Skrip SQL" else "Lihat Pratinjau Skrip SQL",
+                                text = if (showSchemaInfo) "Sembunyikan Detail Koleksi" else "Lihat Detail 9 Koleksi",
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
 
-                        if (showSqlSchema) {
+                        if (showSchemaInfo) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -365,7 +342,7 @@ fun SupabaseConfigDialog(
                             ) {
                                 SelectionContainer {
                                     Text(
-                                        text = sqlSchemaText,
+                                        text = schemaSummaryText,
                                         color = Color(0xFFE2E8F0),
                                         fontSize = 10.sp,
                                         fontFamily = FontFamily.Monospace,

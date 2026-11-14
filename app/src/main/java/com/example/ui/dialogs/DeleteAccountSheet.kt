@@ -183,7 +183,7 @@ fun DeleteAccountBottomSheet(
 
                         if (isSchoolAdmin) {
                             Text(
-                                text = "Menghapus akun Admin Sekolah akan menghapus secara permanen dari perangkat & server cloud (Supabase):\n" +
+                                text = "Menghapus akun Admin Sekolah akan menghapus secara permanen dari perangkat & server cloud (PocketBase):\n" +
                                     "• Akun login Admin & pendaftaran sekolah ini\n" +
                                     "• Seluruh akun Wali Asuh di sekolah ini\n" +
                                     "• Seluruh data siswa, rekam medis, catatan haid, sesi & checklist puasa, serta pesan shift\n" +
@@ -194,7 +194,7 @@ fun DeleteAccountBottomSheet(
                             )
                         } else {
                             Text(
-                                text = "Menghapus akun Wali Asuh akan menghapus kredensial login Anda (nama, username, nomor HP & kata sandi) secara permanen dari perangkat dan server cloud (Supabase).\n" +
+                                text = "Menghapus akun Wali Asuh akan menghapus kredensial login Anda (nama, username, nomor HP & kata sandi) secara permanen dari perangkat dan server cloud (PocketBase).\n" +
                                     "• Anda tidak lagi bisa login dengan akun ini.\n" +
                                     "• Data kesehatan & profil siswa sekolah tetap tersimpan aman untuk Admin Sekolah.",
                                 fontSize = 12.sp,

@@ -550,7 +550,7 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify SupabaseStudentDto preserves schoolId and SupabaseSchemaProvider includes all 6 tables`() {
+  fun `verify PocketBase DTOs preserve schoolId, online checklists, and all 9 collections`() {
     val student = com.example.data.model.ChildStudent(
       id = 55001L,
       name = "Nadia Putri",
@@ -564,31 +564,62 @@ class ExampleRobolectricTest {
       schoolId = "SRT-KED05"
     )
 
-    val dto = com.example.data.remote.supabase.SupabaseStudentDto.fromDomain(student)
+    val dto = com.example.data.remote.pocketbase.PbStudentDto.fromDomain(student)
     assertEquals("SRT-KED05", dto.schoolId)
-    assertEquals(55001L, dto.id)
+    assertEquals(55001L, dto.localId)
+    assertEquals(15, dto.id?.length)
+    org.junit.Assert.assertTrue(com.example.data.remote.pocketbase.PocketBaseIdCodec.isValidPbId(dto.id))
 
     val restored = dto.toDomainModel()
+    assertEquals(55001L, restored.id)
     assertEquals("SRT-KED05", restored.schoolId)
     assertEquals("PP_102", restored.roomNumber)
     assertEquals("Nadia Putri", restored.name)
 
-    val schema = com.example.data.remote.supabase.SupabaseSchemaProvider.FULL_SQL_SCHEMA
-    val expectedTables = listOf(
+    // Verifikasi checklist online sahur & berbuka puasa + school profile
+    val fastingRec = com.example.data.model.FastingRecord(
+      id = 77002L,
+      sessionId = 101L,
+      sessionTitle = "Puasa Senin",
+      sessionDate = 1700000000000L,
+      studentId = 55001L,
+      studentName = "Nadia Putri",
+      isSahurChecked = true,
+      sahurCheckedAt = 1700001000000L,
+      sahurCheckedBy = "Ustzh. Amina",
+      isBukaChecked = true,
+      bukaCheckedAt = 1700045000000L,
+      bukaCheckedBy = "Ustzh. Amina",
+      schoolId = "SRT-KED05",
+      updatedAt = 1700045000000L
+    )
+    val pbFasting = com.example.data.remote.pocketbase.PbFastingRecordDto.fromDomain(fastingRec)
+    val restoredFasting = pbFasting.toDomainModel()
+    assertEquals(true, restoredFasting.isSahurChecked)
+    assertEquals(true, restoredFasting.isBukaChecked)
+    assertEquals("Ustzh. Amina", restoredFasting.bukaCheckedBy)
+    assertEquals(77002L, restoredFasting.id)
+
+    val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
+    val expectedCollections = listOf(
       "child_students",
       "medical_records",
       "haid_records",
       "wali_accounts",
       "shift_messages",
-      "school_registrations"
+      "school_registrations",
+      "fasting_sessions",
+      "fasting_records",
+      "school_profiles"
     )
-    expectedTables.forEach { table ->
-      org.junit.Assert.assertTrue("Missing table $table in SQL schema", schema.contains("public.$table"))
-      org.junit.Assert.assertTrue("Missing RLS enable for $table", schema.contains("alter table public.$table enable row level security"))
-      org.junit.Assert.assertTrue("Missing RLS policy for $table", schema.contains("create policy \"Akses Penuh $table\""))
+    expectedCollections.forEach { col ->
+      org.junit.Assert.assertTrue(
+        "Missing collection $col in PocketBaseSchemaProvider",
+        com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.any { it.collectionName == col }
+      )
+      org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    org.junit.Assert.assertTrue(schema.contains("school_id"))
-    assertEquals(6, com.example.data.remote.supabase.SupabaseSchemaProvider.TABLES.size)
+    assertEquals(9, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
   }
 
   @Test

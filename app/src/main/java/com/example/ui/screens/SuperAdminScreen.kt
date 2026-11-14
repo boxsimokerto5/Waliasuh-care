@@ -122,10 +122,10 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.WaliAccount
-import com.example.data.remote.supabase.SupabaseSchemaProvider
+import com.example.data.remote.pocketbase.PocketBaseSchemaProvider
 import com.example.ui.HealthViewModel
+import com.example.ui.dialogs.PocketBaseConfigDialog
 import com.example.ui.dialogs.SuperadminSchoolDetailSheet
-import com.example.ui.dialogs.SupabaseConfigDialog
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 
@@ -393,7 +393,7 @@ fun SuperAdminScreen(
                         onClick = { selectedMainTab = 2 },
                         text = {
                             Text(
-                                text = "SQL Editor",
+                                text = "Cloud DB",
                                 fontWeight = if (selectedMainTab == 2) FontWeight.Bold else FontWeight.Normal,
                                 fontSize = 12.sp,
                                 maxLines = 1
@@ -637,7 +637,7 @@ fun SuperAdminScreen(
                 viewModel = viewModel,
                 isSyncing = isSyncing,
                 onTestConnection = { onResult ->
-                    viewModel.testSupabaseConnection(onResult)
+                    viewModel.testCloudConnection(onResult)
                 }
             )
         }
@@ -2089,24 +2089,26 @@ fun SuperAdminSqlEditorView(
     val context = LocalContext.current
     var testResultMsg by remember { mutableStateOf<String?>(null) }
     var testResultSuccess by remember { mutableStateOf(true) }
-    var showSupabaseConfigDialog by remember { mutableStateOf(false) }
+    var showCloudConfigDialog by remember { mutableStateOf(false) }
 
-    fun copyFullSql() {
+    fun copySchemaSummary() {
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-        clipboard.setPrimaryClip(ClipData.newPlainText("Supabase SQL Editor Schema", SupabaseSchemaProvider.FULL_SQL_SCHEMA))
-        Toast.makeText(context, "Skrip SQL lengkap berhasil disalin ke clipboard!", Toast.LENGTH_SHORT).show()
+        clipboard.setPrimaryClip(
+            ClipData.newPlainText("PocketBase Cloud Schema", PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY)
+        )
+        Toast.makeText(context, "Ringkasan skema PocketBase berhasil disalin!", Toast.LENGTH_SHORT).show()
     }
 
-    fun shareFullSql() {
+    fun shareSchemaSummary() {
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "SQL Editor Supabase - Wali Asuh Care (${SupabaseSchemaProvider.SCHEMA_VERSION})")
-            putExtra(Intent.EXTRA_TEXT, SupabaseSchemaProvider.FULL_SQL_SCHEMA)
+            putExtra(Intent.EXTRA_SUBJECT, "Skema PocketBase - Wali Asuh Care (${PocketBaseSchemaProvider.SCHEMA_VERSION})")
+            putExtra(Intent.EXTRA_TEXT, PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY)
         }
         try {
-            context.startActivity(Intent.createChooser(intent, "Bagikan Skrip SQL Supabase"))
+            context.startActivity(Intent.createChooser(intent, "Bagikan Ringkasan Skema PocketBase"))
         } catch (_: Exception) {
-            copyFullSql()
+            copySchemaSummary()
         }
     }
 
@@ -2138,7 +2140,7 @@ fun SuperAdminSqlEditorView(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Storage,
-                                contentDescription = "Skema Database Supabase",
+                                contentDescription = "Skema Database PocketBase",
                                 tint = WaliPrimary,
                                 modifier = Modifier.size(22.dp)
                             )
@@ -2146,13 +2148,13 @@ fun SuperAdminSqlEditorView(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "SQL Editor Supabase Terbaru",
+                                text = "Database Cloud PocketBase",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Versi: ${SupabaseSchemaProvider.SCHEMA_VERSION}",
+                                text = "Versi: ${PocketBaseSchemaProvider.SCHEMA_VERSION}",
                                 fontSize = 11.5.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = WaliPrimary
@@ -2161,7 +2163,7 @@ fun SuperAdminSqlEditorView(
                     }
 
                     Text(
-                        text = "Skrip ini selalu diperbarui mengikuti seluruh fitur aplikasi. Jalankan di menu SQL Editor pada dashboard Supabase Anda (aman dijalankan ulang tanpa menghapus data).",
+                        text = "Aplikasi terhubung ke server PocketBase VPS (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}) dengan 9 koleksi multi-tenant termasuk checklist sahur/berbuka & pesan shift online.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2171,7 +2173,7 @@ fun SuperAdminSqlEditorView(
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(
-                            onClick = { copyFullSql() },
+                            onClick = { copySchemaSummary() },
                             modifier = Modifier
                                 .weight(1.3f)
                                 .height(48.dp)
@@ -2180,13 +2182,13 @@ fun SuperAdminSqlEditorView(
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 10.dp)
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = "Salin SQL", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.ContentCopy, contentDescription = "Salin Skema", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Salin Skrip SQL Lengkap", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Text("Salin Info Skema DB", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
 
                         OutlinedButton(
-                            onClick = { shareFullSql() },
+                            onClick = { shareSchemaSummary() },
                             modifier = Modifier
                                 .weight(0.8f)
                                 .height(48.dp)
@@ -2194,9 +2196,9 @@ fun SuperAdminSqlEditorView(
                             shape = RoundedCornerShape(10.dp),
                             contentPadding = PaddingValues(horizontal = 8.dp)
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = "Bagikan SQL", modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Share, contentDescription = "Bagikan Info", modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Bagikan SQL", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Bagikan", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -2218,16 +2220,16 @@ fun SuperAdminSqlEditorView(
                         if (isSyncing) {
                             CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Menguji Koneksi Supabase...", fontSize = 12.sp)
+                            Text("Menguji Koneksi PocketBase...", fontSize = 12.sp)
                         } else {
-                            Icon(Icons.Default.CloudDone, contentDescription = "Uji Koneksi Supabase", modifier = Modifier.size(16.dp), tint = Color(0xFF16A34A))
+                            Icon(Icons.Default.CloudDone, contentDescription = "Uji Koneksi PocketBase", modifier = Modifier.size(16.dp), tint = Color(0xFF16A34A))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Uji Koneksi Supabase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Uji Koneksi PocketBase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
 
                     OutlinedButton(
-                        onClick = { showSupabaseConfigDialog = true },
+                        onClick = { showCloudConfigDialog = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(48.dp)
@@ -2236,12 +2238,12 @@ fun SuperAdminSqlEditorView(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CloudSync,
-                            contentDescription = "Kelola Sinkronisasi & Cloud Supabase",
+                            contentDescription = "Kelola Sinkronisasi & Server PocketBase",
                             modifier = Modifier.size(16.dp),
                             tint = Color(0xFF16A34A)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Kelola Sinkronisasi & Cloud Supabase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Kelola Sinkronisasi & Server PocketBase", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     if (testResultMsg != null) {
@@ -2265,14 +2267,14 @@ fun SuperAdminSqlEditorView(
 
         item {
             Text(
-                text = "Daftar Tabel Tersinkron (${SupabaseSchemaProvider.TABLES.size} Tabel):",
+                text = "Daftar Koleksi Tersinkron (${PocketBaseSchemaProvider.COLLECTIONS.size} Koleksi):",
                 fontSize = 13.5.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
         }
 
-        items(SupabaseSchemaProvider.TABLES, key = { it.tableName }) { tableMeta ->
+        items(PocketBaseSchemaProvider.COLLECTIONS, key = { it.collectionName }) { collectionMeta ->
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(12.dp),
@@ -2299,14 +2301,14 @@ fun SuperAdminSqlEditorView(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = tableMeta.tableName,
+                                text = collectionMeta.collectionName,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = tableMeta.description,
+                                text = collectionMeta.description,
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -2320,7 +2322,7 @@ fun SuperAdminSqlEditorView(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = tableMeta.multiTenantColumn,
+                            text = collectionMeta.multiTenantField,
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold,
@@ -2334,7 +2336,7 @@ fun SuperAdminSqlEditorView(
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(
-                    text = "Kode SQL Editor Lengkap (Siap Copy-Paste):",
+                    text = "Ringkasan Arsitektur Koleksi PocketBase:",
                     fontSize = 13.5.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -2350,7 +2352,7 @@ fun SuperAdminSqlEditorView(
                 ) {
                     SelectionContainer {
                         Text(
-                            text = SupabaseSchemaProvider.FULL_SQL_SCHEMA,
+                            text = PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY,
                             color = Color(0xFFE2E8F0),
                             fontSize = 11.sp,
                             fontFamily = FontFamily.Monospace,
@@ -2362,10 +2364,10 @@ fun SuperAdminSqlEditorView(
         }
     }
 
-    if (showSupabaseConfigDialog) {
-        SupabaseConfigDialog(
+    if (showCloudConfigDialog) {
+        PocketBaseConfigDialog(
             viewModel = viewModel,
-            onDismiss = { showSupabaseConfigDialog = false }
+            onDismiss = { showCloudConfigDialog = false }
         )
     }
 }

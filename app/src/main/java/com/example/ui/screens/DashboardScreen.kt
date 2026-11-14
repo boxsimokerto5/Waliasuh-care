@@ -54,6 +54,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -988,6 +989,13 @@ fun DashboardScreen(
         )
     }
 
+    // Sinkronkan pesan & centang operan shift online setiap kali sheet pesan/riwayat dibuka
+    LaunchedEffect(showShiftMessagesSheet, showShiftHistorySheet) {
+        if (showShiftMessagesSheet || showShiftHistorySheet) {
+            viewModel.syncShiftMessagesOnlineQuietly()
+        }
+    }
+
     // Modal Bottom Sheet: Pesan Shift Berikutnya (Daftar Kartu Operan Jaga)
     if (showShiftMessagesSheet) {
         ShiftMessagesSheet(
@@ -1106,6 +1114,18 @@ fun DashboardScreen(
         FiqihHaidDialog(
             onDismiss = { showFiqihHaidDialog = false }
         )
+    }
+
+    // Sinkronkan sesi & checklist sahur/berbuka puasa online setiap kali modul puasa dibuka
+    LaunchedEffect(
+        showInputPuasaDialog,
+        showDaftarPuasaSheet,
+        showChecklistPuasaSheet,
+        showRankingPuasaSheet
+    ) {
+        if (showInputPuasaDialog || showDaftarPuasaSheet || showChecklistPuasaSheet || showRankingPuasaSheet) {
+            viewModel.syncFastingOnlineQuietly()
+        }
     }
 
     // Modal Bottom Sheet 1 (Puasa): Input Puasa (Sesi, Scan Barcode & Cari Siswa)

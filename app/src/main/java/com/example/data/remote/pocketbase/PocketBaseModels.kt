@@ -1,21 +1,94 @@
-package com.example.data.remote.supabase
+package com.example.data.remote.pocketbase
 
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
+import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
+import org.json.JSONArray
+
+object PocketBaseIdCodec {
+    private val validPbIdRegex = Regex("^[a-z0-9]{15}$")
+
+    /**
+     * Memetakan Long ID lokal Room menjadi ID PocketBase 15 karakter [a-z0-9] secara deterministik & tanpa tabrakan.
+     * Karena Long.MAX_VALUE dalam base-36 panjangnya 13 karakter, awalan 'w' + 14 karakter selalu tepat 15 karakter.
+     */
+    fun toPbId(localId: Long): String {
+        val safeId = if (localId > 0L) localId else stablePositiveHash(localId.toString())
+        val base36 = safeId.toString(36).lowercase()
+        return if (base36.length <= 14) {
+            "w" + base36.padStart(14, '0')
+        } else {
+            "w" + base36.takeLast(14)
+        }
+    }
+
+    fun toPbSchoolProfileId(schoolId: String): String {
+        val clean = schoolId.trim().uppercase().ifBlank { "SRT1-KDR" }
+        return toPbId(stablePositiveHash("school_profile:$clean"))
+    }
+
+    fun resolveLocalId(localId: Long?, pbId: String?): Long {
+        if (localId != null && localId > 0L) return localId
+        if (!pbId.isNullOrBlank()) {
+            if (pbId.length == 15 && pbId.startsWith("w")) {
+                val parsed = pbId.drop(1).toLongOrNull(36)
+                if (parsed != null && parsed > 0L) return parsed
+            }
+            return stablePositiveHash(pbId)
+        }
+        return 0L
+    }
+
+    fun isValidPbId(id: String?): Boolean {
+        return !id.isNullOrBlank() && validPbIdRegex.matches(id)
+    }
+
+    fun stablePositiveHash(input: String): Long {
+        var hash = -3750763034362895579L // FNV-1a 64-bit offset
+        val prime = 1099511628211L
+        for (ch in input) {
+            hash = hash xor ch.code.toLong()
+            hash *= prime
+        }
+        val positive56 = hash and 0x00FFFFFFFFFFFFFFL
+        return if (positive56 > 0L) positive56 else 1L
+    }
+}
 
 @JsonClass(generateAdapter = true)
-data class SupabaseStudentDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbHealthResponse(
+    @Json(name = "code") val code: Int? = null,
+    @Json(name = "message") val message: String? = null
+)
+
+@JsonClass(generateAdapter = true)
+data class PbListResponse<T>(
+    @Json(name = "page") val page: Int = 1,
+    @Json(name = "perPage") val perPage: Int = 500,
+    @Json(name = "totalItems") val totalItems: Int = 0,
+    @Json(name = "totalPages") val totalPages: Int = 1,
+    @Json(name = "items") val items: List<T> = emptyList()
+)
+
+@JsonClass(generateAdapter = true)
+data class PbIdOnlyDto(
+    @Json(name = "id") val id: String = ""
+)
+
+@JsonClass(generateAdapter = true)
+data class PbStudentDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "name") val name: String,
+    @Json(name = "name") val name: String = "",
     @Json(name = "nis") val nis: String? = null,
     @Json(name = "gender") val gender: String? = null,
     @Json(name = "age") val age: Int? = null,
@@ -36,16 +109,16 @@ data class SupabaseStudentDto(
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ChildStudent {
         return ChildStudent(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             name = name,
             nis = nis ?: "",
-            gender = gender ?: "L",
+            gender = gender?.ifBlank { "L" } ?: "L",
             age = age ?: 0,
             dormitory = dormitory ?: "",
             classGrade = classGrade ?: "",
-            allergies = allergies ?: "Tidak ada",
-            bloodType = bloodType ?: "-",
-            emergencyContact = emergencyContact ?: "Pengasuh Asrama",
+            allergies = allergies?.ifBlank { "Tidak ada" } ?: "Tidak ada",
+            bloodType = bloodType?.ifBlank { "-" } ?: "-",
+            emergencyContact = emergencyContact?.ifBlank { "Pengasuh Asrama" } ?: "Pengasuh Asrama",
             specialNotes = specialNotes ?: "",
             nik = nik ?: "",
             noKk = noKk ?: "",
@@ -60,9 +133,13 @@ data class SupabaseStudentDto(
     }
 
     companion object {
-        fun fromDomain(model: ChildStudent): SupabaseStudentDto {
-            return SupabaseStudentDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: ChildStudent): PbStudentDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.nik}:${model.nis}:${model.name}"
+            )
+            return PbStudentDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 name = model.name,
                 nis = model.nis,
@@ -88,16 +165,17 @@ data class SupabaseStudentDto(
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseMedicalRecordDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbMedicalRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "student_id") val studentId: Long,
-    @Json(name = "student_name") val studentName: String,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
     @Json(name = "student_dormitory") val studentDormitory: String? = null,
-    @Json(name = "faskes") val faskes: String,
-    @Json(name = "complaint") val complaint: String,
+    @Json(name = "faskes") val faskes: String = "",
+    @Json(name = "complaint") val complaint: String = "",
     @Json(name = "is_direct_treatment") val isDirectTreatment: Boolean = false,
-    @Json(name = "plan_date") val planDate: Long,
+    @Json(name = "plan_date") val planDate: Long = 0L,
     @Json(name = "departure_time") val departureTime: String? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "treatment_date") val treatmentDate: Long? = null,
@@ -114,11 +192,13 @@ data class SupabaseMedicalRecordDto(
     @Json(name = "discharge_date") val dischargeDate: Long? = null,
     @Json(name = "created_by") val createdBy: String? = null,
     @Json(name = "edited_by") val editedBy: String? = null,
-    @Json(name = "edited_at") val editedAt: Long? = null
+    @Json(name = "edited_at") val editedAt: Long? = null,
+    @Json(name = "created_at") val createdAt: Long? = null
 ) {
     fun toDomainModel(): MedicalRecord {
+        val resolvedCreated = createdAt ?: if (planDate > 0L) planDate else System.currentTimeMillis()
         return MedicalRecord(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             studentId = studentId,
             studentName = studentName,
             studentDormitory = studentDormitory ?: "",
@@ -126,30 +206,35 @@ data class SupabaseMedicalRecordDto(
             complaint = complaint,
             isDirectTreatment = isDirectTreatment,
             planDate = planDate,
-            departureTime = departureTime ?: "08:30",
-            status = status ?: "PLANNED",
-            treatmentDate = treatmentDate,
+            departureTime = departureTime?.ifBlank { "08:30" } ?: "08:30",
+            status = status?.ifBlank { "PLANNED" } ?: "PLANNED",
+            treatmentDate = treatmentDate?.takeIf { it > 0L },
             diagnosis = diagnosis ?: "",
             actionsTaken = actionsTaken ?: "",
             prescription = prescription ?: "",
             needsControl = needsControl,
-            controlDate = controlDate,
+            controlDate = controlDate?.takeIf { it > 0L },
             isControlCompleted = isControlCompleted,
             escortName = escortName ?: "",
             notes = notes ?: "",
             isInpatient = isInpatient,
             inpatientRoom = inpatientRoom ?: "",
-            dischargeDate = dischargeDate,
+            dischargeDate = dischargeDate?.takeIf { it > 0L },
             createdBy = createdBy ?: "",
             editedBy = editedBy ?: "",
-            editedAt = editedAt
+            editedAt = editedAt?.takeIf { it > 0L },
+            createdAt = resolvedCreated
         )
     }
 
     companion object {
-        fun fromDomain(model: MedicalRecord, schoolId: String = "SRT1-KDR"): SupabaseMedicalRecordDto {
-            return SupabaseMedicalRecordDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: MedicalRecord, schoolId: String = "SRT1-KDR"): PbMedicalRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "$schoolId:${model.studentId}:${model.planDate}:${model.complaint}"
+            )
+            return PbMedicalRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = schoolId.ifBlank { "SRT1-KDR" },
                 studentId = model.studentId,
                 studentName = model.studentName,
@@ -160,88 +245,39 @@ data class SupabaseMedicalRecordDto(
                 planDate = model.planDate,
                 departureTime = model.departureTime,
                 status = model.status,
-                treatmentDate = model.treatmentDate,
+                treatmentDate = model.treatmentDate ?: 0L,
                 diagnosis = model.diagnosis,
                 actionsTaken = model.actionsTaken,
                 prescription = model.prescription,
                 needsControl = model.needsControl,
-                controlDate = model.controlDate,
+                controlDate = model.controlDate ?: 0L,
                 isControlCompleted = model.isControlCompleted,
                 escortName = model.escortName,
                 notes = model.notes,
                 isInpatient = model.isInpatient,
                 inpatientRoom = model.inpatientRoom,
-                dischargeDate = model.dischargeDate,
+                dischargeDate = model.dischargeDate ?: 0L,
                 createdBy = model.createdBy,
                 editedBy = model.editedBy,
-                editedAt = model.editedAt
+                editedAt = model.editedAt ?: 0L,
+                createdAt = model.createdAt
             )
         }
     }
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseMedicalRecordLegacyDto(
-    @Json(name = "id") val id: Long? = null,
-    @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "student_id") val studentId: Long,
-    @Json(name = "student_name") val studentName: String,
-    @Json(name = "student_dormitory") val studentDormitory: String? = null,
-    @Json(name = "faskes") val faskes: String,
-    @Json(name = "complaint") val complaint: String,
-    @Json(name = "is_direct_treatment") val isDirectTreatment: Boolean = false,
-    @Json(name = "plan_date") val planDate: Long,
-    @Json(name = "departure_time") val departureTime: String? = null,
-    @Json(name = "status") val status: String? = null,
-    @Json(name = "treatment_date") val treatmentDate: Long? = null,
-    @Json(name = "diagnosis") val diagnosis: String? = null,
-    @Json(name = "actions_taken") val actionsTaken: String? = null,
-    @Json(name = "prescription") val prescription: String? = null,
-    @Json(name = "needs_control") val needsControl: Boolean = false,
-    @Json(name = "control_date") val controlDate: Long? = null,
-    @Json(name = "is_control_completed") val isControlCompleted: Boolean = false,
-    @Json(name = "escort_name") val escortName: String? = null,
-    @Json(name = "notes") val notes: String? = null
-) {
-    companion object {
-        fun fromDomain(model: MedicalRecord, schoolId: String = "SRT1-KDR"): SupabaseMedicalRecordLegacyDto {
-            return SupabaseMedicalRecordLegacyDto(
-                id = if (model.id > 0) model.id else null,
-                schoolId = schoolId.ifBlank { "SRT1-KDR" },
-                studentId = model.studentId,
-                studentName = model.studentName,
-                studentDormitory = model.studentDormitory,
-                faskes = model.faskes,
-                complaint = model.complaint,
-                isDirectTreatment = model.isDirectTreatment,
-                planDate = model.planDate,
-                departureTime = model.departureTime,
-                status = model.status,
-                treatmentDate = model.treatmentDate,
-                diagnosis = model.diagnosis,
-                actionsTaken = model.actionsTaken,
-                prescription = model.prescription,
-                needsControl = model.needsControl,
-                controlDate = model.controlDate,
-                isControlCompleted = model.isControlCompleted,
-                escortName = model.escortName,
-                notes = model.notes
-            )
-        }
-    }
-}
-
-@JsonClass(generateAdapter = true)
-data class SupabaseHaidRecordDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbHaidRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
     @Json(name = "student_id") val studentId: Long = 0L,
-    @Json(name = "student_name") val studentName: String,
+    @Json(name = "student_name") val studentName: String = "",
     @Json(name = "student_nik") val studentNik: String? = null,
     @Json(name = "student_nis") val studentNis: String? = null,
     @Json(name = "student_class") val studentClass: String? = null,
     @Json(name = "student_dorm") val studentDorm: String? = null,
-    @Json(name = "start_date") val startDate: Long,
+    @Json(name = "start_date") val startDate: Long = 0L,
     @Json(name = "end_date") val endDate: Long? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "symptoms") val symptoms: String? = null,
@@ -252,7 +288,7 @@ data class SupabaseHaidRecordDto(
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): HaidRecord {
         return HaidRecord(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             studentId = studentId,
             studentName = studentName,
             studentNik = studentNik ?: "",
@@ -260,21 +296,25 @@ data class SupabaseHaidRecordDto(
             studentClass = studentClass ?: "",
             studentDorm = studentDorm ?: "",
             startDate = startDate,
-            endDate = endDate,
-            status = status ?: "HAID",
-            symptoms = symptoms ?: "Normal",
+            endDate = endDate?.takeIf { it > 0L },
+            status = status?.ifBlank { "HAID" } ?: "HAID",
+            symptoms = symptoms?.ifBlank { "Normal" } ?: "Normal",
             notes = notes ?: "",
-            waliName = waliName ?: "Wali Asuh",
+            waliName = waliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
-            createdAt = createdAt ?: startDate,
-            updatedAt = updatedAt ?: startDate
+            createdAt = createdAt?.takeIf { it > 0L } ?: startDate,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: startDate
         )
     }
 
     companion object {
-        fun fromDomain(model: HaidRecord): SupabaseHaidRecordDto {
-            return SupabaseHaidRecordDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: HaidRecord): PbHaidRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.studentId}:${model.startDate}"
+            )
+            return PbHaidRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 studentId = model.studentId,
                 studentName = model.studentName,
@@ -283,7 +323,7 @@ data class SupabaseHaidRecordDto(
                 studentClass = model.studentClass,
                 studentDorm = model.studentDorm,
                 startDate = model.startDate,
-                endDate = model.endDate,
+                endDate = model.endDate ?: 0L,
                 status = model.status,
                 symptoms = model.symptoms,
                 notes = model.notes,
@@ -296,33 +336,38 @@ data class SupabaseHaidRecordDto(
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseWaliAccountDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbWaliAccountDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "name") val name: String,
-    @Json(name = "username") val username: String,
-    @Json(name = "password") val password: String,
+    @Json(name = "name") val name: String = "",
+    @Json(name = "username") val username: String = "",
+    @Json(name = "password") val password: String = "",
     @Json(name = "dormitory") val dormitory: String? = null,
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): WaliAccount {
         return WaliAccount(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             name = name,
             username = username,
             password = password,
-            dormitory = dormitory ?: "Asrama Putra",
+            dormitory = dormitory?.ifBlank { "Asrama Putra" } ?: "Asrama Putra",
             phone = phone ?: "",
-            createdAt = createdAt ?: System.currentTimeMillis(),
+            createdAt = createdAt?.takeIf { it > 0L } ?: System.currentTimeMillis(),
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
         )
     }
 
     companion object {
-        fun fromDomain(model: WaliAccount): SupabaseWaliAccountDto {
-            return SupabaseWaliAccountDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: WaliAccount): PbWaliAccountDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.username}"
+            )
+            return PbWaliAccountDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 name = model.name,
                 username = model.username,
@@ -336,16 +381,17 @@ data class SupabaseWaliAccountDto(
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseShiftMessageDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbShiftMessageDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "title") val title: String,
-    @Json(name = "follow_up_date") val followUpDate: Long,
+    @Json(name = "title") val title: String = "",
+    @Json(name = "follow_up_date") val followUpDate: Long = 0L,
     @Json(name = "shift") val shift: String? = null,
     @Json(name = "target_wali") val targetWali: String? = null,
-    @Json(name = "message_content") val messageContent: String,
+    @Json(name = "message_content") val messageContent: String = "",
     @Json(name = "priority") val priority: String? = null,
-    @Json(name = "sender_name") val senderName: String,
+    @Json(name = "sender_name") val senderName: String = "",
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "is_completed") val isCompleted: Boolean = false,
     @Json(name = "completed_by") val completedBy: String? = null,
@@ -353,15 +399,15 @@ data class SupabaseShiftMessageDto(
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ShiftMessage {
         return ShiftMessage(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             title = title,
             followUpDate = followUpDate,
-            shift = shift ?: "Semua Shift",
-            targetWali = targetWali ?: "Semua Wali Asuh",
+            shift = shift?.ifBlank { "Semua Shift" } ?: "Semua Shift",
+            targetWali = targetWali?.ifBlank { "Semua Wali Asuh" } ?: "Semua Wali Asuh",
             messageContent = messageContent,
-            priority = priority ?: "BIASA",
+            priority = priority?.ifBlank { "BIASA" } ?: "BIASA",
             senderName = senderName,
-            createdAt = createdAt ?: System.currentTimeMillis(),
+            createdAt = createdAt?.takeIf { it > 0L } ?: System.currentTimeMillis(),
             isCompleted = isCompleted,
             completedBy = completedBy ?: "",
             completedAt = completedAt ?: 0L,
@@ -370,9 +416,13 @@ data class SupabaseShiftMessageDto(
     }
 
     companion object {
-        fun fromDomain(model: ShiftMessage): SupabaseShiftMessageDto {
-            return SupabaseShiftMessageDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: ShiftMessage): PbShiftMessageDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.createdAt}:${model.title}"
+            )
+            return PbShiftMessageDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 title = model.title,
                 followUpDate = model.followUpDate,
@@ -391,15 +441,16 @@ data class SupabaseShiftMessageDto(
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseSchoolRegistrationDto(
-    @Json(name = "id") val id: Long? = null,
-    @Json(name = "school_name") val schoolName: String,
-    @Json(name = "address") val address: String,
-    @Json(name = "city") val city: String,
+data class PbSchoolRegistrationDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_name") val schoolName: String = "",
+    @Json(name = "address") val address: String = "",
+    @Json(name = "city") val city: String = "",
     @Json(name = "estimated_wali_count") val estimatedWaliCount: Int = 0,
-    @Json(name = "pic_name") val picName: String,
+    @Json(name = "pic_name") val picName: String = "",
     @Json(name = "pic_email") val picEmail: String? = null,
-    @Json(name = "pic_phone") val picPhone: String,
+    @Json(name = "pic_phone") val picPhone: String = "",
     @Json(name = "submission_date") val submissionDate: Long? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "rejection_reason") val rejectionReason: String? = null,
@@ -410,7 +461,7 @@ data class SupabaseSchoolRegistrationDto(
 ) {
     fun toDomainModel(): SchoolRegistration {
         return SchoolRegistration(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             schoolName = schoolName,
             address = address,
             city = city,
@@ -418,8 +469,8 @@ data class SupabaseSchoolRegistrationDto(
             picName = picName,
             picEmail = picEmail ?: "",
             picPhone = picPhone,
-            submissionDate = submissionDate ?: System.currentTimeMillis(),
-            status = status ?: "PENDING",
+            submissionDate = submissionDate?.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            status = status?.ifBlank { "PENDING" } ?: "PENDING",
             rejectionReason = rejectionReason ?: "",
             generatedSchoolCode = generatedSchoolCode ?: "",
             generatedAdminUsername = generatedAdminUsername ?: "",
@@ -429,9 +480,13 @@ data class SupabaseSchoolRegistrationDto(
     }
 
     companion object {
-        fun fromDomain(model: SchoolRegistration): SupabaseSchoolRegistrationDto {
-            return SupabaseSchoolRegistrationDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: SchoolRegistration): PbSchoolRegistrationDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolName}:${model.picPhone}:${model.submissionDate}"
+            )
+            return PbSchoolRegistrationDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolName = model.schoolName,
                 address = model.address,
                 city = model.city,
@@ -452,11 +507,12 @@ data class SupabaseSchoolRegistrationDto(
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseFastingSessionDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbFastingSessionDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "title") val title: String,
-    @Json(name = "session_date") val sessionDate: Long,
+    @Json(name = "title") val title: String = "",
+    @Json(name = "session_date") val sessionDate: Long = 0L,
     @Json(name = "description") val description: String? = null,
     @Json(name = "is_active") val isActive: Boolean = true,
     @Json(name = "created_by") val createdBy: String? = null,
@@ -465,22 +521,26 @@ data class SupabaseFastingSessionDto(
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): FastingSession {
         return FastingSession(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             title = title,
             sessionDate = sessionDate,
             description = description ?: "",
             isActive = isActive,
-            createdBy = createdBy ?: "Admin Sekolah",
+            createdBy = createdBy?.ifBlank { "Admin Sekolah" } ?: "Admin Sekolah",
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
-            createdAt = createdAt ?: sessionDate,
-            updatedAt = updatedAt ?: sessionDate
+            createdAt = createdAt?.takeIf { it > 0L } ?: sessionDate,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: sessionDate
         )
     }
 
     companion object {
-        fun fromDomain(model: FastingSession): SupabaseFastingSessionDto {
-            return SupabaseFastingSessionDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: FastingSession): PbFastingSessionDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.sessionDate}:${model.title}"
+            )
+            return PbFastingSessionDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 title = model.title,
                 sessionDate = model.sessionDate,
@@ -495,14 +555,15 @@ data class SupabaseFastingSessionDto(
 }
 
 @JsonClass(generateAdapter = true)
-data class SupabaseFastingRecordDto(
-    @Json(name = "id") val id: Long? = null,
+data class PbFastingRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
-    @Json(name = "session_id") val sessionId: Long,
+    @Json(name = "session_id") val sessionId: Long = 0L,
     @Json(name = "session_title") val sessionTitle: String? = null,
     @Json(name = "session_date") val sessionDate: Long? = null,
     @Json(name = "student_id") val studentId: Long = 0L,
-    @Json(name = "student_name") val studentName: String,
+    @Json(name = "student_name") val studentName: String = "",
     @Json(name = "student_nik") val studentNik: String? = null,
     @Json(name = "student_nis") val studentNis: String? = null,
     @Json(name = "student_class") val studentClass: String? = null,
@@ -521,7 +582,7 @@ data class SupabaseFastingRecordDto(
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): FastingRecord {
         return FastingRecord(
-            id = id ?: 0L,
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
             sessionId = sessionId,
             sessionTitle = sessionTitle ?: "",
             sessionDate = sessionDate ?: 0L,
@@ -533,23 +594,27 @@ data class SupabaseFastingRecordDto(
             studentDorm = studentDorm ?: "",
             studentJenjang = studentJenjang ?: "",
             isSahurChecked = isSahurChecked,
-            sahurCheckedAt = sahurCheckedAt,
+            sahurCheckedAt = sahurCheckedAt?.takeIf { it > 0L },
             sahurCheckedBy = sahurCheckedBy ?: "",
             isBukaChecked = isBukaChecked,
-            bukaCheckedAt = bukaCheckedAt,
+            bukaCheckedAt = bukaCheckedAt?.takeIf { it > 0L },
             bukaCheckedBy = bukaCheckedBy ?: "",
-            waliName = waliName ?: "Wali Asuh",
+            waliName = waliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
             notes = notes ?: "",
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
-            createdAt = createdAt ?: System.currentTimeMillis(),
-            updatedAt = updatedAt ?: System.currentTimeMillis()
+            createdAt = createdAt?.takeIf { it > 0L } ?: System.currentTimeMillis(),
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: System.currentTimeMillis()
         )
     }
 
     companion object {
-        fun fromDomain(model: FastingRecord): SupabaseFastingRecordDto {
-            return SupabaseFastingRecordDto(
-                id = if (model.id > 0) model.id else null,
+        fun fromDomain(model: FastingRecord): PbFastingRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "${model.schoolId}:${model.sessionId}:${model.studentId}:${model.studentName}"
+            )
+            return PbFastingRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 sessionId = model.sessionId,
                 sessionTitle = model.sessionTitle,
@@ -562,15 +627,89 @@ data class SupabaseFastingRecordDto(
                 studentDorm = model.studentDorm,
                 studentJenjang = model.studentJenjang,
                 isSahurChecked = model.isSahurChecked,
-                sahurCheckedAt = model.sahurCheckedAt,
+                sahurCheckedAt = model.sahurCheckedAt ?: 0L,
                 sahurCheckedBy = model.sahurCheckedBy,
                 isBukaChecked = model.isBukaChecked,
-                bukaCheckedAt = model.bukaCheckedAt,
+                bukaCheckedAt = model.bukaCheckedAt ?: 0L,
                 bukaCheckedBy = model.bukaCheckedBy,
                 waliName = model.waliName,
                 notes = model.notes,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbSchoolProfileDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "school_name") val schoolName: String = "",
+    @Json(name = "short_name") val shortName: String? = null,
+    @Json(name = "admin_name") val adminName: String? = null,
+    @Json(name = "address") val address: String? = null,
+    @Json(name = "city") val city: String? = null,
+    @Json(name = "primary_faskes_name") val primaryFaskesName: String? = null,
+    @Json(name = "secondary_faskes_name") val secondaryFaskesName: String? = null,
+    @Json(name = "additional_faskes_json") val additionalFaskesJson: String? = null,
+    @Json(name = "faskes_contacts_json") val faskesContactsJson: String? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): SchoolProfile {
+        val cleanName = schoolName.trim().ifBlank { "Sekolah Rakyat SRT 1 Kabupaten Kediri" }
+        val additionalList = try {
+            if (additionalFaskesJson.isNullOrBlank()) {
+                emptyList()
+            } else {
+                val arr = JSONArray(additionalFaskesJson)
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optString(i, "").trim()
+                        if (item.isNotBlank()) add(item)
+                    }
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+
+        return SchoolProfile(
+            schoolName = cleanName,
+            shortName = SchoolProfile.sanitizeShortName(cleanName, shortName),
+            adminName = adminName?.takeIf { it.isNotBlank() } ?: "Admin Utama",
+            address = address ?: "",
+            city = city?.takeIf { it.isNotBlank() } ?: "Kabupaten Kediri",
+            tenantCode = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            primaryFaskesName = primaryFaskesName?.takeIf { it.isNotBlank() } ?: "UKS Sekolah",
+            secondaryFaskesName = secondaryFaskesName ?: "",
+            additionalFaskesList = additionalList,
+            faskesContacts = SchoolProfile.parseFaskesContacts(faskesContactsJson)
+        )
+    }
+
+    companion object {
+        fun fromDomain(profile: SchoolProfile, updatedAt: Long): PbSchoolProfileDto {
+            val cleanCode = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
+            val localHash = PocketBaseIdCodec.stablePositiveHash("school_profile:${cleanCode.uppercase()}")
+            val additionalArr = JSONArray().apply {
+                profile.additionalFaskesList.map { it.trim() }.filter { it.isNotBlank() }.forEach { put(it) }
+            }
+            return PbSchoolProfileDto(
+                id = PocketBaseIdCodec.toPbSchoolProfileId(cleanCode),
+                localId = localHash,
+                schoolId = cleanCode,
+                schoolName = profile.schoolName,
+                shortName = profile.shortName,
+                adminName = profile.adminName,
+                address = profile.address,
+                city = profile.city,
+                primaryFaskesName = profile.primaryFaskesName,
+                secondaryFaskesName = profile.secondaryFaskesName,
+                additionalFaskesJson = additionalArr.toString(),
+                faskesContactsJson = SchoolProfile.serializeFaskesContacts(profile.faskesContacts),
+                updatedAt = updatedAt
             )
         }
     }

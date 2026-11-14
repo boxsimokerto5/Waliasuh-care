@@ -163,7 +163,7 @@ fun ChangeAdminPasswordDialog(
                                 color = Color(0xFF0369A1)
                             )
                             Text(
-                                text = "Password baru Anda akan otomatis tersinkronisasi ke Supabase dan tetap dapat dipantau oleh Superadmin untuk keperluan bantuan/pemulihan akun sekolah.",
+                                text = "Password baru Anda akan otomatis tersinkronisasi ke PocketBase dan tetap dapat dipantau oleh Superadmin untuk keperluan bantuan/pemulihan akun sekolah.",
                                 fontSize = 11.5.sp,
                                 color = Color(0xFF0C4A6E),
                                 lineHeight = 16.sp

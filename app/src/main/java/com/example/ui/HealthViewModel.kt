@@ -15,8 +15,8 @@ import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
 import com.example.data.model.WaliAccount
-import com.example.data.remote.supabase.SupabaseConfig
-import com.example.data.remote.supabase.SupabaseSyncManager
+import com.example.data.remote.pocketbase.PocketBaseConfig
+import com.example.data.remote.pocketbase.PocketBaseSyncManager
 import com.example.data.repository.HealthRepository
 import com.example.util.NotificationHelper
 import com.example.util.PasswordGenerator
@@ -124,18 +124,27 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
 
     init {
-        if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(application)) {
+        if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(application)) {
             when (_currentUserRole.value) {
                 UserRole.ADMIN, UserRole.WALI -> {
                     val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                     viewModelScope.launch {
-                        SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
-                        SupabaseSyncManager.syncAllSchoolData(getApplication(), activeCode, repository)
+                        PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                        PocketBaseSyncManager.syncAllSchoolData(
+                            context = getApplication(),
+                            schoolId = activeCode,
+                            repository = repository,
+                            localSchoolProfile = _schoolProfile.value,
+                            localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                            onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                                applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                            }
+                        )
                     }
                 }
                 UserRole.SUPERADMIN -> {
                     viewModelScope.launch {
-                        SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                        PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                     }
                 }
                 else -> Unit
@@ -143,7 +152,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun persistSchoolProfile(profile: SchoolProfile, markCustomized: Boolean) {
+    private fun applyRemoteSchoolProfile(profile: SchoolProfile, updatedAt: Long) {
+        persistSchoolProfile(profile, markCustomized = true, updatedAt = updatedAt)
+    }
+
+    private fun persistSchoolProfile(
+        profile: SchoolProfile,
+        markCustomized: Boolean,
+        updatedAt: Long = schoolPrefs.getLong("profile_updated_at", 0L)
+    ) {
         _schoolProfile.value = profile
         schoolPrefs.edit().apply {
             putString("school_name", profile.schoolName)
@@ -156,6 +173,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             putString("secondary_faskes", profile.secondaryFaskesName)
             putString("additional_faskes", profile.additionalFaskesList.joinToString("|||"))
             putString("faskes_contacts", SchoolProfile.serializeFaskesContacts(profile.faskesContacts))
+            if (updatedAt > 0L) {
+                putLong("profile_updated_at", updatedAt)
+            }
             if (markCustomized) {
                 putString("customized_tenant", profile.tenantCode)
             }
@@ -204,6 +224,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun updateSchoolProfile(profile: SchoolProfile, onComplete: () -> Unit = {}) {
+        val now = System.currentTimeMillis()
         val cleanProfile = profile.copy(
             schoolName = profile.schoolName.trim(),
             shortName = SchoolProfile.sanitizeShortName(profile.schoolName, profile.shortName),
@@ -211,9 +232,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             address = profile.address.trim(),
             city = profile.city.trim().ifBlank { "Indonesia" }
         )
-        persistSchoolProfile(cleanProfile, markCustomized = true)
+        persistSchoolProfile(cleanProfile, markCustomized = true, updatedAt = now)
         if (cleanProfile.tenantCode.isNotBlank()) {
             viewModelScope.launch {
+                if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                    PocketBaseSyncManager.uploadSchoolProfile(getApplication(), cleanProfile, now)
+                }
                 val existingReg = repository.getSchoolByCode(cleanProfile.tenantCode)
                 if (existingReg != null) {
                     val updatedReg = existingReg.copy(
@@ -223,8 +247,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         picName = cleanProfile.adminName
                     )
                     repository.updateSchoolRegistration(updatedReg)
-                    if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
-                        SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updatedReg)
+                    if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updatedReg)
                     }
                 }
             }
@@ -380,7 +404,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         repository.completeHaidRecord(rec.id, autoEnd, "SUCI_AUTO")
                         if (!isUnitTestEnvironment()) {
                             repository.getHaidRecordById(rec.id)?.let { updated ->
-                                SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
+                                PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
                             }
                         }
                     }
@@ -402,12 +426,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun saveHaidRecord(record: HaidRecord, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
-            val assignedId = if (record.id > 0L) record.id else SupabaseSyncManager.generateCloudSafeId()
+            val assignedId = if (record.id > 0L) record.id else PocketBaseSyncManager.generateCloudSafeId()
             val stamped = record.copy(id = assignedId, schoolId = activeSchool)
             repository.insertHaidRecord(stamped)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), stamped)
+                PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), stamped)
             }
         }
     }
@@ -418,7 +442,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateHaidRecord(updated)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
             }
         }
     }
@@ -429,7 +453,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onComplete()
             if (!isUnitTestEnvironment()) {
                 repository.getHaidRecordById(id)?.let { updated ->
-                    SupabaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
+                    PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
                 }
             }
         }
@@ -440,7 +464,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteHaidRecord(record)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteHaidRecord(getApplication(), record.id)
+                PocketBaseSyncManager.deleteRemoteHaidRecord(getApplication(), record.id)
             }
         }
     }
@@ -487,7 +511,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val now = System.currentTimeMillis()
             val creator = _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
             val newSession = FastingSession(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 title = title.trim(),
                 sessionDate = sessionDate,
                 description = description.trim(),
@@ -500,7 +524,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.insertFastingSession(newSession)
             onComplete(newSession)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleFastingSession(getApplication(), newSession)
+                PocketBaseSyncManager.uploadSingleFastingSession(getApplication(), newSession)
             }
         }
     }
@@ -518,7 +542,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateFastingSession(updated)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleFastingSession(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleFastingSession(getApplication(), updated)
             }
         }
     }
@@ -532,7 +556,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteFastingSession(session)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteFastingSession(getApplication(), session.id)
+                PocketBaseSyncManager.deleteRemoteFastingSession(getApplication(), session.id)
             }
         }
     }
@@ -558,7 +582,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val now = System.currentTimeMillis()
             val resolvedJenjang = FastingJenjangHelper.resolveJenjang(student)
             val record = FastingRecord(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 sessionId = session.id,
                 sessionTitle = session.title,
                 sessionDate = session.sessionDate,
@@ -579,7 +603,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.insertFastingRecord(record)
             onResult(true, "${student.name} ($resolvedJenjang) berhasil didaftarkan berpuasa.")
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleFastingRecord(getApplication(), record)
+                PocketBaseSyncManager.uploadSingleFastingRecord(getApplication(), record)
             }
         }
     }
@@ -596,7 +620,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             repository.updateFastingRecord(updated)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleFastingRecord(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleFastingRecord(getApplication(), updated)
             }
         }
     }
@@ -613,7 +637,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             repository.updateFastingRecord(updated)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleFastingRecord(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleFastingRecord(getApplication(), updated)
             }
         }
     }
@@ -622,8 +646,24 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.deleteFastingRecord(record)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteFastingRecord(getApplication(), record.id)
+                PocketBaseSyncManager.deleteRemoteFastingRecord(getApplication(), record.id)
             }
+        }
+    }
+
+    fun syncFastingOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncFastingOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun syncShiftMessagesOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncShiftMessagesOnlineQuietly(getApplication(), activeSchool, repository)
         }
     }
 
@@ -632,7 +672,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteHaidRecordById(id)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteHaidRecord(getApplication(), id)
+                PocketBaseSyncManager.deleteRemoteHaidRecord(getApplication(), id)
             }
         }
     }
@@ -667,9 +707,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteHaidRecordsBySchool(targetId)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteStudentsBySchool(getApplication(), targetId)
-                SupabaseSyncManager.deleteWaliAccountsBySchool(getApplication(), targetId)
-                SupabaseSyncManager.deleteShiftMessagesBySchool(getApplication(), targetId)
+                PocketBaseSyncManager.deleteStudentsBySchool(getApplication(), targetId)
+                PocketBaseSyncManager.deleteWaliAccountsBySchool(getApplication(), targetId)
+                PocketBaseSyncManager.deleteShiftMessagesBySchool(getApplication(), targetId)
             }
         }
     }
@@ -727,19 +767,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         specialNotes = imported.specialNotes.ifBlank { matchedExisting.specialNotes }
                     )
                 } else {
-                    val assignedId = if (imported.id > 0L) imported.id else SupabaseSyncManager.generateCloudSafeId()
+                    val assignedId = if (imported.id > 0L) imported.id else PocketBaseSyncManager.generateCloudSafeId()
                     imported.copy(id = assignedId, schoolId = targetSchoolId)
                 }
             }
             repository.insertAllStudents(stampedStudents)
             onComplete(stampedStudents.size)
 
-            if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
                     if (replace) {
-                        SupabaseSyncManager.deleteStudentsBySchool(getApplication(), targetSchoolId)
+                        PocketBaseSyncManager.deleteStudentsBySchool(getApplication(), targetSchoolId)
                     }
-                    SupabaseSyncManager.uploadStudents(getApplication(), stampedStudents)
+                    PocketBaseSyncManager.uploadStudents(getApplication(), stampedStudents)
                 }
             }
         }
@@ -751,14 +791,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (defaultStudents.isNotEmpty()) {
                 repository.deleteStudentsBySchool("SRT1-KDR")
                 val stamped = defaultStudents.map {
-                    val assignedId = if (it.id > 0L) it.id else SupabaseSyncManager.generateCloudSafeId()
+                    val assignedId = if (it.id > 0L) it.id else PocketBaseSyncManager.generateCloudSafeId()
                     it.copy(id = assignedId, schoolId = "SRT1-KDR")
                 }
                 repository.insertAllStudents(stamped)
-                if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+                if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                     viewModelScope.launch {
-                        SupabaseSyncManager.deleteStudentsBySchool(getApplication(), "SRT1-KDR")
-                        SupabaseSyncManager.uploadStudents(getApplication(), stamped)
+                        PocketBaseSyncManager.deleteStudentsBySchool(getApplication(), "SRT1-KDR")
+                        PocketBaseSyncManager.uploadStudents(getApplication(), stamped)
                     }
                 }
             }
@@ -779,18 +819,18 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteWaliAccountsBySchool(targetSchoolId)
             }
             val stampedAccounts = accountList.map { acc ->
-                val assignedId = if (acc.id > 0L) acc.id else SupabaseSyncManager.generateCloudSafeId()
+                val assignedId = if (acc.id > 0L) acc.id else PocketBaseSyncManager.generateCloudSafeId()
                 acc.copy(id = assignedId, schoolId = targetSchoolId)
             }
             repository.insertAllWaliAccounts(stampedAccounts)
             onComplete(stampedAccounts.size)
 
-            if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
                     if (replace) {
-                        SupabaseSyncManager.deleteWaliAccountsBySchool(getApplication(), targetSchoolId)
+                        PocketBaseSyncManager.deleteWaliAccountsBySchool(getApplication(), targetSchoolId)
                     }
-                    SupabaseSyncManager.uploadWaliAccounts(getApplication(), stampedAccounts)
+                    PocketBaseSyncManager.uploadWaliAccounts(getApplication(), stampedAccounts)
                 }
             }
         }
@@ -867,7 +907,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val activeWali = _waliName.value.ifBlank { escortName.ifBlank { "Wali Asuh" } }
             val record = MedicalRecord(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 studentId = student.id,
                 studentName = student.name,
                 studentDormitory = student.dormitory,
@@ -896,9 +936,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     notificationId = (newId % 100000).toInt()
                 )
             }
-            // Sinkronisasi latar belakang ke Supabase Cloud jika terkonfigurasi
+            // Sinkronisasi latar belakang ke PocketBase Cloud
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), recordWithId, activeSchool)
             }
         }
     }
@@ -906,12 +946,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Mark departed (Dianter / Siap Jalan)
     fun markDeparted(recordId: Long) {
         viewModelScope.launch {
-            repository.updateStatus(recordId, "DEPARTED")
-            if (!isUnitTestEnvironment()) {
-                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                repository.getRecordById(recordId).firstOrNull()?.let { updated ->
-                    SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+            val now = System.currentTimeMillis()
+            val existing = repository.getRecordById(recordId).firstOrNull()
+            if (existing != null) {
+                val updated = existing.copy(status = "DEPARTED", editedAt = now)
+                repository.updateRecord(updated)
+                if (!isUnitTestEnvironment()) {
+                    val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                    PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
                 }
+            } else {
+                repository.updateStatus(recordId, "DEPARTED")
             }
         }
     }
@@ -919,22 +964,33 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Mark departed with specific referral faskes and escort
     fun markDepartedToFaskes(recordId: Long, targetFaskes: String, escortName: String) {
         viewModelScope.launch {
-            repository.updateDepartureWithFaskes(recordId, "DEPARTED", targetFaskes, escortName)
-            if (!isUnitTestEnvironment()) {
-                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                repository.getRecordById(recordId).firstOrNull()?.let { updated ->
-                    SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+            val now = System.currentTimeMillis()
+            val existing = repository.getRecordById(recordId).firstOrNull()
+            if (existing != null) {
+                val updated = existing.copy(
+                    status = "DEPARTED",
+                    faskes = targetFaskes,
+                    escortName = escortName,
+                    editedAt = now
+                )
+                repository.updateRecord(updated)
+                if (!isUnitTestEnvironment()) {
+                    val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                    PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
                 }
+            } else {
+                repository.updateDepartureWithFaskes(recordId, "DEPARTED", targetFaskes, escortName)
             }
         }
     }
 
     fun updateRecord(record: MedicalRecord) {
         viewModelScope.launch {
-            repository.updateRecord(record)
+            val updated = record.copy(editedAt = System.currentTimeMillis())
+            repository.updateRecord(updated)
             if (!isUnitTestEnvironment()) {
                 val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), record, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
             }
         }
     }
@@ -942,12 +998,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Update custom status
     fun updateStatus(recordId: Long, status: String) {
         viewModelScope.launch {
-            repository.updateStatus(recordId, status)
-            if (!isUnitTestEnvironment()) {
-                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                repository.getRecordById(recordId).firstOrNull()?.let { updated ->
-                    SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+            val now = System.currentTimeMillis()
+            val existing = repository.getRecordById(recordId).firstOrNull()
+            if (existing != null) {
+                val updated = existing.copy(status = status, editedAt = now)
+                repository.updateRecord(updated)
+                if (!isUnitTestEnvironment()) {
+                    val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                    PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
                 }
+            } else {
+                repository.updateStatus(recordId, status)
             }
         }
     }
@@ -965,9 +1026,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         inpatientRoom: String = ""
     ) {
         viewModelScope.launch {
+            val now = System.currentTimeMillis()
             val updated = record.copy(
                 status = "COMPLETED",
-                treatmentDate = System.currentTimeMillis(),
+                treatmentDate = now,
                 diagnosis = diagnosis,
                 actionsTaken = actionsTaken,
                 prescription = prescription,
@@ -978,13 +1040,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 inpatientRoom = if (isInpatient) inpatientRoom.trim() else "",
                 dischargeDate = if (isInpatient) null else record.dischargeDate,
                 createdBy = record.createdBy.ifBlank { _waliName.value.ifBlank { record.escortName } },
+                editedAt = now,
                 notes = if (additionalNotes.isNotBlank()) "${record.notes}\n$additionalNotes".trim() else record.notes
             )
             repository.updateRecord(updated)
-            // Sinkronisasi latar belakang ke Supabase Cloud
+            // Sinkronisasi latar belakang ke PocketBase Cloud
             if (!isUnitTestEnvironment()) {
                 val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
             }
         }
     }
@@ -1009,7 +1072,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val activeWali = _waliName.value.ifBlank { escortName.ifBlank { "Wali Asuh" } }
             val record = MedicalRecord(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 studentId = student.id,
                 studentName = student.name,
                 studentDormitory = student.dormitory,
@@ -1048,9 +1111,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     notificationId = (newId % 100000).toInt()
                 )
             }
-            // Sinkronisasi latar belakang ke Supabase Cloud
+            // Sinkronisasi latar belakang ke PocketBase Cloud
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), recordWithId, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), recordWithId, activeSchool)
             }
         }
     }
@@ -1085,7 +1148,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateRecord(updated)
             if (!isUnitTestEnvironment()) {
                 val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
             }
         }
     }
@@ -1131,7 +1194,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateRecord(updated)
             if (!isUnitTestEnvironment()) {
                 val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
             }
         }
     }
@@ -1166,7 +1229,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateRecord(updated)
             if (!isUnitTestEnvironment()) {
                 val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+                PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
             }
         }
     }
@@ -1179,12 +1242,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Mark Control Visit as completed
     fun markControlCompleted(recordId: Long) {
         viewModelScope.launch {
-            repository.updateControlCompleted(recordId, true)
-            if (!isUnitTestEnvironment()) {
-                val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-                repository.getRecordById(recordId).firstOrNull()?.let { updated ->
-                    SupabaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
+            val now = System.currentTimeMillis()
+            val existing = repository.getRecordById(recordId).firstOrNull()
+            if (existing != null) {
+                val updated = existing.copy(isControlCompleted = true, editedAt = now)
+                repository.updateRecord(updated)
+                if (!isUnitTestEnvironment()) {
+                    val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                    PocketBaseSyncManager.uploadSingleRecord(getApplication(), updated, activeSchool)
                 }
+            } else {
+                repository.updateControlCompleted(recordId, true)
             }
         }
     }
@@ -1193,9 +1261,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun deleteRecord(record: MedicalRecord) {
         viewModelScope.launch {
             repository.deleteRecord(record)
-            // Hapus dari Supabase jika terhubung
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteRecord(getApplication(), record.id)
+                PocketBaseSyncManager.deleteRemoteRecord(getApplication(), record.id)
             }
         }
     }
@@ -1227,7 +1294,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 com.example.util.StudentCsvParser.deriveJenjang(classGrade)
             }
             val student = ChildStudent(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 name = name.trim(),
                 nis = nis.trim(),
                 gender = gender,
@@ -1250,7 +1317,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             val newId = repository.insertStudent(student)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleStudent(getApplication(), student.copy(id = newId))
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), student.copy(id = newId))
             }
         }
     }
@@ -1260,7 +1327,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateStudent(student)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleStudent(getApplication(), student)
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), student)
             }
         }
     }
@@ -1269,68 +1336,69 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             repository.deleteStudent(student)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteStudent(getApplication(), student.id)
+                PocketBaseSyncManager.deleteRemoteStudent(getApplication(), student.id)
             }
         }
     }
 
     // ==========================================
-    // SUPABASE CLOUD DATABASE SYNC & MANAGEMENT
+    // POCKETBASE CLOUD DATABASE SYNC & MANAGEMENT
     // ==========================================
-    private val _isSupabaseConfigured = MutableStateFlow(SupabaseConfig.isConfigured(application))
-    val isSupabaseConfigured: StateFlow<Boolean> = _isSupabaseConfigured.asStateFlow()
+    private val _isCloudConfigured = MutableStateFlow(PocketBaseConfig.isConfigured(application))
+    val isCloudConfigured: StateFlow<Boolean> = _isCloudConfigured.asStateFlow()
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
 
-    private val _supabaseSyncMessage = MutableStateFlow<String?>(null)
-    val supabaseSyncMessage: StateFlow<String?> = _supabaseSyncMessage.asStateFlow()
+    private val _cloudSyncMessage = MutableStateFlow<String?>(null)
+    val cloudSyncMessage: StateFlow<String?> = _cloudSyncMessage.asStateFlow()
 
-    fun refreshSupabaseConfig() {
-        _isSupabaseConfigured.value = SupabaseConfig.isConfigured(getApplication())
+    fun refreshCloudConfig() {
+        _isCloudConfigured.value = PocketBaseConfig.isConfigured(getApplication())
     }
 
-    fun testSupabaseConnection(onResult: (Boolean, String) -> Unit) {
+    fun testCloudConnection(onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             _isSyncing.value = true
-            val result = SupabaseSyncManager.testConnection(getApplication())
+            val result = PocketBaseSyncManager.testConnection(getApplication())
             _isSyncing.value = false
-            refreshSupabaseConfig()
+            refreshCloudConfig()
             if (result.isSuccess) {
-                val msg = result.getOrNull() ?: "Koneksi Supabase Berhasil!"
-                _supabaseSyncMessage.value = msg
+                val msg = result.getOrNull() ?: "Koneksi PocketBase Berhasil!"
+                _cloudSyncMessage.value = msg
                 onResult(true, msg)
             } else {
-                val err = result.exceptionOrNull()?.message ?: "Gagal terhubung ke Supabase."
-                _supabaseSyncMessage.value = err
+                val err = result.exceptionOrNull()?.message ?: "Gagal terhubung ke server PocketBase."
+                _cloudSyncMessage.value = err
                 onResult(false, err)
             }
         }
     }
 
-    fun syncWithSupabase(onResult: (Boolean, String) -> Unit) {
-        syncAllWithSupabase(onResult)
-    }
-
-    fun syncAllWithSupabase(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+    fun syncAllWithCloud(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
             _isSyncing.value = true
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
-            SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
-            val result = SupabaseSyncManager.syncAllSchoolData(
+            PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+            val result = PocketBaseSyncManager.syncAllSchoolData(
                 context = getApplication(),
                 schoolId = activeSchool,
-                repository = repository
+                repository = repository,
+                localSchoolProfile = _schoolProfile.value,
+                localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                    applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                }
             )
             _isSyncing.value = false
-            refreshSupabaseConfig()
+            refreshCloudConfig()
             if (result.isSuccess) {
                 val msg = result.getOrNull() ?: "Sinkronisasi Berhasil!"
-                _supabaseSyncMessage.value = msg
+                _cloudSyncMessage.value = msg
                 onResult(true, msg)
             } else {
-                val err = result.exceptionOrNull()?.message ?: "Gagal sinkronisasi dengan Supabase."
-                _supabaseSyncMessage.value = err
+                val err = result.exceptionOrNull()?.message ?: "Gagal sinkronisasi dengan PocketBase."
+                _cloudSyncMessage.value = err
                 onResult(false, err)
             }
         }
@@ -1338,39 +1406,44 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun refreshSuperadminCloudData(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
         viewModelScope.launch {
-            if (!SupabaseConfig.isConfigured(getApplication())) {
-                onResult(false, "Supabase belum terkonfigurasi.")
+            if (!PocketBaseConfig.isConfigured(getApplication())) {
+                onResult(false, "Server PocketBase belum terkonfigurasi.")
                 return@launch
             }
             _isSyncing.value = true
             try {
-                SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                 _isSyncing.value = false
-                onResult(true, "Data sekolah, akun admin, & wali terbaru berhasil dimuat dari Supabase.")
+                onResult(true, "Data sekolah, akun admin, & wali terbaru berhasil dimuat dari PocketBase.")
             } catch (e: Exception) {
                 _isSyncing.value = false
-                onResult(false, "Gagal memuat data dari Supabase: ${e.localizedMessage}")
+                onResult(false, "Gagal memuat data dari PocketBase: ${e.localizedMessage}")
             }
         }
     }
 
-    fun uploadAllStudentsToSupabase(onResult: (Boolean, String) -> Unit) {
+    fun uploadAllStudentsToCloud(onResult: (Boolean, String) -> Unit) {
         viewModelScope.launch {
             _isSyncing.value = true
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             val studentList = students.value
-            val result = SupabaseSyncManager.uploadStudents(getApplication(), studentList)
+            val result = PocketBaseSyncManager.uploadStudents(getApplication(), studentList)
             if (result.isSuccess) {
-                SupabaseSyncManager.uploadWaliAccounts(getApplication(), waliAccounts.value)
+                PocketBaseSyncManager.uploadWaliAccounts(getApplication(), waliAccounts.value)
+                PocketBaseSyncManager.uploadSchoolProfile(
+                    getApplication(),
+                    _schoolProfile.value,
+                    schoolPrefs.getLong("profile_updated_at", System.currentTimeMillis())
+                )
                 val count = result.getOrNull() ?: 0
-                val msg = "Berhasil mengunggah $count data siswa ($activeSchool) ke Supabase!"
+                val msg = "Berhasil mengunggah $count data siswa ($activeSchool) ke PocketBase!"
                 _isSyncing.value = false
-                _supabaseSyncMessage.value = msg
+                _cloudSyncMessage.value = msg
                 onResult(true, msg)
             } else {
                 _isSyncing.value = false
-                val err = result.exceptionOrNull()?.message ?: "Gagal upload data siswa ke Supabase."
-                _supabaseSyncMessage.value = err
+                val err = result.exceptionOrNull()?.message ?: "Gagal upload data siswa ke PocketBase."
+                _cloudSyncMessage.value = err
                 onResult(false, err)
             }
         }
@@ -1395,9 +1468,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     .putString("saved_username", "superadmin")
                     .apply()
             }
-            if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
-                    SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                    PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                 }
             }
             return LoginResult.SuccessSuperAdmin
@@ -1405,11 +1478,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
         // 1. Cek Kredensial Administrator Resmi (ekowahyudiadmin / SRT1-KDR)
         if (cleanUser.equals("ekowahyudiadmin", ignoreCase = true)) {
-            if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 val existingPilotLocal = repository.getSchoolByAdminUsername("ekowahyudiadmin")
                     ?: repository.getSchoolByCode("SRT1-KDR")
                 if (existingPilotLocal == null) {
-                    SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                    PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                 }
             }
             val pilotOverride = repository.getSchoolByAdminUsername("ekowahyudiadmin")
@@ -1437,10 +1510,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         .putString("saved_username", "ekowahyudiadmin")
                         .apply()
                 }
-                if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+                if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                     val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                     viewModelScope.launch {
-                        SupabaseSyncManager.syncAllSchoolData(getApplication(), activeCode, repository)
+                        PocketBaseSyncManager.syncAllSchoolData(
+                            context = getApplication(),
+                            schoolId = activeCode,
+                            repository = repository,
+                            localSchoolProfile = _schoolProfile.value,
+                            localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                            onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                                applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                            }
+                        )
                     }
                 }
                 return LoginResult.SuccessAdmin
@@ -1467,11 +1549,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
         }
 
-        // Jika belum ditemukan di lokal (misal baru login di perangkat lain), tarik katalog auth dari Supabase
+        // Jika belum ditemukan di lokal (misal baru login di perangkat lain), tarik katalog auth dari PocketBase
         var matchedSchool = findLocalSchoolAdmin(cleanUser)
         var account = if (matchedSchool == null) findLocalWali(cleanUser) else null
-        if (matchedSchool == null && account == null && !isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
-            SupabaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+        if (matchedSchool == null && account == null && !isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+            PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
             matchedSchool = findLocalSchoolAdmin(cleanUser)
             if (matchedSchool == null) {
                 account = findLocalWali(cleanUser)
@@ -1495,12 +1577,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     .putString("saved_username", matchedSchool.generatedAdminUsername)
                     .apply()
             }
-            if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
-                    SupabaseSyncManager.syncAllSchoolData(
-                        getApplication(),
-                        matchedSchool.generatedSchoolCode,
-                        repository
+                    PocketBaseSyncManager.syncAllSchoolData(
+                        context = getApplication(),
+                        schoolId = matchedSchool.generatedSchoolCode,
+                        repository = repository,
+                        localSchoolProfile = _schoolProfile.value,
+                        localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                        }
                     )
                 }
             }
@@ -1548,9 +1635,18 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     .apply()
             }
 
-            if (!isUnitTestEnvironment() && SupabaseConfig.isConfigured(getApplication())) {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
-                    SupabaseSyncManager.syncAllSchoolData(getApplication(), activeSchoolCode, repository)
+                    PocketBaseSyncManager.syncAllSchoolData(
+                        context = getApplication(),
+                        schoolId = activeSchoolCode,
+                        repository = repository,
+                        localSchoolProfile = _schoolProfile.value,
+                        localProfileUpdatedAt = schoolPrefs.getLong("profile_updated_at", 0L),
+                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                        }
+                    )
                 }
             }
             return LoginResult.SuccessWali(account)
@@ -1580,7 +1676,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             val reg = SchoolRegistration(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 schoolName = schoolName.trim(),
                 address = address.trim(),
                 city = city.trim(),
@@ -1595,7 +1691,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val saved = reg.copy(id = newId)
             onComplete(saved)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
+                PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
             }
         }
     }
@@ -1623,7 +1719,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateSchoolRegistration(updated)
             onApproved(updated)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
             }
         }
     }
@@ -1641,7 +1737,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateSchoolRegistration(updated)
             onComplete(updated)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
             }
         }
     }
@@ -1655,7 +1751,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateSchoolRegistration(updated)
             onComplete(updated)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
             }
         }
     }
@@ -1669,7 +1765,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateSchoolRegistration(updated)
             onComplete(updated)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
             }
         }
     }
@@ -1683,14 +1779,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteStudentsBySchool(registration.generatedSchoolCode)
                 repository.deleteWaliAccountsBySchool(registration.generatedSchoolCode)
                 if (!isUnitTestEnvironment()) {
-                    SupabaseSyncManager.deleteStudentsBySchool(getApplication(), registration.generatedSchoolCode)
-                    SupabaseSyncManager.deleteWaliAccountsBySchool(getApplication(), registration.generatedSchoolCode)
+                    PocketBaseSyncManager.deleteAllSchoolData(getApplication(), registration.generatedSchoolCode)
                 }
             }
             repository.deleteSchoolRegistration(registration)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), registration.id)
+                PocketBaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), registration.id)
             }
         }
     }
@@ -1735,7 +1830,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.updateSchoolRegistration(updated)
                 _currentUsername.value = lockedUsername
                 if (!isUnitTestEnvironment()) {
-                    SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
+                    PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
                 }
                 onResult(true, "Password admin berhasil diperbarui & tersinkron ke Superadmin!")
             } else if (activeUsername.equals("ekowahyudiadmin", ignoreCase = true) ||
@@ -1744,7 +1839,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 val profile = _schoolProfile.value
                 val lockedUsername = "ekowahyudiadmin"
                 val pilotReg = SchoolRegistration(
-                    id = SupabaseSyncManager.generateCloudSafeId(),
+                    id = PocketBaseSyncManager.generateCloudSafeId(),
                     schoolName = profile.schoolName.ifBlank { "Sekolah Rakyat SRT 1 Kabupaten Kediri" },
                     address = profile.address.ifBlank { profile.city.ifBlank { "Kabupaten Kediri" } },
                     city = profile.city.ifBlank { "Kabupaten Kediri" },
@@ -1766,7 +1861,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 val saved = pilotReg.copy(id = insertedId)
                 _currentUsername.value = lockedUsername
                 if (!isUnitTestEnvironment()) {
-                    SupabaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
+                    PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
                 }
                 onResult(true, "Password admin berhasil diperbarui & tersinkron ke Superadmin!")
             } else {
@@ -1821,7 +1916,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             val newAccount = WaliAccount(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 name = name.trim(),
                 username = finalUsername,
                 password = password,
@@ -1834,7 +1929,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val saved = newAccount.copy(id = id)
             onComplete(saved)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadWaliAccounts(getApplication(), listOf(saved))
+                PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(saved))
             }
         }
     }
@@ -1846,7 +1941,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateWaliAccount(updated)
             onComplete(newPass)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
+                PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
             }
         }
     }
@@ -1856,7 +1951,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteWaliAccount(account)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteWaliAccount(getApplication(), account.id)
+                PocketBaseSyncManager.deleteRemoteWaliAccount(getApplication(), account.id)
             }
         }
     }
@@ -1866,7 +1961,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateWaliAccount(account)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadWaliAccounts(getApplication(), listOf(account))
+                PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(account))
             }
         }
     }
@@ -1915,13 +2010,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 onResult(true, "Kata sandi berhasil diperbarui dan tersinkronisasi ke Admin Sekolah.")
                 if (!isUnitTestEnvironment()) {
-                    SupabaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
+                    PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
                 }
             } else {
                 val defaultSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                 val generatedUser = cleanName.lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali" }
                 val newAcc = WaliAccount(
-                    id = SupabaseSyncManager.generateCloudSafeId(),
+                    id = PocketBaseSyncManager.generateCloudSafeId(),
                     name = cleanName,
                     username = generatedUser,
                     password = cleanPass,
@@ -1939,14 +2034,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 onResult(true, "Kata sandi berhasil dibuat dan tersinkronisasi ke Admin Sekolah.")
                 if (!isUnitTestEnvironment()) {
-                    SupabaseSyncManager.uploadWaliAccounts(getApplication(), listOf(newAcc.copy(id = insertedId)))
+                    PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(newAcc.copy(id = insertedId)))
                 }
             }
         }
     }
 
     /**
-     * Hapus akun pribadi Wali Asuh yang sedang login (lokal Room + Supabase).
+     * Hapus akun pribadi Wali Asuh yang sedang login (lokal Room + PocketBase).
      * Data siswa & catatan sekolah tetap aman terjaga untuk Admin & Wali lain.
      */
     fun deleteCurrentWaliAccount(
@@ -1981,7 +2076,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 repository.deleteWaliAccount(account)
                 if (!isUnitTestEnvironment()) {
-                    SupabaseSyncManager.deleteRemoteWaliAccount(getApplication(), account.id)
+                    PocketBaseSyncManager.deleteRemoteWaliAccount(getApplication(), account.id)
                 }
             }
 
@@ -1992,7 +2087,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Hapus akun Admin Sekolah & seluruh data tenant sekolah yang sedang aktif (lokal Room + Supabase).
+     * Hapus akun Admin Sekolah & seluruh data tenant sekolah yang sedang aktif (lokal Room + PocketBase).
      */
     fun deleteCurrentSchoolAdminAccount(
         passwordConfirmation: String,
@@ -2051,13 +2146,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteWaliAccountsBySchool(targetSchoolId)
             }
 
-            // 2. Bersihkan seluruh data sekolah + registrasi akun admin di Supabase
+            // 2. Bersihkan seluruh data sekolah + registrasi akun admin di PocketBase
             if (!isUnitTestEnvironment()) {
                 if (targetSchoolId.isNotBlank()) {
-                    SupabaseSyncManager.deleteAllSchoolData(getApplication(), targetSchoolId)
+                    PocketBaseSyncManager.deleteAllSchoolData(getApplication(), targetSchoolId)
                 }
                 if (existingReg != null) {
-                    SupabaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), existingReg.id)
+                    PocketBaseSyncManager.deleteRemoteSchoolRegistration(getApplication(), existingReg.id)
                 }
             }
 
@@ -2089,7 +2184,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             val newMsg = ShiftMessage(
-                id = SupabaseSyncManager.generateCloudSafeId(),
+                id = PocketBaseSyncManager.generateCloudSafeId(),
                 title = title.trim(),
                 followUpDate = followUpDate,
                 shift = shift.trim().ifBlank { "Semua Shift" },
@@ -2105,7 +2200,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val saved = newMsg.copy(id = newId)
             onComplete(saved)
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.uploadSingleShiftMessage(getApplication(), saved)
+                PocketBaseSyncManager.uploadSingleShiftMessage(getApplication(), saved)
             }
         }
     }
@@ -2114,12 +2209,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val newStatus = !message.isCompleted
             val completedBy = if (newStatus) _waliName.value else ""
-            val completedAt = if (newStatus) System.currentTimeMillis() else 0L
+            val completedAt = System.currentTimeMillis()
             repository.updateShiftMessageCompleted(message.id, newStatus, completedBy, completedAt)
             onComplete()
             if (!isUnitTestEnvironment()) {
                 repository.getShiftMessageById(message.id)?.let { updated ->
-                    SupabaseSyncManager.uploadSingleShiftMessage(getApplication(), updated)
+                    PocketBaseSyncManager.uploadSingleShiftMessage(getApplication(), updated)
                 }
             }
         }
@@ -2130,7 +2225,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteShiftMessage(message)
             onComplete()
             if (!isUnitTestEnvironment()) {
-                SupabaseSyncManager.deleteRemoteShiftMessage(getApplication(), message.id)
+                PocketBaseSyncManager.deleteRemoteShiftMessage(getApplication(), message.id)
             }
         }
     }
