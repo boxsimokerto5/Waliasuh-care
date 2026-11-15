@@ -4304,4 +4304,364 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("parent_tab_profile").assertIsDisplayed()
     composeTestRule.onNodeWithTag("parent_tab_haid").assertDoesNotExist()
   }
+
+  @Test
+  fun `verify anaksuperadmin logs in as WALI, can reorder dashboard icons, and syncs layout via PocketBase DTO`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_dashboard_layout_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    // 1. Password salah untuk anaksuperadmin harus ditolak
+    val wrongPassResult = vm.executeLogin("anaksuperadmin", "Salah123@", rememberMe = false)
+    org.junit.Assert.assertTrue(wrongPassResult is com.example.ui.LoginResult.Error)
+    org.junit.Assert.assertFalse(vm.isAnakSuperAdmin.value)
+
+    // 2. Login anaksuperadmin dengan Woyowoyo12@ masuk sebagai UserRole.WALI
+    val okResult = vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = true)
+    org.junit.Assert.assertTrue(okResult is com.example.ui.LoginResult.SuccessWali)
+    org.junit.Assert.assertEquals(com.example.ui.UserRole.WALI, vm.currentUserRole.value)
+    org.junit.Assert.assertEquals("Anak Superadmin", vm.waliName.value)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    org.junit.Assert.assertTrue(vm.isAnakSuperAdmin.value)
+
+    // 3. Ubah urutan ikon (pindahkan MENGAJI ke posisi pertama & BEROBAT ke posisi terakhir)
+    val customOrder = listOf(
+      com.example.data.model.DashboardIconKey.MENGAJI,
+      com.example.data.model.DashboardIconKey.PUASA,
+      com.example.data.model.DashboardIconKey.KUNJUNGAN,
+      com.example.data.model.DashboardIconKey.ORANG_TUA,
+      com.example.data.model.DashboardIconKey.ANAK_ASUH,
+      com.example.data.model.DashboardIconKey.HAID,
+      com.example.data.model.DashboardIconKey.PESAN,
+      com.example.data.model.DashboardIconKey.BEROBAT
+    )
+    var saveOk = false
+    vm.saveDashboardIconOrder(customOrder) { success, _ -> saveOk = success }
+    org.junit.Assert.assertTrue(saveOk)
+    org.junit.Assert.assertEquals(customOrder, vm.dashboardIconOrder.value)
+
+    // 4. PocketBase DTO round-trip untuk tata letak dashboard global
+    val dto = com.example.data.remote.pocketbase.PbSchoolProfileDto.fromDashboardLayout(customOrder, 1731650000000L)
+    org.junit.Assert.assertEquals("__GLOBAL_DASHBOARD_LAYOUT__", dto.schoolId)
+    val decoded = dto.toDashboardLayoutConfig()
+    org.junit.Assert.assertNotNull(decoded)
+    org.junit.Assert.assertEquals(customOrder, decoded?.order)
+    org.junit.Assert.assertEquals(1731650000000L, decoded?.updatedAt)
+
+    // 5. Akun Wali Asuh biasa tidak memiliki hak isAnakSuperAdmin dan tidak bisa mengubah tata letak
+    val normalWali = com.example.data.model.WaliAccount(
+      name = "Wali Biasa",
+      username = "walibiasa_layout_test",
+      password = "Wali#1234",
+      dormitory = "Asrama Putra",
+      schoolId = "SRT1-KDR"
+    )
+    db.waliAccountDao().insert(normalWali)
+    val normalLogin = vm.executeLogin("walibiasa_layout_test", "Wali#1234", rememberMe = false)
+    org.junit.Assert.assertTrue(normalLogin is com.example.ui.LoginResult.SuccessWali)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    org.junit.Assert.assertFalse(vm.isAnakSuperAdmin.value)
+
+    var blockedForNormalWali = false
+    vm.saveDashboardIconOrder(com.example.data.model.DashboardIconKey.DEFAULT_ORDER) { success, _ ->
+      blockedForNormalWali = !success
+    }
+    org.junit.Assert.assertTrue(blockedForNormalWali)
+    org.junit.Assert.assertEquals(customOrder, vm.dashboardIconOrder.value)
+
+    // 6. Simulasikan pembaruan dari cloud PocketBase yang lebih baru -> otomatis berubah pada Wali Asuh biasa
+    val cloudOrder = listOf(
+      com.example.data.model.DashboardIconKey.HAID,
+      com.example.data.model.DashboardIconKey.MENGAJI,
+      com.example.data.model.DashboardIconKey.BEROBAT,
+      com.example.data.model.DashboardIconKey.KUNJUNGAN,
+      com.example.data.model.DashboardIconKey.ORANG_TUA,
+      com.example.data.model.DashboardIconKey.ANAK_ASUH,
+      com.example.data.model.DashboardIconKey.PUASA,
+      com.example.data.model.DashboardIconKey.PESAN
+    )
+    vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
+    org.junit.Assert.assertEquals(cloudOrder, vm.dashboardIconOrder.value)
+  }
+
+  @Test
+  fun `verify DashboardScreen shows Arrange Icons button only for anaksuperadmin`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    // Login sebagai anaksuperadmin -> tombol Atur Ikon muncul
+    vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = false)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val plans by vm.activePlans.collectAsStateWithLifecycle()
+        val students by vm.students.collectAsStateWithLifecycle()
+        val waliName by vm.waliName.collectAsStateWithLifecycle()
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = waliName,
+          activePlans = plans,
+          students = students,
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_customize_dashboard_layout").performScrollTo().assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify anaksuperadmin school switcher lists approved schools, isolates tenant data, and routes new activities`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.childStudentDao().deleteBySchoolId("SRT-SBY01")
+    db.shiftMessageDao().deleteBySchoolId("SRT-SBY01")
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SBY01")
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SUSP99")
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-PEND88")
+
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "Sekolah Rakyat Surabaya 1",
+        address = "Jl. Ahmad Yani No. 10",
+        city = "Kota Surabaya",
+        estimatedWaliCount = 8,
+        picName = "Ustadz Arif",
+        picEmail = "arif@sby.sch.id",
+        picPhone = "081234000111",
+        status = "APPROVED",
+        generatedSchoolCode = "SRT-SBY01",
+        generatedAdminUsername = "admin_sby01",
+        generatedAdminPassword = "Pass#Sby1"
+      )
+    )
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "Sekolah Suspend Uji",
+        address = "Jl. Test",
+        city = "Kota Solo",
+        estimatedWaliCount = 2,
+        picName = "Test",
+        picEmail = "t@t.id",
+        picPhone = "081",
+        status = "SUSPENDED",
+        generatedSchoolCode = "SRT-SUSP99"
+      )
+    )
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "Sekolah Pending Uji",
+        address = "Jl. Test 2",
+        city = "Kota Malang",
+        estimatedWaliCount = 2,
+        picName = "Test 2",
+        picEmail = "t2@t.id",
+        picPhone = "082",
+        status = "PENDING",
+        generatedSchoolCode = "SRT-PEND88"
+      )
+    )
+
+    val vm = com.example.ui.HealthViewModel(app)
+    val loginRes = vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = false)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessWali)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    // Tunggu flow availableSchoolsForSwitch memuat sekolah APPROVED + SRT1-KDR
+    var options = vm.availableSchoolsForSwitch.value
+    for (i in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      options = vm.availableSchoolsForSwitch.value
+      if (options.any { it.tenantCode == "SRT-SBY01" }) break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertTrue(options.any { it.tenantCode == "SRT1-KDR" })
+    org.junit.Assert.assertTrue(options.any { it.tenantCode == "SRT-SBY01" })
+    org.junit.Assert.assertFalse(options.any { it.tenantCode == "SRT-SUSP99" })
+    org.junit.Assert.assertFalse(options.any { it.tenantCode == "SRT-PEND88" })
+    org.junit.Assert.assertFalse(options.any { it.tenantCode == "__GLOBAL_DASHBOARD_LAYOUT__" })
+
+    // Beralih ke Sekolah Rakyat Surabaya 1
+    var switchedOk = false
+    vm.switchActiveSchoolForAnakSuperAdmin("SRT-SBY01") { ok, _ -> switchedOk = ok }
+    for (i in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (switchedOk && vm.schoolProfile.value.tenantCode == "SRT-SBY01") break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertTrue(switchedOk)
+    org.junit.Assert.assertEquals("SRT-SBY01", vm.schoolProfile.value.tenantCode)
+    org.junit.Assert.assertEquals("Sekolah Rakyat Surabaya 1", vm.schoolProfile.value.schoolName)
+
+    // Tambah siswa dan pesan shift -> harus otomatis masuk ke SRT-SBY01
+    vm.addStudent(
+      name = "Santri Surabaya Uji",
+      nis = "SBY-9901",
+      gender = "L",
+      age = 14,
+      dormitory = "Asrama SBY",
+      classGrade = "8A",
+      allergies = "",
+      bloodType = "O",
+      emergencyContact = "081111111",
+      specialNotes = ""
+    )
+    vm.addShiftMessage(
+      title = "Operan Malam Surabaya",
+      followUpDate = System.currentTimeMillis(),
+      shift = "Shift Malam",
+      targetWali = "Semua Wali Asuh",
+      content = "Pantau anak SBY",
+      priority = "PENTING"
+    )
+
+    for (i in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.students.value.any { it.name == "Santri Surabaya Uji" } &&
+        vm.shiftMessages.value.any { it.title == "Operan Malam Surabaya" }
+      ) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    val sbyStudent = vm.students.value.firstOrNull { it.name == "Santri Surabaya Uji" }
+    org.junit.Assert.assertNotNull(sbyStudent)
+    org.junit.Assert.assertEquals("SRT-SBY01", sbyStudent?.schoolId)
+
+    val sbyMsg = vm.shiftMessages.value.firstOrNull { it.title == "Operan Malam Surabaya" }
+    org.junit.Assert.assertNotNull(sbyMsg)
+    org.junit.Assert.assertEquals("SRT-SBY01", sbyMsg?.schoolId)
+
+    // Beralih kembali ke SRT1-KDR -> data SRT-SBY01 terisolasi dan tidak tampil di SRT1-KDR
+    var backToPilot = false
+    vm.switchActiveSchoolForAnakSuperAdmin("SRT1-KDR") { ok, _ -> backToPilot = ok }
+    for (i in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (backToPilot && vm.schoolProfile.value.tenantCode == "SRT1-KDR" &&
+        vm.students.value.none { it.name == "Santri Surabaya Uji" }
+      ) break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertTrue(backToPilot)
+    org.junit.Assert.assertEquals("SRT1-KDR", vm.schoolProfile.value.tenantCode)
+    org.junit.Assert.assertTrue(vm.students.value.none { it.name == "Santri Surabaya Uji" })
+    org.junit.Assert.assertTrue(vm.shiftMessages.value.none { it.title == "Operan Malam Surabaya" })
+
+    // Wali biasa tidak diizinkan mengganti sekolah lewat method switchActiveSchoolForAnakSuperAdmin
+    val normalWali = com.example.data.model.WaliAccount(
+      name = "Wali Reguler",
+      username = "wali_reguler_switch_test",
+      password = "Pass#Wali9",
+      dormitory = "Asrama A",
+      schoolId = "SRT1-KDR"
+    )
+    db.waliAccountDao().insert(normalWali)
+    vm.executeLogin("wali_reguler_switch_test", "Pass#Wali9", rememberMe = false)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    var deniedForNormal = false
+    vm.switchActiveSchoolForAnakSuperAdmin("SRT-SBY01") { ok, _ -> deniedForNormal = !ok }
+    org.junit.Assert.assertTrue(deniedForNormal)
+    org.junit.Assert.assertEquals("SRT1-KDR", vm.schoolProfile.value.tenantCode)
+
+    // Cleanup
+    db.childStudentDao().deleteBySchoolId("SRT-SBY01")
+    db.shiftMessageDao().deleteBySchoolId("SRT-SBY01")
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SBY01")
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SUSP99")
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-PEND88")
+    db.waliAccountDao().delete(normalWali)
+  }
+
+  @Test
+  fun `verify ProfileScreen renders school switcher dropdown exclusively for anaksuperadmin`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SBY02")
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "Sekolah Rakyat Sidoarjo",
+        address = "Jl. Pahlawan No. 5",
+        city = "Kabupaten Sidoarjo",
+        estimatedWaliCount = 6,
+        picName = "Pak Hendra",
+        picEmail = "hendra@sda.sch.id",
+        picPhone = "081234567000",
+        status = "APPROVED",
+        generatedSchoolCode = "SRT-SBY02"
+      )
+    )
+    val normalWali = com.example.data.model.WaliAccount(
+      name = "Wali Biasa Profil",
+      username = "walibiasa_profil_test",
+      password = "Pass#Profil1",
+      dormitory = "Asrama B",
+      schoolId = "SRT1-KDR"
+    )
+    db.waliAccountDao().insert(normalWali)
+
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    // 1. Login sebagai Wali biasa -> dropdown sekolah TIDAK boleh muncul di ProfileScreen
+    vm.executeLogin("walibiasa_profil_test", "Pass#Profil1", rememberMe = false)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val waliName by vm.waliName.collectAsStateWithLifecycle()
+        val records by vm.completedRecords.collectAsStateWithLifecycle()
+        com.example.ui.screens.ProfileScreen(
+          viewModel = vm,
+          waliName = waliName,
+          isDarkTheme = false,
+          onToggleTheme = {},
+          records = records
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dropdown_anaksuperadmin_school").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("card_anaksuperadmin_school_switcher").assertDoesNotExist()
+
+    // 2. Login sebagai anaksuperadmin -> dropdown muncul & dapat memilih sekolah SRT-SBY02
+    vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = false)
+    for (i in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.isAnakSuperAdmin.value && vm.availableSchoolsForSwitch.value.any { it.tenantCode == "SRT-SBY02" }) break
+      kotlinx.coroutines.delay(30)
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_anaksuperadmin_school_switcher").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("dropdown_anaksuperadmin_school").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("school_option_SRT-SBY02").assertIsDisplayed().performClick()
+    for (i in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.schoolProfile.value.tenantCode == "SRT-SBY02") break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertEquals("SRT-SBY02", vm.schoolProfile.value.tenantCode)
+
+    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SBY02")
+    db.waliAccountDao().delete(normalWali)
+  }
 }
+

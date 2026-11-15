@@ -1,6 +1,8 @@
 package com.example.data.remote.pocketbase
 
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardIconKey
+import com.example.data.model.DashboardIconLayoutConfig
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -710,7 +712,17 @@ data class PbSchoolProfileDto(
         )
     }
 
+    fun toDashboardLayoutConfig(): DashboardIconLayoutConfig? {
+        val parsed = DashboardIconKey.parseJson(additionalFaskesJson) ?: return null
+        return DashboardIconLayoutConfig(
+            order = parsed,
+            updatedAt = updatedAt ?: 0L
+        )
+    }
+
     companion object {
+        const val GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID = "__GLOBAL_DASHBOARD_LAYOUT__"
+
         fun fromDomain(profile: SchoolProfile, updatedAt: Long): PbSchoolProfileDto {
             val cleanCode = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
             val localHash = PocketBaseIdCodec.stablePositiveHash("school_profile:${cleanCode.uppercase()}")
@@ -730,6 +742,30 @@ data class PbSchoolProfileDto(
                 secondaryFaskesName = profile.secondaryFaskesName,
                 additionalFaskesJson = additionalArr.toString(),
                 faskesContactsJson = SchoolProfile.serializeFaskesContacts(profile.faskesContacts),
+                updatedAt = updatedAt
+            )
+        }
+
+        fun fromDashboardLayout(
+            order: List<DashboardIconKey>,
+            updatedAt: Long
+        ): PbSchoolProfileDto {
+            val localHash = PocketBaseIdCodec.stablePositiveHash(
+                "school_profile:${GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID}"
+            )
+            return PbSchoolProfileDto(
+                id = PocketBaseIdCodec.toPbSchoolProfileId(GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID),
+                localId = localHash,
+                schoolId = GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID,
+                schoolName = "Global Dashboard Icon Layout",
+                shortName = "Global Layout",
+                adminName = "anaksuperadmin",
+                address = "",
+                city = "Global",
+                primaryFaskesName = "UKS Sekolah",
+                secondaryFaskesName = "",
+                additionalFaskesJson = DashboardIconKey.serializeJson(order),
+                faskesContactsJson = "[]",
                 updatedAt = updatedAt
             )
         }

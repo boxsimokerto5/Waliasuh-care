@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardIconKey
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -38,6 +39,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+
+data class SwitchableSchoolOption(
+    val tenantCode: String,
+    val schoolName: String,
+    val city: String,
+    val isDefaultPilot: Boolean = false
+)
 
 enum class UserRole {
     NOT_LOGGED_IN,
@@ -123,6 +131,129 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentUsername = MutableStateFlow<String?>(authPrefs.getString("saved_username", null))
     val currentUsername: StateFlow<String?> = _currentUsername.asStateFlow()
 
+    val isAnakSuperAdmin: StateFlow<Boolean> = combine(
+        _currentUserRole,
+        _currentUsername
+    ) { role, username ->
+        role == UserRole.WALI && username.equals("anaksuperadmin", ignoreCase = true)
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        _currentUserRole.value == UserRole.WALI &&
+            _currentUsername.value.equals("anaksuperadmin", ignoreCase = true)
+    )
+
+    // Global Dashboard Icon Layout Preferences (Synced with PocketBase across all Wali Asuh)
+    private val layoutPrefs = application.getSharedPreferences("waliasuh_dashboard_layout_prefs", Context.MODE_PRIVATE)
+    private val _dashboardIconOrder = MutableStateFlow(loadSavedDashboardIconOrder())
+    val dashboardIconOrder: StateFlow<List<DashboardIconKey>> = _dashboardIconOrder.asStateFlow()
+
+    private val _isSavingDashboardLayout = MutableStateFlow(false)
+    val isSavingDashboardLayout: StateFlow<Boolean> = _isSavingDashboardLayout.asStateFlow()
+
+    private fun loadSavedDashboardIconOrder(): List<DashboardIconKey> {
+        val raw = layoutPrefs.getString("icon_order_json", null)
+        return DashboardIconKey.parseJson(raw) ?: DashboardIconKey.DEFAULT_ORDER
+    }
+
+    private fun getDashboardLayoutUpdatedAt(): Long {
+        return layoutPrefs.getLong("icon_order_updated_at", 0L)
+    }
+
+    private fun persistDashboardIconOrder(order: List<DashboardIconKey>, updatedAt: Long) {
+        val normalized = DashboardIconKey.normalizeOrder(order.map { it.key })
+        _dashboardIconOrder.value = normalized
+        layoutPrefs.edit()
+            .putString("icon_order_json", DashboardIconKey.serializeJson(normalized))
+            .putLong("icon_order_updated_at", updatedAt)
+            .apply()
+    }
+
+    fun applyRemoteDashboardIconOrder(order: List<DashboardIconKey>, updatedAt: Long) {
+        val localTs = getDashboardLayoutUpdatedAt()
+        if (updatedAt >= localTs) {
+            persistDashboardIconOrder(order, updatedAt)
+        }
+    }
+
+    fun syncDashboardIconLayoutNow() {
+        if (isUnitTestEnvironment() || !PocketBaseConfig.isConfigured(getApplication())) return
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncDashboardIconLayoutQuietly(
+                context = getApplication(),
+                localOrder = _dashboardIconOrder.value,
+                localUpdatedAt = getDashboardLayoutUpdatedAt(),
+                allowPushToCloud = isAnakSuperAdmin.value,
+                onRemoteLayoutUpdated = { remoteOrder, remoteTs ->
+                    applyRemoteDashboardIconOrder(remoteOrder, remoteTs)
+                }
+            )
+        }
+    }
+
+    fun saveDashboardIconOrder(
+        newOrder: List<DashboardIconKey>,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!isAnakSuperAdmin.value) {
+            onResult(
+                false,
+                if (isEn) {
+                    "Only anaksuperadmin can change the dashboard icon layout."
+                } else {
+                    "Hanya akun anaksuperadmin yang dapat mengubah tata letak ikon dashboard."
+                }
+            )
+            return
+        }
+        val normalized = DashboardIconKey.normalizeOrder(newOrder.map { it.key })
+        val now = System.currentTimeMillis()
+        persistDashboardIconOrder(normalized, now)
+
+        if (isUnitTestEnvironment()) {
+            onResult(
+                true,
+                if (isEn) "Dashboard icon layout saved!" else "Tata letak ikon dashboard berhasil disimpan!"
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _isSavingDashboardLayout.value = true
+            val res = PocketBaseSyncManager.uploadDashboardIconLayout(
+                context = getApplication(),
+                order = normalized,
+                updatedAt = now
+            )
+            _isSavingDashboardLayout.value = false
+            if (res.isSuccess) {
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Layout saved & synced to PocketBase for all Wali Asuh!"
+                    } else {
+                        "Tata letak disimpan & disinkronkan ke PocketBase untuk semua Wali Asuh!"
+                    }
+                )
+            } else {
+                val errDetail = res.exceptionOrNull()?.message.orEmpty()
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Saved locally, but PocketBase sync failed: $errDetail"
+                    } else {
+                        "Tersimpan di perangkat, namun sinkronisasi PocketBase gagal: $errDetail"
+                    }
+                )
+            }
+        }
+    }
+
+    fun resetDashboardIconOrder(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        saveDashboardIconOrder(DashboardIconKey.DEFAULT_ORDER, onResult)
+    }
+
     // School Profile & Tenant Customization
     private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
     private fun parseFaskesList(raw: String?): List<String> {
@@ -153,6 +284,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     )
     val schoolProfile: StateFlow<SchoolProfile> = _schoolProfile.asStateFlow()
 
+    private suspend fun runUnifiedSchoolCloudSync(schoolId: String): Result<String> {
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        return PocketBaseSyncManager.syncAllSchoolData(
+            context = getApplication(),
+            schoolId = cleanSchoolId,
+            repository = repository,
+            localSchoolProfile = _schoolProfile.value,
+            localProfileUpdatedAt = getProfileUpdatedAt(cleanSchoolId),
+            onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                applyRemoteSchoolProfile(remoteProfile, remoteTs)
+            },
+            localDashboardIconOrder = _dashboardIconOrder.value,
+            localDashboardLayoutUpdatedAt = getDashboardLayoutUpdatedAt(),
+            allowPushDashboardLayout = isAnakSuperAdmin.value,
+            onRemoteDashboardLayoutUpdated = { remoteOrder, remoteTs ->
+                applyRemoteDashboardIconOrder(remoteOrder, remoteTs)
+            },
+            onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
+            }
+        )
+    }
+
     init {
         viewModelScope.launch {
             sanitizeExistingIdentityDataInRoom()
@@ -163,19 +317,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                     viewModelScope.launch {
                         PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
-                        PocketBaseSyncManager.syncAllSchoolData(
-                            context = getApplication(),
-                            schoolId = activeCode,
-                            repository = repository,
-                            localSchoolProfile = _schoolProfile.value,
-                            localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
-                            onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                                applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                            },
-                            onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                                processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                            }
-                        )
+                        runUnifiedSchoolCloudSync(activeCode)
                     }
                 }
                 UserRole.SUPERADMIN -> {
@@ -199,19 +341,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (!PocketBaseConfig.isConfigured(getApplication())) continue
                 val activeCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
                 runCatching {
-                    PocketBaseSyncManager.syncAllSchoolData(
-                        context = getApplication(),
-                        schoolId = activeCode,
-                        repository = repository,
-                        localSchoolProfile = _schoolProfile.value,
-                        localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
-                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                        },
-                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                        }
-                    )
+                    runUnifiedSchoolCloudSync(activeCode)
                 }
             }
         }
@@ -271,7 +401,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         return schoolPrefs.getLong(profileUpdatedAtKey(tenantCode), 0L)
     }
 
+    private val _remoteSchoolProfiles = MutableStateFlow<Map<String, Pair<SchoolProfile, Long>>>(emptyMap())
+    private val _isSwitchingSchool = MutableStateFlow(false)
+    val isSwitchingSchool: StateFlow<Boolean> = _isSwitchingSchool.asStateFlow()
+
     private fun applyRemoteSchoolProfile(profile: SchoolProfile, updatedAt: Long) {
+        val codeUpper = profile.tenantCode.trim().uppercase()
+        if (codeUpper.isNotBlank() &&
+            codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+        ) {
+            _remoteSchoolProfiles.value = _remoteSchoolProfiles.value.toMutableMap().apply {
+                put(codeUpper, profile.copy(tenantCode = codeUpper) to updatedAt)
+            }
+        }
         persistSchoolProfile(profile, markCustomized = true, updatedAt = updatedAt)
     }
 
@@ -383,6 +525,253 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     val schoolRegistrations: StateFlow<List<SchoolRegistration>> = repository.allSchoolRegistrations
         .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val availableSchoolsForSwitch: StateFlow<List<SwitchableSchoolOption>> = combine(
+        schoolRegistrations,
+        _remoteSchoolProfiles,
+        _schoolProfile
+    ) { registrations, remoteProfiles, currentActiveProfile ->
+        val blockedStatuses = setOf("PENDING", "REJECTED", "SUSPENDED")
+        val blockedCodes = registrations
+            .filter { it.status.uppercase() in blockedStatuses && it.generatedSchoolCode.isNotBlank() }
+            .map { it.generatedSchoolCode.trim().uppercase() }
+            .toSet()
+
+        val optionsMap = linkedMapOf<String, SwitchableSchoolOption>()
+        val activeUpper = currentActiveProfile.tenantCode.trim().uppercase().ifBlank { "SRT1-KDR" }
+
+        // 1. Sekolah pilot default (SRT1-KDR) selalu tersedia sebagai opsi dasar
+        val pilotRemote = remoteProfiles["SRT1-KDR"]?.first
+        val pilotName = when {
+            activeUpper == "SRT1-KDR" && currentActiveProfile.schoolName.isNotBlank() -> currentActiveProfile.schoolName
+            pilotRemote != null && pilotRemote.schoolName.isNotBlank() -> pilotRemote.schoolName
+            else -> "Sekolah Rakyat SRT 1 Kabupaten Kediri"
+        }
+        val pilotCity = when {
+            activeUpper == "SRT1-KDR" && currentActiveProfile.city.isNotBlank() -> currentActiveProfile.city
+            pilotRemote != null && pilotRemote.city.isNotBlank() -> pilotRemote.city
+            else -> "Kabupaten Kediri"
+        }
+        optionsMap["SRT1-KDR"] = SwitchableSchoolOption(
+            tenantCode = "SRT1-KDR",
+            schoolName = pilotName,
+            city = pilotCity,
+            isDefaultPilot = true
+        )
+
+        // 2. Semua sekolah yang berstatus APPROVED dari pendaftaran
+        registrations
+            .filter {
+                it.status.equals("APPROVED", ignoreCase = true) &&
+                    it.generatedSchoolCode.isNotBlank() &&
+                    !it.generatedSchoolCode.equals(
+                        com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID,
+                        ignoreCase = true
+                    )
+            }
+            .forEach { reg ->
+                val codeUpper = reg.generatedSchoolCode.trim().uppercase()
+                val remoteForCode = remoteProfiles[codeUpper]?.first
+                val resolvedName = when {
+                    activeUpper == codeUpper && currentActiveProfile.schoolName.isNotBlank() -> currentActiveProfile.schoolName
+                    remoteForCode != null && remoteForCode.schoolName.isNotBlank() -> remoteForCode.schoolName
+                    else -> reg.schoolName.trim().ifBlank { codeUpper }
+                }
+                val resolvedCity = when {
+                    activeUpper == codeUpper && currentActiveProfile.city.isNotBlank() -> currentActiveProfile.city
+                    remoteForCode != null && remoteForCode.city.isNotBlank() -> remoteForCode.city
+                    else -> reg.city.trim().ifBlank { "Indonesia" }
+                }
+                optionsMap[codeUpper] = SwitchableSchoolOption(
+                    tenantCode = codeUpper,
+                    schoolName = resolvedName,
+                    city = resolvedCity,
+                    isDefaultPilot = codeUpper == "SRT1-KDR"
+                )
+            }
+
+        // 3. Profil sekolah jarak jauh dari PocketBase yang mungkin belum ada di Room registrations
+        remoteProfiles.forEach { (codeUpper, pair) ->
+            if (codeUpper !in blockedCodes &&
+                codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+                !optionsMap.containsKey(codeUpper)
+            ) {
+                val prof = pair.first
+                optionsMap[codeUpper] = SwitchableSchoolOption(
+                    tenantCode = codeUpper,
+                    schoolName = prof.schoolName.ifBlank { codeUpper },
+                    city = prof.city.ifBlank { "Indonesia" },
+                    isDefaultPilot = codeUpper == "SRT1-KDR"
+                )
+            }
+        }
+
+        // 4. Pastikan sekolah aktif saat ini selalu masuk dalam opsi bila valid
+        if (activeUpper !in blockedCodes &&
+            activeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+            !optionsMap.containsKey(activeUpper)
+        ) {
+            optionsMap[activeUpper] = SwitchableSchoolOption(
+                tenantCode = activeUpper,
+                schoolName = currentActiveProfile.schoolName.ifBlank { activeUpper },
+                city = currentActiveProfile.city.ifBlank { "Indonesia" },
+                isDefaultPilot = activeUpper == "SRT1-KDR"
+            )
+        }
+
+        optionsMap.values.sortedWith(
+            compareByDescending<SwitchableSchoolOption> { it.isDefaultPilot }
+                .thenBy { it.schoolName.lowercase() }
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun refreshAvailableSchoolsForSwitch(onComplete: (Boolean) -> Unit = {}) {
+        if (!isAnakSuperAdmin.value) {
+            onComplete(false)
+            return
+        }
+        if (isUnitTestEnvironment() || !PocketBaseConfig.isConfigured(getApplication())) {
+            onComplete(true)
+            return
+        }
+        viewModelScope.launch {
+            _isSwitchingSchool.value = true
+            try {
+                PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                val remoteList = PocketBaseSyncManager.fetchAllRemoteSchoolProfiles(getApplication())
+                if (remoteList.isNotEmpty()) {
+                    val updatedMap = _remoteSchoolProfiles.value.toMutableMap()
+                    remoteList.forEach { (prof, ts) ->
+                        val codeUpper = prof.tenantCode.trim().uppercase()
+                        if (codeUpper.isNotBlank() &&
+                            codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+                        ) {
+                            updatedMap[codeUpper] = prof.copy(tenantCode = codeUpper) to ts
+                        }
+                    }
+                    _remoteSchoolProfiles.value = updatedMap
+                }
+                onComplete(true)
+            } catch (_: Exception) {
+                onComplete(false)
+            } finally {
+                _isSwitchingSchool.value = false
+            }
+        }
+    }
+
+    fun switchActiveSchoolForAnakSuperAdmin(
+        targetSchoolCode: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!isAnakSuperAdmin.value) {
+            onResult(
+                false,
+                if (isEn) {
+                    "Only anaksuperadmin can switch active schools."
+                } else {
+                    "Hanya akun anaksuperadmin yang dapat berpindah sekolah aktif."
+                }
+            )
+            return
+        }
+        val cleanCode = targetSchoolCode.trim().uppercase()
+        if (cleanCode.isBlank() ||
+            cleanCode == com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+        ) {
+            onResult(
+                false,
+                if (isEn) "Invalid target school code." else "Kode sekolah tujuan tidak valid."
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            val matchingReg = repository.getSchoolByCode(cleanCode)
+                ?: repository.getAllSchoolRegistrationsList().firstOrNull {
+                    it.generatedSchoolCode.equals(cleanCode, ignoreCase = true)
+                }
+
+            if (matchingReg != null && !matchingReg.status.equals("APPROVED", ignoreCase = true)) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "School $cleanCode is not active (Status: ${matchingReg.status})."
+                    } else {
+                        "Sekolah $cleanCode belum berstatus aktif (Status: ${matchingReg.status})."
+                    }
+                )
+                return@launch
+            }
+
+            val remotePair = _remoteSchoolProfiles.value[cleanCode]
+            val current = _schoolProfile.value
+            val (resolvedProfile, resolvedUpdatedAt) = when {
+                current.tenantCode.equals(cleanCode, ignoreCase = true) -> {
+                    current.copy(tenantCode = cleanCode) to getProfileUpdatedAt(cleanCode)
+                }
+                remotePair != null -> {
+                    remotePair.first.copy(tenantCode = cleanCode) to maxOf(remotePair.second, getProfileUpdatedAt(cleanCode))
+                }
+                matchingReg != null -> {
+                    buildProfileForSchool(matchingReg).copy(tenantCode = cleanCode) to getProfileUpdatedAt(cleanCode)
+                }
+                cleanCode == "SRT1-KDR" -> {
+                    SchoolProfile() to getProfileUpdatedAt("SRT1-KDR")
+                }
+                else -> {
+                    val option = availableSchoolsForSwitch.value.firstOrNull {
+                        it.tenantCode.equals(cleanCode, ignoreCase = true)
+                    }
+                    SchoolProfile(
+                        schoolName = option?.schoolName?.ifBlank { cleanCode } ?: cleanCode,
+                        shortName = option?.schoolName?.ifBlank { cleanCode } ?: cleanCode,
+                        city = option?.city?.ifBlank { "Indonesia" } ?: "Indonesia",
+                        tenantCode = cleanCode
+                    ) to getProfileUpdatedAt(cleanCode)
+                }
+            }
+
+            persistSchoolProfile(resolvedProfile, markCustomized = false, updatedAt = resolvedUpdatedAt)
+
+            if (isUnitTestEnvironment() || !PocketBaseConfig.isConfigured(getApplication())) {
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Switched to ${resolvedProfile.schoolName} ($cleanCode). Student data & activities now follow this school."
+                    } else {
+                        "Beralih ke ${resolvedProfile.schoolName} ($cleanCode). Data siswa & aktivitas kini masuk ke sekolah ini."
+                    }
+                )
+                return@launch
+            }
+
+            _isSwitchingSchool.value = true
+            _isSyncing.value = true
+            val syncRes = runUnifiedSchoolCloudSync(cleanCode)
+            _isSyncing.value = false
+            _isSwitchingSchool.value = false
+
+            val syncedName = _schoolProfile.value.schoolName.ifBlank { resolvedProfile.schoolName }
+            if (syncRes.isSuccess) {
+                val msg = if (isEn) {
+                    "Switched to $syncedName ($cleanCode) & synced with PocketBase!"
+                } else {
+                    "Berhasil masuk ke $syncedName ($cleanCode) & tersinkron PocketBase!"
+                }
+                _cloudSyncMessage.value = msg
+                onResult(true, msg)
+            } else {
+                val msg = if (isEn) {
+                    "Switched to $syncedName ($cleanCode) locally (cloud sync pending)."
+                } else {
+                    "Beralih ke $syncedName ($cleanCode) di perangkat (sinkronisasi cloud tertunda)."
+                }
+                onResult(true, msg)
+            }
+        }
+    }
 
     // Raw global flows for SuperAdmin
     val allGlobalStudents: Flow<List<ChildStudent>> = repository.allStudents
@@ -2351,19 +2740,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             _isSyncing.value = true
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
-            val result = PocketBaseSyncManager.syncAllSchoolData(
-                context = getApplication(),
-                schoolId = activeSchool,
-                repository = repository,
-                localSchoolProfile = _schoolProfile.value,
-                localProfileUpdatedAt = getProfileUpdatedAt(activeSchool),
-                onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                    applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                },
-                onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                    processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                }
-            )
+            val result = runUnifiedSchoolCloudSync(activeSchool)
             _isSyncing.value = false
             refreshCloudConfig()
             if (result.isSuccess) {
@@ -2525,19 +2902,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                     val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                     viewModelScope.launch {
-                        PocketBaseSyncManager.syncAllSchoolData(
-                            context = getApplication(),
-                            schoolId = activeCode,
-                            repository = repository,
-                            localSchoolProfile = _schoolProfile.value,
-                            localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
-                            onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                                applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                            },
-                            onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                                processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                            }
-                        )
+                        runUnifiedSchoolCloudSync(activeCode)
                     }
                 }
                 return LoginResult.SuccessAdmin
@@ -2549,6 +2914,59 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     "Password untuk Admin 'ekowahyudiadmin' salah. Silakan periksa kembali."
                 }
             )
+        }
+
+        // 1b. Cek Kredensial Khusus Anak Superadmin (Masuk sebagai Wali Asuh + Hak Atur Tata Letak Dashboard)
+        if (cleanUser.equals("anaksuperadmin", ignoreCase = true)) {
+            if (cleanPass != "Woyowoyo12@") {
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Incorrect password for 'anaksuperadmin'. Please check again."
+                    } else {
+                        "Password untuk akun 'anaksuperadmin' salah. Silakan periksa kembali."
+                    }
+                )
+            }
+            val displayName = "Anak Superadmin"
+            val activeSchoolCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+            _currentUserRole.value = UserRole.WALI
+            _currentUsername.value = "anaksuperadmin"
+            _waliName.value = displayName
+            if (rememberMe) {
+                authPrefs.edit()
+                    .putString("saved_role", "WALI")
+                    .putString("saved_username", "anaksuperadmin")
+                    .putString("saved_wali_name", displayName)
+                    .apply()
+            }
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                viewModelScope.launch {
+                    PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                    val remoteList = PocketBaseSyncManager.fetchAllRemoteSchoolProfiles(getApplication())
+                    if (remoteList.isNotEmpty()) {
+                        val updatedMap = _remoteSchoolProfiles.value.toMutableMap()
+                        remoteList.forEach { (prof, ts) ->
+                            val codeUpper = prof.tenantCode.trim().uppercase()
+                            if (codeUpper.isNotBlank() &&
+                                codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+                            ) {
+                                updatedMap[codeUpper] = prof.copy(tenantCode = codeUpper) to ts
+                            }
+                        }
+                        _remoteSchoolProfiles.value = updatedMap
+                    }
+                    runUnifiedSchoolCloudSync(activeSchoolCode)
+                }
+            }
+            val specialAccount = WaliAccount(
+                id = 0L,
+                name = displayName,
+                username = "anaksuperadmin",
+                password = "",
+                dormitory = "Semua Asrama",
+                schoolId = activeSchoolCode
+            )
+            return LoginResult.SuccessWali(specialAccount)
         }
 
         // Helper mencari admin sekolah & akun wali di database lokal
@@ -2634,19 +3052,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
-                    PocketBaseSyncManager.syncAllSchoolData(
-                        context = getApplication(),
-                        schoolId = matchedSchool.generatedSchoolCode,
-                        repository = repository,
-                        localSchoolProfile = _schoolProfile.value,
-                        localProfileUpdatedAt = getProfileUpdatedAt(matchedSchool.generatedSchoolCode),
-                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                        },
-                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                        }
-                    )
+                    runUnifiedSchoolCloudSync(matchedSchool.generatedSchoolCode)
                 }
             }
             return LoginResult.SuccessAdmin
@@ -2693,11 +3099,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     val cleanCode = account.schoolId.trim()
                     if (!_schoolProfile.value.tenantCode.equals(cleanCode, ignoreCase = true)) {
                         persistSchoolProfile(
-                            SchoolProfile(
-                                schoolName = cleanCode,
-                                shortName = cleanCode,
-                                tenantCode = cleanCode
-                            ),
+                            if (cleanCode.equals("SRT1-KDR", ignoreCase = true)) {
+                                SchoolProfile()
+                            } else {
+                                SchoolProfile(
+                                    schoolName = cleanCode,
+                                    shortName = cleanCode,
+                                    tenantCode = cleanCode
+                                )
+                            },
                             markCustomized = false
                         )
                     }
@@ -2716,19 +3126,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
-                    PocketBaseSyncManager.syncAllSchoolData(
-                        context = getApplication(),
-                        schoolId = activeSchoolCode,
-                        repository = repository,
-                        localSchoolProfile = _schoolProfile.value,
-                        localProfileUpdatedAt = getProfileUpdatedAt(activeSchoolCode),
-                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                        },
-                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                        }
-                    )
+                    runUnifiedSchoolCloudSync(activeSchoolCode)
                 }
             }
             return LoginResult.SuccessWali(account)
@@ -2775,11 +3173,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     val cleanCode = parentLink.schoolId.trim()
                     if (!_schoolProfile.value.tenantCode.equals(cleanCode, ignoreCase = true)) {
                         persistSchoolProfile(
-                            SchoolProfile(
-                                schoolName = cleanCode,
-                                shortName = cleanCode,
-                                tenantCode = cleanCode
-                            ),
+                            if (cleanCode.equals("SRT1-KDR", ignoreCase = true)) {
+                                SchoolProfile()
+                            } else {
+                                SchoolProfile(
+                                    schoolName = cleanCode,
+                                    shortName = cleanCode,
+                                    tenantCode = cleanCode
+                                )
+                            },
                             markCustomized = false
                         )
                     }
@@ -2799,19 +3201,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 viewModelScope.launch {
-                    PocketBaseSyncManager.syncAllSchoolData(
-                        context = getApplication(),
-                        schoolId = activeSchoolCode,
-                        repository = repository,
-                        localSchoolProfile = _schoolProfile.value,
-                        localProfileUpdatedAt = getProfileUpdatedAt(activeSchoolCode),
-                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
-                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
-                        },
-                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
-                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
-                        }
-                    )
+                    runUnifiedSchoolCloudSync(activeSchoolCode)
                 }
             }
             return LoginResult.SuccessParent(parentLink)
@@ -3184,6 +3574,18 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            if (_currentUsername.value.equals("anaksuperadmin", ignoreCase = true)) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "System account 'anaksuperadmin' credentials cannot be changed from profile."
+                    } else {
+                        "Kredensial akun khusus 'anaksuperadmin' dikelola sistem dan tidak dapat diubah dari profil."
+                    }
+                )
+                return@launch
+            }
             val s = AppLanguageManager.getStrings(getApplication()).nav
             val cleanPass = newPassword.trim()
             if (cleanPass.length < 6) {
@@ -3261,6 +3663,18 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            if (_currentUsername.value.equals("anaksuperadmin", ignoreCase = true)) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "System account 'anaksuperadmin' cannot be deleted."
+                    } else {
+                        "Akun khusus 'anaksuperadmin' tidak dapat dihapus."
+                    }
+                )
+                return@launch
+            }
             val s = AppLanguageManager.getStrings(getApplication()).nav
             val cleanPass = passwordConfirmation.trim()
             if (cleanPass.isBlank()) {

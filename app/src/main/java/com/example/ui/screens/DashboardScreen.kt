@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Healing
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -104,6 +105,7 @@ import com.example.ui.dialogs.DaftarHaidSheet
 import com.example.ui.dialogs.DaftarHadirKunjunganSheet
 import com.example.ui.dialogs.DaftarPuasaSheet
 import com.example.ui.dialogs.DaftarSuciSheet
+import com.example.ui.dialogs.DashboardLayoutEditorSheet
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.FaskesReferralSheet
@@ -174,7 +176,14 @@ fun DashboardScreen(
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
+    val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
+    val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
+
+    LaunchedEffect(Unit) {
+        viewModel.syncDashboardIconLayoutNow()
+    }
     val myFosterStudents = remember(students, waliName) {
         students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
     }
@@ -197,6 +206,7 @@ fun DashboardScreen(
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
     var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
+    var showLayoutEditorSheet by remember { mutableStateOf(false) }
     var selectedTodayShiftMessageId by remember { mutableStateOf<Long?>(null) }
 
     val todayDateFormatted = remember(s.language) {
@@ -261,8 +271,8 @@ fun DashboardScreen(
                     .fillMaxSize()
                     .widthIn(max = 640.dp)
                     .testTag("dashboard_lazy_list"),
-                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 // Compact Gojek-Style Top Faskes Notification Strip Card
                 item {
@@ -305,21 +315,21 @@ fun DashboardScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("card_summary_today"),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .background(Brush.linearGradient(heroGradient))
-                                .border(1.dp, heroBorderColor, RoundedCornerShape(16.dp))
+                                .border(1.dp, heroBorderColor, RoundedCornerShape(14.dp))
                         ) {
                         Column(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
-                            // Row 1: Concise Title + Short Date Chip + Wali Shortcut + Inline "+ Rencana" CTA
+                            // Row 1: Concise Title + Short Date Chip + Wali Shortcut + Slim "+ Rencana" CTA
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
                                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -327,7 +337,7 @@ fun DashboardScreen(
                             ) {
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    verticalArrangement = Arrangement.spacedBy(1.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -335,7 +345,7 @@ fun DashboardScreen(
                                     ) {
                                         Text(
                                             text = if (isEn) "Today's Care" else "Berobat Hari Ini",
-                                            fontSize = 14.sp,
+                                            fontSize = 13.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = heroTitleColor,
                                             maxLines = 1,
@@ -348,67 +358,64 @@ fun DashboardScreen(
                                         ) {
                                             Text(
                                                 text = todayShortFormatted,
-                                                fontSize = 10.5.sp,
+                                                fontSize = 10.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = heroDateText,
                                                 maxLines = 1,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
                                             )
                                         }
                                     }
-                                    Surface(
-                                        onClick = onNavigateToProfile,
-                                        color = Color.Transparent,
-                                        shape = RoundedCornerShape(6.dp)
+                                    Row(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .clickable(onClick = onNavigateToProfile)
+                                            .padding(vertical = 1.dp, horizontal = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Row(
-                                            modifier = Modifier.padding(vertical = 2.dp, horizontal = 2.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Person,
-                                                contentDescription = null,
-                                                tint = heroSubtitleColor,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Text(
-                                                text = "Wali: $waliName",
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = heroSubtitleColor,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
+                                        Icon(
+                                            imageVector = Icons.Default.Person,
+                                            contentDescription = null,
+                                            tint = heroSubtitleColor,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Text(
+                                            text = "Wali: $waliName",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = heroSubtitleColor,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Button(
-                                    onClick = {
-                                        TopOnAdManager.onUserActionClick(context)
-                                        modalState.showCreateDialog = true
-                                    },
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = heroAccentGreen,
-                                        contentColor = if (isDarkSurface) Color(0xFF022C22) else Color.White
-                                    ),
-                                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                                Row(
                                     modifier = Modifier
-                                        .heightIn(min = 38.dp)
-                                        .testTag("fab_dashboard_add")
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(heroAccentGreen)
+                                        .clickable {
+                                            TopOnAdManager.onUserActionClick(context)
+                                            modalState.showCreateDialog = true
+                                        }
+                                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                                        .testTag("fab_dashboard_add"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
+                                    val ctaTextColor = if (isDarkSurface) Color(0xFF022C22) else Color.White
                                     Icon(
                                         imageVector = Icons.Default.Add,
                                         contentDescription = if (isEn) "Add Sick Student / Treatment Plan" else "Tambah Anak Sakit / Rencana",
-                                        modifier = Modifier.size(16.dp)
+                                        tint = ctaTextColor,
+                                        modifier = Modifier.size(15.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = if (isEn) "Plan" else "Rencana",
-                                        fontSize = 12.sp,
+                                        fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold,
+                                        color = ctaTextColor,
                                         maxLines = 1
                                     )
                                 }
@@ -420,7 +427,7 @@ fun DashboardScreen(
                                     .fillMaxWidth()
                                     .horizontalScroll(rememberScrollState())
                                     .testTag("row_faskes_strip"),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 sortedFaskesEntries.forEach { (faskesName, count, faskesInpatients) ->
@@ -445,21 +452,21 @@ fun DashboardScreen(
                                     }
                                     Row(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(RoundedCornerShape(8.dp))
                                             .background(pillBg)
                                             .border(
                                                 width = 1.dp,
                                                 color = pillBorder,
-                                                shape = RoundedCornerShape(10.dp)
+                                                shape = RoundedCornerShape(8.dp)
                                             )
-                                            .padding(horizontal = 9.dp, vertical = 5.dp)
+                                            .padding(horizontal = 8.dp, vertical = 3.5.dp)
                                             .testTag("pill_faskes_$faskesSlug"),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Box(
                                             modifier = Modifier
-                                                .size(6.dp)
+                                                .size(5.5.dp)
                                                 .clip(CircleShape)
                                                 .background(
                                                     when {
@@ -471,7 +478,7 @@ fun DashboardScreen(
                                         )
                                         Text(
                                             text = faskesName,
-                                            fontSize = 11.5.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = if (hasActive) FontWeight.Bold else FontWeight.Medium,
                                             color = pillLabelColor,
                                             maxLines = 1
@@ -490,7 +497,7 @@ fun DashboardScreen(
                                                 } else {
                                                     "0"
                                                 },
-                                                fontSize = 10.5.sp,
+                                                fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = when {
                                                     count > 0 -> if (isDarkSurface) Color(0xFF022C22) else Color.White
@@ -498,7 +505,7 @@ fun DashboardScreen(
                                                     else -> Color(0xFF065F46)
                                                 },
                                                 maxLines = 1,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                             )
                                         }
                                         if (faskesInpatients.isNotEmpty()) {
@@ -548,20 +555,20 @@ fun DashboardScreen(
                                 customFaskesInpatients.forEach { (faskesName, list) ->
                                     Row(
                                         modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(RoundedCornerShape(8.dp))
                                             .background(Color.White.copy(alpha = if (isDarkSurface) 0.12f else 0.92f))
                                             .border(
                                                 width = 1.dp,
                                                 color = Color(0xFFDC2626).copy(alpha = 0.35f),
-                                                shape = RoundedCornerShape(10.dp)
+                                                shape = RoundedCornerShape(8.dp)
                                             )
-                                            .padding(horizontal = 9.dp, vertical = 5.dp),
+                                            .padding(horizontal = 8.dp, vertical = 3.5.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Text(
                                             text = faskesName,
-                                            fontSize = 11.5.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (isDarkSurface) Color(0xFFECFDF5) else Color(0xFF0F172A),
                                             maxLines = 1
@@ -610,12 +617,12 @@ fun DashboardScreen(
                             }
 
                             // Row 3: Slim Progress Bar + Compact 1-Line Footer
-                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                                 LinearProgressIndicator(
                                     progress = { progressRatio },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(4.dp)
+                                        .height(3.5.dp)
                                         .clip(RoundedCornerShape(2.dp)),
                                     color = heroAccentGreen,
                                     trackColor = if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.65f) else Color.White.copy(alpha = 0.75f)
@@ -631,14 +638,14 @@ fun DashboardScreen(
                                         } else {
                                             "$totalToday/$totalSchoolStudents Siswa Dijadwalkan"
                                         },
-                                        fontSize = 10.5.sp,
+                                        fontSize = 10.sp,
                                         fontWeight = FontWeight.SemiBold,
                                         color = heroSubtitleColor
                                     )
                                     if (upcomingPlans.isNotEmpty()) {
                                         Text(
                                             text = if (isEn) "+${upcomingPlans.size} upcoming" else "+${upcomingPlans.size} mendatang",
-                                            fontSize = 10.5.sp,
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = heroDateText
                                         )
@@ -668,19 +675,52 @@ fun DashboardScreen(
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(
-                            onClick = {
-                                TopOnAdManager.onUserActionClick(context)
-                                showGridTiles = !showGridTiles
-                            },
-                            modifier = Modifier.size(28.dp)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Icon(
-                                imageVector = if (showGridTiles) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
-                                contentDescription = "Toggle Grid Menu",
-                                tint = WaliPrimary,
-                                modifier = Modifier.size(17.dp)
-                            )
+                            if (isAnakSuperAdmin) {
+                                Row(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(WaliPrimary.copy(alpha = 0.12f))
+                                        .clickable {
+                                            TopOnAdManager.onUserActionClick(context)
+                                            showLayoutEditorSheet = true
+                                        }
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        .testTag("btn_customize_dashboard_layout"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Tune,
+                                        contentDescription = if (isEn) "Arrange dashboard icons" else "Atur tata letak ikon",
+                                        tint = WaliPrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = if (isEn) "Arrange" else "Atur Ikon",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WaliPrimary
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    showGridTiles = !showGridTiles
+                                },
+                                modifier = Modifier.size(28.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (showGridTiles) Icons.AutoMirrored.Filled.ViewList else Icons.Default.GridView,
+                                    contentDescription = "Toggle Grid Menu",
+                                    tint = WaliPrimary,
+                                    modifier = Modifier.size(17.dp)
+                                )
+                            }
                         }
                     }
                 }
@@ -775,7 +815,8 @@ fun DashboardScreen(
                             unreadParentMessagesCount = unreadParentMessagesCount,
                             myFosterStudentsCount = myFosterStudentsCount,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
-                            faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
+                            faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
+                            iconOrder = dashboardIconOrder
                         )
                     }
                 }
@@ -1987,6 +2028,36 @@ fun DashboardScreen(
                     ).show()
                 }
                 modalState.studentToEditParentPhone = null
+            }
+        )
+    }
+
+    // Modal Bottom Sheet: Atur Tata Letak Ikon Dashboard (Khusus Anak Superadmin + Sinkron PocketBase)
+    if (showLayoutEditorSheet && isAnakSuperAdmin) {
+        DashboardLayoutEditorSheet(
+            currentOrder = dashboardIconOrder,
+            isSaving = isSavingDashboardLayout,
+            onDismiss = { showLayoutEditorSheet = false },
+            onSave = { newOrder ->
+                viewModel.saveDashboardIconOrder(newOrder) { success, message ->
+                    Toast.makeText(
+                        context,
+                        message,
+                        if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                    ).show()
+                    if (success) {
+                        showLayoutEditorSheet = false
+                    }
+                }
+            },
+            onResetDefault = {
+                viewModel.resetDashboardIconOrder { success, message ->
+                    Toast.makeText(
+                        context,
+                        message,
+                        if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         )
     }

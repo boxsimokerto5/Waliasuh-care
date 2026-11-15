@@ -75,6 +75,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -92,6 +93,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.ui.HealthViewModel
 import com.example.ui.UserRole
+import com.example.ui.components.AnakSuperAdminSchoolSwitcherCard
 import com.example.ui.theme.WaliPrimary
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,8 +114,17 @@ fun ProfileScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val students by viewModel.students.collectAsStateWithLifecycle()
     val role by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
+    val availableSchools by viewModel.availableSchoolsForSwitch.collectAsStateWithLifecycle()
+    val isSwitchingSchool by viewModel.isSwitchingSchool.collectAsStateWithLifecycle()
     val currentWaliAccount by viewModel.currentWaliAccount.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isAnakSuperAdmin) {
+        if (isAnakSuperAdmin) {
+            viewModel.refreshAvailableSchoolsForSwitch()
+        }
+    }
     var showPuskesmasDialog by remember { mutableStateOf(false) }
     var showNotifDialog by remember { mutableStateOf(false) }
     var showLanguageSheet by remember { mutableStateOf(false) }
@@ -161,6 +172,34 @@ fun ProfileScreen(
                 }
             }
 
+            if (isAnakSuperAdmin) {
+                item {
+                    AnakSuperAdminSchoolSwitcherCard(
+                        activeSchoolProfile = schoolProfile,
+                        availableSchools = availableSchools,
+                        isSwitchingSchool = isSwitchingSchool,
+                        onSelectSchool = { option ->
+                            viewModel.switchActiveSchoolForAnakSuperAdmin(option.tenantCode) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onRefreshSchools = {
+                            viewModel.refreshAvailableSchoolsForSwitch { ok ->
+                                Toast.makeText(
+                                    context,
+                                    if (ok) {
+                                        if (isEn) "School list updated." else "Daftar sekolah diperbarui."
+                                    } else {
+                                        if (isEn) "Failed to refresh school list." else "Gagal memuat daftar sekolah."
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
+                }
+            }
+
             // GROUP 1: Pengaturan App
             item {
                 SectionHeader(title = s.nav.profileAppSettingsSection)
@@ -199,13 +238,31 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = if (isEn) "Account & Password" else "Akun & Kata Sandi",
-                    subtitle = if (isEn) "Account profile & change login password" else "Profil akun & ganti kata sandi login",
+                    subtitle = if (isAnakSuperAdmin) {
+                        if (isEn) "System special account (anaksuperadmin)" else "Akun khusus sistem (anaksuperadmin)"
+                    } else if (isEn) {
+                        "Account profile & change login password"
+                    } else {
+                        "Profil akun & ganti kata sandi login"
+                    },
                     icon = Icons.Default.AccountCircle,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF475569),
                     onClick = {
                         TopOnAdManager.onUserActionClick(context)
-                        showEditAccountDialog = true
+                        if (isAnakSuperAdmin) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) {
+                                    "System account 'anaksuperadmin' credentials are managed centrally."
+                                } else {
+                                    "Kredensial akun khusus 'anaksuperadmin' dikelola langsung oleh sistem."
+                                },
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        } else {
+                            showEditAccountDialog = true
+                        }
                     },
                     testTag = "menu_akun"
                 )
@@ -440,7 +497,7 @@ fun ProfileScreen(
                 )
             }
 
-            if (role == UserRole.WALI) {
+            if (role == UserRole.WALI && !isAnakSuperAdmin) {
                 item {
                     MenuSettingCard(
                         title = if (isEn) "Delete My Account" else "Hapus Akun Saya",

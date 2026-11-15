@@ -38,8 +38,77 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.model.DashboardIconKey
 import com.example.ui.theme.WaliPrimary
 import com.example.util.i18n.LocalAppStrings
+
+data class DashboardIconUiMeta(
+    val key: DashboardIconKey,
+    val title: String,
+    val imageRes: Int,
+    val tileBg: Color
+)
+
+fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMeta {
+    return when (key) {
+        DashboardIconKey.BEROBAT -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Treatment" else "Berobat",
+            imageRes = R.drawable.img_menu_rencana,
+            tileBg = Color(0xFFE0F2FE)
+        )
+        DashboardIconKey.KUNJUNGAN -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Visits" else "Kunjungan",
+            imageRes = R.drawable.img_menu_kunjungan,
+            tileBg = Color(0xFFDBEAFE)
+        )
+        DashboardIconKey.ORANG_TUA -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Parents" else "Hubungan Ortu",
+            imageRes = R.drawable.img_menu_orang_tua,
+            tileBg = Color(0xFFE0E7FF)
+        )
+        DashboardIconKey.ANAK_ASUH -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Students" else "Anak Asuh",
+            imageRes = R.drawable.img_menu_anak_asuh,
+            tileBg = Color(0xFFF3E8FF)
+        )
+        DashboardIconKey.PUASA -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Fasting" else "Puasa",
+            imageRes = R.drawable.img_menu_input_puasa,
+            tileBg = Color(0xFFCCFBF1)
+        )
+        DashboardIconKey.HAID -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Period" else "Haid",
+            imageRes = R.drawable.img_menu_daftar_haid,
+            tileBg = Color(0xFFFCE7F3)
+        )
+        DashboardIconKey.PESAN -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Shift Notes" else "Pesan Shift",
+            imageRes = R.drawable.img_menu_pesan_shift,
+            tileBg = Color(0xFFFEF3C7)
+        )
+        DashboardIconKey.MENGAJI -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Recitation" else "Mengaji",
+            imageRes = R.drawable.img_menu_mengaji,
+            tileBg = Color(0xFFD1FAE5)
+        )
+    }
+}
+
+private data class GridTileSpec(
+    val meta: DashboardIconUiMeta,
+    val badgeText: String?,
+    val badgeBg: Color,
+    val testTag: String,
+    val onClick: () -> Unit
+)
 
 @Composable
 fun QuickMenuTiles(
@@ -81,9 +150,133 @@ fun QuickMenuTiles(
     myFosterStudentsCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
+    iconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
     modifier: Modifier = Modifier
 ) {
     val isEn = LocalAppStrings.current.isEnglish
+    val normalizedOrder = DashboardIconKey.normalizeOrder(iconOrder.map { it.key })
+
+    val orderedSpecs = normalizedOrder.map { key ->
+        val meta = dashboardIconUiMeta(key, isEn)
+        when (key) {
+            DashboardIconKey.BEROBAT -> {
+                val berobatBadge = when {
+                    inpatientCount > 0 -> "$inpatientCount Inap"
+                    todayPlansCount > 0 -> "$todayPlansCount"
+                    else -> if (isEn) "Hub" else "Menu"
+                }
+                val berobatBadgeBg = if (inpatientCount > 0) Color(0xFFDC2626) else Color(0xFF0284C7)
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = berobatBadge,
+                    badgeBg = berobatBadgeBg,
+                    testTag = "category_berobat",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.BEROBAT) }
+                )
+            }
+            DashboardIconKey.KUNJUNGAN -> {
+                val kunjunganBadge = when {
+                    todayVisitsCount > 0 -> "$todayVisitsCount"
+                    visitSessionsCount > 0 -> "$visitSessionsCount Sesi"
+                    else -> if (isEn) "Hub" else "Menu"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = kunjunganBadge,
+                    badgeBg = Color(0xFF1D4ED8),
+                    testTag = "category_kunjungan",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.KUNJUNGAN) }
+                )
+            }
+            DashboardIconKey.ORANG_TUA -> {
+                val ortuBadge = when {
+                    unreadParentMessagesCount > 0 -> "$unreadParentMessagesCount Chat"
+                    myFosterStudentsCount > 0 -> "$myFosterStudentsCount"
+                    else -> if (isEn) "Hub" else "Menu"
+                }
+                val ortuBadgeBg = if (unreadParentMessagesCount > 0) Color(0xFFDC2626) else Color(0xFF4F46E5)
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = ortuBadge,
+                    badgeBg = ortuBadgeBg,
+                    testTag = "category_orang_tua",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.ORANG_TUA) }
+                )
+            }
+            DashboardIconKey.ANAK_ASUH -> {
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = if (studentsCount > 0) "$studentsCount" else null,
+                    badgeBg = Color(0xFF7E22CE),
+                    testTag = "tile_anak_asuh",
+                    onClick = onNavigateToStudents
+                )
+            }
+            DashboardIconKey.PUASA -> {
+                val puasaBadge = when {
+                    todayFastingCount > 0 -> "$todayFastingCount"
+                    fastingSessionsCount > 0 -> "$fastingSessionsCount Sesi"
+                    else -> if (isEn) "Hub" else "Menu"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = puasaBadge,
+                    badgeBg = Color(0xFF0F766E),
+                    testTag = "category_puasa",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.PUASA) }
+                )
+            }
+            DashboardIconKey.HAID -> {
+                val haidBadge = when {
+                    istihadhahCount > 0 -> "H15 ($istihadhahCount)"
+                    activeHaidCount > 0 -> "$activeHaidCount"
+                    else -> "Fiqih"
+                }
+                val haidBadgeBg = if (istihadhahCount > 0) Color(0xFFDC2626) else Color(0xFFDB2777)
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = haidBadge,
+                    badgeBg = haidBadgeBg,
+                    testTag = "category_haid",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.HAID) }
+                )
+            }
+            DashboardIconKey.PESAN -> {
+                val pesanBadge = when {
+                    urgentShiftMessagesCount > 0 -> "${urgentShiftMessagesCount}!"
+                    activeShiftMessagesCount > 0 -> "$activeShiftMessagesCount"
+                    uncompletedPastShiftCount > 0 -> "$uncompletedPastShiftCount"
+                    else -> null
+                }
+                val pesanBadgeBg = when {
+                    urgentShiftMessagesCount > 0 -> Color(0xFFDC2626)
+                    activeShiftMessagesCount > 0 -> Color(0xFFB45309)
+                    else -> Color(0xFF475569)
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = pesanBadge,
+                    badgeBg = pesanBadgeBg,
+                    testTag = "category_pesan",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.PESAN) }
+                )
+            }
+            DashboardIconKey.MENGAJI -> {
+                val mengajiBadge = when {
+                    mengajiTodayCount > 0 -> "$mengajiTodayCount"
+                    mengajiTotalCount > 0 -> "$mengajiTotalCount Log"
+                    else -> if (isEn) "Hub" else "Menu"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = mengajiBadge,
+                    badgeBg = Color(0xFF047857),
+                    testTag = "category_mengaji",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.MENGAJI) }
+                )
+            }
+        }
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -102,149 +295,24 @@ fun QuickMenuTiles(
                     .padding(horizontal = 8.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Baris 1: Kategori Berobat + Akses Cepat Kesehatan & Siswa
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    val berobatBadge = when {
-                        inpatientCount > 0 -> "$inpatientCount Inap"
-                        todayPlansCount > 0 -> "$todayPlansCount"
-                        else -> if (isEn) "Hub" else "Menu"
+                orderedSpecs.chunked(4).forEach { rowSpecs ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        rowSpecs.forEach { spec ->
+                            SuperAppGridItem(
+                                title = spec.meta.title,
+                                imageRes = spec.meta.imageRes,
+                                tileBg = spec.meta.tileBg,
+                                badgeText = spec.badgeText,
+                                badgeBg = spec.badgeBg,
+                                onClick = spec.onClick,
+                                testTag = spec.testTag,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
-                    val berobatBadgeBg = if (inpatientCount > 0) Color(0xFFDC2626) else Color(0xFF0284C7)
-
-                    SuperAppGridItem(
-                        title = if (isEn) "Treatment" else "Berobat",
-                        imageRes = R.drawable.img_menu_rencana,
-                        tileBg = Color(0xFFE0F2FE),
-                        badgeText = berobatBadge,
-                        badgeBg = berobatBadgeBg,
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.BEROBAT) },
-                        testTag = "category_berobat",
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    val kunjunganBadge = when {
-                        todayVisitsCount > 0 -> "$todayVisitsCount"
-                        visitSessionsCount > 0 -> "$visitSessionsCount Sesi"
-                        else -> if (isEn) "Hub" else "Menu"
-                    }
-                    SuperAppGridItem(
-                        title = if (isEn) "Visits" else "Kunjungan",
-                        imageRes = R.drawable.img_menu_kunjungan,
-                        tileBg = Color(0xFFDBEAFE),
-                        badgeText = kunjunganBadge,
-                        badgeBg = Color(0xFF1D4ED8),
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.KUNJUNGAN) },
-                        testTag = "category_kunjungan",
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    val ortuBadge = when {
-                        unreadParentMessagesCount > 0 -> "$unreadParentMessagesCount Chat"
-                        myFosterStudentsCount > 0 -> "$myFosterStudentsCount"
-                        else -> if (isEn) "Hub" else "Menu"
-                    }
-                    val ortuBadgeBg = if (unreadParentMessagesCount > 0) Color(0xFFDC2626) else Color(0xFF4F46E5)
-                    SuperAppGridItem(
-                        title = if (isEn) "Parents" else "Hubungan Ortu",
-                        imageRes = R.drawable.img_menu_orang_tua,
-                        tileBg = Color(0xFFE0E7FF),
-                        badgeText = ortuBadge,
-                        badgeBg = ortuBadgeBg,
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.ORANG_TUA) },
-                        testTag = "category_orang_tua",
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    SuperAppGridItem(
-                        title = if (isEn) "Students" else "Anak Asuh",
-                        imageRes = R.drawable.img_menu_anak_asuh,
-                        tileBg = Color(0xFFF3E8FF),
-                        badgeText = if (studentsCount > 0) "$studentsCount" else null,
-                        badgeBg = Color(0xFF7E22CE),
-                        onClick = onNavigateToStudents,
-                        testTag = "tile_anak_asuh",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-
-                // Baris 2: Hub Kategori (Puasa, Haid, Pesan Shift, Mengaji)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    val puasaBadge = when {
-                        todayFastingCount > 0 -> "$todayFastingCount"
-                        fastingSessionsCount > 0 -> "$fastingSessionsCount Sesi"
-                        else -> if (isEn) "Hub" else "Menu"
-                    }
-                    SuperAppGridItem(
-                        title = "Puasa",
-                        imageRes = R.drawable.img_menu_input_puasa,
-                        tileBg = Color(0xFFCCFBF1),
-                        badgeText = puasaBadge,
-                        badgeBg = Color(0xFF0F766E),
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.PUASA) },
-                        testTag = "category_puasa",
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    val haidBadge = when {
-                        istihadhahCount > 0 -> "H15 ($istihadhahCount)"
-                        activeHaidCount > 0 -> "$activeHaidCount"
-                        else -> "Fiqih"
-                    }
-                    val haidBadgeBg = if (istihadhahCount > 0) Color(0xFFDC2626) else Color(0xFFDB2777)
-                    SuperAppGridItem(
-                        title = "Haid",
-                        imageRes = R.drawable.img_menu_daftar_haid,
-                        tileBg = Color(0xFFFCE7F3),
-                        badgeText = haidBadge,
-                        badgeBg = haidBadgeBg,
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.HAID) },
-                        testTag = "category_haid",
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    val pesanBadge = when {
-                        urgentShiftMessagesCount > 0 -> "${urgentShiftMessagesCount}!"
-                        activeShiftMessagesCount > 0 -> "$activeShiftMessagesCount"
-                        uncompletedPastShiftCount > 0 -> "$uncompletedPastShiftCount"
-                        else -> null
-                    }
-                    val pesanBadgeBg = when {
-                        urgentShiftMessagesCount > 0 -> Color(0xFFDC2626)
-                        activeShiftMessagesCount > 0 -> Color(0xFFB45309)
-                        else -> Color(0xFF475569)
-                    }
-                    SuperAppGridItem(
-                        title = if (isEn) "Shift Notes" else "Pesan Shift",
-                        imageRes = R.drawable.img_menu_pesan_shift,
-                        tileBg = Color(0xFFFEF3C7),
-                        badgeText = pesanBadge,
-                        badgeBg = pesanBadgeBg,
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.PESAN) },
-                        testTag = "category_pesan",
-                        modifier = Modifier.weight(1f)
-                    )
-
-                    val mengajiBadge = when {
-                        mengajiTodayCount > 0 -> "$mengajiTodayCount"
-                        mengajiTotalCount > 0 -> "$mengajiTotalCount Log"
-                        else -> if (isEn) "Hub" else "Menu"
-                    }
-                    SuperAppGridItem(
-                        title = "Mengaji",
-                        imageRes = R.drawable.img_menu_mengaji,
-                        tileBg = Color(0xFFD1FAE5),
-                        badgeText = mengajiBadge,
-                        badgeBg = Color(0xFF047857),
-                        onClick = { onOpenCategoryHub(DashboardCategoryHub.MENGAJI) },
-                        testTag = "category_mengaji",
-                        modifier = Modifier.weight(1f)
-                    )
                 }
             }
         }

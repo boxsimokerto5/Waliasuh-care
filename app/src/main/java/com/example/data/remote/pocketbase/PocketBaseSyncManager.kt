@@ -3,6 +3,8 @@ package com.example.data.remote.pocketbase
 import android.content.Context
 import android.util.Log
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardIconKey
+import com.example.data.model.DashboardIconLayoutConfig
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -629,6 +631,118 @@ object PocketBaseSyncManager {
         }
     }
 
+    suspend fun fetchAllRemoteSchoolProfiles(
+        context: Context
+    ): List<Pair<SchoolProfile, Long>> = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext emptyList()
+        val service = PocketBaseClient.getService(context) ?: return@withContext emptyList()
+        return@withContext try {
+            val res = fetchAllPages { page ->
+                service.listSchoolProfiles(page = page, perPage = 500)
+            }
+            res.getOrNull()
+                ?.mapNotNull { dto ->
+                    val rawSchoolId = dto.schoolId?.trim().orEmpty()
+                    if (rawSchoolId.isBlank() ||
+                        rawSchoolId.equals(PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID, ignoreCase = true) ||
+                        PocketBaseConfig.isSchoolCodeDeleted(context, rawSchoolId)
+                    ) {
+                        null
+                    } else {
+                        dto.toDomainModel(rawSchoolId) to (dto.updatedAt ?: 0L)
+                    }
+                }
+                .orEmpty()
+        } catch (e: Exception) {
+            Log.e(TAG, "Silent error fetchAllRemoteSchoolProfiles ke PocketBase", e)
+            emptyList()
+        }
+    }
+
+    // --- Global Dashboard Icon Layout (Disimpan di school_profiles dengan tenant khusus) ---
+    suspend fun uploadDashboardIconLayout(
+        context: Context,
+        order: List<DashboardIconKey>,
+        updatedAt: Long = System.currentTimeMillis()
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase is not configured yet." else "PocketBase belum terkonfigurasi.")
+            )
+        }
+        val service = PocketBaseClient.getService(context)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Failed to connect to PocketBase." else "Gagal terhubung ke layanan PocketBase.")
+            )
+        return@withContext try {
+            val dto = PbSchoolProfileDto.fromDashboardLayout(order, updatedAt)
+            val ok = upsertSingleDto(service, "school_profiles", dto.id!!, dto)
+            if (ok) {
+                PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
+                Result.success(true)
+            } else {
+                Result.failure(
+                    Exception(
+                        if (isEn) "Failed to save dashboard layout to PocketBase cloud." else "Gagal menyimpan tata letak ikon ke cloud PocketBase."
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadDashboardIconLayout", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun syncDashboardIconLayoutMerged(
+        service: PocketBaseService,
+        localOrder: List<DashboardIconKey>,
+        localUpdatedAt: Long,
+        allowPushToCloud: Boolean,
+        onRemoteLayoutUpdated: ((List<DashboardIconKey>, Long) -> Unit)?
+    ) {
+        val globalFilter = buildSchoolFilter(PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID)
+        val remoteRes = fetchAllPages { page ->
+            service.listSchoolProfiles(page = page, perPage = 10, filter = globalFilter)
+        }
+        if (!remoteRes.isSuccess) return
+        val remoteConfig = remoteRes.getOrNull()
+            ?.mapNotNull { it.toDashboardLayoutConfig() }
+            ?.maxByOrNull { it.updatedAt }
+
+        if (remoteConfig != null) {
+            if (remoteConfig.updatedAt > localUpdatedAt) {
+                onRemoteLayoutUpdated?.invoke(remoteConfig.order, remoteConfig.updatedAt)
+            } else if (allowPushToCloud && localUpdatedAt > remoteConfig.updatedAt) {
+                val dto = PbSchoolProfileDto.fromDashboardLayout(localOrder, localUpdatedAt)
+                upsertSingleDto(service, "school_profiles", dto.id!!, dto)
+            }
+        } else if (allowPushToCloud && localUpdatedAt > 0L) {
+            val dto = PbSchoolProfileDto.fromDashboardLayout(localOrder, localUpdatedAt)
+            upsertSingleDto(service, "school_profiles", dto.id!!, dto)
+        }
+    }
+
+    suspend fun syncDashboardIconLayoutQuietly(
+        context: Context,
+        localOrder: List<DashboardIconKey>,
+        localUpdatedAt: Long,
+        allowPushToCloud: Boolean = false,
+        onRemoteLayoutUpdated: (List<DashboardIconKey>, Long) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        runCatching {
+            syncDashboardIconLayoutMerged(
+                service = service,
+                localOrder = localOrder,
+                localUpdatedAt = localUpdatedAt,
+                allowPushToCloud = allowPushToCloud,
+                onRemoteLayoutUpdated = onRemoteLayoutUpdated
+            )
+        }
+    }
+
     // --- Parent Access Links & Parent Messages ---
     suspend fun uploadSingleParentAccessLink(context: Context, link: ParentAccessLink) =
         withContext(Dispatchers.IO) {
@@ -1153,6 +1267,10 @@ object PocketBaseSyncManager {
         localSchoolProfile: SchoolProfile? = null,
         localProfileUpdatedAt: Long = 0L,
         onRemoteSchoolProfileUpdated: ((SchoolProfile, Long) -> Unit)? = null,
+        localDashboardIconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
+        localDashboardLayoutUpdatedAt: Long = 0L,
+        allowPushDashboardLayout: Boolean = false,
+        onRemoteDashboardLayoutUpdated: ((List<DashboardIconKey>, Long) -> Unit)? = null,
         onNewRemoteMedicalRecords: ((List<MedicalRecord>, List<ChildStudent>, String) -> Unit)? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
@@ -1192,6 +1310,17 @@ object PocketBaseSyncManager {
                     val dto = PbSchoolProfileDto.fromDomain(localSchoolProfile, ts)
                     upsertSingleDto(service, "school_profiles", dto.id!!, dto)
                 }
+            }
+
+            // 0b. Sinkronkan Tata Letak Ikon Dashboard Global (untuk semua Wali Asuh)
+            runCatching {
+                syncDashboardIconLayoutMerged(
+                    service = service,
+                    localOrder = localDashboardIconOrder,
+                    localUpdatedAt = localDashboardLayoutUpdatedAt,
+                    allowPushToCloud = allowPushDashboardLayout,
+                    onRemoteLayoutUpdated = onRemoteDashboardLayoutUpdated
+                )
             }
 
             // 1. Sinkronkan Data Siswa (child_students)
