@@ -16,6 +16,9 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
@@ -1056,6 +1059,7 @@ data class PbParentAccessLinkDto(
     @Json(name = "can_view_fasting") val canViewFasting: Boolean? = null,
     @Json(name = "can_view_haid") val canViewHaid: Boolean? = null,
     @Json(name = "can_view_profile") val canViewProfile: Boolean? = null,
+    @Json(name = "can_view_tabungan") val canViewTabungan: Boolean? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1080,6 +1084,7 @@ data class PbParentAccessLinkDto(
             canViewFasting = canViewFasting ?: true,
             canViewHaid = canViewHaid ?: true,
             canViewProfile = canViewProfile ?: true,
+            canViewTabungan = canViewTabungan ?: false,
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
             createdAt = resolvedCreated,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
@@ -1111,6 +1116,7 @@ data class PbParentAccessLinkDto(
                 canViewFasting = model.canViewFasting,
                 canViewHaid = model.canViewHaid,
                 canViewProfile = model.canViewProfile,
+                canViewTabungan = model.canViewTabungan,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )
@@ -1228,6 +1234,165 @@ data class PbDeletionLogDto(
                 deletedSummary = model.deletedSummary,
                 deletedBy = model.deletedBy,
                 deletedByUsername = model.deletedByUsername,
+                createdAt = model.createdAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbTabunganTransactionDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
+    @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
+    @Json(name = "is_private") val isPrivate: Boolean? = null,
+    @Json(name = "transaction_type") val transactionType: String? = null,
+    @Json(name = "amount") val amount: Long = 0L,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "transaction_date") val transactionDate: Long? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "cancelled_by") val cancelledBy: String? = null,
+    @Json(name = "cancelled_reason") val cancelledReason: String? = null,
+    @Json(name = "cancelled_at") val cancelledAt: Long? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): TabunganTransaction {
+        val now = System.currentTimeMillis()
+        val resolvedTxDate = transactionDate?.takeIf { it > 0L } ?: now
+        return TabunganTransaction(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            studentId = studentId,
+            studentName = studentName,
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            ownerWaliUsername = ownerWaliUsername.orEmpty(),
+            ownerWaliName = ownerWaliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            isPrivate = isPrivate ?: true,
+            transactionType = transactionType?.trim()?.uppercase()?.ifBlank { TabunganHelper.TYPE_IN } ?: TabunganHelper.TYPE_IN,
+            amount = amount.coerceAtLeast(0L),
+            title = title.orEmpty(),
+            notes = notes.orEmpty(),
+            transactionDate = resolvedTxDate,
+            status = status?.trim()?.uppercase()?.ifBlank { TabunganHelper.STATUS_ACTIVE } ?: TabunganHelper.STATUS_ACTIVE,
+            cancelledBy = cancelledBy.orEmpty(),
+            cancelledReason = cancelledReason.orEmpty(),
+            cancelledAt = cancelledAt?.takeIf { it > 0L },
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: resolvedTxDate,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedTxDate
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: TabunganTransaction): PbTabunganTransactionDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "tab_tx:${model.schoolId}:${model.ownerWaliUsername}:${model.studentId}:${model.createdAt}"
+            )
+            return PbTabunganTransactionDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                ownerWaliUsername = model.ownerWaliUsername,
+                ownerWaliName = model.ownerWaliName,
+                isPrivate = model.isPrivate,
+                transactionType = model.transactionType,
+                amount = model.amount,
+                title = model.title,
+                notes = model.notes,
+                transactionDate = model.transactionDate,
+                status = model.status,
+                cancelledBy = model.cancelledBy,
+                cancelledReason = model.cancelledReason,
+                cancelledAt = model.cancelledAt ?: 0L,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbTabunganLogDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "transaction_id") val transactionId: Long = 0L,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
+    @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
+    @Json(name = "is_private") val isPrivate: Boolean? = null,
+    @Json(name = "action_type") val actionType: String? = null,
+    @Json(name = "amount") val amount: Long = 0L,
+    @Json(name = "balance_before") val balanceBefore: Long = 0L,
+    @Json(name = "balance_after") val balanceAfter: Long = 0L,
+    @Json(name = "summary") val summary: String? = null,
+    @Json(name = "actor_name") val actorName: String? = null,
+    @Json(name = "actor_username") val actorUsername: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): TabunganLog {
+        val now = System.currentTimeMillis()
+        return TabunganLog(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            transactionId = transactionId,
+            studentId = studentId,
+            studentName = studentName,
+            studentClass = studentClass.orEmpty(),
+            ownerWaliUsername = ownerWaliUsername.orEmpty(),
+            ownerWaliName = ownerWaliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            isPrivate = isPrivate ?: true,
+            actionType = actionType?.trim()?.uppercase()?.ifBlank { TabunganHelper.LOG_INPUT_IN } ?: TabunganHelper.LOG_INPUT_IN,
+            amount = amount.coerceAtLeast(0L),
+            balanceBefore = balanceBefore.coerceAtLeast(0L),
+            balanceAfter = balanceAfter.coerceAtLeast(0L),
+            summary = summary.orEmpty(),
+            actorName = actorName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            actorUsername = actorUsername.orEmpty(),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: TabunganLog): PbTabunganLogDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "tab_log:${model.schoolId}:${model.ownerWaliUsername}:${model.transactionId}:${model.createdAt}"
+            )
+            return PbTabunganLogDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                transactionId = model.transactionId,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentClass = model.studentClass,
+                ownerWaliUsername = model.ownerWaliUsername,
+                ownerWaliName = model.ownerWaliName,
+                isPrivate = model.isPrivate,
+                actionType = model.actionType,
+                amount = model.amount,
+                balanceBefore = model.balanceBefore,
+                balanceAfter = model.balanceAfter,
+                summary = model.summary,
+                actorName = model.actorName,
+                actorUsername = model.actorUsername,
                 createdAt = model.createdAt
             )
         }

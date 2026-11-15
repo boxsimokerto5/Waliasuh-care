@@ -73,7 +73,7 @@ fun PilihanAksesOrangTuaSheet(
     isAdmin: Boolean,
     onOpenPilihAnakAsuh: (() -> Unit)? = null,
     onEnsureAccessLink: (ChildStudent) -> Unit,
-    onUpdatePermissions: (ParentAccessLink, Boolean, Boolean, Boolean, Boolean, Boolean) -> Unit,
+    onUpdatePermissions: (ParentAccessLink, Boolean, Boolean, Boolean, Boolean, Boolean, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
@@ -158,7 +158,7 @@ fun PilihanAksesOrangTuaSheet(
                                 text = if (isEn) {
                                     "Choose modules & profile parents can view"
                                 } else {
-                                    "Centang profil & riwayat yang boleh dilihat orang tua"
+                                    "Centang profil, tabungan & riwayat yang boleh dilihat orang tua"
                                 },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -379,7 +379,7 @@ fun PilihanAksesOrangTuaSheet(
                                             checked = link.canViewProfile,
                                             accentColor = Color(0xFF4338CA),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, link.canViewHaid, checked)
+                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, link.canViewHaid, checked, link.canViewTabungan)
                                             },
                                             testTag = "chk_access_profile_${student.id}"
                                         )
@@ -388,7 +388,7 @@ fun PilihanAksesOrangTuaSheet(
                                             checked = link.canViewMengaji,
                                             accentColor = Color(0xFF047857),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, checked, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile)
+                                                onUpdatePermissions(link, checked, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile, link.canViewTabungan)
                                             },
                                             testTag = "chk_access_mengaji_${student.id}"
                                         )
@@ -397,7 +397,7 @@ fun PilihanAksesOrangTuaSheet(
                                             checked = link.canViewMedical,
                                             accentColor = Color(0xFF0284C7),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, link.canViewMengaji, checked, link.canViewFasting, link.canViewHaid, link.canViewProfile)
+                                                onUpdatePermissions(link, link.canViewMengaji, checked, link.canViewFasting, link.canViewHaid, link.canViewProfile, link.canViewTabungan)
                                             },
                                             testTag = "chk_access_medical_${student.id}"
                                         )
@@ -406,7 +406,7 @@ fun PilihanAksesOrangTuaSheet(
                                             checked = link.canViewFasting,
                                             accentColor = Color(0xFF0F766E),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, checked, link.canViewHaid, link.canViewProfile)
+                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, checked, link.canViewHaid, link.canViewProfile, link.canViewTabungan)
                                             },
                                             testTag = "chk_access_fasting_${student.id}"
                                         )
@@ -416,11 +416,20 @@ fun PilihanAksesOrangTuaSheet(
                                                 checked = link.canViewHaid,
                                                 accentColor = Color(0xFFDB2777),
                                                 onCheckedChange = { checked ->
-                                                    onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, checked, link.canViewProfile)
+                                                    onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, checked, link.canViewProfile, link.canViewTabungan)
                                                 },
                                                 testTag = "chk_access_haid_${student.id}"
                                             )
                                         }
+                                        PermissionCheckboxRow(
+                                            label = if (isEn) "Child Savings Ledger (Balance & History)" else "Tabungan Anak (Saldo & Mutasi Titipan)",
+                                            checked = link.canViewTabungan,
+                                            accentColor = Color(0xFFD97706),
+                                            onCheckedChange = { checked ->
+                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile, checked)
+                                            },
+                                            testTag = "chk_access_tabungan_${student.id}"
+                                        )
                                     }
                                 }
                             }

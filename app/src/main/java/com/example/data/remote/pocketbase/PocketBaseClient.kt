@@ -162,6 +162,23 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-created_at"
     ): Response<PbListResponse<PbDeletionLogDto>>
 
+    // --- Tabungan Transactions & Logs (Penitipan Uang Pribadi Wali Asuh) ---
+    @GET("api/collections/tabungan_transactions/records")
+    suspend fun listTabunganTransactions(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-transaction_date"
+    ): Response<PbListResponse<PbTabunganTransactionDto>>
+
+    @GET("api/collections/tabungan_logs/records")
+    suspend fun listTabunganLogs(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbTabunganLogDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

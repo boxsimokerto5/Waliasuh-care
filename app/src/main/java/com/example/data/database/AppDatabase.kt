@@ -29,6 +29,8 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentMessageDao
+import com.example.data.dao.TabunganLogDao
+import com.example.data.dao.TabunganTransactionDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -36,6 +38,8 @@ import com.example.data.model.HaidRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 
@@ -54,9 +58,11 @@ import com.example.data.model.VisitSession
         VisitRecord::class,
         ParentAccessLink::class,
         ParentMessage::class,
-        DeletionLog::class
+        DeletionLog::class,
+        TabunganTransaction::class,
+        TabunganLog::class
     ],
-    version = 21,
+    version = 22,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -74,6 +80,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun parentAccessLinkDao(): ParentAccessLinkDao
     abstract fun parentMessageDao(): ParentMessageDao
     abstract fun deletionLogDao(): DeletionLogDao
+    abstract fun tabunganTransactionDao(): TabunganTransactionDao
+    abstract fun tabunganLogDao(): TabunganLogDao
 
     companion object {
         @Volatile
@@ -393,6 +401,66 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_21_22 = object : androidx.room.migration.Migration(21, 22) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE parent_access_links ADD COLUMN canViewTabungan INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {
+                    // Column may already exist
+                }
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS tabungan_transactions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        ownerWaliUsername TEXT NOT NULL DEFAULT '',
+                        ownerWaliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        isPrivate INTEGER NOT NULL DEFAULT 1,
+                        transactionType TEXT NOT NULL DEFAULT 'IN',
+                        amount INTEGER NOT NULL DEFAULT 0,
+                        title TEXT NOT NULL DEFAULT '',
+                        notes TEXT NOT NULL DEFAULT '',
+                        transactionDate INTEGER NOT NULL DEFAULT 0,
+                        status TEXT NOT NULL DEFAULT 'ACTIVE',
+                        cancelledBy TEXT NOT NULL DEFAULT '',
+                        cancelledReason TEXT NOT NULL DEFAULT '',
+                        cancelledAt INTEGER,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS tabungan_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        transactionId INTEGER NOT NULL DEFAULT 0,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        ownerWaliUsername TEXT NOT NULL DEFAULT '',
+                        ownerWaliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        isPrivate INTEGER NOT NULL DEFAULT 1,
+                        actionType TEXT NOT NULL DEFAULT 'INPUT_IN',
+                        amount INTEGER NOT NULL DEFAULT 0,
+                        balanceBefore INTEGER NOT NULL DEFAULT 0,
+                        balanceAfter INTEGER NOT NULL DEFAULT 0,
+                        summary TEXT NOT NULL DEFAULT '',
+                        actorName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        actorUsername TEXT NOT NULL DEFAULT '',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -414,7 +482,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_17_18,
                         MIGRATION_18_19,
                         MIGRATION_19_20,
-                        MIGRATION_20_21
+                        MIGRATION_20_21,
+                        MIGRATION_21_22
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

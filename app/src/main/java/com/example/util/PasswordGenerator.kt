@@ -3,8 +3,11 @@ package com.example.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.example.data.model.ChildStudent
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.SchoolProfile
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.WaliAccount
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
@@ -140,6 +143,7 @@ object PasswordGenerator {
             if (link.canViewMedical) add(if (isEnglish) "Medical History" else "Riwayat Sakit")
             if (link.canViewFasting) add(if (isEnglish) "Fasting History" else "Riwayat Puasa")
             if (isFemaleStudent && link.canViewHaid) add(if (isEnglish) "Haid History" else "Riwayat Haid")
+            if (link.canViewTabungan) add(if (isEnglish) "Child Savings Ledger" else "Tabungan Anak")
         }.ifEmpty {
             listOf(if (isEnglish) "Messages with Caregiver" else "Pesan dengan Wali Asuh")
         }.joinToString(", ")
@@ -210,5 +214,45 @@ object PasswordGenerator {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         runCatching { context.startActivity(chooser) }
+    }
+
+    fun formatTabunganStudentWaSummary(
+        student: ChildStudent,
+        transactions: List<TabunganTransaction>,
+        waliName: String,
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH)
+    ): String {
+        val summary = TabunganHelper.computeSummaryForStudent(transactions, student)
+        val schoolDisplay = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
+            .ifBlank { if (isEnglish) "School" else "Sekolah" }
+        val activeTxs = transactions
+            .filter { TabunganHelper.matchesStudent(it, student) && TabunganHelper.isActive(it.status) }
+            .sortedByDescending { it.transactionDate }
+            .take(8)
+        val dateFmt = java.text.SimpleDateFormat("d MMM", if (isEnglish) java.util.Locale.ENGLISH else java.util.Locale("id", "ID"))
+
+        return buildString {
+            appendLine(if (isEnglish) "*PERSONAL SAVINGS REPORT (TABUNGAN)*" else "*LAPORAN TABUNGAN TITIPAN ANAK*")
+            appendLine("_${schoolDisplay}_")
+            appendLine()
+            appendLine(if (isEnglish) "Student: *${student.name}* (${student.classGrade.ifBlank { "-" }})" else "Ananda: *${student.name}* (${student.classGrade.ifBlank { "-" }})")
+            appendLine(if (isEnglish) "Caregiver (Holder): *$waliName*" else "Wali Asuh Pemegang Titipan: *$waliName*")
+            appendLine("• ${if (isEnglish) "Total Deposit (+)" else "Total Titip Masuk (+)"}: *${TabunganHelper.formatRupiah(summary.totalIn)}*")
+            appendLine("• ${if (isEnglish) "Total Expense (-)" else "Total Pengeluaran (-)"}: *${TabunganHelper.formatRupiah(summary.totalOut)}*")
+            appendLine("• ${if (isEnglish) "Current Balance" else "Saldo Tersisa"}: *${TabunganHelper.formatRupiah(summary.balance)}*")
+            if (activeTxs.isNotEmpty()) {
+                appendLine()
+                appendLine(if (isEnglish) "*Latest Transactions:*" else "*Mutasi Terakhir:*")
+                activeTxs.forEachIndexed { idx, tx ->
+                    val sign = if (TabunganHelper.isIncome(tx.transactionType)) "+" else "-"
+                    val dLabel = dateFmt.format(java.util.Date(tx.transactionDate))
+                    val title = tx.title.ifBlank { if (TabunganHelper.isIncome(tx.transactionType)) "Titip Masuk" else "Pengeluaran" }
+                    appendLine("${idx + 1}. $dLabel • $sign${TabunganHelper.formatRupiah(tx.amount)} ($title)")
+                }
+            }
+            appendLine()
+            append(if (isEnglish) "_Private record managed by Foster Caregiver._" else "_Catatan pribadi ini hanya dikelola oleh Wali Asuh pembina._")
+        }
     }
 }

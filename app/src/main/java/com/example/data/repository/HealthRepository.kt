@@ -22,6 +22,8 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentMessageDao
+import com.example.data.dao.TabunganLogDao
+import com.example.data.dao.TabunganTransactionDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -29,6 +31,8 @@ import com.example.data.model.HaidRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 
@@ -46,7 +50,9 @@ class HealthRepository(
     private val visitRecordDao: VisitRecordDao? = null,
     private val parentAccessLinkDao: ParentAccessLinkDao? = null,
     private val parentMessageDao: ParentMessageDao? = null,
-    private val deletionLogDao: DeletionLogDao? = null
+    private val deletionLogDao: DeletionLogDao? = null,
+    private val tabunganTransactionDao: TabunganTransactionDao? = null,
+    private val tabunganLogDao: TabunganLogDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -67,6 +73,10 @@ class HealthRepository(
     val allParentAccessLinks: Flow<List<ParentAccessLink>> = parentAccessLinkDao?.getAllLinks() ?: emptyFlow()
     val allParentMessages: Flow<List<ParentMessage>> = parentMessageDao?.getAllMessages() ?: emptyFlow()
     val allDeletionLogs: Flow<List<DeletionLog>> = deletionLogDao?.getAllLogs() ?: emptyFlow()
+    val allTabunganTransactions: Flow<List<TabunganTransaction>> =
+        tabunganTransactionDao?.getAllTransactions() ?: emptyFlow()
+    val allTabunganLogs: Flow<List<TabunganLog>> =
+        tabunganLogDao?.getAllLogs() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -481,5 +491,49 @@ class HealthRepository(
 
     suspend fun deleteOldDeletionLogs(cutoffTimestamp: Long) {
         deletionLogDao?.deleteOlderThan(cutoffTimestamp)
+    }
+
+    // --- Tabungan (Penitipan Uang Pribadi Wali Asuh) ---
+    suspend fun insertTabunganTransaction(transaction: TabunganTransaction): Long =
+        tabunganTransactionDao?.insert(transaction) ?: 0L
+
+    suspend fun insertAllTabunganTransactions(transactions: List<TabunganTransaction>) {
+        tabunganTransactionDao?.insertAll(transactions)
+    }
+
+    suspend fun updateTabunganTransaction(transaction: TabunganTransaction) {
+        tabunganTransactionDao?.update(transaction)
+    }
+
+    suspend fun deleteTabunganTransaction(transaction: TabunganTransaction) {
+        tabunganTransactionDao?.delete(transaction)
+    }
+
+    suspend fun deleteTabunganTransactionById(id: Long) {
+        tabunganTransactionDao?.deleteById(id)
+    }
+
+    suspend fun getTabunganTransactionsBySchoolList(schoolId: String): List<TabunganTransaction> =
+        tabunganTransactionDao?.getTransactionsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getTabunganTransactionsForStudentList(studentId: Long, schoolId: String): List<TabunganTransaction> =
+        tabunganTransactionDao?.getTransactionsForStudentList(studentId, schoolId) ?: emptyList()
+
+    suspend fun deleteTabunganTransactionsBySchool(schoolId: String) {
+        tabunganTransactionDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertTabunganLog(log: TabunganLog): Long =
+        tabunganLogDao?.insert(log) ?: 0L
+
+    suspend fun insertAllTabunganLogs(logs: List<TabunganLog>) {
+        tabunganLogDao?.insertAll(logs)
+    }
+
+    suspend fun getTabunganLogsBySchoolList(schoolId: String): List<TabunganLog> =
+        tabunganLogDao?.getLogsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteTabunganLogsBySchool(schoolId: String) {
+        tabunganLogDao?.deleteBySchoolId(schoolId)
     }
 }

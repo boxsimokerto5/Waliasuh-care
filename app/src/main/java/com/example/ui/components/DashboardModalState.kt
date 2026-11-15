@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 
 import com.example.data.model.ChildStudent
 import com.example.data.model.MengajiRecord
+import com.example.data.model.TabunganHelper
 import com.example.data.model.VisitSession
 
 enum class DashboardCategoryHub {
@@ -18,7 +19,8 @@ enum class DashboardCategoryHub {
     HAID,
     PESAN,
     MENGAJI,
-    ORANG_TUA
+    ORANG_TUA,
+    TABUNGAN
 }
 
 @Stable
@@ -63,6 +65,15 @@ class DashboardModalState {
     var showPesanOrtuSheet by mutableStateOf(false)
     var selectedParentChatStudent by mutableStateOf<ChildStudent?>(null)
     var studentToEditParentPhone by mutableStateOf<ChildStudent?>(null)
+
+    // Modul Tabungan Pribadi Wali Asuh
+    var showInputTabunganDialog by mutableStateOf(false)
+    var inputTabunganDefaultType by mutableStateOf(TabunganHelper.TYPE_IN)
+    var inputTabunganTargetStudent by mutableStateOf<ChildStudent?>(null)
+    var showTabunganStudentListSheet by mutableStateOf(false)
+    var showTabunganHistoryLogsSheet by mutableStateOf(false)
+    var tabunganHistoryInitialTab by mutableStateOf(0)
+    var tabunganStudentForDetail by mutableStateOf<ChildStudent?>(null)
 }
 
 @Composable

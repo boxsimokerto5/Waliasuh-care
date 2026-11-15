@@ -21,9 +21,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Button
@@ -34,6 +37,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +61,9 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
 import com.example.data.model.ShiftMessage
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
@@ -1192,7 +1199,7 @@ internal fun LazyListScope.orangTuaCategoryItems(
             ) {
                 CartoonMenuCard(
                     title = if (isEn) "Access Options" else "Pilihan Akses",
-                    subtitle = if (isEn) "Profile, Mengaji, Sick, Fasting & Haid" else "Profil, Mengaji, Sakit, Puasa & Haid",
+                    subtitle = if (isEn) "Profile, Mengaji, Sick, Fasting, Haid & Savings" else "Profil, Mengaji, Sakit, Puasa, Haid & Tabungan",
                     imageRes = R.drawable.img_menu_checklist_puasa,
                     badgeText = if (isEn) "Controls" else "Kontrol",
                     badgeBg = Color(0xFFDCFCE7),
@@ -1245,5 +1252,493 @@ internal fun LazyListScope.orangTuaCategoryItems(
         }
     }
 }
+
+internal fun LazyListScope.tabunganCategoryItems(
+    isEn: Boolean,
+    allStudents: List<ChildStudent>,
+    claimedStudents: List<ChildStudent>,
+    transactions: List<TabunganTransaction>,
+    logs: List<TabunganLog>,
+    isAnakSuperAdmin: Boolean,
+    onOpenInputTabungan: (String, ChildStudent?) -> Unit,
+    onOpenStudentList: () -> Unit,
+    onOpenStudentDetail: (ChildStudent) -> Unit,
+    onOpenHistoryLogs: () -> Unit,
+    onOpenPdfSummary: () -> Unit,
+    onOpenPilihAnakAsuh: () -> Unit,
+    onOpenPilihanAksesOrtu: () -> Unit
+) {
+    val totals = TabunganHelper.computeAggregateTotals(transactions)
+    val claimedIds = claimedStudents.map { it.id }.toSet()
+    val extraSchoolStudentsForSuper = if (isAnakSuperAdmin) {
+        val txStudentIds = transactions.map { it.studentId }.filter { it > 0L && it !in claimedIds }.toSet()
+        txStudentIds.map { sid ->
+            allStudents.firstOrNull { it.id == sid } ?: run {
+                val sampleTx = transactions.first { it.studentId == sid }
+                ChildStudent(
+                    id = sid,
+                    name = sampleTx.studentName,
+                    nis = sampleTx.studentNis,
+                    gender = "L",
+                    age = 12,
+                    dormitory = sampleTx.studentDorm,
+                    classGrade = sampleTx.studentClass,
+                    assignedWaliUsername = sampleTx.ownerWaliUsername,
+                    assignedWaliName = sampleTx.ownerWaliName,
+                    schoolId = sampleTx.schoolId
+                )
+            }
+        }
+    } else {
+        emptyList()
+    }
+    val displayedStudents = (claimedStudents + extraSchoolStudentsForSuper)
+        .distinctBy { it.id }
+        .sortedBy { it.name.lowercase() }
+
+    // 1. Deklarasi Sifat Pribadi & Privasi Ketat
+    item(key = "hub_tabungan_privacy") {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_tabungan_privacy_declaration"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+            border = BorderStroke(1.dp, Color(0xFFFCD34D))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFFEF3C7)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = if (isEn) "Private Ledger" else "Privasi Tabungan",
+                        tint = Color(0xFFB45309),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFD97706)
+                        ) {
+                            Text(
+                                text = if (isEn) "PRIVATE & ONLINE SYNCED" else "BERSIFAT PRIBADI",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        if (isAnakSuperAdmin) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFF047857)
+                            ) {
+                                Text(
+                                    text = "SUPER ACCESS",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = if (isEn) {
+                            "This savings ledger is strictly PRIVATE: only visible to you as the managing Foster Caregiver (and AnakSuperAdmin), never published to other caregivers or school admins even in the same school. Parents only see it if you check their permission."
+                        } else {
+                            "Catatan tabungan ini bersifat PRIBADI: hanya dapat dilihat oleh Anda sebagai Wali Asuh pemegang titipan (dan AnakSuperAdmin), tidak dipublikasikan ke Wali Asuh maupun admin lain meski satu sekolah."
+                        },
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = Color(0xFF78350F)
+                    )
+                }
+            }
+        }
+    }
+
+    // 2. Ringkasan Total Saldo Keseluruhan
+    item(key = "hub_tabungan_totals") {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_tabungan_totals"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = if (isEn) "Total Held Balance" else "Total Saldo Titipan Saya",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = TabunganHelper.formatRupiah(totals.totalBalance),
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFB45309)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFFEF3C7)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccountBalanceWallet,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "${totals.holdersCount} ${if (isEn) "Holders" else "Anak"}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    HubStatTile(
+                        value = TabunganHelper.formatRupiah(totals.totalIn),
+                        label = if (isEn) "Total In (+)" else "Pemasukan (+)",
+                        bg = Color(0xFFDCFCE7),
+                        fg = Color(0xFF15803D),
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubStatTile(
+                        value = TabunganHelper.formatRupiah(totals.totalOut),
+                        label = if (isEn) "Total Out (-)" else "Pengeluaran (-)",
+                        bg = Color(0xFFFEE2E2),
+                        fg = Color(0xFFDC2626),
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubStatTile(
+                        value = "${totals.activeCount}",
+                        label = if (isEn) "Active Tx" else "Transaksi",
+                        bg = Color(0xFFFEF3C7),
+                        fg = Color(0xFFB45309),
+                        modifier = Modifier.weight(0.65f)
+                    )
+                }
+            }
+        }
+    }
+
+    // 3. Ikon Menu Di Dalam Tabungan (Gaya Seragam dengan Puasa & Mengaji)
+    item(key = "hub_tabungan_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Deposit (+)" else "Titip Masuk (+)",
+                    subtitle = if (isEn) "Add Allowance / Savings" else "Catat Uang Titipan",
+                    imageRes = R.drawable.img_menu_tabungan,
+                    badgeText = if (isEn) "Income" else "Pemasukan",
+                    badgeBg = Color(0xFFDCFCE7),
+                    badgeColor = Color(0xFF15803D),
+                    bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFA7F3D0),
+                    onClick = { onOpenInputTabungan(TabunganHelper.TYPE_IN, null) },
+                    testTag = "tile_tabungan_masuk",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Expense (-)" else "Pengeluaran (-)",
+                    subtitle = if (isEn) "Withdraw / Buy Needs" else "Ambil & Jajan Anak",
+                    imageRes = R.drawable.img_menu_tindakan,
+                    badgeText = if (isEn) "Expense" else "Ambil Uang",
+                    badgeBg = Color(0xFFFEE2E2),
+                    badgeColor = Color(0xFFDC2626),
+                    bgGradient = listOf(Color(0xFFFEF2F2), Color(0xFFFEE2E2).copy(alpha = 0.55f)),
+                    borderColor = Color(0xFFFECACA),
+                    onClick = { onOpenInputTabungan(TabunganHelper.TYPE_OUT, null) },
+                    testTag = "tile_tabungan_keluar",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Balance / Child" else "Saldo Per Anak",
+                    subtitle = if (isEn) "Claimed Foster Kids Only" else "Daftar Anak Binaan Saya",
+                    imageRes = R.drawable.img_menu_anak_asuh,
+                    badgeText = "${displayedStudents.size} ${if (isEn) "Kids" else "Anak"}",
+                    badgeBg = Color(0xFFFEF3C7),
+                    badgeColor = Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = onOpenStudentList,
+                    testTag = "tile_tabungan_per_anak",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "History & Audit Log" else "Riwayat & Log",
+                    subtitle = if (isEn) "Transactions & Audit Trail" else "Mutasi, Batal & Hapus",
+                    imageRes = R.drawable.img_menu_daftar_puasa,
+                    badgeText = "${logs.size} Log",
+                    badgeBg = Color(0xFFE0E7FF),
+                    badgeColor = Color(0xFF4338CA),
+                    bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFC7D2FE),
+                    onClick = onOpenHistoryLogs,
+                    testTag = "tile_tabungan_riwayat",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Print Recap PDF" else "Cetak Rekap PDF",
+                    subtitle = if (isEn) "Personal Balance Sheet" else "Laporan Saldo Binaan",
+                    imageRes = R.drawable.img_menu_ranking_puasa,
+                    badgeText = "PDF",
+                    badgeBg = Color(0xFFCCFBF1),
+                    badgeColor = Color(0xFF0F766E),
+                    bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFF99F6E4),
+                    onClick = onOpenPdfSummary,
+                    testTag = "tile_tabungan_laporan",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Parent Access" else "Izin Akses Ortu",
+                    subtitle = if (isEn) "Toggle Savings Visibility" else "Centang Akses Portal Ortu",
+                    imageRes = R.drawable.img_menu_orang_tua,
+                    badgeText = if (isEn) "Checkbox" else "Centang",
+                    badgeBg = Color(0xFFEDE9FE),
+                    badgeColor = Color(0xFF6D28D9),
+                    bgGradient = listOf(Color(0xFFF5F3FF), Color(0xFFEDE9FE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFDDD6FE),
+                    onClick = onOpenPilihanAksesOrtu,
+                    testTag = "tile_tabungan_akses_ortu",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // 4. Daftar Saldo Anak Binaan (Klik untuk Pop-Up Detail Pemasukan, Pengeluaran & Log)
+    item(key = "hub_tabungan_students_hdr") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isEn) "My Foster Students Balance (Tap for Detail)" else "Saldo Anak Binaan Saya (Ketuk untuk Detail)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (displayedStudents.isNotEmpty()) {
+                Text(
+                    text = "${displayedStudents.size} ${if (isEn) "Kids" else "Anak"}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFFB45309)
+                )
+            }
+        }
+    }
+
+    if (displayedStudents.isEmpty()) {
+        item(key = "hub_tabungan_empty_claimed") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("empty_tabungan_no_claimed"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        tint = Color(0xFFB45309),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = if (isEn) "No Claimed Foster Students Yet" else "Belum Ada Anak Asuh Binaan Dipilih",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isEn) {
+                            "Tabungan strictly lists students you claimed under Parent Connect → Select Foster Kids."
+                        } else {
+                            "Menu Tabungan hanya menampilkan anak asuh yang sudah Anda klaim di Hubungan Ortu → Pilih Anak Asuh."
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = onOpenPilihAnakAsuh,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB45309)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_tabungan_open_pilih_anak")
+                    ) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) "Select Foster Students Now" else "Pilih Anak Asuh (Hubungan Ortu)",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        items(displayedStudents, key = { "hub_tab_st_${it.id}" }) { student ->
+            val stSummary = TabunganHelper.computeSummaryForStudent(transactions, student)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenStudentDetail(student) }
+                    .testTag("card_tabungan_student_${student.id}"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(
+                    1.dp,
+                    if (stSummary.balance > 0L) Color(0xFFFCD34D) else MaterialTheme.colorScheme.outlineVariant
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = student.name,
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (isAnakSuperAdmin && student.id !in claimedIds && student.assignedWaliName.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(5.dp),
+                                    color = Color(0xFFE0E7FF)
+                                ) {
+                                    Text(
+                                        text = student.assignedWaliName,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF4338CA),
+                                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = "${student.classGrade.ifBlank { "-" }} • ${student.dormitory.ifBlank { "-" }}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "+${TabunganHelper.formatRupiah(stSummary.totalIn)}  •  -${TabunganHelper.formatRupiah(stSummary.totalOut)}",
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (stSummary.balance > 0L) Color(0xFFFEF3C7) else Color(0xFFF1F5F9)
+                        ) {
+                            Text(
+                                text = TabunganHelper.formatRupiah(stSummary.balance),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (stSummary.balance > 0L) Color(0xFFB45309) else Color(0xFF64748B),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        if (stSummary.activeCount > 0) {
+                            Text(
+                                text = "${stSummary.activeCount} ${if (isEn) "tx" else "mutasi"}",
+                                fontSize = 9.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 

@@ -21,6 +21,9 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
@@ -1083,6 +1086,42 @@ object PocketBaseSyncManager {
             }
         }
 
+    // --- Tabungan Pribadi Wali Asuh (Transactions & Logs) ---
+    suspend fun uploadSingleTabunganTransaction(context: Context, tx: TabunganTransaction) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbTabunganTransactionDto.fromDomain(tx)
+                upsertSingleDto(service, "tabungan_transactions", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleTabunganTransaction ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteTabunganTransaction(context: Context, txId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("tabungan_transactions", PocketBaseIdCodec.toPbId(txId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteTabunganTransaction ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleTabunganLog(context: Context, log: TabunganLog) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbTabunganLogDto.fromDomain(log)
+                upsertSingleDto(service, "tabungan_logs", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleTabunganLog ke PocketBase", e)
+            }
+        }
+
     /**
      * Menghapus seluruh data satu tenant sekolah dari PocketBase saat akun sekolah dihapus permanen.
      */
@@ -1091,6 +1130,8 @@ object PocketBaseSyncManager {
             if (!PocketBaseConfig.isConfigured(context) || schoolId.isBlank()) return@withContext
             val filter = buildSchoolFilter(schoolId)
             val service = PocketBaseClient.getService(context) ?: return@withContext
+            runCatching { deleteCollectionByFilter(service, "tabungan_logs", filter) }
+            runCatching { deleteCollectionByFilter(service, "tabungan_transactions", filter) }
             runCatching { deleteCollectionByFilter(service, "deletion_logs", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
@@ -1242,6 +1283,104 @@ object PocketBaseSyncManager {
 
         runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    suspend fun syncTabunganOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+
+        val logs = runCatching {
+            syncTabunganLogsMerged(service, cleanSchoolId, filter, repository)
+        }.getOrDefault(repository.getTabunganLogsBySchoolList(cleanSchoolId))
+        val deletedTxIds = logs
+            .filter { it.actionType.equals(TabunganHelper.LOG_DELETE, ignoreCase = true) && it.transactionId > 0L }
+            .map { it.transactionId }
+            .toSet()
+        runCatching { syncTabunganTransactionsMerged(service, cleanSchoolId, filter, repository, deletedTxIds) }
+    }
+
+    private suspend fun syncTabunganLogsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ): List<TabunganLog> {
+        val localLogs = repository.getTabunganLogsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listTabunganLogs(page = page, perPage = 500, filter = filter)
+        }
+        val remoteLogs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return localLogs
+
+        val localById = localLogs.associateBy { it.id }
+        val remoteById = remoteLogs.associateBy { it.id }
+
+        val toInsertLocal = remoteLogs.filter { localById[it.id] == null }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllTabunganLogs(toInsertLocal)
+        }
+
+        val toPushRemote = localLogs.filter { remoteById[it.id] == null }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { log ->
+                val dto = PbTabunganLogDto.fromDomain(log)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "tabungan_logs", pairs)
+        }
+        return repository.getTabunganLogsBySchoolList(cleanSchoolId)
+    }
+
+    private suspend fun syncTabunganTransactionsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository,
+        deletedTxIds: Set<Long> = emptySet()
+    ) {
+        val localAll = repository.getTabunganTransactionsBySchoolList(cleanSchoolId)
+        if (deletedTxIds.isNotEmpty()) {
+            localAll.filter { it.id in deletedTxIds }.forEach {
+                repository.deleteTabunganTransaction(it)
+            }
+        }
+        val localTxs = localAll.filter { it.id !in deletedTxIds }
+
+        val remoteRes = fetchAllPages { page ->
+            service.listTabunganTransactions(page = page, perPage = 500, filter = filter)
+        }
+        val remoteTxs = remoteRes.getOrNull()
+            ?.map { it.toDomainModel(cleanSchoolId) }
+            ?.filter { it.id !in deletedTxIds }
+            ?: return
+
+        val localById = localTxs.associateBy { it.id }
+        val remoteById = remoteTxs.associateBy { it.id }
+
+        val toInsertLocal = remoteTxs.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllTabunganTransactions(toInsertLocal)
+        }
+
+        val toPushRemote = localTxs.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { tx ->
+                val dto = PbTabunganTransactionDto.fromDomain(tx)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "tabungan_transactions", pairs)
+        }
     }
 
     private suspend fun syncParentAccessLinksMerged(
@@ -1921,6 +2060,16 @@ object PocketBaseSyncManager {
             }
             runCatching {
                 syncParentMessagesMerged(service, cleanSchoolId, filter, repository)
+            }
+
+            // 10. Sinkronkan Tabungan Pribadi Wali Asuh & Log Audit (tabungan_logs & tabungan_transactions)
+            runCatching {
+                val mergedTabLogs = syncTabunganLogsMerged(service, cleanSchoolId, filter, repository)
+                val deletedTabIds = mergedTabLogs
+                    .filter { it.actionType.equals(TabunganHelper.LOG_DELETE, ignoreCase = true) && it.transactionId > 0L }
+                    .map { it.transactionId }
+                    .toSet()
+                syncTabunganTransactionsMerged(service, cleanSchoolId, filter, repository, deletedTabIds)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())

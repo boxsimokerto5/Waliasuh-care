@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
@@ -82,6 +83,8 @@ import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganTransaction
 import com.example.ui.HealthViewModel
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
@@ -102,6 +105,7 @@ private enum class ParentPortalTab(
     MEDICAL("Riwayat Sakit", "Medical", Icons.Default.LocalHospital, "parent_tab_medical"),
     FASTING("Puasa", "Fasting", Icons.Default.NightlightRound, "parent_tab_fasting"),
     HAID("Riwayat Haid", "Haid Cycle", Icons.Default.Favorite, "parent_tab_haid"),
+    TABUNGAN("Tabungan", "Savings", Icons.Default.AccountBalanceWallet, "parent_tab_tabungan"),
     MESSAGES("Pesan", "Messages", Icons.Default.ChatBubbleOutline, "parent_tab_messages")
 }
 
@@ -122,6 +126,7 @@ fun ParentPortalScreen(
     val medicalRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
+    val tabunganRecords by viewModel.parentTabunganTransactions.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
@@ -167,6 +172,7 @@ fun ParentPortalScreen(
             if (activeLink?.canViewMedical == true) add(ParentPortalTab.MEDICAL)
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
             if (isFemaleStudent && activeLink?.canViewHaid == true) add(ParentPortalTab.HAID)
+            if (activeLink?.canViewTabungan == true) add(ParentPortalTab.TABUNGAN)
             add(ParentPortalTab.MESSAGES)
         }
     }
@@ -318,6 +324,16 @@ fun ParentPortalScreen(
                     }
                 }
 
+                val sortedTabungan = remember(tabunganRecords) {
+                    tabunganRecords.sortedWith(
+                        compareByDescending<TabunganTransaction> { it.transactionDate }
+                            .thenByDescending { it.createdAt }
+                    )
+                }
+                val tabunganTotals = remember(sortedTabungan) {
+                    TabunganHelper.computeAggregateTotals(sortedTabungan)
+                }
+
                 when (currentTab) {
                     ParentPortalTab.HOME -> ParentOverviewContent(
                         student = student,
@@ -327,6 +343,8 @@ fun ParentPortalScreen(
                         medicalCount = studentMedical.size,
                         fastingCount = studentFasting.size,
                         haidRecords = studentHaid,
+                        tabunganBalance = tabunganTotals.totalBalance,
+                        tabunganCount = sortedTabungan.size,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
@@ -341,6 +359,11 @@ fun ParentPortalScreen(
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(records = studentMedical)
                     ParentPortalTab.FASTING -> ParentFastingContent(records = studentFasting)
                     ParentPortalTab.HAID -> ParentHaidContent(records = studentHaid)
+                    ParentPortalTab.TABUNGAN -> ParentTabunganContent(
+                        transactions = sortedTabungan,
+                        waliName = student?.assignedWaliName?.ifBlank { activeLink?.assignedWaliName.orEmpty() }
+                            ?: activeLink?.assignedWaliName.orEmpty()
+                    )
                     ParentPortalTab.MESSAGES -> ParentChatContent(
                         student = student,
                         link = activeLink,
@@ -367,6 +390,8 @@ private fun ParentOverviewContent(
     medicalCount: Int,
     fastingCount: Int,
     haidRecords: List<HaidRecord>,
+    tabunganBalance: Long,
+    tabunganCount: Int,
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit
 ) {
@@ -561,6 +586,22 @@ private fun ParentOverviewContent(
                     icon = Icons.Default.Favorite,
                     onClick = { onOpenTab(ParentPortalTab.HAID) },
                     testTag = "card_parent_summary_haid"
+                )
+            }
+        }
+        if (link?.canViewTabungan == true) {
+            item {
+                PortalModuleSummaryCard(
+                    title = if (isEn) "Child Savings Ledger" else "Tabungan Titipan Anak",
+                    subtitle = if (isEn) {
+                        "Balance: ${TabunganHelper.formatRupiah(tabunganBalance)} ($tabunganCount entries)"
+                    } else {
+                        "Saldo: ${TabunganHelper.formatRupiah(tabunganBalance)} ($tabunganCount mutasi)"
+                    },
+                    accentColor = Color(0xFFD97706),
+                    icon = Icons.Default.AccountBalanceWallet,
+                    onClick = { onOpenTab(ParentPortalTab.TABUNGAN) },
+                    testTag = "card_parent_summary_tabungan"
                 )
             }
         }
@@ -1228,6 +1269,155 @@ private fun ParentChatContent(
                     .testTag("btn_parent_portal_send")
             ) {
                 Icon(Icons.AutoMirrored.Filled.Send, contentDescription = if (isEn) "Send" else "Kirim")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParentTabunganContent(
+    transactions: List<TabunganTransaction>,
+    waliName: String
+) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val totals = remember(transactions) { TabunganHelper.computeAggregateTotals(transactions) }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("parent_tabungan_list"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                border = BorderStroke(1.dp, Color(0xFFFDE68A))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Current Allowance Balance" else "Saldo Tabungan Titipan Anak",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF92400E)
+                    )
+                    Text(
+                        text = TabunganHelper.formatRupiah(totals.totalBalance),
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFFB45309)
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isEn) "Total Deposit (+)" else "Total Titip Masuk (+)",
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = TabunganHelper.formatRupiah(totals.totalIn),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isEn) "Total Expense (-)" else "Total Pengeluaran (-)",
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = TabunganHelper.formatRupiah(totals.totalOut),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFDC2626)
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (isEn) {
+                            "Managed by: ${waliName.ifBlank { "Foster Caregiver" }} • Shared strictly with parent permission"
+                        } else {
+                            "Pemegang Titipan: ${waliName.ifBlank { "Wali Asuh Pembina" }} • Akses khusus atas izin Wali Asuh"
+                        },
+                        fontSize = 10.5.sp,
+                        color = Color(0xFF78350F)
+                    )
+                }
+            }
+        }
+
+        if (transactions.isEmpty()) {
+            item {
+                ParentEmptyNotice(
+                    if (isEn) "No savings transactions recorded yet."
+                    else "Belum ada catatan transaksi tabungan titipan."
+                )
+            }
+        } else {
+            items(transactions, key = { "ptab_${it.id}" }) { tx ->
+                val isIncome = TabunganHelper.isIncome(tx.transactionType)
+                val accent = if (isIncome) Color(0xFF15803D) else Color(0xFFDC2626)
+                val badgeBg = if (isIncome) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.25f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text(
+                                text = tx.title.ifBlank {
+                                    if (isIncome) "Titip Masuk" else "Pengeluaran"
+                                },
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = DateUtils.formatDateTime(tx.transactionDate),
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (tx.notes.isNotBlank()) {
+                                Text(
+                                    text = tx.notes,
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(shape = RoundedCornerShape(8.dp), color = badgeBg) {
+                            Text(
+                                text = "${if (isIncome) "+" else "-"}${TabunganHelper.formatRupiah(tx.amount)}",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = accent,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }

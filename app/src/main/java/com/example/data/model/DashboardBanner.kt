@@ -156,6 +156,14 @@ enum class DashboardBannerFeatureTarget(
         groupId = "Mengaji",
         groupEn = "Recitation"
     ),
+    // Tabungan
+    FEATURE_TABUNGAN_HUB(
+        key = "FEATURE_TABUNGAN_HUB",
+        labelId = "Menu Tabungan Anak Asuh",
+        labelEn = "Student Savings Center",
+        groupId = "Tabungan",
+        groupEn = "Savings"
+    ),
     FEATURE_INPUT_MENGAJI(
         key = "FEATURE_INPUT_MENGAJI",
         labelId = "Input Setoran Mengaji",

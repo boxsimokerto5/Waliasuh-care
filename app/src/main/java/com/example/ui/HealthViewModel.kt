@@ -23,6 +23,9 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
@@ -94,7 +97,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.visitRecordDao(),
             db.parentAccessLinkDao(),
             db.parentMessageDao(),
-            db.deletionLogDao()
+            db.deletionLogDao(),
+            db.tabunganTransactionDao(),
+            db.tabunganLogDao()
         )
     }
 
@@ -1831,6 +1836,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         canFasting: Boolean,
         canHaid: Boolean = link.canViewHaid,
         canProfile: Boolean = link.canViewProfile,
+        canTabungan: Boolean = link.canViewTabungan,
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -1840,12 +1846,306 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewFasting = canFasting,
                 canViewHaid = canHaid,
                 canViewProfile = canProfile,
+                canViewTabungan = canTabungan,
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateParentAccessLink(updated)
             onComplete()
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+        }
+    }
+
+    // ==========================================
+    // TABUNGAN PRIBADI WALI ASUH (PENITIPAN UANG SISWA - ISOLASI PRIVAT)
+    // Hanya terlihat oleh Wali Asuh pemiliknya & anaksuperadmin (serta Portal Ortu jika dicentang)
+    // ==========================================
+    val tabunganTransactions: StateFlow<List<TabunganTransaction>> = combine(
+        repository.allTabunganTransactions,
+        _schoolProfile,
+        _currentUserRole,
+        combine(_currentUsername, _waliName, isAnakSuperAdmin) { u, w, superW -> Triple(u, w, superW) }
+    ) { allTxs, profile, role, actorTriple ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        TabunganHelper.filterPrivateTransactions(
+            allTransactions = allTxs,
+            schoolId = tenant,
+            role = role,
+            isAnakSuperAdmin = actorTriple.third,
+            currentUsername = actorTriple.first,
+            currentWaliName = actorTriple.second
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val tabunganLogs: StateFlow<List<TabunganLog>> = combine(
+        repository.allTabunganLogs,
+        _schoolProfile,
+        _currentUserRole,
+        combine(_currentUsername, _waliName, isAnakSuperAdmin) { u, w, superW -> Triple(u, w, superW) }
+    ) { allLogs, profile, role, actorTriple ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        TabunganHelper.filterPrivateLogs(
+            allLogs = allLogs,
+            schoolId = tenant,
+            role = role,
+            isAnakSuperAdmin = actorTriple.third,
+            currentUsername = actorTriple.first,
+            currentWaliName = actorTriple.second
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val parentTabunganTransactions: StateFlow<List<TabunganTransaction>> = combine(
+        repository.allTabunganTransactions,
+        activeParentAccessLink,
+        _currentUserRole
+    ) { allTxs, parentLink, role ->
+        if (role != UserRole.PARENT || parentLink == null || !parentLink.canViewTabungan) {
+            emptyList()
+        } else {
+            allTxs.filter { tx ->
+                tx.schoolId.equals(parentLink.schoolId, ignoreCase = true) &&
+                    tx.studentId == parentLink.studentId &&
+                    TabunganHelper.isActive(tx.status)
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun syncTabunganOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncTabunganOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun saveTabunganTransaction(
+        student: ChildStudent,
+        transactionType: String,
+        amount: Long,
+        title: String,
+        notes: String = "",
+        transactionDate: Long = System.currentTimeMillis(),
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (amount <= 0L) {
+            onResult(false, if (isEn) "Nominal must be greater than Rp 0." else "Nominal harus lebih dari Rp 0.")
+            return
+        }
+        val cleanType = if (TabunganHelper.isIncome(transactionType)) TabunganHelper.TYPE_IN else TabunganHelper.TYPE_OUT
+        viewModelScope.launch {
+            val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val currentUser = _currentUsername.value?.trim().orEmpty()
+            val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val ownerUser = student.assignedWaliUsername.trim().ifBlank { currentUser }
+            val ownerName = student.assignedWaliName.trim().ifBlank { currentName }
+
+            val existingForStudent = repository.getTabunganTransactionsForStudentList(student.id, activeSchool)
+                .filter {
+                    TabunganHelper.matchesPrivateOwner(
+                        ownerUsername = it.ownerWaliUsername,
+                        ownerName = it.ownerWaliName,
+                        currentUsername = ownerUser,
+                        currentWaliName = ownerName
+                    )
+                }
+            val summaryBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, student.id)
+            if (cleanType == TabunganHelper.TYPE_OUT && amount > summaryBefore.balance) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Insufficient balance (${TabunganHelper.formatRupiah(summaryBefore.balance)})."
+                    } else {
+                        "Saldo ${student.name} tidak mencukupi (tersedia ${TabunganHelper.formatRupiah(summaryBefore.balance)})."
+                    }
+                )
+                return@launch
+            }
+
+            val now = System.currentTimeMillis()
+            val txId = PocketBaseSyncManager.generateCloudSafeId()
+            val resolvedTitle = title.trim().ifBlank {
+                if (cleanType == TabunganHelper.TYPE_IN) "Titip Uang Saku" else "Pengeluaran Kebutuhan"
+            }
+            val newTx = TabunganTransaction(
+                id = txId,
+                studentId = student.id,
+                studentName = student.name,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                ownerWaliUsername = ownerUser,
+                ownerWaliName = ownerName,
+                isPrivate = true,
+                transactionType = cleanType,
+                amount = amount,
+                title = resolvedTitle,
+                notes = notes.trim(),
+                transactionDate = transactionDate,
+                status = TabunganHelper.STATUS_ACTIVE,
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertTabunganTransaction(newTx)
+
+            val balanceAfter = if (cleanType == TabunganHelper.TYPE_IN) {
+                summaryBefore.balance + amount
+            } else {
+                (summaryBefore.balance - amount).coerceAtLeast(0L)
+            }
+            val logEntry = TabunganLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                transactionId = newTx.id,
+                studentId = student.id,
+                studentName = student.name,
+                studentClass = student.classGrade,
+                ownerWaliUsername = ownerUser,
+                ownerWaliName = ownerName,
+                isPrivate = true,
+                actionType = if (cleanType == TabunganHelper.TYPE_IN) TabunganHelper.LOG_INPUT_IN else TabunganHelper.LOG_INPUT_OUT,
+                amount = amount,
+                balanceBefore = summaryBefore.balance,
+                balanceAfter = balanceAfter,
+                summary = buildString {
+                    append(resolvedTitle)
+                    if (notes.isNotBlank()) append(" • ${notes.trim()}")
+                },
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertTabunganLog(logEntry)
+            onResult(
+                true,
+                if (isEn) "Savings transaction saved & synced." else "Transaksi tabungan berhasil dicatat (privat)."
+            )
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleTabunganTransaction(getApplication(), newTx)
+                PocketBaseSyncManager.uploadSingleTabunganLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    fun cancelTabunganTransaction(
+        tx: TabunganTransaction,
+        reason: String = "",
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!TabunganHelper.isActive(tx.status)) {
+            onResult(false, if (isEn) "Transaction is already cancelled." else "Transaksi ini sudah dibatalkan.")
+            return
+        }
+        viewModelScope.launch {
+            val activeSchool = tx.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val currentUser = _currentUsername.value?.trim().orEmpty()
+            val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val now = System.currentTimeMillis()
+            val cleanReason = reason.trim().ifBlank { "Dibatalkan oleh Wali Asuh" }
+
+            val existingForStudent = repository.getTabunganTransactionsForStudentList(tx.studentId, activeSchool)
+                .filter {
+                    TabunganHelper.matchesPrivateOwner(
+                        ownerUsername = it.ownerWaliUsername,
+                        ownerName = it.ownerWaliName,
+                        currentUsername = tx.ownerWaliUsername,
+                        currentWaliName = tx.ownerWaliName
+                    )
+                }
+            val balanceBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, tx.studentId).balance
+            val updatedTx = tx.copy(
+                status = TabunganHelper.STATUS_CANCELLED,
+                cancelledBy = currentName,
+                cancelledReason = cleanReason,
+                cancelledAt = now,
+                updatedAt = now
+            )
+            repository.updateTabunganTransaction(updatedTx)
+
+            val updatedList = existingForStudent.map { if (it.id == tx.id) updatedTx else it }
+            val balanceAfter = TabunganHelper.computeSummaryByStudentId(updatedList, tx.studentId).balance
+
+            val logEntry = TabunganLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                transactionId = tx.id,
+                studentId = tx.studentId,
+                studentName = tx.studentName,
+                studentClass = tx.studentClass,
+                ownerWaliUsername = tx.ownerWaliUsername,
+                ownerWaliName = tx.ownerWaliName,
+                isPrivate = true,
+                actionType = TabunganHelper.LOG_CANCEL,
+                amount = tx.amount,
+                balanceBefore = balanceBefore,
+                balanceAfter = balanceAfter,
+                summary = "Batalkan: ${tx.title.ifBlank { tx.transactionType }} ($cleanReason)",
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertTabunganLog(logEntry)
+            onResult(true, if (isEn) "Transaction cancelled." else "Transaksi dibatalkan & tercatat di log tabungan.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleTabunganTransaction(getApplication(), updatedTx)
+                PocketBaseSyncManager.uploadSingleTabunganLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    fun deleteTabunganTransaction(
+        tx: TabunganTransaction,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        viewModelScope.launch {
+            val activeSchool = tx.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val currentUser = _currentUsername.value?.trim().orEmpty()
+            val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val now = System.currentTimeMillis()
+
+            val existingForStudent = repository.getTabunganTransactionsForStudentList(tx.studentId, activeSchool)
+                .filter {
+                    TabunganHelper.matchesPrivateOwner(
+                        ownerUsername = it.ownerWaliUsername,
+                        ownerName = it.ownerWaliName,
+                        currentUsername = tx.ownerWaliUsername,
+                        currentWaliName = tx.ownerWaliName
+                    )
+                }
+            val balanceBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, tx.studentId).balance
+            repository.deleteTabunganTransaction(tx)
+            val afterList = existingForStudent.filterNot { it.id == tx.id }
+            val balanceAfter = TabunganHelper.computeSummaryByStudentId(afterList, tx.studentId).balance
+
+            // Catat log privat internal Tabungan SAJA — TIDAK menerbitkan DeletionLog publik sekolah
+            val logEntry = TabunganLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                transactionId = tx.id,
+                studentId = tx.studentId,
+                studentName = tx.studentName,
+                studentClass = tx.studentClass,
+                ownerWaliUsername = tx.ownerWaliUsername,
+                ownerWaliName = tx.ownerWaliName,
+                isPrivate = true,
+                actionType = TabunganHelper.LOG_DELETE,
+                amount = tx.amount,
+                balanceBefore = balanceBefore,
+                balanceAfter = balanceAfter,
+                summary = "Hapus permanen: ${tx.title.ifBlank { tx.transactionType }} (${TabunganHelper.formatRupiah(tx.amount)})",
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertTabunganLog(logEntry)
+            onResult(true, if (isEn) "Transaction deleted." else "Transaksi dihapus permanen (tercatat di log pribadi).")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteTabunganTransaction(getApplication(), tx.id)
+                PocketBaseSyncManager.uploadSingleTabunganLog(getApplication(), logEntry)
             }
         }
     }
@@ -4226,6 +4526,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             // 1. Bersihkan seluruh data sekolah di Room lokal (students cascade ke medical_records)
             if (targetSchoolId.isNotBlank()) {
+                repository.deleteTabunganLogsBySchool(targetSchoolId)
+                repository.deleteTabunganTransactionsBySchool(targetSchoolId)
                 repository.deleteDeletionLogsBySchool(targetSchoolId)
                 repository.deleteParentMessagesBySchool(targetSchoolId)
                 repository.deleteParentAccessLinksBySchool(targetSchoolId)

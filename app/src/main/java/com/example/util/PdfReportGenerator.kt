@@ -31,6 +31,8 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
@@ -3025,6 +3027,413 @@ object PdfReportGenerator {
                 appendLine()
             }
             append(if (isEn) "Reported by: $waliName" else "Dilaporkan oleh: $waliName")
+        }
+    }
+
+    /**
+     * Membuat PDF Laporan Tabungan Per Anak Asuh (Pemasukan, Pengeluaran, Saldo & Status Aktif/Dibatalkan)
+     * menggunakan satu tanda tangan Wali Asuh kanan bawah + QR Code.
+     */
+    fun generateTabunganStudentPdf(
+        context: Context,
+        student: ChildStudent,
+        transactions: List<TabunganTransaction>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var pageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
+            val paint = Paint().apply { isAntiAlias = true }
+            val dateFmt = SimpleDateFormat("d MMM yyyy HH:mm", lang.locale)
+
+            var currentY = 35f
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = if (isEn) "PRIVATE STUDENT SAVINGS LEDGER (WALI ASUH)" else "CATATAN TABUNGAN PRIBADI WALI ASUH"
+            )
+
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 13f
+            paint.color = Color.rgb(180, 83, 9)
+            canvas.drawText(
+                if (isEn) "STUDENT PERSONAL SAVINGS & ALLOWANCE LEDGER" else "LAPORAN TABUNGAN TITIPAN UANG SISWA",
+                pageWidth / 2f,
+                currentY + 12f,
+                paint
+            )
+            currentY += 24f
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(
+                if (isEn) "Private Record Managed by: $waliName" else "Catatan Pribadi Dikelola Oleh: $waliName",
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            currentY += 16f
+            paint.textAlign = Paint.Align.LEFT
+
+            val summary = TabunganHelper.computeSummaryForStudent(transactions, student)
+            val boxLeft = 35f
+            val boxRight = pageWidth - 35f
+            val boxTop = currentY
+            val boxH = 74f
+            paint.color = Color.rgb(255, 251, 235)
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + boxH), 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(253, 230, 138)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + boxH), 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 10f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("${student.name} (NIS: ${student.nis.ifBlank { "-" }})", boxLeft + 10f, boxTop + 18f, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(71, 85, 105)
+            canvas.drawText(
+                "${if (isEn) "Class" else "Kelas"}: ${student.classGrade.ifBlank { "-" }}  |  Asrama: ${student.dormitory.ifBlank { "-" }}  |  ${if (isEn) "Status: Private" else "Sifat: Pribadi Wali Asuh"}",
+                boxLeft + 10f,
+                boxTop + 34f,
+                paint
+            )
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(21, 128, 61)
+            canvas.drawText("${if (isEn) "Deposit (+)" else "Masuk (+)"}: ${TabunganHelper.formatRupiah(summary.totalIn)}", boxLeft + 10f, boxTop + 54f, paint)
+            paint.color = Color.rgb(185, 28, 28)
+            canvas.drawText("${if (isEn) "Expense (-)" else "Keluar (-)"}: ${TabunganHelper.formatRupiah(summary.totalOut)}", boxLeft + 180f, boxTop + 54f, paint)
+            paint.color = Color.rgb(180, 83, 9)
+            canvas.drawText("${if (isEn) "Balance" else "Saldo Akhir"}: ${TabunganHelper.formatRupiah(summary.balance)}", boxLeft + 355f, boxTop + 54f, paint)
+            currentY = boxTop + boxH + 14f
+
+            val sortedTxs = transactions
+                .filter { TabunganHelper.matchesStudent(it, student) }
+                .sortedWith(compareByDescending<TabunganTransaction> { it.transactionDate }.thenByDescending { it.createdAt })
+
+            fun drawTxHeader(y: Float): Float {
+                val h = 23f
+                paint.color = Color.rgb(254, 243, 199)
+                canvas.drawRect(boxLeft, y, boxRight, y + h, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(245, 158, 11)
+                paint.strokeWidth = 0.8f
+                canvas.drawRect(boxLeft, y, boxRight, y + h, paint)
+                paint.style = Paint.Style.FILL
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.2f
+                paint.color = Color.rgb(146, 64, 14)
+                val tY = y + 15f
+                canvas.drawText("No", boxLeft + 6f, tY, paint)
+                canvas.drawText(if (isEn) "Date" else "Tanggal", boxLeft + 30f, tY, paint)
+                canvas.drawText(if (isEn) "Description / Notes" else "Keterangan", boxLeft + 135f, tY, paint)
+                canvas.drawText(if (isEn) "Type" else "Jenis", boxLeft + 335f, tY, paint)
+                canvas.drawText(if (isEn) "Nominal" else "Nominal", boxLeft + 410f, tY, paint)
+                return y + h
+            }
+
+            if (sortedTxs.isEmpty()) {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText(
+                    if (isEn) "No transactions recorded yet." else "Belum ada transaksi tabungan tercatat.",
+                    boxLeft + 8f,
+                    currentY + 14f,
+                    paint
+                )
+                currentY += 30f
+            } else {
+                currentY = drawTxHeader(currentY)
+                val rowH = 22f
+                sortedTxs.forEachIndexed { idx, tx ->
+                    if (currentY > pageHeight - 130f) {
+                        document.finishPage(page)
+                        pageNumber++
+                        pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                        page = document.startPage(pageInfo)
+                        canvas = page.canvas
+                        currentY = 40f
+                        currentY = drawTxHeader(currentY)
+                    }
+                    val rTop = currentY
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.5f
+                    canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
+                    paint.style = Paint.Style.FILL
+
+                    val tY = rTop + 14.5f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.textSize = 8f
+                    paint.color = Color.rgb(15, 23, 42)
+                    canvas.drawText("${idx + 1}.", boxLeft + 6f, tY, paint)
+                    canvas.drawText(dateFmt.format(Date(tx.transactionDate)), boxLeft + 30f, tY, paint)
+
+                    val isActive = TabunganHelper.isActive(tx.status)
+                    val desc = buildString {
+                        append(tx.title.ifBlank { if (TabunganHelper.isIncome(tx.transactionType)) "Titip Uang" else "Pengeluaran" })
+                        if (tx.notes.isNotBlank()) append(" (${tx.notes})")
+                        if (!isActive) append(" [DIBATALKAN]")
+                    }
+                    canvas.drawText(
+                        TextUtils.ellipsize(desc, TextPaint(paint), 192f, TextUtils.TruncateAt.END).toString(),
+                        boxLeft + 135f,
+                        tY,
+                        paint
+                    )
+
+                    val isIn = TabunganHelper.isIncome(tx.transactionType)
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = when {
+                        !isActive -> Color.rgb(148, 163, 184)
+                        isIn -> Color.rgb(21, 128, 61)
+                        else -> Color.rgb(185, 28, 28)
+                    }
+                    canvas.drawText(
+                        when {
+                            !isActive -> if (isEn) "VOID" else "BATAL"
+                            isIn -> if (isEn) "IN (+)" else "MASUK"
+                            else -> if (isEn) "OUT (-)" else "KELUAR"
+                        },
+                        boxLeft + 335f,
+                        tY,
+                        paint
+                    )
+                    val sign = if (isIn) "+" else "-"
+                    canvas.drawText("$sign${TabunganHelper.formatRupiah(tx.amount)}", boxLeft + 410f, tY, paint)
+                    currentY = rTop + rowH
+                }
+                currentY += 16f
+            }
+
+            if (currentY > pageHeight - 140f) {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                currentY = 40f
+            }
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            document.finishPage(page)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanName = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val file = File(outputDir, "Tabungan_${cleanName}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    /**
+     * Membuat PDF Rekap Saldo Seluruh Anak Binaan Pribadi Wali Asuh.
+     */
+    fun generateTabunganSummaryPdf(
+        context: Context,
+        students: List<ChildStudent>,
+        transactions: List<TabunganTransaction>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val lang = AppLanguageManager.getLanguage(context)
+            val isEn = lang == AppLanguage.ENGLISH
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var pageNumber = 1
+            var pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+            var page = document.startPage(pageInfo)
+            var canvas = page.canvas
+            val paint = Paint().apply { isAntiAlias = true }
+
+            var currentY = 35f
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = if (isEn) "PRIVATE STUDENT SAVINGS RECAP (WALI ASUH)" else "REKAP TABUNGAN PRIBADI WALI ASUH"
+            )
+
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 13f
+            paint.color = Color.rgb(180, 83, 9)
+            canvas.drawText(
+                if (isEn) "PRIVATE STUDENT SAVINGS BALANCE SUMMARY" else "REKAP SALDO TABUNGAN ANAK BINAAN SAYA",
+                pageWidth / 2f,
+                currentY + 12f,
+                paint
+            )
+            currentY += 24f
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(
+                if (isEn) "Holder: $waliName • Confidential (Only visible to managing Caregiver)" else "Pemegang Titipan: $waliName • Bersifat Pribadi",
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            currentY += 16f
+            paint.textAlign = Paint.Align.LEFT
+
+            val totals = TabunganHelper.computeAggregateTotals(transactions)
+            val boxLeft = 35f
+            val boxRight = pageWidth - 35f
+            val boxTop = currentY
+            val boxH = 44f
+            paint.color = Color.rgb(255, 251, 235)
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + boxH), 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(253, 230, 138)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + boxH), 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.2f
+            paint.color = Color.rgb(146, 64, 14)
+            canvas.drawText(
+                if (isEn) "TOTAL HELD BALANCE: ${TabunganHelper.formatRupiah(totals.totalBalance)}" else "TOTAL SALDO TITIPAN SAYA: ${TabunganHelper.formatRupiah(totals.totalBalance)}",
+                boxLeft + 10f,
+                boxTop + 17f,
+                paint
+            )
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(51, 65, 85)
+            canvas.drawText(
+                if (isEn) {
+                    "In: ${TabunganHelper.formatRupiah(totals.totalIn)}  •  Out: ${TabunganHelper.formatRupiah(totals.totalOut)}  •  Students: ${students.size}"
+                } else {
+                    "Total Masuk: ${TabunganHelper.formatRupiah(totals.totalIn)}  •  Total Keluar: ${TabunganHelper.formatRupiah(totals.totalOut)}  •  Anak Binaan: ${students.size}"
+                },
+                boxLeft + 10f,
+                boxTop + 34f,
+                paint
+            )
+            currentY = boxTop + boxH + 14f
+
+            fun drawSummaryHeader(y: Float): Float {
+                val h = 23f
+                paint.color = Color.rgb(254, 243, 199)
+                canvas.drawRect(boxLeft, y, boxRight, y + h, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(245, 158, 11)
+                paint.strokeWidth = 0.8f
+                canvas.drawRect(boxLeft, y, boxRight, y + h, paint)
+                paint.style = Paint.Style.FILL
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.2f
+                paint.color = Color.rgb(146, 64, 14)
+                val tY = y + 15f
+                canvas.drawText("No", boxLeft + 6f, tY, paint)
+                canvas.drawText(if (isEn) "Student Name" else "Nama Anak", boxLeft + 30f, tY, paint)
+                canvas.drawText(if (isEn) "Class" else "Kelas", boxLeft + 190f, tY, paint)
+                canvas.drawText(if (isEn) "In (+)" else "Masuk", boxLeft + 255f, tY, paint)
+                canvas.drawText(if (isEn) "Out (-)" else "Keluar", boxLeft + 345f, tY, paint)
+                canvas.drawText(if (isEn) "Balance" else "Saldo", boxLeft + 435f, tY, paint)
+                return y + h
+            }
+
+            currentY = drawSummaryHeader(currentY)
+            val rowH = 22f
+            students.sortedBy { it.name }.forEachIndexed { idx, st ->
+                if (currentY > pageHeight - 130f) {
+                    document.finishPage(page)
+                    pageNumber++
+                    pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                    page = document.startPage(pageInfo)
+                    canvas = page.canvas
+                    currentY = 40f
+                    currentY = drawSummaryHeader(currentY)
+                }
+                val s = TabunganHelper.computeSummaryForStudent(transactions, st)
+                val rTop = currentY
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(226, 232, 240)
+                paint.strokeWidth = 0.5f
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
+                paint.style = Paint.Style.FILL
+
+                val tY = rTop + 14.5f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8f
+                paint.color = Color.rgb(15, 23, 42)
+                canvas.drawText("${idx + 1}.", boxLeft + 6f, tY, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText(
+                    TextUtils.ellipsize(st.name, TextPaint(paint), 152f, TextUtils.TruncateAt.END).toString(),
+                    boxLeft + 30f,
+                    tY,
+                    paint
+                )
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                canvas.drawText(st.classGrade.ifBlank { "-" }, boxLeft + 190f, tY, paint)
+                paint.color = Color.rgb(21, 128, 61)
+                canvas.drawText(TabunganHelper.formatRupiah(s.totalIn), boxLeft + 255f, tY, paint)
+                paint.color = Color.rgb(185, 28, 28)
+                canvas.drawText(TabunganHelper.formatRupiah(s.totalOut), boxLeft + 345f, tY, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.color = Color.rgb(180, 83, 9)
+                canvas.drawText(TabunganHelper.formatRupiah(s.balance), boxLeft + 435f, tY, paint)
+                currentY = rTop + rowH
+            }
+            currentY += 16f
+
+            if (currentY > pageHeight - 140f) {
+                document.finishPage(page)
+                pageNumber++
+                pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                page = document.startPage(pageInfo)
+                canvas = page.canvas
+                currentY = 40f
+            }
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            document.finishPage(page)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+            val file = File(outputDir, "Rekap_Tabungan_${dateSlug}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
         }
     }
 }

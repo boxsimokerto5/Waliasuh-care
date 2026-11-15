@@ -67,6 +67,9 @@ import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
+import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganLog
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.util.DateUtils
@@ -121,7 +124,16 @@ fun CategoryHubOverlay(
     onOpenPilihAnakAsuh: () -> Unit = {},
     onOpenKartuAksesOrtu: () -> Unit = {},
     onOpenPilihanAksesOrtu: () -> Unit = {},
-    onOpenPesanOrtu: () -> Unit = {}
+    onOpenPesanOrtu: () -> Unit = {},
+    tabunganTransactions: List<TabunganTransaction> = emptyList(),
+    tabunganLogs: List<TabunganLog> = emptyList(),
+    claimedFosterStudents: List<ChildStudent> = emptyList(),
+    isAnakSuperAdmin: Boolean = false,
+    onOpenInputTabungan: (String, ChildStudent?) -> Unit = { _, _ -> },
+    onOpenTabunganStudentList: () -> Unit = {},
+    onOpenTabunganStudentDetail: (ChildStudent) -> Unit = {},
+    onOpenTabunganHistory: () -> Unit = {},
+    onOpenTabunganPdfSummary: () -> Unit = {}
 ) {
     var lastCategory by remember { mutableStateOf(category) }
     if (category != null) {
@@ -154,6 +166,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.PESAN -> listOf(Color(0xFFB45309), Color(0xFFD97706))
             DashboardCategoryHub.MENGAJI -> listOf(Color(0xFF047857), Color(0xFF0F766E))
             DashboardCategoryHub.ORANG_TUA -> listOf(Color(0xFF4338CA), Color(0xFF7C3AED))
+            DashboardCategoryHub.TABUNGAN -> listOf(Color(0xFFB45309), Color(0xFF047857))
         }
 
         val heroTitle = when (current) {
@@ -164,6 +177,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.PESAN -> if (isEn) "Shift Handover Notes" else "Pesan & Operan Shift"
             DashboardCategoryHub.MENGAJI -> if (isEn) "Mengaji & Progress Card" else "Mengaji & Kartu Kendali"
             DashboardCategoryHub.ORANG_TUA -> if (isEn) "Parent Connect Center" else "Hubungan Orang Tua"
+            DashboardCategoryHub.TABUNGAN -> if (isEn) "Private Student Savings" else "Tabungan Anak Asuh"
         }
 
         val heroSubtitle = when (current) {
@@ -211,6 +225,14 @@ fun CategoryHubOverlay(
                     "$myFosterStudentsCount anak asuh • ${parentAccessLinks.size} kartu akses • $unreadCount pesan baru"
                 }
             }
+            DashboardCategoryHub.TABUNGAN -> {
+                val totals = TabunganHelper.computeAggregateTotals(tabunganTransactions)
+                if (isEn) {
+                    "Balance: ${TabunganHelper.formatRupiah(totals.totalBalance)} • ${totals.holdersCount} Holders (Private)"
+                } else {
+                    "Saldo: ${TabunganHelper.formatRupiah(totals.totalBalance)} • ${totals.holdersCount} Anak (Pribadi)"
+                }
+            }
         }
 
         val heroImage = when (current) {
@@ -221,6 +243,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.PESAN -> R.drawable.img_menu_pesan_shift
             DashboardCategoryHub.MENGAJI -> R.drawable.img_menu_mengaji
             DashboardCategoryHub.ORANG_TUA -> R.drawable.img_menu_orang_tua
+            DashboardCategoryHub.TABUNGAN -> R.drawable.img_menu_tabungan
         }
 
         val contextPillText = schoolProfile.shortName
@@ -322,6 +345,7 @@ fun CategoryHubOverlay(
                                 DashboardCategoryHub.PESAN -> if (isEn) "Write Note" else "Tulis Pesan"
                                 DashboardCategoryHub.MENGAJI -> if (isEn) "Scan Input Mengaji" else "Scan Input Mengaji"
                                 DashboardCategoryHub.ORANG_TUA -> if (isEn) "Pick Foster Students" else "Pilih Anak Asuh"
+                                DashboardCategoryHub.TABUNGAN -> if (isEn) "Add Savings Entry" else "Catat Titip Uang"
                             }
                             Surface(
                                 shape = CircleShape,
@@ -339,6 +363,7 @@ fun CategoryHubOverlay(
                                             DashboardCategoryHub.PESAN -> onOpenCreateShiftMessage()
                                             DashboardCategoryHub.MENGAJI -> onOpenInputMengaji()
                                             DashboardCategoryHub.ORANG_TUA -> onOpenPilihAnakAsuh()
+                                            DashboardCategoryHub.TABUNGAN -> onOpenInputTabungan(TabunganHelper.TYPE_IN, null)
                                         }
                                     }
                                     .testTag("btn_quick_action_category_hub")
@@ -489,6 +514,21 @@ fun CategoryHubOverlay(
                                     onOpenKartuAksesOrtu = onOpenKartuAksesOrtu,
                                     onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu,
                                     onOpenPesanOrtu = onOpenPesanOrtu
+                                )
+                                DashboardCategoryHub.TABUNGAN -> tabunganCategoryItems(
+                                    isEn = isEn,
+                                    allStudents = students,
+                                    claimedStudents = claimedFosterStudents,
+                                    transactions = tabunganTransactions,
+                                    logs = tabunganLogs,
+                                    isAnakSuperAdmin = isAnakSuperAdmin,
+                                    onOpenInputTabungan = onOpenInputTabungan,
+                                    onOpenStudentList = onOpenTabunganStudentList,
+                                    onOpenStudentDetail = onOpenTabunganStudentDetail,
+                                    onOpenHistoryLogs = onOpenTabunganHistory,
+                                    onOpenPdfSummary = onOpenTabunganPdfSummary,
+                                    onOpenPilihAnakAsuh = onOpenPilihAnakAsuh,
+                                    onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu
                                 )
                             }
                         }

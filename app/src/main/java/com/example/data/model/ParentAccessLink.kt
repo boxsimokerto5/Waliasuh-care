@@ -22,6 +22,7 @@ data class ParentAccessLink(
     val canViewFasting: Boolean = true,
     val canViewHaid: Boolean = true,
     val canViewProfile: Boolean = true,
+    val canViewTabungan: Boolean = false,
     val schoolId: String = "SRT1-KDR",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()

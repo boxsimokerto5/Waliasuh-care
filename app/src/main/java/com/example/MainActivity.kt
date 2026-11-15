@@ -257,10 +257,20 @@ private fun WaliAsuhCareAppContent(
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
+    val tabunganTransactions by viewModel.tabunganTransactions.collectAsStateWithLifecycle()
+    val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
     val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
+    var readyMainTabunganSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
+
+    LaunchedEffect(dashboardModalState.activeCategoryHub) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.TABUNGAN) {
+            viewModel.syncTabunganOnlineQuietly()
+        }
+    }
     val myFosterStudents = remember(students, waliName) {
         students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
     }
@@ -699,9 +709,96 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.selectedParentChatStudent = null
                     dashboardModalState.showPesanOrtuSheet = true
+                },
+                tabunganTransactions = tabunganTransactions,
+                tabunganLogs = tabunganLogs,
+                claimedFosterStudents = myFosterStudents,
+                isAnakSuperAdmin = isAnakSuperAdmin,
+                onOpenInputTabungan = { defaultType, targetStudent ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.inputTabunganDefaultType = defaultType
+                    dashboardModalState.inputTabunganTargetStudent = targetStudent
+                    dashboardModalState.showInputTabunganDialog = true
+                },
+                onOpenTabunganStudentList = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showTabunganStudentListSheet = true
+                },
+                onOpenTabunganStudentDetail = { student ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.tabunganStudentForDetail = student
+                },
+                onOpenTabunganHistory = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.tabunganHistoryInitialTab = 0
+                    dashboardModalState.showTabunganHistoryLogsSheet = true
+                },
+                onOpenTabunganPdfSummary = {
+                    TopOnAdManager.onUserActionClick(context)
+                    val summaryStudents = if (myFosterStudents.isNotEmpty()) {
+                        myFosterStudents
+                    } else {
+                        students.filter { st ->
+                            tabunganTransactions.any { tx -> com.example.data.model.TabunganHelper.matchesStudent(tx, st) }
+                        }
+                    }
+                    val pdf = com.example.util.PdfReportGenerator.generateTabunganSummaryPdf(
+                        context = context,
+                        students = summaryStudents,
+                        transactions = tabunganTransactions,
+                        waliName = waliName,
+                        schoolProfile = schoolProfile
+                    )
+                    if (pdf != null) {
+                        readyMainTabunganSummaryPdf = pdf
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Failed to generate savings recap PDF." else "Gagal membuat PDF rekap tabungan.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             )
         }
+    }
+
+    readyMainTabunganSummaryPdf?.let { pdfFile ->
+        AlertDialog(
+            onDismissRequest = { readyMainTabunganSummaryPdf = null },
+            title = { Text(if (s.isEnglish) "Savings Recap PDF Ready" else "PDF Rekap Tabungan Siap") },
+            text = {
+                Text(
+                    if (s.isEnglish) "Choose to open the private savings recap PDF or share it."
+                    else "Pilih untuk membuka atau membagikan laporan PDF saldo tabungan anak binaan."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        readyMainTabunganSummaryPdf = null
+                        com.example.util.PdfReportGenerator.openPdfFile(context, pdfFile)
+                    }
+                ) {
+                    Text(if (s.isEnglish) "Open PDF" else "Buka PDF")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        readyMainTabunganSummaryPdf = null
+                        com.example.util.PdfReportGenerator.shareFastingPdf(
+                            context = context,
+                            pdfFile = pdfFile,
+                            subject = if (s.isEnglish) "Private Savings Recap" else "Rekap Tabungan Anak Binaan",
+                            text = if (s.isEnglish) "Attached is the private student savings balance recap PDF." else "Terlampir rekap saldo tabungan pribadi wali asuh."
+                        )
+                    }
+                ) {
+                    Text(if (s.isEnglish) "Share PDF" else "Bagikan")
+                }
+            }
+        )
     }
 
     // Modal Notifikasi Ringkas saat klik Lonceng Atas (Google Maps Style Bottom Sheet)

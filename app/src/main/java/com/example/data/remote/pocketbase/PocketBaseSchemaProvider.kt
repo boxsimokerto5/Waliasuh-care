@@ -30,7 +30,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.44.0 • 16 Koleksi Multi-Tenant + Peran Guru Ngaji (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.45.0 • 18 Koleksi Multi-Tenant + Tabungan Pribadi Wali Asuh (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -351,6 +351,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("can_view_fasting", "bool"),
                 PbFieldDef("can_view_haid", "bool"),
                 PbFieldDef("can_view_profile", "bool"),
+                PbFieldDef("can_view_tabungan", "bool"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),
@@ -418,6 +419,60 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("created_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_dl_school ON deletion_logs (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "tabungan_transactions",
+            description = "Transaksi penitipan uang pribadi siswa kepada Wali Asuh (isolasi pribadi per owner_wali_username)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("owner_wali_username", "text"),
+                PbFieldDef("owner_wali_name", "text"),
+                PbFieldDef("is_private", "bool"),
+                PbFieldDef("transaction_type", "text"),
+                PbFieldDef("amount", "number"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("notes", "text"),
+                PbFieldDef("transaction_date", "number"),
+                PbFieldDef("status", "text"),
+                PbFieldDef("cancelled_by", "text"),
+                PbFieldDef("cancelled_reason", "text"),
+                PbFieldDef("cancelled_at", "number"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_tt_school ON tabungan_transactions (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "tabungan_logs",
+            description = "Log audit & riwayat perubahan tabungan pribadi (input, batalkan, hapus) per Wali Asuh",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("transaction_id", "number"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("owner_wali_username", "text"),
+                PbFieldDef("owner_wali_name", "text"),
+                PbFieldDef("is_private", "bool"),
+                PbFieldDef("action_type", "text"),
+                PbFieldDef("amount", "number"),
+                PbFieldDef("balance_before", "number"),
+                PbFieldDef("balance_after", "number"),
+                PbFieldDef("summary", "text"),
+                PbFieldDef("actor_name", "text"),
+                PbFieldDef("actor_username", "text"),
+                PbFieldDef("created_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_tl_school ON tabungan_logs (school_id)")
         )
     )
 

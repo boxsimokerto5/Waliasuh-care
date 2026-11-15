@@ -107,6 +107,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_mengaji,
             tileBg = Color(0xFFD1FAE5)
         )
+        DashboardIconKey.TABUNGAN -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Savings" else "Tabungan",
+            imageRes = R.drawable.img_menu_tabungan,
+            tileBg = Color(0xFFFEF3C7)
+        )
     }
 }
 
@@ -184,6 +190,8 @@ fun QuickMenuTiles(
     todayVisitsCount: Int = 0,
     unreadParentMessagesCount: Int = 0,
     myFosterStudentsCount: Int = 0,
+    tabunganTotalBalance: Long = 0L,
+    tabunganHoldersCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     iconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
@@ -310,6 +318,20 @@ fun QuickMenuTiles(
                     badgeBg = Color(0xFF047857),
                     testTag = "category_mengaji",
                     onClick = { onOpenCategoryHub(DashboardCategoryHub.MENGAJI) }
+                )
+            }
+            DashboardIconKey.TABUNGAN -> {
+                val tabunganBadge = when {
+                    tabunganHoldersCount > 0 -> "$tabunganHoldersCount ${if (isEn) "Kids" else "Anak"}"
+                    tabunganTotalBalance > 0L -> if (isEn) "Active" else "Aktif"
+                    else -> if (isEn) "Private" else "Privat"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = tabunganBadge,
+                    badgeBg = Color(0xFFD97706),
+                    testTag = "category_tabungan",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.TABUNGAN) }
                 )
             }
         }
