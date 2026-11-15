@@ -142,9 +142,20 @@ object NotificationHelper {
     }
 
     /**
-     * Notifikasi uji coba (test) agar pengguna dapat langsung memverifikasi sistem notifikasi resmi di perangkatnya.
+     * Membersihkan seluruh notifikasi aktif di panel perangkat (misal saat pengguna logout / berpindah akun sekolah).
      */
-    fun showTestNotification(context: Context) {
+    fun cancelAllNotifications(context: Context) {
+        try {
+            NotificationManagerCompat.from(context).cancelAll()
+        } catch (e: Exception) {
+            Log.w("NotificationHelper", "Failed to cancel notifications", e)
+        }
+    }
+
+    /**
+     * Notifikasi uji coba (test) agar pengguna dapat langsung memverifikasi fitur di perangkatnya.
+     */
+    fun showTestNotification(context: Context, schoolName: String = "") {
         val s = AppLanguageManager.getStrings(context).report
         showSickStudentNotification(
             context = context,
@@ -153,6 +164,7 @@ object NotificationHelper {
             roomNumber = "A-02",
             complaint = s.notifTestComplaint,
             faskes = "Puskesmas Wates",
+            schoolName = schoolName,
             notificationId = 9999
         )
     }

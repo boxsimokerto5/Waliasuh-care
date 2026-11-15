@@ -2926,6 +2926,10 @@ class ExampleRobolectricTest {
     }
 
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("student_detail_tab_row").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tab_student_detail_mengaji").performClick()
+    composeTestRule.waitForIdle()
+
     composeTestRule.onNodeWithTag("badge_student_latest_mengaji").performScrollTo().assertIsDisplayed()
     composeTestRule.onNodeWithTag("student_mengaji_item_701").performScrollTo().assertIsDisplayed()
 
@@ -3093,5 +3097,168 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
 
     assertEquals("Puasa Senin Kamis", createdTitle)
+  }
+
+  @Test
+  fun `verify StudentDetailDialog switches across Biodata, Mengaji, Berobat, and Puasa tabs`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 920L,
+      name = "Zaki Al-Farizi",
+      nis = "92001",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "IX-2",
+      nik = "3506150101100002",
+      district = "Plosoklaten",
+      schoolId = "SRT1-KDR"
+    )
+    val medRec = com.example.data.model.MedicalRecord(
+      id = 811L,
+      studentId = 920L,
+      studentName = "Zaki Al-Farizi",
+      studentDormitory = "Asrama Putra",
+      faskes = "Puskesmas Wates",
+      complaint = "Demam Tinggi",
+      diagnosis = "Febris",
+      planDate = 1794800000000L,
+      treatmentDate = 1794800000000L,
+      status = "COMPLETED"
+    )
+    val fastingRec = com.example.data.model.FastingRecord(
+      id = 911L,
+      sessionId = 50L,
+      sessionTitle = "Puasa Senin Kamis",
+      sessionDate = 1794800000000L,
+      studentId = 920L,
+      studentName = "Zaki Al-Farizi",
+      studentNik = "3506150101100002",
+      studentNis = "92001",
+      isSahurChecked = true,
+      sahurCheckedBy = "Ustadz Ahmad",
+      isBukaChecked = true,
+      bukaCheckedBy = "Ustadz Ahmad",
+      waliName = "Ustadz Ahmad",
+      schoolId = "SRT1-KDR"
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.StudentDetailDialog(
+          student = student,
+          studentRecords = listOf(medRec),
+          waliName = "Ustadz Ahmad",
+          mengajiRecords = emptyList(),
+          fastingRecords = listOf(fastingRec),
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    // Default tab: Biodata
+    composeTestRule.onNodeWithTag("section_student_biodata").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Plosoklaten").performScrollTo().assertIsDisplayed()
+
+    // Switch to Berobat tab
+    composeTestRule.onNodeWithTag("tab_student_detail_berobat").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("student_medical_item_811").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("Keluhan: Demam Tinggi").performScrollTo().assertIsDisplayed()
+
+    // Switch to Puasa tab
+    composeTestRule.onNodeWithTag("tab_student_detail_puasa").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("student_fasting_item_911").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("Puasa Senin Kamis").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("Sahur • Terlaksana").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("Berbuka • Terlaksana").performScrollTo().assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify incoming cloud synced treatment plan notifications strictly isolate by logged-in tenant`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_notif_prefs", android.content.Context.MODE_PRIVATE)
+      .edit().clear().apply()
+    val vm = com.example.ui.HealthViewModel(app)
+
+    val studentSchoolA = com.example.data.model.ChildStudent(
+      id = 5001L,
+      name = "Santri Sekolah A",
+      nis = "5001",
+      gender = "L",
+      age = 14,
+      dormitory = "Asrama A",
+      classGrade = "VIII-1",
+      schoolId = "SEKOLAH-A"
+    )
+    val plannedRecordA = com.example.data.model.MedicalRecord(
+      id = 9001L,
+      studentId = 5001L,
+      studentName = "Santri Sekolah A",
+      studentDormitory = "Asrama A",
+      faskes = "Puskesmas A",
+      complaint = "Batuk",
+      isDirectTreatment = false,
+      planDate = System.currentTimeMillis(),
+      status = "PLANNED"
+    )
+    val completedRecordA = plannedRecordA.copy(id = 9002L, status = "COMPLETED")
+
+    // 1. User belum login -> Tidak ada notifikasi yang muncul
+    vm.logout()
+    org.junit.Assert.assertFalse(
+      vm.shouldNotifyIncomingSyncedPlan(plannedRecordA, "SEKOLAH-A", "SEKOLAH-A")
+    )
+    assertEquals(
+      0,
+      vm.processIncomingRemoteMedicalRecords(listOf(plannedRecordA), listOf(studentSchoolA), "SEKOLAH-A")
+    )
+
+    // 2. User login di Sekolah B -> Tidak menerima notifikasi dari Sekolah A
+    vm.switchRoleToWali()
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = "SEKOLAH-B",
+        schoolName = "Sekolah Rakyat B"
+      )
+    )
+    org.junit.Assert.assertFalse(
+      vm.shouldNotifyIncomingSyncedPlan(plannedRecordA, "SEKOLAH-A", "SEKOLAH-A")
+    )
+    assertEquals(
+      0,
+      vm.processIncomingRemoteMedicalRecords(listOf(plannedRecordA), listOf(studentSchoolA), "SEKOLAH-A")
+    )
+
+    // 3. User login di Sekolah A -> Menerima notifikasi rencana PLANNED baru Sekolah A, tepat satu kali
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = "SEKOLAH-A",
+        schoolName = "Sekolah Rakyat A"
+      )
+    )
+    org.junit.Assert.assertTrue(
+      vm.shouldNotifyIncomingSyncedPlan(plannedRecordA, "SEKOLAH-A", "SEKOLAH-A")
+    )
+    org.junit.Assert.assertFalse(
+      vm.shouldNotifyIncomingSyncedPlan(completedRecordA, "SEKOLAH-A", "SEKOLAH-A")
+    )
+    assertEquals(
+      1,
+      vm.processIncomingRemoteMedicalRecords(
+        listOf(plannedRecordA, completedRecordA),
+        listOf(studentSchoolA),
+        "SEKOLAH-A"
+      )
+    )
+    // Sync ulang untuk ID yang sama tidak mengirim notifikasi duplikat
+    assertEquals(
+      0,
+      vm.processIncomingRemoteMedicalRecords(listOf(plannedRecordA), listOf(studentSchoolA), "SEKOLAH-A")
+    )
   }
 }

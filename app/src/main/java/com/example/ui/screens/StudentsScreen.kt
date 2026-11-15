@@ -81,6 +81,7 @@ fun StudentsScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var showCardGeneratorSheet by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
@@ -334,6 +335,7 @@ fun StudentsScreen(
             schoolProfile = schoolProfile,
             waliName = waliName,
             mengajiRecords = studentMengaji,
+            fastingRecords = fastingRecords,
             onInputMengaji = { target ->
                 selectedStudentForDetail = null
                 studentForMengajiInput = target

@@ -861,7 +861,8 @@ object PocketBaseSyncManager {
         repository: HealthRepository,
         localSchoolProfile: SchoolProfile? = null,
         localProfileUpdatedAt: Long = 0L,
-        onRemoteSchoolProfileUpdated: ((SchoolProfile, Long) -> Unit)? = null
+        onRemoteSchoolProfileUpdated: ((SchoolProfile, Long) -> Unit)? = null,
+        onNewRemoteMedicalRecords: ((List<MedicalRecord>, List<ChildStudent>, String) -> Unit)? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         if (!PocketBaseConfig.isConfigured(context)) {
@@ -987,8 +988,12 @@ object PocketBaseSyncManager {
                         val loc = localById[rem.id]
                         loc == null || medicalRecordTimestamp(rem) >= medicalRecordTimestamp(loc)
                     }
+                    val newlyInsertedRemote = toInsertLocal.filter { localById[it.id] == null }
                     if (toInsertLocal.isNotEmpty()) {
                         repository.insertAllRecords(toInsertLocal)
+                    }
+                    if (newlyInsertedRemote.isNotEmpty()) {
+                        onNewRemoteMedicalRecords?.invoke(newlyInsertedRemote, syncedStudents, cleanSchoolId)
                     }
 
                     val toPushRemote = localRecords.filter { loc ->

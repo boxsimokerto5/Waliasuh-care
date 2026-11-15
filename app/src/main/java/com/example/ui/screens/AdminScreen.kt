@@ -1581,6 +1581,7 @@ fun AdminScreen(
             schoolProfile = schoolProfile,
             waliName = schoolProfile.adminName.ifBlank { waliName },
             mengajiRecords = MengajiHelper.recordsForStudent(mengajiRecords, student),
+            fastingRecords = fastingRecords,
             onInputMengaji = { target ->
                 selectedDetailStudent = null
                 studentForMengajiInput = target

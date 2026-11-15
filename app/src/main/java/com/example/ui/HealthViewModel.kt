@@ -51,6 +51,7 @@ sealed class LoginResult {
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: HealthRepository
     private val authPrefs = application.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE)
+    private val notifPrefs = application.getSharedPreferences("waliasuh_notif_prefs", Context.MODE_PRIVATE)
 
     init {
         AppLanguageManager.init(application)
@@ -155,6 +156,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                             localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
                             onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                                 applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                            },
+                            onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                                processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
                             }
                         )
                     }
@@ -165,6 +169,35 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     }
                 }
                 else -> Unit
+            }
+            startMultiTenantForegroundSyncLoop()
+        }
+    }
+
+    private fun startMultiTenantForegroundSyncLoop() {
+        viewModelScope.launch {
+            while (true) {
+                kotlinx.coroutines.delay(45_000L)
+                val role = _currentUserRole.value
+                if (role != UserRole.ADMIN && role != UserRole.WALI) continue
+                if (_isSyncing.value) continue
+                if (!PocketBaseConfig.isConfigured(getApplication())) continue
+                val activeCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+                runCatching {
+                    PocketBaseSyncManager.syncAllSchoolData(
+                        context = getApplication(),
+                        schoolId = activeCode,
+                        repository = repository,
+                        localSchoolProfile = _schoolProfile.value,
+                        localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
+                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                        },
+                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
+                        }
+                    )
+                }
             }
         }
     }
@@ -1080,6 +1113,32 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private fun notifHistoryKey(schoolId: String): String {
+        val clean = schoolId.trim().uppercase().ifBlank { "SRT1-KDR" }
+        return "notified_plan_ids_$clean"
+    }
+
+    private fun hasPlanBeenNotified(schoolId: String, recordId: Long): Boolean {
+        val raw = notifPrefs.getString(notifHistoryKey(schoolId), "").orEmpty()
+        if (raw.isBlank()) return false
+        return raw.split(",").any { it == recordId.toString() }
+    }
+
+    private fun markPlanNotified(schoolId: String, recordId: Long) {
+        if (recordId <= 0L) return
+        val key = notifHistoryKey(schoolId)
+        val existing = notifPrefs.getString(key, "").orEmpty()
+            .split(",")
+            .filter { it.isNotBlank() }
+            .toMutableList()
+        val idStr = recordId.toString()
+        if (!existing.contains(idStr)) {
+            existing.add(idStr)
+            val trimmed = if (existing.size > 300) existing.takeLast(300) else existing
+            notifPrefs.edit().putString(key, trimmed.joinToString(",")).apply()
+        }
+    }
+
     /**
      * Memverifikasi apakah notifikasi boleh dimunculkan untuk siswa tertentu.
      * Dalam arsitektur Multi-Tenant:
@@ -1094,6 +1153,54 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         val activeSchoolCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
         val targetSchoolCode = studentSchoolId.ifBlank { "SRT1-KDR" }
         return activeSchoolCode.equals(targetSchoolCode, ignoreCase = true)
+    }
+
+    /**
+     * Filter ketat notifikasi rencana berobat baru yang datang dari sinkronisasi PocketBase perangkat lain.
+     * User di Sekolah B atau yang belum login tidak akan pernah menerima notifikasi dari Sekolah A.
+     */
+    fun shouldNotifyIncomingSyncedPlan(
+        record: MedicalRecord,
+        studentSchoolId: String,
+        syncedSchoolId: String
+    ): Boolean {
+        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN) return false
+        val targetSyncedSchool = syncedSchoolId.trim().ifBlank { "SRT1-KDR" }
+        val targetStudentSchool = studentSchoolId.trim().ifBlank { targetSyncedSchool }
+        if (!shouldTriggerNotificationForStudent(targetSyncedSchool)) return false
+        if (!shouldTriggerNotificationForStudent(targetStudentSchool)) return false
+        if (!record.status.equals("PLANNED", ignoreCase = true) || record.isDirectTreatment) return false
+        return !hasPlanBeenNotified(targetSyncedSchool, record.id)
+    }
+
+    fun processIncomingRemoteMedicalRecords(
+        newRecords: List<MedicalRecord>,
+        schoolStudents: List<ChildStudent>,
+        syncedSchoolId: String
+    ): Int {
+        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN) return 0
+        val studentsById = schoolStudents.associateBy { it.id }
+        var notifiedCount = 0
+        newRecords.forEach { rec ->
+            val matchedStudent = studentsById[rec.studentId]
+            val studentSchool = matchedStudent?.schoolId?.ifBlank { syncedSchoolId } ?: syncedSchoolId
+            if (shouldNotifyIncomingSyncedPlan(rec, studentSchool, syncedSchoolId)) {
+                markPlanNotified(syncedSchoolId, rec.id)
+                NotificationHelper.showSickStudentNotification(
+                    context = getApplication(),
+                    studentName = matchedStudent?.name ?: rec.studentName,
+                    className = matchedStudent?.classGrade ?: "",
+                    roomNumber = matchedStudent?.roomNumber?.ifBlank { matchedStudent.dormitory }
+                        ?: rec.studentDormitory,
+                    complaint = rec.complaint,
+                    faskes = rec.faskes,
+                    schoolName = _schoolProfile.value.shortName,
+                    notificationId = ((rec.id % 100000L).toInt()).coerceAtLeast(1)
+                )
+                notifiedCount++
+            }
+        }
+        return notifiedCount
     }
 
     // Create Treatment Plan
@@ -1126,8 +1233,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             val newId = repository.insertRecord(record)
             val recordWithId = record.copy(id = newId)
+            markPlanNotified(activeSchool, newId)
             // Multi-tenant filter: Hanya kirim notifikasi resmi sistem Android jika user login di sekolah yang sama atau SuperAdmin
-            if (shouldTriggerNotificationForStudent(student.schoolId)) {
+            if (shouldTriggerNotificationForStudent(activeSchool)) {
                 NotificationHelper.showSickStudentNotification(
                     context = getApplication(),
                     studentName = student.name,
@@ -1437,9 +1545,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // Kirim notifikasi tes untuk memverifikasi fitur di perangkat pengguna
+    // Kirim notifikasi tes untuk memverifikasi fitur di perangkat pengguna (terikat tenant aktif)
     fun sendTestNotification() {
-        NotificationHelper.showTestNotification(getApplication())
+        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN) return
+        NotificationHelper.showTestNotification(
+            context = getApplication(),
+            schoolName = _schoolProfile.value.shortName
+        )
     }
 
     // Mark Control Visit as completed
@@ -1610,6 +1722,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 localProfileUpdatedAt = getProfileUpdatedAt(activeSchool),
                 onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                     applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                },
+                onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                    processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
                 }
             )
             _isSyncing.value = false
@@ -1781,6 +1896,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                             localProfileUpdatedAt = getProfileUpdatedAt(activeCode),
                             onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                                 applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                            },
+                            onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                                processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
                             }
                         )
                     }
@@ -1872,6 +1990,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         localProfileUpdatedAt = getProfileUpdatedAt(matchedSchool.generatedSchoolCode),
                         onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                             applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                        },
+                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
                         }
                     )
                 }
@@ -1951,6 +2072,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         localProfileUpdatedAt = getProfileUpdatedAt(activeSchoolCode),
                         onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
                             applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                        },
+                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
                         }
                     )
                 }
@@ -2234,6 +2358,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         _currentUserRole.value = UserRole.NOT_LOGGED_IN
         _currentUsername.value = null
         authPrefs.edit().clear().apply()
+        NotificationHelper.cancelAllNotifications(getApplication())
     }
 
     fun switchRoleToAdmin() {
