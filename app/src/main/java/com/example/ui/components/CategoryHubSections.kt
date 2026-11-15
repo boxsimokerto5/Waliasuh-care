@@ -1192,7 +1192,7 @@ internal fun LazyListScope.orangTuaCategoryItems(
             ) {
                 CartoonMenuCard(
                     title = if (isEn) "Access Options" else "Pilihan Akses",
-                    subtitle = if (isEn) "Mengaji, Sick & Fasting" else "Mengaji, Sakit & Puasa",
+                    subtitle = if (isEn) "Profile, Mengaji, Sick, Fasting & Haid" else "Profil, Mengaji, Sakit, Puasa & Haid",
                     imageRes = R.drawable.img_menu_checklist_puasa,
                     badgeText = if (isEn) "Controls" else "Kontrol",
                     badgeBg = Color(0xFFDCFCE7),

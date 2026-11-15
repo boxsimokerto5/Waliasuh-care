@@ -53,7 +53,7 @@ import com.example.data.model.VisitSession
         ParentAccessLink::class,
         ParentMessage::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -316,6 +316,8 @@ abstract class AppDatabase : RoomDatabase() {
                         canViewMengaji INTEGER NOT NULL DEFAULT 1,
                         canViewMedical INTEGER NOT NULL DEFAULT 1,
                         canViewFasting INTEGER NOT NULL DEFAULT 1,
+                        canViewHaid INTEGER NOT NULL DEFAULT 1,
+                        canViewProfile INTEGER NOT NULL DEFAULT 1,
                         schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
                         createdAt INTEGER NOT NULL DEFAULT 0,
                         updatedAt INTEGER NOT NULL DEFAULT 0
@@ -344,6 +346,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_18_19 = object : androidx.room.migration.Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE parent_access_links ADD COLUMN canViewHaid INTEGER NOT NULL DEFAULT 1")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE parent_access_links ADD COLUMN canViewProfile INTEGER NOT NULL DEFAULT 1")
+                } catch (_: Exception) {}
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -362,7 +375,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_14_15,
                         MIGRATION_15_16,
                         MIGRATION_16_17,
-                        MIGRATION_17_18
+                        MIGRATION_17_18,
+                        MIGRATION_18_19
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

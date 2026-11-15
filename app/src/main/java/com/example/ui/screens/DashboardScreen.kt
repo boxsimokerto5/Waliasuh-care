@@ -175,11 +175,18 @@ fun DashboardScreen(
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
-    val myFosterStudentsCount = remember(students, waliName) {
-        students.count { viewModel.isStudentClaimedByCurrentWali(it) }
+    val myFosterStudents = remember(students, waliName) {
+        students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
     }
-    val unreadParentMessagesCount = remember(parentMessages) {
-        parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
+    val myFosterStudentIds = remember(myFosterStudents) {
+        myFosterStudents.map { it.id }.toSet()
+    }
+    val myFosterStudentsCount = myFosterStudents.size
+    val myFosterParentMessages = remember(parentMessages, myFosterStudentIds) {
+        parentMessages.filter { it.studentId in myFosterStudentIds }
+    }
+    val unreadParentMessagesCount = remember(myFosterParentMessages) {
+        myFosterParentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
     }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -965,7 +972,7 @@ fun DashboardScreen(
                 visitSessions = visitSessions,
                 visitRecords = visitRecords,
                 parentAccessLinks = parentAccessLinks,
-                parentMessages = parentMessages,
+                parentMessages = myFosterParentMessages,
                 myFosterStudentsCount = myFosterStudentsCount,
                 isAdmin = isAdminUser,
                 onDismiss = { modalState.activeCategoryHub = null },
@@ -1883,6 +1890,10 @@ fun DashboardScreen(
             schoolProfile = schoolProfile,
             isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
             isAdmin = isAdminUser,
+            onOpenPilihAnakAsuh = {
+                modalState.showKartuAksesOrtuSheet = false
+                modalState.showPilihAnakAsuhSheet = true
+            },
             onGenerateAccessCard = { st ->
                 viewModel.ensureParentAccessLinkForStudent(st) {
                     Toast.makeText(
@@ -1908,18 +1919,29 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 3: Pilihan Akses (Mengaji, Sakit, Puasa)
+    // Modal Hubungan Orang Tua 3: Pilihan Akses (Profil, Mengaji, Sakit, Puasa, Haid)
     if (modalState.showPilihanAksesOrtuSheet) {
         PilihanAksesOrangTuaSheet(
             students = students,
             parentAccessLinks = parentAccessLinks,
             isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
             isAdmin = isAdminUser,
+            onOpenPilihAnakAsuh = {
+                modalState.showPilihanAksesOrtuSheet = false
+                modalState.showPilihAnakAsuhSheet = true
+            },
             onEnsureAccessLink = { st ->
                 viewModel.ensureParentAccessLinkForStudent(st)
             },
-            onUpdatePermissions = { link, canMengaji, canMedical, canFasting ->
-                viewModel.updateParentAccessPermissions(link, canMengaji, canMedical, canFasting)
+            onUpdatePermissions = { link, canMengaji, canMedical, canFasting, canHaid, canProfile ->
+                viewModel.updateParentAccessPermissions(
+                    link = link,
+                    canMengaji = canMengaji,
+                    canMedical = canMedical,
+                    canFasting = canFasting,
+                    canHaid = canHaid,
+                    canProfile = canProfile
+                )
             },
             onDismiss = { modalState.showPilihanAksesOrtuSheet = false }
         )
@@ -1933,6 +1955,10 @@ fun DashboardScreen(
             isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
             isAdmin = isAdminUser,
             initialSelectedStudent = modalState.selectedParentChatStudent,
+            onOpenPilihAnakAsuh = {
+                modalState.showPesanOrtuSheet = false
+                modalState.showPilihAnakAsuhSheet = true
+            },
             onSendMessage = { st, content ->
                 viewModel.sendParentMessage(st, content, "WALI")
             },

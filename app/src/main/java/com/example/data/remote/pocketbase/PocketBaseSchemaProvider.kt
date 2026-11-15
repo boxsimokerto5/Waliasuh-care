@@ -348,6 +348,8 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("can_view_mengaji", "bool"),
                 PbFieldDef("can_view_medical", "bool"),
                 PbFieldDef("can_view_fasting", "bool"),
+                PbFieldDef("can_view_haid", "bool"),
+                PbFieldDef("can_view_profile", "bool"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),

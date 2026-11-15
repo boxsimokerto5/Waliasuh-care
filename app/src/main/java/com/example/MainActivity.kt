@@ -247,8 +247,15 @@ private fun WaliAsuhCareAppContent(
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
-    val myFosterStudentsCount = remember(students, waliName) {
-        students.count { viewModel.isStudentClaimedByCurrentWali(it) }
+    val myFosterStudents = remember(students, waliName) {
+        students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
+    }
+    val myFosterStudentIds = remember(myFosterStudents) {
+        myFosterStudents.map { it.id }.toSet()
+    }
+    val myFosterStudentsCount = myFosterStudents.size
+    val myFosterParentMessages = remember(parentMessages, myFosterStudentIds) {
+        parentMessages.filter { it.studentId in myFosterStudentIds }
     }
     val inpatientCount = remember(allRecords) {
         allRecords.count { it.isInpatient && it.status != "CANCELLED" }
@@ -544,7 +551,7 @@ private fun WaliAsuhCareAppContent(
                 visitSessions = visitSessions,
                 visitRecords = visitRecords,
                 parentAccessLinks = parentAccessLinks,
-                parentMessages = parentMessages,
+                parentMessages = myFosterParentMessages,
                 myFosterStudentsCount = myFosterStudentsCount,
                 isAdmin = (currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN),
                 onDismiss = { dashboardModalState.activeCategoryHub = null },

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.BottomSheetDefaults
@@ -40,6 +41,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
@@ -53,11 +55,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.ParentAccessLink
+import com.example.util.StudentClassifier
 import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -67,32 +71,33 @@ fun PilihanAksesOrangTuaSheet(
     parentAccessLinks: List<ParentAccessLink>,
     isStudentClaimedByCurrentWali: (ChildStudent) -> Boolean,
     isAdmin: Boolean,
+    onOpenPilihAnakAsuh: (() -> Unit)? = null,
     onEnsureAccessLink: (ChildStudent) -> Unit,
-    onUpdatePermissions: (ParentAccessLink, Boolean, Boolean, Boolean) -> Unit,
+    onUpdatePermissions: (ParentAccessLink, Boolean, Boolean, Boolean, Boolean, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
-    val hasClaimedStudents = remember(students, isStudentClaimedByCurrentWali) {
-        students.any { isStudentClaimedByCurrentWali(it) }
-    }
+    val claimedStudents = students.filter { isStudentClaimedByCurrentWali(it) }
     var searchQuery by remember { mutableStateOf("") }
-    var selectedScope by remember(hasClaimedStudents, isAdmin) {
-        mutableStateOf(if (hasClaimedStudents && !isAdmin) 0 else 1)
+    // Untuk Wali non-Admin: selalu fokus ke Anak Asuh Saya (0). Admin bisa memilih Semua Siswa (1) atau Anak Asuh Saya (0).
+    var selectedScope by remember(isAdmin) {
+        mutableStateOf(if (!isAdmin) 0 else 1)
     }
 
     val linkByStudentId = remember(parentAccessLinks) {
         parentAccessLinks.associateBy { it.studentId }
     }
 
-    val filteredStudents = remember(students, searchQuery, selectedScope, isStudentClaimedByCurrentWali, linkByStudentId) {
+    val effectiveScope = if (!isAdmin) 0 else selectedScope
+    val baseScopeStudents = if (effectiveScope == 0) claimedStudents else students
+
+    val filteredStudents = remember(baseScopeStudents, searchQuery, linkByStudentId) {
         val q = searchQuery.trim().lowercase()
-        students.filter { st ->
-            val scopeMatch = if (selectedScope == 0) isStudentClaimedByCurrentWali(st) else true
-            val queryMatch = q.isBlank() ||
+        baseScopeStudents.filter { st ->
+            q.isBlank() ||
                 st.name.lowercase().contains(q) ||
                 st.classGrade.lowercase().contains(q) ||
                 st.dormitory.lowercase().contains(q)
-            scopeMatch && queryMatch
         }.sortedWith(
             compareByDescending<ChildStudent> { linkByStudentId.containsKey(it.id) }
                 .thenBy { it.name }
@@ -151,9 +156,9 @@ fun PilihanAksesOrangTuaSheet(
                             )
                             Text(
                                 text = if (isEn) {
-                                    "Choose which history tabs parents can view"
+                                    "Choose modules & profile parents can view"
                                 } else {
-                                    "Centang riwayat yang boleh dilihat oleh orang tua"
+                                    "Centang profil & riwayat yang boleh dilihat orang tua"
                                 },
                                 fontSize = 11.5.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -167,44 +172,65 @@ fun PilihanAksesOrangTuaSheet(
                     }
                 }
 
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = {
-                        Text(if (isEn) "Search student name..." else "Cari nama siswa...", fontSize = 12.5.sp)
-                    },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                if (baseScopeStudents.isNotEmpty() || isAdmin) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = {
+                            Text(if (isEn) "Search student name..." else "Cari nama siswa...", fontSize = 12.5.sp)
+                        },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = if (isEn) "Clear" else "Bersihkan", modifier = Modifier.size(16.dp))
+                                }
                             }
-                        }
-                    },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_search_pilihan_akses")
-                )
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_search_pilihan_akses")
+                    )
+                }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val mineCount = students.count { isStudentClaimedByCurrentWali(it) }
-                    FilterChip(
-                        selected = selectedScope == 0,
-                        onClick = { selectedScope = 0 },
-                        label = { Text(if (isEn) "My Foster ($mineCount)" else "Anak Asuh Saya ($mineCount)", fontSize = 11.5.sp) }
-                    )
-                    FilterChip(
-                        selected = selectedScope == 1,
-                        onClick = { selectedScope = 1 },
-                        label = { Text(if (isEn) "All Students (${students.size})" else "Semua Siswa (${students.size})", fontSize = 11.5.sp) }
-                    )
+                if (isAdmin) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedScope == 0,
+                            onClick = { selectedScope = 0 },
+                            label = { Text(if (isEn) "My Foster (${claimedStudents.size})" else "Anak Asuh Saya (${claimedStudents.size})", fontSize = 11.5.sp) }
+                        )
+                        FilterChip(
+                            selected = selectedScope == 1,
+                            onClick = { selectedScope = 1 },
+                            label = { Text(if (isEn) "All Students (${students.size})" else "Semua Siswa (${students.size})", fontSize = 11.5.sp) }
+                        )
+                    }
+                } else if (claimedStudents.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color(0xFFDCFCE7),
+                        border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "My Selected Foster Kids: ${claimedStudents.size}"
+                            } else {
+                                "Anak Asuh Terpilih: ${claimedStudents.size} siswa"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF15803D),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
                 }
 
                 LazyColumn(
@@ -214,7 +240,75 @@ fun PilihanAksesOrangTuaSheet(
                         .heightIn(min = 200.dp, max = 440.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    if (filteredStudents.isEmpty()) {
+                    if (effectiveScope == 0 && claimedStudents.isEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp)
+                                    .testTag("empty_pilihan_akses_no_claimed"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 22.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFDCFCE7)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PersonAdd,
+                                            contentDescription = null,
+                                            tint = Color(0xFF15803D),
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isEn) "No Foster Students Selected Yet" else "Belum Ada Anak Asuh Dipilih",
+                                        fontSize = 14.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = if (isEn) {
+                                            "Select your foster students in Select Foster Kids first to configure their parent access permissions."
+                                        } else {
+                                            "Pilih siswa binaan terlebih dahulu di menu Pilih Anak Asuh agar dapat mengatur izin akses orang tua."
+                                        },
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    if (onOpenPilihAnakAsuh != null) {
+                                        Button(
+                                            onClick = onOpenPilihAnakAsuh,
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_open_pilih_anak_asuh_from_perm")
+                                        ) {
+                                            Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = if (isEn) "Select Foster Students" else "Pilih Anak Asuh Sekarang",
+                                                fontSize = 12.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else if (filteredStudents.isEmpty()) {
                         item {
                             Box(
                                 modifier = Modifier
@@ -223,7 +317,7 @@ fun PilihanAksesOrangTuaSheet(
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
-                                    text = if (isEn) "No students to configure." else "Belum ada siswa yang dapat diatur.",
+                                    text = if (isEn) "No students to configure." else "Belum ada siswa yang cocok.",
                                     fontSize = 12.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -232,6 +326,7 @@ fun PilihanAksesOrangTuaSheet(
                     } else {
                         items(filteredStudents, key = { "perm_${it.id}" }) { student ->
                             val link = linkByStudentId[student.id]
+                            val isFemale = StudentClassifier.isFemaleStudent(student)
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -280,11 +375,20 @@ fun PilihanAksesOrangTuaSheet(
 
                                     if (link != null) {
                                         PermissionCheckboxRow(
+                                            label = if (isEn) "Child Profile & Biodata" else "Profil & Biodata Anak",
+                                            checked = link.canViewProfile,
+                                            accentColor = Color(0xFF4338CA),
+                                            onCheckedChange = { checked ->
+                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, link.canViewHaid, checked)
+                                            },
+                                            testTag = "chk_access_profile_${student.id}"
+                                        )
+                                        PermissionCheckboxRow(
                                             label = if (isEn) "Mengaji History (Progress & Fluency)" else "Riwayat Mengaji (Jilid & Kelancaran)",
                                             checked = link.canViewMengaji,
                                             accentColor = Color(0xFF047857),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, checked, link.canViewMedical, link.canViewFasting)
+                                                onUpdatePermissions(link, checked, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile)
                                             },
                                             testTag = "chk_access_mengaji_${student.id}"
                                         )
@@ -293,7 +397,7 @@ fun PilihanAksesOrangTuaSheet(
                                             checked = link.canViewMedical,
                                             accentColor = Color(0xFF0284C7),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, link.canViewMengaji, checked, link.canViewFasting)
+                                                onUpdatePermissions(link, link.canViewMengaji, checked, link.canViewFasting, link.canViewHaid, link.canViewProfile)
                                             },
                                             testTag = "chk_access_medical_${student.id}"
                                         )
@@ -302,10 +406,21 @@ fun PilihanAksesOrangTuaSheet(
                                             checked = link.canViewFasting,
                                             accentColor = Color(0xFF0F766E),
                                             onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, checked)
+                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, checked, link.canViewHaid, link.canViewProfile)
                                             },
                                             testTag = "chk_access_fasting_${student.id}"
                                         )
+                                        if (isFemale) {
+                                            PermissionCheckboxRow(
+                                                label = if (isEn) "Haid History (Cycle & Suci)" else "Riwayat Haid (Siklus & Masa Suci)",
+                                                checked = link.canViewHaid,
+                                                accentColor = Color(0xFFDB2777),
+                                                onCheckedChange = { checked ->
+                                                    onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, checked, link.canViewProfile)
+                                                },
+                                                testTag = "chk_access_haid_${student.id}"
+                                            )
+                                        }
                                     }
                                 }
                             }

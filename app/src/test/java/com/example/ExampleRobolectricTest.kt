@@ -3974,13 +3974,25 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("parent_portal_screen").assertIsDisplayed()
     composeTestRule.onNodeWithTag("parent_tab_home").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("parent_tab_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_profile").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_mengaji").performScrollTo().assertIsDisplayed()
     composeTestRule.onNodeWithTag("parent_tab_medical").assertDoesNotExist()
     composeTestRule.onNodeWithTag("parent_tab_fasting").assertDoesNotExist()
-    composeTestRule.onNodeWithTag("parent_tab_messages").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_haid").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_messages").performScrollTo().assertIsDisplayed()
+
+    // Open Profile tab -> verify biodata renders
+    composeTestRule.onNodeWithTag("parent_tab_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_profile_content").assertIsDisplayed()
+
+    // Open Haid tab -> verify female haid cycle tab renders
+    composeTestRule.onNodeWithTag("parent_tab_haid").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_haid_list").assertIsDisplayed()
 
     // Open Messages tab and send a message from Parent to Wali Asuh
-    composeTestRule.onNodeWithTag("parent_tab_messages").performClick()
+    composeTestRule.onNodeWithTag("parent_tab_messages").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("input_parent_portal_message").performTextInput("Assalamualaikum ustadzah, bagaimana kabar Nadia?")
     composeTestRule.onNodeWithTag("btn_parent_portal_send").performClick()
@@ -3994,5 +4006,302 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertTrue(
       vm.parentMessages.value.any { it.studentId == 9301L && it.senderRole == "PARENT" }
     )
+  }
+
+  @Test
+  fun `verify PesanOrangTuaSheet displays only claimed foster students and empty state CTA when none claimed`(): Unit = kotlinx.coroutines.runBlocking {
+    val claimedStudent = com.example.data.model.ChildStudent(
+      id = 9401L,
+      name = "Alya Zahira",
+      nis = "31990101",
+      gender = "P",
+      age = 12,
+      dormitory = "Asrama Putri",
+      classGrade = "VII-A",
+      motherName = "Ibu Aminah",
+      assignedWaliUsername = "ustsari",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = "SRT1-KDR"
+    )
+    val otherStudent = com.example.data.model.ChildStudent(
+      id = 9402L,
+      name = "Abimanyu Satria",
+      nis = "31990102",
+      gender = "L",
+      age = 12,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-B",
+      motherName = "Ibu Mujiati",
+      assignedWaliUsername = "",
+      assignedWaliName = "",
+      schoolId = "SRT1-KDR"
+    )
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val alyaClaimedState = androidx.compose.runtime.mutableStateOf(false)
+
+    // 1. When 0 students claimed -> show empty state + Pilih Anak Asuh CTA, hide unclaimed students
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val isAlyaClaimed = alyaClaimedState.value
+        com.example.ui.dialogs.PesanOrangTuaSheet(
+          students = listOf(claimedStudent, otherStudent),
+          parentMessages = emptyList(),
+          isStudentClaimedByCurrentWali = { st -> isAlyaClaimed && st.id == 9401L },
+          isAdmin = false,
+          onOpenPilihAnakAsuh = { alyaClaimedState.value = true },
+          onSendMessage = { _, _ -> },
+          onMarkRead = {},
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("empty_pesan_ortu_no_claimed").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_open_pilih_anak_asuh_from_chat").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_chat_student_9401").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("card_chat_student_9402").assertDoesNotExist()
+
+    // 2. Tap CTA -> simulate claiming Alya -> only Alya appears, Abimanyu stays hidden
+    composeTestRule.onNodeWithTag("btn_open_pilih_anak_asuh_from_chat").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_chat_student_9401").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_chat_student_9402").assertDoesNotExist()
+  }
+
+  @Test
+  fun `verify PilihanAksesOrangTuaSheet scopes to claimed students and shows Haid option only for female`(): Unit = kotlinx.coroutines.runBlocking {
+    val femaleStudent = com.example.data.model.ChildStudent(
+      id = 9501L,
+      name = "Nafa Raidatul Kusna",
+      nis = "31990501",
+      gender = "P",
+      age = 15,
+      dormitory = "Asrama Putri",
+      classGrade = "X-1",
+      motherName = "Ibu Mujiati",
+      assignedWaliUsername = "ustsari",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = "SRT1-KDR"
+    )
+    val maleStudent = com.example.data.model.ChildStudent(
+      id = 9502L,
+      name = "Abimanyu Satria",
+      nis = "31990502",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-1",
+      motherName = "Ibu Ani",
+      assignedWaliUsername = "ustsari",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = "SRT1-KDR"
+    )
+    val links = listOf(
+      com.example.data.model.ParentAccessLink(
+        id = 9511L,
+        studentId = 9501L,
+        studentName = femaleStudent.name,
+        studentNis = femaleStudent.nis,
+        studentClass = femaleStudent.classGrade,
+        studentDorm = femaleStudent.dormitory,
+        parentName = femaleStudent.motherName,
+        username = "ortu_nafa_0501",
+        password = "Pass#1234",
+        canViewMengaji = true,
+        canViewMedical = true,
+        canViewFasting = true,
+        canViewHaid = true,
+        canViewProfile = true,
+        schoolId = "SRT1-KDR"
+      ),
+      com.example.data.model.ParentAccessLink(
+        id = 9512L,
+        studentId = 9502L,
+        studentName = maleStudent.name,
+        studentNis = maleStudent.nis,
+        studentClass = maleStudent.classGrade,
+        studentDorm = maleStudent.dormitory,
+        parentName = maleStudent.motherName,
+        username = "ortu_abi_0502",
+        password = "Pass#5678",
+        canViewMengaji = true,
+        canViewMedical = true,
+        canViewFasting = true,
+        canViewHaid = true,
+        canViewProfile = true,
+        schoolId = "SRT1-KDR"
+      )
+    )
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val claimedState = androidx.compose.runtime.mutableStateOf(false)
+    val lastUpdatedProfile = androidx.compose.runtime.mutableStateOf<Boolean?>(null)
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val isClaimed = claimedState.value
+        com.example.ui.dialogs.PilihanAksesOrangTuaSheet(
+          students = listOf(femaleStudent, maleStudent),
+          parentAccessLinks = links,
+          isStudentClaimedByCurrentWali = { isClaimed },
+          isAdmin = false,
+          onOpenPilihAnakAsuh = { claimedState.value = true },
+          onEnsureAccessLink = {},
+          onUpdatePermissions = { _, _, _, _, _, canProfile ->
+            lastUpdatedProfile.value = canProfile
+          },
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    // Non-admin Wali with 0 claimed students sees empty state + CTA and no student cards
+    composeTestRule.onNodeWithTag("empty_pilihan_akses_no_claimed").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_open_pilih_anak_asuh_from_perm").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_pilihan_akses_9501").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("card_pilihan_akses_9502").assertDoesNotExist()
+
+    // Simulate claiming both students
+    composeTestRule.onNodeWithTag("btn_open_pilih_anak_asuh_from_perm").performClick()
+    composeTestRule.waitForIdle()
+
+    // Male student (Abimanyu) appears first alphabetically: has Profil, must NOT have Haid checkbox
+    composeTestRule.onNodeWithTag("chk_access_profile_9502").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("chk_access_haid_9502").assertDoesNotExist()
+
+    // Search for female student (Nafa) -> brings her card to top: shows Profil + all modules + Haid checkbox
+    composeTestRule.onNodeWithTag("input_search_pilihan_akses").performTextInput("Nafa")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("chk_access_profile_9501").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("chk_access_haid_9501").assertExists()
+
+    // Clicking Profile checkbox invokes onUpdatePermissions with false
+    composeTestRule.onNodeWithTag("chk_access_profile_9501").performClick()
+    composeTestRule.waitForIdle()
+    org.junit.Assert.assertEquals(false, lastUpdatedProfile.value)
+  }
+
+  @Test
+  fun `verify KartuAksesOrangTuaSheet scopes to claimed foster students for non-admin Wali`(): Unit = kotlinx.coroutines.runBlocking {
+    val student = com.example.data.model.ChildStudent(
+      id = 9601L,
+      name = "Sofa Lailiya",
+      nis = "31990601",
+      gender = "P",
+      age = 15,
+      dormitory = "Asrama Putri",
+      classGrade = "X-1",
+      motherName = "Ibu Fatimah",
+      assignedWaliUsername = "ustsari",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = "SRT1-KDR"
+    )
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val claimed = androidx.compose.runtime.mutableStateOf(false)
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val isClaimed = claimed.value
+        com.example.ui.dialogs.KartuAksesOrangTuaSheet(
+          students = listOf(student),
+          parentAccessLinks = emptyList(),
+          schoolProfile = com.example.data.model.SchoolProfile(),
+          isStudentClaimedByCurrentWali = { isClaimed && it.id == 9601L },
+          isAdmin = false,
+          onOpenPilihAnakAsuh = { claimed.value = true },
+          onGenerateAccessCard = {},
+          onResetPassword = {},
+          onEditStudentProfile = {},
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("empty_kartu_ortu_no_claimed").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_open_pilih_anak_asuh_from_cards").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_unlinked_9601").assertDoesNotExist()
+
+    composeTestRule.onNodeWithTag("btn_open_pilih_anak_asuh_from_cards").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_parent_unlinked_9601").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify ParentPortalScreen hides Haid tab for male student even when link canViewHaid is true and DTO roundtrip preserves fields`(): Unit = kotlinx.coroutines.runBlocking {
+    // 1. PocketBase DTO round-trip preserves canViewHaid & canViewProfile
+    val originalLink = com.example.data.model.ParentAccessLink(
+      id = 9711L,
+      studentId = 9701L,
+      studentName = "Ahmad Fauzi",
+      studentNis = "31990701",
+      studentClass = "VIII-A",
+      studentDorm = "Asrama Putra",
+      parentName = "Bapak Hasan",
+      username = "ortu_fauzi_0701",
+      password = "Ortu#9999",
+      canViewMengaji = true,
+      canViewMedical = true,
+      canViewFasting = true,
+      canViewHaid = false,
+      canViewProfile = false,
+      schoolId = "SRT1-KDR"
+    )
+    val dto = com.example.data.remote.pocketbase.PbParentAccessLinkDto.fromDomain(originalLink)
+    val roundTripped = dto.toDomainModel("SRT1-KDR")
+    org.junit.Assert.assertEquals(false, roundTripped.canViewHaid)
+    org.junit.Assert.assertEquals(false, roundTripped.canViewProfile)
+
+    // 2. Male student logged into ParentPortalScreen -> Profil tab visible, Haid tab hidden even if canViewHaid = true
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val maleStudent = com.example.data.model.ChildStudent(
+      id = 9701L,
+      name = "Ahmad Fauzi",
+      nis = "31990701",
+      gender = "L",
+      age = 14,
+      dormitory = "Asrama Putra",
+      classGrade = "VIII-A",
+      motherName = "Ibu Aminah",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(maleStudent)
+    db.parentAccessLinkDao().insert(
+      originalLink.copy(
+        schoolId = activeSchool,
+        canViewProfile = true,
+        canViewHaid = true
+      )
+    )
+
+    val loginRes = vm.executeLogin("ortu_fauzi_0701", "Ortu#9999")
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+
+    var loops = 0
+    while (loops < 25 && vm.activeParentAccessLink.value == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.ParentPortalScreen(viewModel = vm, onLogout = {})
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_tab_profile").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_haid").assertDoesNotExist()
   }
 }

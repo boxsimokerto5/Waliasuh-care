@@ -25,12 +25,14 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -52,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,6 +72,7 @@ fun PesanOrangTuaSheet(
     isStudentClaimedByCurrentWali: (ChildStudent) -> Boolean,
     isAdmin: Boolean,
     initialSelectedStudent: ChildStudent? = null,
+    onOpenPilihAnakAsuh: (() -> Unit)? = null,
     onSendMessage: (ChildStudent, String) -> Unit,
     onMarkRead: (Long) -> Unit,
     onDismiss: () -> Unit
@@ -79,26 +83,19 @@ fun PesanOrangTuaSheet(
     var searchQuery by remember { mutableStateOf("") }
     var replyText by remember { mutableStateOf("") }
 
-    val hasClaimed = remember(students, isStudentClaimedByCurrentWali) {
-        students.any { isStudentClaimedByCurrentWali(it) }
-    }
-    var selectedScope by remember(hasClaimed, isAdmin) {
-        mutableStateOf(if (hasClaimed && !isAdmin) 0 else 1)
-    }
+    val claimedStudents = students.filter { isStudentClaimedByCurrentWali(it) }
 
     val messagesByStudentId = remember(parentMessages) {
         parentMessages.groupBy { it.studentId }
     }
 
-    val filteredStudents = remember(students, searchQuery, selectedScope, isStudentClaimedByCurrentWali, messagesByStudentId) {
+    val filteredStudents = remember(claimedStudents, searchQuery, messagesByStudentId) {
         val q = searchQuery.trim().lowercase()
-        students.filter { st ->
-            val scopeMatch = if (selectedScope == 0) isStudentClaimedByCurrentWali(st) else true
-            val queryMatch = q.isBlank() ||
+        claimedStudents.filter { st ->
+            q.isBlank() ||
                 st.name.lowercase().contains(q) ||
                 st.motherName.lowercase().contains(q) ||
                 st.classGrade.lowercase().contains(q)
-            scopeMatch && queryMatch
         }.sortedWith(
             compareByDescending<ChildStudent> { st ->
                 messagesByStudentId[st.id].orEmpty().count { !it.isReadByWali && it.senderRole == "PARENT" }
@@ -136,7 +133,7 @@ fun PesanOrangTuaSheet(
             ) {
                 val activeStudent = selectedStudent
                 if (activeStudent == null) {
-                    // Conversation List
+                    // Conversation List (Hanya Anak Asuh Terpilih)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically,
@@ -168,7 +165,11 @@ fun PesanOrangTuaSheet(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = if (isEn) "Select a student to open chat with parents" else "Pilih siswa untuk membuka percakapan dengan orang tua",
+                                    text = if (isEn) {
+                                        "Showing foster students selected in Select Foster Kids"
+                                    } else {
+                                        "Khusus siswa yang dipilih di menu Pilih Anak Asuh"
+                                    },
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -181,30 +182,43 @@ fun PesanOrangTuaSheet(
                         }
                     }
 
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text(if (isEn) "Search student or parent..." else "Cari siswa atau orang tua...", fontSize = 12.5.sp) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_search_pesan_ortu")
-                    )
+                    if (claimedStudents.isNotEmpty()) {
+                        OutlinedTextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text(if (isEn) "Search my foster students or parents..." else "Cari anak asuh saya atau orang tua...", fontSize = 12.5.sp) },
+                            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                            trailingIcon = {
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Close, contentDescription = if (isEn) "Clear" else "Bersihkan", modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_search_pesan_ortu")
+                        )
 
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        val mineCount = students.count { isStudentClaimedByCurrentWali(it) }
-                        FilterChip(
-                            selected = selectedScope == 0,
-                            onClick = { selectedScope = 0 },
-                            label = { Text(if (isEn) "My Foster ($mineCount)" else "Anak Asuh Saya ($mineCount)", fontSize = 11.5.sp) }
-                        )
-                        FilterChip(
-                            selected = selectedScope == 1,
-                            onClick = { selectedScope = 1 },
-                            label = { Text(if (isEn) "All Students (${students.size})" else "Semua Siswa (${students.size})", fontSize = 11.5.sp) }
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFEEF2FF),
+                            border = BorderStroke(1.dp, Color(0xFFC7D2FE))
+                        ) {
+                            Text(
+                                text = if (isEn) {
+                                    "My Selected Foster Kids: ${claimedStudents.size}"
+                                } else {
+                                    "Anak Asuh Terpilih: ${claimedStudents.size} siswa"
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF4338CA),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
 
                     LazyColumn(
@@ -214,7 +228,84 @@ fun PesanOrangTuaSheet(
                             .heightIn(min = 200.dp, max = 420.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        if (filteredStudents.isEmpty()) {
+                        if (claimedStudents.isEmpty()) {
+                            item {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp)
+                                        .testTag("empty_pesan_ortu_no_claimed"),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp, vertical = 22.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally,
+                                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(48.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(0xFFE0E7FF)),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.PersonAdd,
+                                                contentDescription = null,
+                                                tint = Color(0xFF4338CA),
+                                                modifier = Modifier.size(24.dp)
+                                            )
+                                        }
+                                        Text(
+                                            text = if (isEn) {
+                                                "No Foster Students Selected Yet"
+                                            } else {
+                                                "Belum Ada Anak Asuh Dipilih"
+                                            },
+                                            fontSize = 14.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = if (isEn) {
+                                                "Only students claimed in Select Foster Kids appear here so you can chat directly with their parents."
+                                            } else {
+                                                "Hanya siswa yang sudah dipilih di menu Pilih Anak Asuh yang tampil di sini agar percakapan lebih fokus."
+                                            },
+                                            fontSize = 12.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            textAlign = TextAlign.Center
+                                        )
+                                        if (onOpenPilihAnakAsuh != null) {
+                                            Button(
+                                                onClick = onOpenPilihAnakAsuh,
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA)),
+                                                modifier = Modifier
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("btn_open_pilih_anak_asuh_from_chat")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.PersonAdd,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = if (isEn) "Select Foster Students" else "Pilih Anak Asuh Sekarang",
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (filteredStudents.isEmpty()) {
                             item {
                                 Box(
                                     modifier = Modifier
@@ -223,7 +314,7 @@ fun PesanOrangTuaSheet(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
-                                        text = if (isEn) "No student conversations found." else "Belum ada daftar siswa.",
+                                        text = if (isEn) "No matching foster students found." else "Tidak ada anak asuh yang cocok dengan pencarian.",
                                         fontSize = 12.5.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )

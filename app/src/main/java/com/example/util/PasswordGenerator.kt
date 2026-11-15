@@ -88,7 +88,8 @@ object PasswordGenerator {
     fun formatParentAccessWhatsAppMessage(
         link: ParentAccessLink,
         schoolProfile: SchoolProfile = SchoolProfile(),
-        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH)
+        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH),
+        isFemaleStudent: Boolean = false
     ): String {
         val schoolDisplay = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
             .ifBlank { if (isEnglish) "School" else "Sekolah" }
@@ -99,9 +100,11 @@ object PasswordGenerator {
             if (isEnglish) "Foster Caregiver" else "Wali Asuh"
         }
         val enabledPermissions = buildList {
+            if (link.canViewProfile) add(if (isEnglish) "Child Profile" else "Profil Anak")
             if (link.canViewMengaji) add(if (isEnglish) "Mengaji History" else "Riwayat Mengaji")
             if (link.canViewMedical) add(if (isEnglish) "Medical History" else "Riwayat Sakit")
             if (link.canViewFasting) add(if (isEnglish) "Fasting History" else "Riwayat Puasa")
+            if (isFemaleStudent && link.canViewHaid) add(if (isEnglish) "Haid History" else "Riwayat Haid")
         }.ifEmpty {
             listOf(if (isEnglish) "Messages with Caregiver" else "Pesan dengan Wali Asuh")
         }.joinToString(", ")
@@ -150,9 +153,10 @@ object PasswordGenerator {
         context: Context,
         link: ParentAccessLink,
         schoolProfile: SchoolProfile = SchoolProfile(),
-        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH)
+        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH),
+        isFemaleStudent: Boolean = false
     ) {
-        val message = formatParentAccessWhatsAppMessage(link, schoolProfile, isEnglish)
+        val message = formatParentAccessWhatsAppMessage(link, schoolProfile, isEnglish, isFemaleStudent)
         val waDigits = StudentCsvParser.formatWhatsAppDigits(link.parentPhone)
         if (waDigits.length >= 9) {
             val waUrl = "https://wa.me/$waDigits?text=${Uri.encode(message)}"

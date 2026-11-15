@@ -981,6 +981,8 @@ data class PbParentAccessLinkDto(
     @Json(name = "can_view_mengaji") val canViewMengaji: Boolean? = null,
     @Json(name = "can_view_medical") val canViewMedical: Boolean? = null,
     @Json(name = "can_view_fasting") val canViewFasting: Boolean? = null,
+    @Json(name = "can_view_haid") val canViewHaid: Boolean? = null,
+    @Json(name = "can_view_profile") val canViewProfile: Boolean? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1003,6 +1005,8 @@ data class PbParentAccessLinkDto(
             canViewMengaji = canViewMengaji ?: true,
             canViewMedical = canViewMedical ?: true,
             canViewFasting = canViewFasting ?: true,
+            canViewHaid = canViewHaid ?: true,
+            canViewProfile = canViewProfile ?: true,
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
             createdAt = resolvedCreated,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
@@ -1032,6 +1036,8 @@ data class PbParentAccessLinkDto(
                 canViewMengaji = model.canViewMengaji,
                 canViewMedical = model.canViewMedical,
                 canViewFasting = model.canViewFasting,
+                canViewHaid = model.canViewHaid,
+                canViewProfile = model.canViewProfile,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

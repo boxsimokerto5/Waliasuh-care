@@ -28,13 +28,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -73,6 +76,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
+import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
@@ -82,6 +86,7 @@ import com.example.ui.HealthViewModel
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
+import com.example.util.StudentClassifier
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
 
@@ -92,9 +97,11 @@ private enum class ParentPortalTab(
     val tag: String
 ) {
     HOME("Ringkasan", "Overview", Icons.Default.Home, "parent_tab_home"),
+    PROFILE("Profil Anak", "Profile", Icons.Default.Badge, "parent_tab_profile"),
     MENGAJI("Mengaji", "Mengaji", Icons.AutoMirrored.Filled.MenuBook, "parent_tab_mengaji"),
     MEDICAL("Riwayat Sakit", "Medical", Icons.Default.LocalHospital, "parent_tab_medical"),
     FASTING("Puasa", "Fasting", Icons.Default.NightlightRound, "parent_tab_fasting"),
+    HAID("Riwayat Haid", "Haid Cycle", Icons.Default.Favorite, "parent_tab_haid"),
     MESSAGES("Pesan", "Messages", Icons.Default.ChatBubbleOutline, "parent_tab_messages")
 }
 
@@ -114,6 +121,7 @@ fun ParentPortalScreen(
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val medicalRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
@@ -123,11 +131,14 @@ fun ParentPortalScreen(
         students.firstOrNull { it.id == resolvedStudentId }
     } ?: remember(activeLink, resolvedStudentId) {
         activeLink?.let { link ->
+            val guessedGender = if (link.studentDorm.contains("putri", ignoreCase = true) ||
+                link.studentDorm.contains("banat", ignoreCase = true)
+            ) "P" else "L"
             ChildStudent(
                 id = link.studentId,
                 name = link.studentName,
                 nis = link.studentNis,
-                gender = "L",
+                gender = guessedGender,
                 age = 12,
                 dormitory = link.studentDorm,
                 classGrade = link.studentClass,
@@ -144,12 +155,18 @@ fun ParentPortalScreen(
         }
     }
 
-    val visibleTabs = remember(activeLink) {
+    val isFemaleStudent = remember(student) {
+        student != null && StudentClassifier.isFemaleStudent(student)
+    }
+
+    val visibleTabs = remember(activeLink, isFemaleStudent) {
         buildList {
             add(ParentPortalTab.HOME)
+            if (activeLink?.canViewProfile == true) add(ParentPortalTab.PROFILE)
             if (activeLink?.canViewMengaji == true) add(ParentPortalTab.MENGAJI)
             if (activeLink?.canViewMedical == true) add(ParentPortalTab.MEDICAL)
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
+            if (isFemaleStudent && activeLink?.canViewHaid == true) add(ParentPortalTab.HAID)
             add(ParentPortalTab.MESSAGES)
         }
     }
@@ -170,6 +187,15 @@ fun ParentPortalScreen(
     }
     val studentFasting = remember(fastingRecords, resolvedStudentId) {
         fastingRecords.filter { it.studentId == resolvedStudentId }.sortedByDescending { it.sessionDate }
+    }
+    val studentHaid = remember(haidRecords, student, resolvedStudentId) {
+        haidRecords.filter { rec ->
+            rec.studentId == resolvedStudentId ||
+                (student != null && (
+                    (rec.studentNik.isNotBlank() && student.nik.isNotBlank() && rec.studentNik == student.nik) ||
+                        rec.studentName.equals(student.name, ignoreCase = true)
+                    ))
+        }.sortedByDescending { it.startDate }
     }
     val threadMessages = remember(parentMessages, resolvedStudentId) {
         parentMessages.filter { it.studentId == resolvedStudentId }.sortedBy { it.createdAt }
@@ -296,18 +322,25 @@ fun ParentPortalScreen(
                     ParentPortalTab.HOME -> ParentOverviewContent(
                         student = student,
                         link = activeLink,
+                        isFemaleStudent = isFemaleStudent,
                         mengajiCount = studentMengaji.size,
                         medicalCount = studentMedical.size,
                         fastingCount = studentFasting.size,
+                        haidRecords = studentHaid,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
                             if (idx >= 0) selectedTabIndex = idx
                         }
                     )
+                    ParentPortalTab.PROFILE -> ParentProfileContent(
+                        student = student,
+                        link = activeLink
+                    )
                     ParentPortalTab.MENGAJI -> ParentMengajiContent(records = studentMengaji)
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(records = studentMedical)
                     ParentPortalTab.FASTING -> ParentFastingContent(records = studentFasting)
+                    ParentPortalTab.HAID -> ParentHaidContent(records = studentHaid)
                     ParentPortalTab.MESSAGES -> ParentChatContent(
                         student = student,
                         link = activeLink,
@@ -329,9 +362,11 @@ fun ParentPortalScreen(
 private fun ParentOverviewContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
+    isFemaleStudent: Boolean,
     mengajiCount: Int,
     medicalCount: Int,
     fastingCount: Int,
+    haidRecords: List<HaidRecord>,
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit
 ) {
@@ -457,6 +492,22 @@ private fun ParentOverviewContent(
             )
         }
 
+        if (link?.canViewProfile == true) {
+            item {
+                PortalModuleSummaryCard(
+                    title = if (isEn) "Child Profile & Biodata" else "Profil & Biodata Anak",
+                    subtitle = if (isEn) {
+                        "Class ${student?.classGrade ?: link.studentClass} • Room ${student?.roomNumber?.ifBlank { "-" } ?: "-"}"
+                    } else {
+                        "Kelas ${student?.classGrade ?: link.studentClass} • Kamar ${student?.roomNumber?.ifBlank { "-" } ?: "-"}"
+                    },
+                    accentColor = Color(0xFF4338CA),
+                    icon = Icons.Default.Badge,
+                    onClick = { onOpenTab(ParentPortalTab.PROFILE) },
+                    testTag = "card_parent_summary_profile"
+                )
+            }
+        }
         if (link?.canViewMengaji == true) {
             item {
                 PortalModuleSummaryCard(
@@ -493,6 +544,211 @@ private fun ParentOverviewContent(
                 )
             }
         }
+        if (isFemaleStudent && link?.canViewHaid == true) {
+            val activeHaid = haidRecords.firstOrNull { it.isActive }
+            val haidSubtitle = if (activeHaid != null) {
+                if (isEn) "Active Haid Day ${activeHaid.durationDays} • ${haidRecords.size} records"
+                else "Sedang Haid Hari ke-${activeHaid.durationDays} • ${haidRecords.size} catatan"
+            } else {
+                if (isEn) "${haidRecords.size} haid & suci cycle records"
+                else "${haidRecords.size} catatan siklus haid & masa suci"
+            }
+            item {
+                PortalModuleSummaryCard(
+                    title = if (isEn) "Haid Cycle History" else "Riwayat Haid & Masa Suci",
+                    subtitle = haidSubtitle,
+                    accentColor = Color(0xFFDB2777),
+                    icon = Icons.Default.Favorite,
+                    onClick = { onOpenTab(ParentPortalTab.HAID) },
+                    testTag = "card_parent_summary_haid"
+                )
+            }
+        }
+    }
+}
+
+private fun maskIdNumber(raw: String): String {
+    val clean = raw.trim()
+    if (clean.isBlank()) return "-"
+    if (clean.length <= 4) return clean
+    return "••••••••${clean.takeLast(4)}"
+}
+
+@Composable
+private fun ParentProfileContent(
+    student: ChildStudent?,
+    link: ParentAccessLink?
+) {
+    val isEn = LocalAppStrings.current.isEnglish
+    if (student == null && link == null) {
+        ParentEmptyNotice(if (isEn) "Student profile is not available yet." else "Data profil anak belum tersedia.")
+        return
+    }
+    val genderLabel = when {
+        student != null && StudentClassifier.isFemaleStudent(student) -> if (isEn) "Female" else "Perempuan"
+        else -> if (isEn) "Male" else "Laki-laki"
+    }
+    val birthPlaceDate = listOfNotNull(
+        student?.birthPlace?.takeIf { it.isNotBlank() },
+        student?.birthDate?.takeIf { it.isNotBlank() }
+    ).joinToString(", ").ifBlank { "-" }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("parent_profile_content"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color(0xFFC7D2FE))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Student Identity & Boarding" else "Identitas & Asrama Ananda",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF4338CA)
+                    )
+                    ParentProfileRow(if (isEn) "Full Name" else "Nama Lengkap", student?.name ?: link?.studentName ?: "-")
+                    ParentProfileRow("NIS / NISN", (student?.nis ?: link?.studentNis).orEmpty().ifBlank { "-" })
+                    ParentProfileRow(if (isEn) "Gender" else "Jenis Kelamin", genderLabel)
+                    if (student != null && student.age > 0) {
+                        ParentProfileRow(if (isEn) "Age" else "Usia", if (isEn) "${student.age} years" else "${student.age} tahun")
+                    }
+                    ParentProfileRow(if (isEn) "Birth Place & Date" else "Tempat, Tanggal Lahir", birthPlaceDate)
+                    ParentProfileRow(
+                        if (isEn) "Level & Class" else "Jenjang & Kelas",
+                        listOfNotNull(
+                            student?.jenjang?.takeIf { it.isNotBlank() },
+                            (student?.classGrade ?: link?.studentClass)?.takeIf { it.isNotBlank() }
+                        ).joinToString(" • ").ifBlank { "-" }
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Dormitory & Room" else "Asrama & Kamar",
+                        listOfNotNull(
+                            (student?.dormitory ?: link?.studentDorm)?.takeIf { it.isNotBlank() },
+                            student?.roomNumber?.takeIf { it.isNotBlank() }?.let { if (isEn) "Room $it" else "Kamar $it" }
+                        ).joinToString(" • ").ifBlank { "-" }
+                    )
+                    if (!student?.nik.isNullOrBlank()) {
+                        ParentProfileRow("NIK", maskIdNumber(student?.nik.orEmpty()))
+                    }
+                    if (!student?.noKk.isNullOrBlank()) {
+                        ParentProfileRow("No. KK", maskIdNumber(student?.noKk.orEmpty()))
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Health Profile" else "Profil Kesehatan Dasar",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0284C7)
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Blood Type" else "Golongan Darah",
+                        student?.bloodType?.ifBlank { "-" } ?: "-"
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Allergies" else "Riwayat Alergi",
+                        student?.allergies?.ifBlank { if (isEn) "None" else "Tidak ada" } ?: "-"
+                    )
+                    if (!student?.specialNotes.isNullOrBlank()) {
+                        ParentProfileRow(
+                            if (isEn) "Special Notes" else "Catatan Khusus",
+                            student?.specialNotes.orEmpty()
+                        )
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Family & Address" else "Keluarga, Pembina & Alamat",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF047857)
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Parent / Mother" else "Nama Ibu / Orang Tua",
+                        student?.motherName?.ifBlank { link?.parentName.orEmpty() }?.ifBlank { "-" }
+                            ?: link?.parentName?.ifBlank { "-" } ?: "-"
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Parent Phone" else "No. HP Orang Tua",
+                        student?.parentPhone?.ifBlank { link?.parentPhone.orEmpty() }?.ifBlank { "-" }
+                            ?: link?.parentPhone?.ifBlank { "-" } ?: "-"
+                    )
+                    ParentProfileRow(
+                        if (isEn) "District" else "Kecamatan",
+                        student?.district?.ifBlank { "-" } ?: "-"
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Address" else "Alamat",
+                        student?.address?.ifBlank { "-" } ?: "-"
+                    )
+                    ParentProfileRow(
+                        if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
+                        student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }?.ifBlank { "-" }
+                            ?: link?.assignedWaliName?.ifBlank { "-" } ?: "-"
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParentProfileRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(0.42f)
+        )
+        Text(
+            text = value,
+            fontSize = 12.5.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(0.58f)
+        )
     }
 }
 
@@ -708,6 +964,144 @@ private fun ParentFastingContent(records: List<FastingRecord>) {
                                 color = if (rec.isBukaChecked) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParentHaidContent(records: List<HaidRecord>) {
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("parent_haid_list"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (records.isEmpty()) {
+            item {
+                ParentEmptyNotice(
+                    if (isEn) "No haid cycle records yet."
+                    else "Belum ada catatan riwayat haid."
+                )
+            }
+        } else {
+            val latest = records.first()
+            item {
+                val statusBannerColor = if (latest.isActive) Color(0xFFFDF2F8) else Color(0xFFF0FDF4)
+                val statusBorderColor = if (latest.isActive) Color(0xFFF9A8D4) else Color(0xFF86EFAC)
+                val statusTextColor = if (latest.isActive) Color(0xFFBE185D) else Color(0xFF15803D)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = statusBannerColor),
+                    border = BorderStroke(1.dp, statusBorderColor)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (latest.isActive) {
+                                if (isEn) "Current Status: Active Haid (Day ${latest.durationDays})"
+                                else "Status Saat Ini: Sedang Haid (Hari ke-${latest.durationDays})"
+                            } else {
+                                if (isEn) "Current Status: Suci Period (Day ${latest.suciDayCount})"
+                                else "Status Saat Ini: Masa Suci (Hari ke-${latest.suciDayCount})"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = statusTextColor
+                        )
+                        if (latest.isIstihadhahWarning) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.WarningAmber,
+                                    contentDescription = null,
+                                    tint = Color(0xFFB45309),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "Reached 15-day max limit (Istihadhah check recommended)"
+                                    else "Mencapai batas 15 hari (perlu pemantauan istihadhah)",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFFB45309),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            items(records, key = { "phaid_${it.id}" }) { rec ->
+                val isOngoing = rec.isActive
+                val accent = if (isOngoing) Color(0xFFDB2777) else Color(0xFF047857)
+                val badgeBg = if (isOngoing) Color(0xFFFCE7F3) else Color(0xFFDCFCE7)
+                val statusLabel = when {
+                    isOngoing -> if (isEn) "Haid Day ${rec.durationDays}" else "Haid Hari ke-${rec.durationDays}"
+                    rec.isAutoCompletedByLimit -> if (isEn) "Auto Suci (15d)" else "Suci Otomatis (15 Hr)"
+                    else -> if (isEn) "Completed (${rec.durationDays}d)" else "Suci (${rec.durationDays} Hari)"
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, accent.copy(alpha = 0.25f))
+                ) {
+                    Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${if (isEn) "Start" else "Mulai"}: ${DateUtils.formatShortDate(rec.startDate, s.language)}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Surface(shape = RoundedCornerShape(6.dp), color = badgeBg) {
+                                Text(
+                                    text = statusLabel,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accent,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                )
+                            }
+                        }
+                        rec.effectiveEndDate?.let { endMillis ->
+                            Text(
+                                text = "${if (isEn) "Suci Date" else "Tanggal Mandi Suci"}: ${DateUtils.formatShortDate(endMillis, s.language)}",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (rec.symptoms.isNotBlank() && rec.symptoms != "-") {
+                            Text(
+                                text = "${if (isEn) "Symptoms / Condition" else "Keluhan / Kondisi"}: ${rec.symptoms}",
+                                fontSize = 12.sp
+                            )
+                        }
+                        if (rec.notes.isNotBlank()) {
+                            Text(
+                                text = "${if (isEn) "Notes" else "Catatan"}: ${rec.notes}",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "${if (isEn) "Recorded by" else "Dicatat oleh"}: ${rec.waliName}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

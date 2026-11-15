@@ -1064,6 +1064,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewMengaji = true,
                 canViewMedical = true,
                 canViewFasting = true,
+                canViewHaid = true,
+                canViewProfile = true,
                 schoolId = activeSchool,
                 createdAt = now,
                 updatedAt = now
@@ -1218,6 +1220,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         canMengaji: Boolean,
         canMedical: Boolean,
         canFasting: Boolean,
+        canHaid: Boolean = link.canViewHaid,
+        canProfile: Boolean = link.canViewProfile,
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -1225,6 +1229,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewMengaji = canMengaji,
                 canViewMedical = canMedical,
                 canViewFasting = canFasting,
+                canViewHaid = canHaid,
+                canViewProfile = canProfile,
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateParentAccessLink(updated)
