@@ -234,6 +234,9 @@ private fun WaliAsuhCareAppContent(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
     val inpatientCount = remember(allRecords) {
         allRecords.count { it.isInpatient && it.status != "CANCELLED" }
@@ -525,6 +528,10 @@ private fun WaliAsuhCareAppContent(
                 suciRecords = suciRecords,
                 shiftMessages = shiftMessages,
                 mengajiRecords = mengajiRecords,
+                students = students,
+                visitSessions = visitSessions,
+                visitRecords = visitRecords,
+                isAdmin = (currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN),
                 onDismiss = { dashboardModalState.activeCategoryHub = null },
                 onNavigateToPlan = {
                     dashboardModalState.activeCategoryHub = null
@@ -616,6 +623,28 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.riwayatMengajiInitialTab = 1
                     dashboardModalState.showRiwayatMengajiSheet = true
+                },
+                onOpenJadwalKunjungan = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showJadwalKunjunganSheet = true
+                },
+                onOpenDaftarHadirKunjungan = { tabIdx ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.daftarHadirKunjunganInitialTab = tabIdx
+                    dashboardModalState.showDaftarHadirKunjunganSheet = true
+                },
+                onOpenLaporanKunjungan = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showLaporanKunjunganSheet = true
+                },
+                onOpenSiswaPerKecamatan = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showSiswaPerKecamatanSheet = true
+                },
+                onOpenCreateVisitSession = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.visitSessionToEdit = null
+                    dashboardModalState.showCreateVisitSessionDialog = true
                 }
             )
         }

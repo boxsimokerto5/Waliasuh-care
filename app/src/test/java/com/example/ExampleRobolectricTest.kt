@@ -622,10 +622,11 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(10, jsonSchema.length())
+    assertEquals(12, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
+    org.junit.Assert.assertTrue(sshScript.contains("session_dates_csv"))
 
     val expectedCollections = listOf(
       "child_students",
@@ -637,7 +638,9 @@ class ExampleRobolectricTest {
       "fasting_sessions",
       "fasting_records",
       "mengaji_records",
-      "school_profiles"
+      "school_profiles",
+      "visit_sessions",
+      "visit_records"
     )
     expectedCollections.forEach { col ->
       org.junit.Assert.assertTrue(
@@ -646,7 +649,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(10, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(12, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -2361,7 +2364,8 @@ class ExampleRobolectricTest {
 
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("category_berobat").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("tile_tindakan_langsung").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_tindakan_langsung").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("category_kunjungan").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_rekam_medis").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_anak_asuh").assertIsDisplayed()
     composeTestRule.onNodeWithTag("category_puasa").assertIsDisplayed()
@@ -2370,6 +2374,9 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_tulis_pesan_shift").assertDoesNotExist()
     composeTestRule.onNodeWithTag("tile_puskesmas_info").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("category_kunjungan").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.KUNJUNGAN, openedHub)
 
     composeTestRule.onNodeWithTag("category_puasa").performClick()
     assertEquals(com.example.ui.components.DashboardCategoryHub.PUASA, openedHub)
@@ -3260,5 +3267,339 @@ class ExampleRobolectricTest {
       0,
       vm.processIncomingRemoteMedicalRecords(listOf(plannedRecordA), listOf(studentSchoolA), "SEKOLAH-A")
     )
+  }
+
+  @Test
+  fun `verify VisitHelper dynamic district extraction, multi-date CSV, and schedule matching`() {
+    assertEquals("Wates", com.example.data.model.VisitHelper.normalizeDistrict("Kec. wates"))
+    assertEquals("Plosoklaten", com.example.data.model.VisitHelper.normalizeDistrict("Kecamatan   PLOSOKLATEN"))
+    assertEquals("", com.example.data.model.VisitHelper.normalizeDistrict(" - "))
+
+    val s1 = com.example.data.model.ChildStudent(
+      id = 1L, name = "Ahmad", nis = "101", gender = "L", age = 13,
+      dormitory = "Asrama A", classGrade = "VII", district = "Kec. Wates", schoolId = "SRT1-KDR"
+    )
+    val s2 = com.example.data.model.ChildStudent(
+      id = 2L, name = "Budi", nis = "102", gender = "L", age = 14,
+      dormitory = "Asrama A", classGrade = "VIII", district = "plosoklaten", schoolId = "SRT1-KDR"
+    )
+    val s3 = com.example.data.model.ChildStudent(
+      id = 3L, name = "Citra", nis = "103", gender = "P", age = 13,
+      dormitory = "Asrama B", classGrade = "VII", district = "", schoolId = "SRT1-KDR"
+    )
+    val groups = com.example.data.model.VisitHelper.extractDynamicDistricts(listOf(s1, s2, s3), isEn = false)
+    assertEquals(3, groups.size)
+    // Sorted alphabetically, with __UNASSIGNED__ last
+    assertEquals("Plosoklaten", groups[0].displayName)
+    assertEquals("Wates", groups[1].displayName)
+    assertEquals(com.example.data.model.VisitHelper.UNASSIGNED_DISTRICT, groups[2].normalizedKey)
+    assertEquals("Belum Diisi Kecamatan", groups[2].displayName)
+
+    val cal = java.util.Calendar.getInstance()
+    cal.set(2026, java.util.Calendar.NOVEMBER, 8, 14, 30, 0)
+    val sunday2 = cal.timeInMillis
+    cal.set(2026, java.util.Calendar.NOVEMBER, 15, 9, 0, 0)
+    val sunday3 = cal.timeInMillis
+    cal.set(2026, java.util.Calendar.NOVEMBER, 22, 16, 45, 0)
+    val sunday4 = cal.timeInMillis
+
+    val csv = com.example.data.model.VisitHelper.formatDatesCsv(listOf(sunday4, sunday2, sunday3, sunday2))
+    val parsed = com.example.data.model.VisitHelper.parseDatesCsv(csv)
+    assertEquals(3, parsed.size)
+    org.junit.Assert.assertTrue(parsed[0] < parsed[1] && parsed[1] < parsed[2])
+
+    val session = com.example.data.model.VisitSession(
+      id = 77L,
+      title = "Kunjungan November 2026",
+      monthYear = "2026-11",
+      sessionDatesCsv = csv,
+      selectedDistrictsCsv = com.example.data.model.VisitHelper.formatDistrictsCsv(listOf("Wates", "Pare")),
+      schoolId = "SRT1-KDR"
+    )
+    val scheduled = com.example.data.model.VisitHelper.scheduledStudentsForSession(session, listOf(s1, s2, s3))
+    assertEquals(1, scheduled.size)
+    assertEquals("Ahmad", scheduled.first().name)
+    org.junit.Assert.assertTrue(com.example.data.model.VisitHelper.isStudentInSessionSchedule(session, s1))
+    org.junit.Assert.assertFalse(com.example.data.model.VisitHelper.isStudentInSessionSchedule(session, s2))
+  }
+
+  @Test
+  fun `verify PbVisitSessionDto and PbVisitRecordDto serialize and convert accurately`() {
+    val session = com.example.data.model.VisitSession(
+      id = 401L,
+      title = "Kunjungan November",
+      monthYear = "2026-11",
+      sessionDatesCsv = "1794070800000,1794675600000",
+      selectedDistrictsCsv = "Wates|Puncu",
+      description = "Sesi Minggu 2 & 3",
+      isActive = true,
+      createdBy = "Admin",
+      schoolId = "SRT1-KDR"
+    )
+    val sessionDto = com.example.data.remote.pocketbase.PbVisitSessionDto.fromDomain(session)
+    val restoredSession = sessionDto.toDomainModel()
+    assertEquals(session.id, restoredSession.id)
+    assertEquals(session.title, restoredSession.title)
+    assertEquals(session.monthYear, restoredSession.monthYear)
+    assertEquals(2, restoredSession.getVisitDatesList().size)
+    assertEquals(listOf("Wates", "Puncu"), restoredSession.getDistrictsList())
+
+    val record = com.example.data.model.VisitRecord(
+      id = 501L,
+      sessionId = 401L,
+      sessionTitle = "Kunjungan November",
+      visitDate = 1794070800000L,
+      checkedInAt = 1794099600000L,
+      studentId = 10L,
+      studentName = "Santri Kunjungan",
+      studentNik = "3506123456780001",
+      studentNis = "1001",
+      studentClass = "VIII-A",
+      studentDorm = "Asrama Putra",
+      studentDistrict = "Kec. wates",
+      visitorName = "Ibu Aminah",
+      visitorRelation = "Ibu",
+      checkInMethod = com.example.data.model.VisitRecord.METHOD_BARCODE,
+      isOutOfScheduleDistrict = false,
+      waliName = "Ustadz Budi",
+      schoolId = "SRT1-KDR"
+    )
+    val recordDto = com.example.data.remote.pocketbase.PbVisitRecordDto.fromDomain(record)
+    val restoredRecord = recordDto.toDomainModel()
+    assertEquals(record.id, restoredRecord.id)
+    assertEquals("Wates", restoredRecord.studentDistrict)
+    assertEquals("Ibu", restoredRecord.visitorRelation)
+    assertEquals(com.example.data.model.VisitRecord.METHOD_BARCODE, restoredRecord.checkInMethod)
+  }
+
+  @Test
+  fun `verify HealthViewModel Kunjungan multi-date check-in duplicate guard and PDF generation`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+
+    val cal = java.util.Calendar.getInstance()
+    cal.set(2026, java.util.Calendar.NOVEMBER, 8, 9, 0, 0)
+    val dateWeek2 = com.example.data.model.VisitHelper.normalizeDayStart(cal.timeInMillis)
+    cal.set(2026, java.util.Calendar.NOVEMBER, 15, 9, 0, 0)
+    val dateWeek3 = com.example.data.model.VisitHelper.normalizeDayStart(cal.timeInMillis)
+
+    // Role WALI cannot create visit session
+    vm.switchRoleToWali()
+    var waliDone = false
+    var createdByWali: com.example.data.model.VisitSession? = null
+    vm.createVisitSession(
+      title = "Should Fail",
+      monthYear = "2026-11",
+      visitDates = listOf(dateWeek2),
+      selectedDistricts = listOf("Wates")
+    ) {
+      createdByWali = it
+      waliDone = true
+    }
+    var ticks = 0
+    while (ticks < 20 && !waliDone) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(25)
+      ticks++
+    }
+    org.junit.Assert.assertTrue(waliDone)
+    org.junit.Assert.assertNull(createdByWali)
+
+    // Admin creates multi-date visit session
+    vm.switchRoleToAdmin()
+    var createdSession: com.example.data.model.VisitSession? = null
+    vm.createVisitSession(
+      title = "Kunjungan November",
+      monthYear = "2026-11",
+      visitDates = listOf(dateWeek2, dateWeek3),
+      selectedDistricts = listOf("Wates")
+    ) { createdSession = it }
+    ticks = 0
+    while (ticks < 30 && createdSession == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    assertNotNull(createdSession)
+    assertEquals(2, createdSession!!.getVisitDatesList().size)
+
+    val studentScheduled = com.example.data.model.ChildStudent(
+      id = 7001L, name = "Siswa Wates", nis = "7001", nik = "3506000000007001",
+      gender = "L", age = 13, dormitory = "Asrama 1", classGrade = "VII-A",
+      district = "Wates", schoolId = createdSession!!.schoolId
+    )
+    val studentOutOfSchedule = com.example.data.model.ChildStudent(
+      id = 7002L, name = "Siswa Pare", nis = "7002", nik = "3506000000007002",
+      gender = "L", age = 14, dormitory = "Asrama 2", classGrade = "VIII-A",
+      district = "Pare", schoolId = createdSession!!.schoolId
+    )
+
+    // Check-in 1 on Week 2 succeeds
+    var done1 = false
+    var added1 = false
+    vm.recordStudentVisitCheckIn(
+      session = createdSession!!,
+      student = studentScheduled,
+      visitDate = dateWeek2,
+      visitorRelation = "Ibu",
+      checkInMethod = com.example.data.model.VisitRecord.METHOD_BARCODE
+    ) { added, _, _ ->
+      added1 = added
+      done1 = true
+    }
+    ticks = 0
+    while (ticks < 30 && !done1) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    org.junit.Assert.assertTrue(added1)
+
+    // Duplicate same-day check-in on Week 2 blocked
+    var doneDup = false
+    var addedDup = true
+    vm.recordStudentVisitCheckIn(
+      session = createdSession!!,
+      student = studentScheduled,
+      visitDate = dateWeek2,
+      visitorRelation = "Ibu"
+    ) { added, _, _ ->
+      addedDup = added
+      doneDup = true
+    }
+    ticks = 0
+    while (ticks < 30 && !doneDup) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    org.junit.Assert.assertTrue(doneDup)
+    org.junit.Assert.assertFalse(addedDup)
+
+    // Check-in on Week 3 (different date in same session) succeeds
+    var doneWeek3 = false
+    var addedWeek3 = false
+    vm.recordStudentVisitCheckIn(
+      session = createdSession!!,
+      student = studentScheduled,
+      visitDate = dateWeek3,
+      visitorRelation = "Ayah"
+    ) { added, _, _ ->
+      addedWeek3 = added
+      doneWeek3 = true
+    }
+    ticks = 0
+    while (ticks < 30 && !doneWeek3) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    org.junit.Assert.assertTrue(addedWeek3)
+
+    // Out-of-schedule district student flagged properly
+    var doneOut = false
+    var outRecord: com.example.data.model.VisitRecord? = null
+    vm.recordStudentVisitCheckIn(
+      session = createdSession!!,
+      student = studentOutOfSchedule,
+      visitDate = dateWeek2,
+      visitorRelation = "Wali",
+      checkInMethod = com.example.data.model.VisitRecord.METHOD_MANUAL
+    ) { _, _, rec ->
+      outRecord = rec
+      doneOut = true
+    }
+    ticks = 0
+    while (ticks < 30 && !doneOut) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    assertNotNull(outRecord)
+    org.junit.Assert.assertTrue(outRecord!!.isOutOfScheduleDistrict)
+
+    // Render A4 Canvas for Manual Roster & Attendance Report PDFs + multi-page pagination
+    val allRecs = listOfNotNull(outRecord)
+    val manualBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderVisitManualRosterPages(
+      context = app,
+      session = createdSession!!,
+      scheduledStudents = listOf(studentScheduled),
+      existingRecords = allRecs,
+      targetDateMillis = dateWeek2,
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        manualBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
+    )
+    assertEquals(1, manualBitmaps.size)
+    manualBitmaps.forEach { it.recycle() }
+
+    val manyVisitStudents = (1..35).map { idx ->
+      studentScheduled.copy(id = 8000L + idx, name = "Santri Wates $idx")
+    }
+    val reportBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderVisitAttendanceReportPages(
+      context = app,
+      session = createdSession!!,
+      scheduledStudents = manyVisitStudents,
+      sessionRecords = allRecs,
+      targetDateMillis = dateWeek2,
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        reportBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
+    )
+    org.junit.Assert.assertTrue(reportBitmaps.size >= 2)
+    reportBitmaps.forEach { it.recycle() }
+
+    val waSummary = com.example.util.PdfReportGenerator.buildVisitReportWaSummary(
+      session = createdSession!!,
+      scheduledStudents = listOf(studentScheduled),
+      sessionRecords = allRecs,
+      targetDateMillis = dateWeek2,
+      waliName = "Wali Test",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      language = com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    org.junit.Assert.assertTrue(waSummary.contains("Kunjungan November"))
+    org.junit.Assert.assertTrue(waSummary.contains("Siswa Wates"))
+  }
+
+  @Test
+  fun `verify DashboardScreen opens Kunjungan hub displaying 4 required menu icons`() {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = "Abisarwan Rafif",
+          activePlans = emptyList(),
+          students = emptyList(),
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {},
+          renderInlineCategoryHub = true
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_kunjungan").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("category_hub_overlay_kunjungan").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_jadwal_kunjungan").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_daftar_hadir_kunjungan").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_laporan_kunjungan").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_siswa_per_kecamatan").assertIsDisplayed()
   }
 }

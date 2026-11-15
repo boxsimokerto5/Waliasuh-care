@@ -31,6 +31,9 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
 import java.io.File
@@ -2278,5 +2281,750 @@ object PdfReportGenerator {
             .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
             .build()
         printManager.print(jobName, adapter, attributes)
+    }
+
+    /**
+     * Membuat dokumen PDF resmi Daftar Hadir Manual Kunjungan Orang Tua/Wali per Sesi
+     * lengkap dengan kolom tanda tangan/paraf untuk pencatatan manual di lapangan.
+     */
+    fun generateVisitManualRosterPdf(
+        context: Context,
+        session: VisitSession,
+        scheduledStudents: List<ChildStudent>,
+        existingRecords: List<VisitRecord>,
+        targetDateMillis: Long? = null,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var pageNumber = 0
+            var currentPage: PdfDocument.Page? = null
+
+            renderVisitManualRosterPages(
+                context = context,
+                session = session,
+                scheduledStudents = scheduledStudents,
+                existingRecords = existingRecords,
+                targetDateMillis = targetDateMillis,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                startNewCanvas = {
+                    currentPage?.let { document.finishPage(it) }
+                    pageNumber++
+                    val info = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                    val created = document.startPage(info)
+                    currentPage = created
+                    created.canvas
+                }
+            )
+            currentPage?.let { document.finishPage(it) }
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanTitle = session.title.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(targetDateMillis ?: System.currentTimeMillis()))
+            val file = File(outputDir, "Daftar_Hadir_Kunjungan_Manual_${cleanTitle}_$dateSlug.pdf")
+
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    internal fun renderVisitManualRosterPages(
+        context: Context,
+        session: VisitSession,
+        scheduledStudents: List<ChildStudent>,
+        existingRecords: List<VisitRecord>,
+        targetDateMillis: Long? = null,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        startNewCanvas: () -> Canvas
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val pageWidth = 595
+        val pageHeight = 842
+        var pageNumber = 1
+        var canvas = startNewCanvas()
+
+        val paint = Paint().apply { isAntiAlias = true }
+        val dateFmt = SimpleDateFormat("d MMM yyyy", lang.locale)
+        val timeFmt = SimpleDateFormat("HH:mm", lang.locale)
+
+        var currentY = 35f
+        currentY = drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile
+        )
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 13f
+        paint.color = Color.rgb(3, 105, 161)
+        canvas.drawText(
+            if (isEn) "PARENT VISIT MANUAL ATTENDANCE SHEET" else "DAFTAR HADIR MANUAL KUNJUNGAN ORANG TUA / WALI",
+            pageWidth / 2f,
+            currentY + 12f,
+            paint
+        )
+        currentY += 25f
+
+        val monthLabel = VisitHelper.formatMonthYearLabel(session.monthYear, lang.locale)
+        val datesLabel = if (targetDateMillis != null && targetDateMillis > 0L) {
+            dateFmt.format(Date(targetDateMillis))
+        } else {
+            val dates = session.getVisitDatesList()
+            if (dates.isEmpty()) monthLabel else dates.joinToString(", ") { dateFmt.format(Date(it)) }
+        }
+        paint.textSize = 10f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            "${session.title.uppercase(lang.locale)} ($monthLabel)",
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        currentY += 13f
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.8f
+        paint.color = Color.rgb(71, 85, 105)
+        val scheduleLine = TextUtils.ellipsize(
+            if (isEn) "Visit Dates: $datesLabel" else "Tanggal Jadwal: $datesLabel",
+            TextPaint(paint),
+            pageWidth - 70f,
+            TextUtils.TruncateAt.END
+        ).toString()
+        canvas.drawText(scheduleLine, pageWidth / 2f, currentY, paint)
+        currentY += 14f
+        paint.textAlign = Paint.Align.LEFT
+
+        val boxLeft = 35f
+        val boxRight = pageWidth - 35f
+        val boxTop = currentY
+        val summaryHeight = 46f
+        paint.color = Color.rgb(240, 249, 255)
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(186, 230, 253)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+
+        val districtsText = session.getDistrictsList()
+            .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+            .ifBlank { if (isEn) "All Districts" else "Semua Kecamatan" }
+        val presentCount = scheduledStudents.count { st ->
+            VisitHelper.findVisitForStudent(existingRecords, st, targetDateMillis) != null
+        }
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9f
+        paint.color = Color.rgb(3, 105, 161)
+        val distLine = TextUtils.ellipsize(
+            if (isEn) "Districts: $districtsText" else "Kecamatan Terjadwal: $districtsText",
+            TextPaint(paint),
+            boxRight - boxLeft - 20f,
+            TextUtils.TruncateAt.END
+        ).toString()
+        canvas.drawText(distLine, boxLeft + 10f, boxTop + 16f, paint)
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.8f
+        paint.color = Color.rgb(51, 65, 85)
+        val statLine = if (isEn) {
+            "• Total Scheduled: ${scheduledStudents.size} Students   • Checked-in: $presentCount   • Pending: ${scheduledStudents.size - presentCount}"
+        } else {
+            "• Total Terjadwal: ${scheduledStudents.size} Siswa   • Sudah Hadir: $presentCount   • Belum Berkunjung: ${scheduledStudents.size - presentCount}"
+        }
+        canvas.drawText(statLine, boxLeft + 10f, boxTop + 34f, paint)
+        currentY = boxTop + summaryHeight + 12f
+
+        val colNo = 35f
+        val colName = 60f
+        val colClass = 215f
+        val colDistrict = 310f
+        val colArrival = 395f
+        val colSign = 475f
+
+        fun drawManualHeader(startYPos: Float): Float {
+            val hTop = startYPos
+            val hHeight = 24f
+            paint.color = Color.rgb(224, 242, 254)
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(56, 189, 248)
+            paint.strokeWidth = 0.9f
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
+            listOf(colName, colClass, colDistrict, colArrival, colSign).forEach { x ->
+                canvas.drawLine(x, hTop, x, hTop + hHeight, paint)
+            }
+            paint.style = Paint.Style.FILL
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8.2f
+            paint.color = Color.rgb(3, 105, 161)
+            val textY = hTop + 15.5f
+            canvas.drawText("No", colNo + 5f, textY, paint)
+            canvas.drawText(if (isEn) "Student Name" else "Nama Siswa", colName + 5f, textY, paint)
+            canvas.drawText(if (isEn) "Class/Dorm" else "Kelas/Asrama", colClass + 4f, textY, paint)
+            canvas.drawText(if (isEn) "District" else "Kecamatan", colDistrict + 4f, textY, paint)
+            canvas.drawText(if (isEn) "Time/Guest" else "Jam Datang", colArrival + 4f, textY, paint)
+            canvas.drawText(if (isEn) "Signature" else "Paraf / TTD", colSign + 5f, textY, paint)
+            return hTop + hHeight
+        }
+
+        if (scheduledStudents.isEmpty()) {
+            val emptyTop = currentY
+            val emptyH = 44f
+            paint.color = Color.rgb(248, 250, 252)
+            canvas.drawRoundRect(RectF(boxLeft, emptyTop, boxRight, emptyTop + emptyH), 6f, 6f, paint)
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) "No scheduled students in selected districts for this visit session." else "Belum ada siswa pada kecamatan terpilih untuk sesi kunjungan ini.",
+                pageWidth / 2f,
+                emptyTop + 26f,
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+            currentY = emptyTop + emptyH + 14f
+        } else {
+            currentY = drawManualHeader(currentY)
+            val rowHeight = 25f
+            scheduledStudents.forEachIndexed { idx, st ->
+                if (currentY > pageHeight - 130f) {
+                    pageNumber++
+                    canvas = startNewCanvas()
+                    currentY = 40f
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 9f
+                    paint.color = Color.rgb(100, 116, 139)
+                    canvas.drawText(
+                        if (isEn) "Continued Manual Visit Attendance (${session.title}) - Page $pageNumber" else "Lanjutan Daftar Hadir Kunjungan (${session.title}) - Halaman $pageNumber",
+                        35f,
+                        currentY,
+                        paint
+                    )
+                    currentY += 12f
+                    currentY = drawManualHeader(currentY)
+                }
+
+                val rTop = currentY
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(203, 213, 225)
+                paint.strokeWidth = 0.6f
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
+                listOf(colName, colClass, colDistrict, colArrival, colSign).forEach { x ->
+                    canvas.drawLine(x, rTop, x, rTop + rowHeight, paint)
+                }
+                paint.style = Paint.Style.FILL
+
+                val textY = rTop + 16f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8.2f
+                paint.color = Color.rgb(15, 23, 42)
+                canvas.drawText("${idx + 1}.", colNo + 5f, textY, paint)
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                val nameCell = TextUtils.ellipsize(st.name, TextPaint(paint), colClass - colName - 8f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(nameCell, colName + 5f, textY, paint)
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.color = Color.rgb(51, 65, 85)
+                val classDorm = listOf(st.classGrade.trim(), st.dormitory.trim())
+                    .filter { it.isNotBlank() }
+                    .joinToString(" • ")
+                    .ifBlank { "-" }
+                val classCell = TextUtils.ellipsize(classDorm, TextPaint(paint), colDistrict - colClass - 8f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(classCell, colClass + 4f, textY, paint)
+
+                val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
+                val distCell = TextUtils.ellipsize(distLabel, TextPaint(paint), colArrival - colDistrict - 8f, TextUtils.TruncateAt.END).toString()
+                canvas.drawText(distCell, colDistrict + 4f, textY, paint)
+
+                val matchedRec = VisitHelper.findVisitForStudent(existingRecords, st, targetDateMillis)
+                if (matchedRec != null) {
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = Color.rgb(21, 128, 61)
+                    val arrivalText = "${timeFmt.format(Date(matchedRec.checkedInAt))} WIB"
+                    canvas.drawText(arrivalText, colArrival + 4f, textY, paint)
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    canvas.drawText(if (isEn) "✓ Checked" else "✓ Hadir", colSign + 5f, textY, paint)
+                } else {
+                    paint.color = Color.rgb(148, 163, 184)
+                    canvas.drawText("____ : ____", colArrival + 4f, textY, paint)
+                    canvas.drawText("..........", colSign + 8f, textY + 2f, paint)
+                }
+
+                currentY = rTop + rowHeight
+            }
+            currentY += 14f
+        }
+
+        if (currentY > pageHeight - 140f) {
+            pageNumber++
+            canvas = startNewCanvas()
+            currentY = 40f
+        }
+
+        drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+    }
+
+    /**
+     * Membuat dokumen PDF resmi Laporan Kehadiran Kunjungan (Sudah Hadir vs Belum Berkunjung).
+     */
+    fun generateVisitAttendanceReportPdf(
+        context: Context,
+        session: VisitSession,
+        scheduledStudents: List<ChildStudent>,
+        sessionRecords: List<VisitRecord>,
+        targetDateMillis: Long? = null,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var pageNumber = 0
+            var currentPage: PdfDocument.Page? = null
+
+            renderVisitAttendanceReportPages(
+                context = context,
+                session = session,
+                scheduledStudents = scheduledStudents,
+                sessionRecords = sessionRecords,
+                targetDateMillis = targetDateMillis,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                startNewCanvas = {
+                    currentPage?.let { document.finishPage(it) }
+                    pageNumber++
+                    val info = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create()
+                    val created = document.startPage(info)
+                    currentPage = created
+                    created.canvas
+                }
+            )
+            currentPage?.let { document.finishPage(it) }
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanTitle = session.title.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(targetDateMillis ?: System.currentTimeMillis()))
+            val file = File(outputDir, "Laporan_Kehadiran_Kunjungan_${cleanTitle}_$dateSlug.pdf")
+
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    internal fun renderVisitAttendanceReportPages(
+        context: Context,
+        session: VisitSession,
+        scheduledStudents: List<ChildStudent>,
+        sessionRecords: List<VisitRecord>,
+        targetDateMillis: Long? = null,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        startNewCanvas: () -> Canvas
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val pageWidth = 595
+        val pageHeight = 842
+        var pageNumber = 1
+        var canvas = startNewCanvas()
+
+        val paint = Paint().apply { isAntiAlias = true }
+        val dateFmt = SimpleDateFormat("d MMM yyyy", lang.locale)
+        val timeFmt = SimpleDateFormat("HH:mm", lang.locale)
+
+        val normalizedTarget = targetDateMillis?.takeIf { it > 0L }?.let { VisitHelper.normalizeDayStart(it) }
+        val filteredRecords = if (normalizedTarget == null) {
+            sessionRecords
+        } else {
+            sessionRecords.filter { VisitHelper.normalizeDayStart(it.visitDate) == normalizedTarget }
+        }
+
+        val presentPairs = scheduledStudents.mapNotNull { st ->
+            val rec = VisitHelper.findVisitForStudent(filteredRecords, st, normalizedTarget)
+            if (rec != null) st to rec else null
+        }
+        val extraRecords = filteredRecords.filter { rec ->
+            scheduledStudents.none { st -> VisitHelper.matchesRecordToStudent(rec, st) }
+        }
+        val absentStudents = scheduledStudents.filter { st ->
+            VisitHelper.findVisitForStudent(filteredRecords, st, normalizedTarget) == null
+        }
+        val totalScheduled = scheduledStudents.size
+        val totalPresent = presentPairs.size + extraRecords.size
+        val pct = if (totalScheduled > 0) ((presentPairs.size * 100) / totalScheduled) else 0
+
+        var currentY = 35f
+        currentY = drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile
+        )
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 13f
+        paint.color = Color.rgb(4, 120, 87)
+        canvas.drawText(
+            if (isEn) "PARENT VISIT ATTENDANCE REPORT" else "LAPORAN KEHADIRAN KUNJUNGAN ORANG TUA",
+            pageWidth / 2f,
+            currentY + 12f,
+            paint
+        )
+        currentY += 25f
+
+        val periodSub = if (normalizedTarget != null) {
+            "${session.title} • ${dateFmt.format(Date(normalizedTarget))}"
+        } else {
+            "${session.title} • ${VisitHelper.formatMonthYearLabel(session.monthYear, lang.locale)}"
+        }
+        paint.textSize = 10f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(periodSub, pageWidth / 2f, currentY, paint)
+        currentY += 15f
+        paint.textAlign = Paint.Align.LEFT
+
+        val boxLeft = 35f
+        val boxRight = pageWidth - 35f
+        val boxTop = currentY
+        val summaryHeight = 46f
+        paint.color = Color.rgb(236, 253, 245)
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(167, 243, 208)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9.5f
+        paint.color = Color.rgb(6, 95, 70)
+        canvas.drawText(
+            if (isEn) "VISIT ATTENDANCE SUMMARY ($pct% Attended):" else "RINGKASAN KEHADIRAN KUNJUNGAN ($pct% Terlaksana):",
+            boxLeft + 10f,
+            boxTop + 15f,
+            paint
+        )
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 9f
+        paint.color = Color.rgb(30, 41, 59)
+        canvas.drawText(
+            if (isEn) {
+                "• Scheduled: $totalScheduled Students   • Attended: $totalPresent   • Not Yet Visited: ${absentStudents.size}"
+            } else {
+                "• Terjadwal: $totalScheduled Siswa   • Sudah Hadir: $totalPresent   • Belum Berkunjung: ${absentStudents.size}"
+            },
+            boxLeft + 10f,
+            boxTop + 33f,
+            paint
+        )
+        currentY = boxTop + summaryHeight + 14f
+
+        fun ensureSpace(needed: Float, contTitle: String, redrawHeader: (() -> Unit)? = null) {
+            if (currentY > pageHeight - needed) {
+                pageNumber++
+                canvas = startNewCanvas()
+                currentY = 40f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 9f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText("$contTitle (Hal. $pageNumber)", 35f, currentY, paint)
+                currentY += 14f
+                redrawHeader?.invoke()
+            }
+        }
+
+        val allPresentRows = presentPairs.map { it.second } + extraRecords
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 10.5f
+        paint.color = Color.rgb(21, 128, 61)
+        canvas.drawText(
+            if (isEn) "A. ATTENDED (${allPresentRows.size} Students)" else "A. SUDAH HADIR BERKUNJUNG (${allPresentRows.size} Siswa)",
+            boxLeft,
+            currentY,
+            paint
+        )
+        currentY += 8f
+
+        fun drawPresentHeader() {
+            val hTop = currentY
+            val hH = 22f
+            paint.color = Color.rgb(220, 252, 231)
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hH, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(134, 239, 172)
+            paint.strokeWidth = 0.8f
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hH, paint)
+            paint.style = Paint.Style.FILL
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8.2f
+            paint.color = Color.rgb(22, 101, 52)
+            val tY = hTop + 14.5f
+            canvas.drawText("No", 42f, tY, paint)
+            canvas.drawText(if (isEn) "Student Name" else "Nama Siswa", 66f, tY, paint)
+            canvas.drawText(if (isEn) "District" else "Kecamatan", 225f, tY, paint)
+            canvas.drawText(if (isEn) "Time & Date" else "Waktu Hadir", 322f, tY, paint)
+            canvas.drawText(if (isEn) "Visitor / Method" else "Pengunjung / Cara", 425f, tY, paint)
+            currentY = hTop + hH
+        }
+
+        if (allPresentRows.isEmpty()) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) "No check-ins recorded yet." else "Belum ada siswa yang tercatat hadir berkunjung.",
+                boxLeft + 6f,
+                currentY + 12f,
+                paint
+            )
+            currentY += 24f
+        } else {
+            drawPresentHeader()
+            val rH = 21f
+            allPresentRows.forEachIndexed { idx, rec ->
+                ensureSpace(125f, session.title) { drawPresentHeader() }
+                val rTop = currentY
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rH, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(226, 232, 240)
+                paint.strokeWidth = 0.5f
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rH, paint)
+                paint.style = Paint.Style.FILL
+
+                val tY = rTop + 14f
+                paint.textSize = 8.2f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.color = Color.rgb(15, 23, 42)
+                canvas.drawText("${idx + 1}.", 42f, tY, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText(
+                    TextUtils.ellipsize(rec.studentName, TextPaint(paint), 152f, TextUtils.TruncateAt.END).toString(),
+                    66f,
+                    tY,
+                    paint
+                )
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.color = Color.rgb(51, 65, 85)
+                canvas.drawText(
+                    TextUtils.ellipsize(VisitHelper.displayDistrict(rec.studentDistrict, isEn), TextPaint(paint), 92f, TextUtils.TruncateAt.END).toString(),
+                    225f,
+                    tY,
+                    paint
+                )
+                val timeLabel = "${dateFmt.format(Date(rec.visitDate))} ${timeFmt.format(Date(rec.checkedInAt))}"
+                canvas.drawText(timeLabel, 322f, tY, paint)
+                val visitorSummary = buildString {
+                    append(rec.visitorRelation.ifBlank { "Wali" })
+                    if (rec.visitorName.isNotBlank()) append(" (${rec.visitorName})")
+                    append(" • ${rec.checkInMethod}")
+                }
+                canvas.drawText(
+                    TextUtils.ellipsize(visitorSummary, TextPaint(paint), 130f, TextUtils.TruncateAt.END).toString(),
+                    425f,
+                    tY,
+                    paint
+                )
+                currentY = rTop + rH
+            }
+            currentY += 16f
+        }
+
+        ensureSpace(145f, session.title)
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 10.5f
+        paint.color = Color.rgb(185, 28, 28)
+        canvas.drawText(
+            if (isEn) "B. NOT YET VISITED (${absentStudents.size} Students)" else "B. BELUM BERKUNJUNG (${absentStudents.size} Siswa)",
+            boxLeft,
+            currentY,
+            paint
+        )
+        currentY += 8f
+
+        fun drawAbsentHeader() {
+            val hTop = currentY
+            val hH = 22f
+            paint.color = Color.rgb(254, 226, 226)
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hH, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(252, 165, 165)
+            paint.strokeWidth = 0.8f
+            canvas.drawRect(boxLeft, hTop, boxRight, hTop + hH, paint)
+            paint.style = Paint.Style.FILL
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8.2f
+            paint.color = Color.rgb(153, 27, 27)
+            val tY = hTop + 14.5f
+            canvas.drawText("No", 42f, tY, paint)
+            canvas.drawText(if (isEn) "Student Name" else "Nama Siswa", 66f, tY, paint)
+            canvas.drawText(if (isEn) "Class / Dorm" else "Kelas / Asrama", 230f, tY, paint)
+            canvas.drawText(if (isEn) "District" else "Kecamatan", 355f, tY, paint)
+            canvas.drawText(if (isEn) "Parent Contact" else "Kontak Ibu / Wali", 448f, tY, paint)
+            currentY = hTop + hH
+        }
+
+        if (absentStudents.isEmpty()) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.2f
+            paint.color = Color.rgb(21, 128, 61)
+            canvas.drawText(
+                if (isEn) "All scheduled students have been visited! (100%)" else "Alhamdulillah — Seluruh siswa terjadwal sudah dikunjungi! (100%)",
+                boxLeft + 6f,
+                currentY + 12f,
+                paint
+            )
+            currentY += 26f
+        } else {
+            drawAbsentHeader()
+            val rH = 21f
+            absentStudents.forEachIndexed { idx, st ->
+                ensureSpace(125f, session.title) { drawAbsentHeader() }
+                val rTop = currentY
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(254, 242, 242)
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rH, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(226, 232, 240)
+                paint.strokeWidth = 0.5f
+                canvas.drawRect(boxLeft, rTop, boxRight, rTop + rH, paint)
+                paint.style = Paint.Style.FILL
+
+                val tY = rTop + 14f
+                paint.textSize = 8.2f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.color = Color.rgb(15, 23, 42)
+                canvas.drawText("${idx + 1}.", 42f, tY, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                canvas.drawText(
+                    TextUtils.ellipsize(st.name, TextPaint(paint), 158f, TextUtils.TruncateAt.END).toString(),
+                    66f,
+                    tY,
+                    paint
+                )
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.color = Color.rgb(51, 65, 85)
+                val classDorm = listOf(st.classGrade.trim(), st.dormitory.trim()).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "-" }
+                canvas.drawText(
+                    TextUtils.ellipsize(classDorm, TextPaint(paint), 118f, TextUtils.TruncateAt.END).toString(),
+                    230f,
+                    tY,
+                    paint
+                )
+                canvas.drawText(
+                    TextUtils.ellipsize(VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn), TextPaint(paint), 88f, TextUtils.TruncateAt.END).toString(),
+                    355f,
+                    tY,
+                    paint
+                )
+                val contactText = st.motherName.ifBlank { st.emergencyContact }.ifBlank { "-" }
+                canvas.drawText(
+                    TextUtils.ellipsize(contactText, TextPaint(paint), 108f, TextUtils.TruncateAt.END).toString(),
+                    448f,
+                    tY,
+                    paint
+                )
+                currentY = rTop + rH
+            }
+            currentY += 14f
+        }
+
+        ensureSpace(140f, session.title)
+        drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+    }
+
+    fun buildVisitReportWaSummary(
+        session: VisitSession,
+        scheduledStudents: List<ChildStudent>,
+        sessionRecords: List<VisitRecord>,
+        targetDateMillis: Long?,
+        waliName: String,
+        schoolProfile: SchoolProfile,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        val isEn = language == AppLanguage.ENGLISH
+        val dateFmt = SimpleDateFormat("d MMM yyyy", language.locale)
+        val timeFmt = SimpleDateFormat("HH:mm", language.locale)
+        val normalizedTarget = targetDateMillis?.takeIf { it > 0L }?.let { VisitHelper.normalizeDayStart(it) }
+        val filteredRecords = if (normalizedTarget == null) {
+            sessionRecords
+        } else {
+            sessionRecords.filter { VisitHelper.normalizeDayStart(it.visitDate) == normalizedTarget }
+        }
+
+        val presentStudents = scheduledStudents.mapNotNull { st ->
+            VisitHelper.findVisitForStudent(filteredRecords, st, normalizedTarget)?.let { st to it }
+        }
+        val absentStudents = scheduledStudents.filter { st ->
+            VisitHelper.findVisitForStudent(filteredRecords, st, normalizedTarget) == null
+        }
+        val schoolTitle = schoolProfile.schoolName.trim().ifBlank { schoolProfile.shortName.ifBlank { "Wali Asuh Care" } }
+        val dateLabel = if (normalizedTarget != null) {
+            dateFmt.format(Date(normalizedTarget))
+        } else {
+            val dList = session.getVisitDatesList()
+            if (dList.isEmpty()) VisitHelper.formatMonthYearLabel(session.monthYear, language.locale)
+            else dList.joinToString(", ") { dateFmt.format(Date(it)) }
+        }
+
+        return buildString {
+            appendLine(if (isEn) "*PARENT VISIT ATTENDANCE REPORT*" else "*LAPORAN KEHADIRAN KUNJUNGAN ORANG TUA*")
+            appendLine("*$schoolTitle*")
+            appendLine(if (isEn) "Session: *${session.title}*" else "Sesi: *${session.title}*")
+            appendLine(if (isEn) "Date: $dateLabel" else "Tanggal: $dateLabel")
+            appendLine(if (isEn) "• Scheduled: ${scheduledStudents.size} | Attended: ${presentStudents.size} | Not Visited: ${absentStudents.size}" else "• Terjadwal: ${scheduledStudents.size} | Sudah Hadir: ${presentStudents.size} | Belum Berkunjung: ${absentStudents.size}")
+            appendLine()
+            if (presentStudents.isNotEmpty()) {
+                appendLine(if (isEn) "✅ *Attended (${presentStudents.size}):*" else "✅ *Sudah Hadir (${presentStudents.size}):*")
+                presentStudents.forEachIndexed { idx, (st, rec) ->
+                    appendLine("${idx + 1}. ${st.name} (${VisitHelper.displayDistrict(rec.studentDistrict, isEn)}) — ${timeFmt.format(Date(rec.checkedInAt))} WIB")
+                }
+                appendLine()
+            }
+            if (absentStudents.isNotEmpty()) {
+                appendLine(if (isEn) "⏳ *Not Yet Visited (${absentStudents.size}):*" else "⏳ *Belum Berkunjung (${absentStudents.size}):*")
+                absentStudents.forEachIndexed { idx, st ->
+                    val dist = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
+                    appendLine("${idx + 1}. ${st.name} ($dist • ${st.classGrade.ifBlank { "-" }})")
+                }
+                appendLine()
+            }
+            append(if (isEn) "Reported by: $waliName" else "Dilaporkan oleh: $waliName")
+        }
     }
 }

@@ -95,7 +95,9 @@ import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreateFastingSessionDialog
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.CreateShiftMessageDialog
+import com.example.ui.dialogs.CreateVisitSessionDialog
 import com.example.ui.dialogs.DaftarHaidSheet
+import com.example.ui.dialogs.DaftarHadirKunjunganSheet
 import com.example.ui.dialogs.DaftarPuasaSheet
 import com.example.ui.dialogs.DaftarSuciSheet
 import com.example.ui.dialogs.DepartReferralDialog
@@ -108,13 +110,17 @@ import com.example.ui.dialogs.InputPuasaDialog
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocalHospital
 import com.example.ui.dialogs.InputTreatmentResultDialog
+import com.example.ui.dialogs.JadwalKunjunganSheet
 import com.example.ui.dialogs.KartuMengajiSheet
+import com.example.ui.dialogs.LaporanKunjunganSheet
 import com.example.ui.dialogs.PrintPdfDialog
 import com.example.ui.dialogs.RankingPuasaSheet
 import com.example.ui.dialogs.RiwayatMengajiSheet
 import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.ui.dialogs.ShiftHistorySheet
 import com.example.ui.dialogs.ShiftMessagesSheet
+import com.example.ui.dialogs.SiswaPerKecamatanSheet
+import com.example.ui.dialogs.StudentDetailDialog
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -155,6 +161,10 @@ fun DashboardScreen(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordPlanToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -714,6 +724,8 @@ fun DashboardScreen(
                             },
                             mengajiTodayCount = mengajiRecords.count { DateUtils.isToday(it.sessionDate) },
                             mengajiTotalCount = mengajiRecords.size,
+                            visitSessionsCount = visitSessions.size,
+                            todayVisitsCount = visitRecords.count { DateUtils.isToday(it.visitDate) },
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
                         )
@@ -892,6 +904,10 @@ fun DashboardScreen(
                 suciRecords = suciRecords,
                 shiftMessages = shiftMessages,
                 mengajiRecords = mengajiRecords,
+                students = students,
+                visitSessions = visitSessions,
+                visitRecords = visitRecords,
+                isAdmin = isAdminUser,
                 onDismiss = { modalState.activeCategoryHub = null },
                 onNavigateToPlan = {
                     modalState.activeCategoryHub = null
@@ -932,6 +948,17 @@ fun DashboardScreen(
                 onOpenRekapMengaji = {
                     modalState.riwayatMengajiInitialTab = 1
                     modalState.showRiwayatMengajiSheet = true
+                },
+                onOpenJadwalKunjungan = { modalState.showJadwalKunjunganSheet = true },
+                onOpenDaftarHadirKunjungan = { tabIdx ->
+                    modalState.daftarHadirKunjunganInitialTab = tabIdx
+                    modalState.showDaftarHadirKunjunganSheet = true
+                },
+                onOpenLaporanKunjungan = { modalState.showLaporanKunjunganSheet = true },
+                onOpenSiswaPerKecamatan = { modalState.showSiswaPerKecamatanSheet = true },
+                onOpenCreateVisitSession = {
+                    modalState.visitSessionToEdit = null
+                    modalState.showCreateVisitSessionDialog = true
                 }
             )
         }
@@ -1377,12 +1404,16 @@ fun DashboardScreen(
         )
     }
 
-    // Sinkronkan sesi & checklist sahur/berbuka puasa online setiap kali modul puasa dibuka
+    // Sinkronkan sesi & checklist sahur/berbuka puasa serta kunjungan online setiap kali modul dibuka
     LaunchedEffect(
         modalState.showInputPuasaDialog,
         modalState.showDaftarPuasaSheet,
         modalState.showChecklistPuasaSheet,
         modalState.showRankingPuasaSheet,
+        modalState.showJadwalKunjunganSheet,
+        modalState.showDaftarHadirKunjunganSheet,
+        modalState.showLaporanKunjunganSheet,
+        modalState.showSiswaPerKecamatanSheet,
         modalState.activeCategoryHub
     ) {
         if (modalState.showInputPuasaDialog || modalState.showDaftarPuasaSheet ||
@@ -1393,6 +1424,12 @@ fun DashboardScreen(
         }
         if (modalState.activeCategoryHub == DashboardCategoryHub.PESAN) {
             viewModel.syncShiftMessagesOnlineQuietly()
+        }
+        if (modalState.showJadwalKunjunganSheet || modalState.showDaftarHadirKunjunganSheet ||
+            modalState.showLaporanKunjunganSheet || modalState.showSiswaPerKecamatanSheet ||
+            modalState.activeCategoryHub == DashboardCategoryHub.KUNJUNGAN
+        ) {
+            viewModel.syncVisitsOnlineQuietly()
         }
     }
 
@@ -1586,6 +1623,147 @@ fun DashboardScreen(
                 ).show()
             },
             onDismiss = { modalState.showRiwayatMengajiSheet = false }
+        )
+    }
+
+    // Modal Kunjungan 1: Jadwal Kunjungan Bulanan & Multi-Tanggal
+    if (modalState.showJadwalKunjunganSheet) {
+        JadwalKunjunganSheet(
+            sessions = visitSessions,
+            students = students,
+            visitRecords = visitRecords,
+            isAdmin = isAdminUser,
+            onOpenDaftarHadir = {
+                modalState.daftarHadirKunjunganInitialTab = 0
+                modalState.showDaftarHadirKunjunganSheet = true
+            },
+            onOpenLaporan = { modalState.showLaporanKunjunganSheet = true },
+            onEditSession = if (isAdminUser) { sess ->
+                modalState.visitSessionToEdit = sess
+                modalState.showCreateVisitSessionDialog = true
+            } else null,
+            onCreateSession = if (isAdminUser) {
+                {
+                    modalState.visitSessionToEdit = null
+                    modalState.showCreateVisitSessionDialog = true
+                }
+            } else null,
+            onDismiss = { modalState.showJadwalKunjunganSheet = false }
+        )
+    }
+
+    // Modal Kunjungan 2: Daftar Hadir (Scan Barcode & List Cetak PDF Manual)
+    if (modalState.showDaftarHadirKunjunganSheet) {
+        DaftarHadirKunjunganSheet(
+            sessions = visitSessions,
+            students = students,
+            visitRecords = visitRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            initialTab = modalState.daftarHadirKunjunganInitialTab,
+            onRecordVisitCheckIn = { sess, st, visitDate, relation, vName, method, onResult ->
+                viewModel.recordStudentVisitCheckIn(
+                    session = sess,
+                    student = st,
+                    visitDate = visitDate,
+                    visitorRelation = relation,
+                    visitorName = vName,
+                    checkInMethod = method,
+                    onResult = onResult
+                )
+            },
+            onDeleteVisitRecord = { rec ->
+                viewModel.deleteVisitRecord(rec)
+                Toast.makeText(
+                    context,
+                    if (isEn) "Visit check-in removed." else "Data kehadiran kunjungan dihapus.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { modalState.showDaftarHadirKunjunganSheet = false }
+        )
+    }
+
+    // Modal Kunjungan 3: Laporan Kehadiran (Sudah Hadir vs Belum Berkunjung)
+    if (modalState.showLaporanKunjunganSheet) {
+        LaporanKunjunganSheet(
+            sessions = visitSessions,
+            students = students,
+            visitRecords = visitRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            onQuickMarkManual = { sess, st, targetDate ->
+                viewModel.recordStudentVisitCheckIn(
+                    session = sess,
+                    student = st,
+                    visitDate = targetDate,
+                    visitorRelation = "Orang Tua / Wali",
+                    checkInMethod = com.example.data.model.VisitRecord.METHOD_MANUAL
+                ) { _, msg, _ ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showLaporanKunjunganSheet = false }
+        )
+    }
+
+    // Modal Kunjungan 4: Daftar Siswa per Kecamatan (Dinamis sesuai data siswa sekolah)
+    if (modalState.showSiswaPerKecamatanSheet) {
+        SiswaPerKecamatanSheet(
+            students = students,
+            visitSessions = visitSessions,
+            onStudentClick = { st -> modalState.visitStudentForDetail = st },
+            onDismiss = { modalState.showSiswaPerKecamatanSheet = false }
+        )
+    }
+
+    if (modalState.showCreateVisitSessionDialog && isAdminUser) {
+        CreateVisitSessionDialog(
+            students = students,
+            initialSession = modalState.visitSessionToEdit,
+            onDismiss = {
+                modalState.showCreateVisitSessionDialog = false
+                modalState.visitSessionToEdit = null
+            },
+            onConfirm = { title, monthYear, dates, districts, desc ->
+                val editing = modalState.visitSessionToEdit
+                if (editing != null) {
+                    viewModel.updateVisitSession(editing, title, monthYear, dates, districts, desc) { updated ->
+                        if (updated != null) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Visit session updated!" else "Sesi kunjungan diperbarui!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                } else {
+                    viewModel.createVisitSession(title, monthYear, dates, districts, desc) { created ->
+                        if (created != null) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Visit session created!" else "Sesi kunjungan \"${created.title}\" dibuat!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+                modalState.showCreateVisitSessionDialog = false
+                modalState.visitSessionToEdit = null
+            }
+        )
+    }
+
+    modalState.visitStudentForDetail?.let { detailStudent ->
+        val stRecords = allRecords.filter { it.studentId == detailStudent.id }
+        StudentDetailDialog(
+            student = detailStudent,
+            studentRecords = stRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            mengajiRecords = mengajiRecords,
+            fastingRecords = fastingRecords,
+            onDismiss = { modalState.visitStudentForDetail = null }
         )
     }
 }

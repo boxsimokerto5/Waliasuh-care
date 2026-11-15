@@ -57,6 +57,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
+import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -64,6 +65,8 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 
@@ -79,6 +82,10 @@ fun CategoryHubOverlay(
     suciRecords: List<HaidRecord>,
     shiftMessages: List<ShiftMessage>,
     mengajiRecords: List<MengajiRecord> = emptyList(),
+    students: List<ChildStudent> = emptyList(),
+    visitSessions: List<VisitSession> = emptyList(),
+    visitRecords: List<VisitRecord> = emptyList(),
+    isAdmin: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateToPlan: () -> Unit,
     onNavigateToRecords: () -> Unit,
@@ -100,7 +107,12 @@ fun CategoryHubOverlay(
     onOpenInputMengaji: () -> Unit = {},
     onOpenRiwayatMengaji: () -> Unit = {},
     onOpenKartuMengaji: () -> Unit = {},
-    onOpenRekapMengaji: () -> Unit = {}
+    onOpenRekapMengaji: () -> Unit = {},
+    onOpenJadwalKunjungan: () -> Unit = {},
+    onOpenDaftarHadirKunjungan: (Int) -> Unit = {},
+    onOpenLaporanKunjungan: () -> Unit = {},
+    onOpenSiswaPerKecamatan: () -> Unit = {},
+    onOpenCreateVisitSession: () -> Unit = {}
 ) {
     var lastCategory by remember { mutableStateOf(category) }
     if (category != null) {
@@ -127,6 +139,7 @@ fun CategoryHubOverlay(
 
         val gradientColors = when (current) {
             DashboardCategoryHub.BEROBAT -> listOf(Color(0xFF0369A1), Color(0xFF0F766E))
+            DashboardCategoryHub.KUNJUNGAN -> listOf(Color(0xFF1D4ED8), Color(0xFF0F766E))
             DashboardCategoryHub.PUASA -> listOf(Color(0xFF065F46), Color(0xFF0F766E))
             DashboardCategoryHub.HAID -> listOf(Color(0xFF9D174D), Color(0xFFDB2777))
             DashboardCategoryHub.PESAN -> listOf(Color(0xFFB45309), Color(0xFFD97706))
@@ -135,6 +148,7 @@ fun CategoryHubOverlay(
 
         val heroTitle = when (current) {
             DashboardCategoryHub.BEROBAT -> if (isEn) "Health & Treatment" else "Kesehatan & Berobat"
+            DashboardCategoryHub.KUNJUNGAN -> if (isEn) "Parent Visit Center" else "Pusat Kunjungan Orang Tua"
             DashboardCategoryHub.PUASA -> if (isEn) "Student Puasa Center" else "Pusat Pendataan Puasa"
             DashboardCategoryHub.HAID -> if (isEn) "Haid & Fiqih Care" else "Pendataan & Fiqih Haid"
             DashboardCategoryHub.PESAN -> if (isEn) "Shift Handover Notes" else "Pesan & Operan Shift"
@@ -146,6 +160,16 @@ fun CategoryHubOverlay(
                 "${todayPlans.size} plans today • ${upcomingPlans.size} upcoming"
             } else {
                 "${todayPlans.size} rencana hari ini • ${upcomingPlans.size} mendatang"
+            }
+            DashboardCategoryHub.KUNJUNGAN -> {
+                val activeVisit = visitSessions.firstOrNull { it.isActive } ?: visitSessions.firstOrNull()
+                if (activeVisit != null) {
+                    activeVisit.title
+                } else if (isEn) {
+                    "Monthly Schedule, Attendance & Districts"
+                } else {
+                    "Jadwal Bulanan, Daftar Hadir, Laporan & Kecamatan"
+                }
             }
             DashboardCategoryHub.PUASA -> {
                 val activeSess = fastingSessions.firstOrNull { it.isActive } ?: fastingSessions.firstOrNull()
@@ -172,6 +196,7 @@ fun CategoryHubOverlay(
 
         val heroImage = when (current) {
             DashboardCategoryHub.BEROBAT -> R.drawable.img_menu_rencana
+            DashboardCategoryHub.KUNJUNGAN -> R.drawable.img_menu_kunjungan
             DashboardCategoryHub.PUASA -> R.drawable.img_menu_input_puasa
             DashboardCategoryHub.HAID -> R.drawable.img_menu_daftar_haid
             DashboardCategoryHub.PESAN -> R.drawable.img_menu_pesan_shift
@@ -266,11 +291,12 @@ fun CategoryHubOverlay(
 
                             // Tombol Aksi Cepat Lingkaran di Kanan Atas
                             val quickActionIcon = when (current) {
-                                DashboardCategoryHub.PUASA, DashboardCategoryHub.HAID, DashboardCategoryHub.MENGAJI -> Icons.Default.QrCodeScanner
+                                DashboardCategoryHub.KUNJUNGAN, DashboardCategoryHub.PUASA, DashboardCategoryHub.HAID, DashboardCategoryHub.MENGAJI -> Icons.Default.QrCodeScanner
                                 else -> Icons.Default.Add
                             }
                             val quickActionDesc = when (current) {
                                 DashboardCategoryHub.BEROBAT -> if (isEn) "Create Plan" else "Buat Rencana"
+                                DashboardCategoryHub.KUNJUNGAN -> if (isEn) "Scan Visit Check-in" else "Scan Daftar Hadir Kunjungan"
                                 DashboardCategoryHub.PUASA -> if (isEn) "Scan Input Puasa" else "Scan Input Puasa"
                                 DashboardCategoryHub.HAID -> if (isEn) "Scan Input Haid" else "Scan Input Haid"
                                 DashboardCategoryHub.PESAN -> if (isEn) "Write Note" else "Tulis Pesan"
@@ -286,6 +312,7 @@ fun CategoryHubOverlay(
                                     .clickable {
                                         when (current) {
                                             DashboardCategoryHub.BEROBAT -> onOpenCreatePlan()
+                                            DashboardCategoryHub.KUNJUNGAN -> onOpenDaftarHadirKunjungan(0)
                                             DashboardCategoryHub.PUASA -> onOpenInputPuasa()
                                             DashboardCategoryHub.HAID -> onOpenInputHaid()
                                             DashboardCategoryHub.PESAN -> onOpenCreateShiftMessage()
@@ -416,6 +443,19 @@ fun CategoryHubOverlay(
                                     onOpenRiwayatMengaji = onOpenRiwayatMengaji,
                                     onOpenKartuMengaji = onOpenKartuMengaji,
                                     onOpenRekapMengaji = onOpenRekapMengaji
+                                )
+                                DashboardCategoryHub.KUNJUNGAN -> kunjunganCategoryItems(
+                                    isEn = isEn,
+                                    lang = lang,
+                                    students = students,
+                                    visitSessions = visitSessions,
+                                    visitRecords = visitRecords,
+                                    isAdmin = isAdmin,
+                                    onOpenJadwalKunjungan = onOpenJadwalKunjungan,
+                                    onOpenDaftarHadirKunjungan = onOpenDaftarHadirKunjungan,
+                                    onOpenLaporanKunjungan = onOpenLaporanKunjungan,
+                                    onOpenSiswaPerKecamatan = onOpenSiswaPerKecamatan,
+                                    onOpenCreateVisitSession = onOpenCreateVisitSession
                                 )
                             }
                         }

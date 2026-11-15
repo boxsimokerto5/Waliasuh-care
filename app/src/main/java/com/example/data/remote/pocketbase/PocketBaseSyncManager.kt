@@ -11,6 +11,8 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
 import com.example.data.repository.HealthRepository
 import com.example.util.i18n.AppLanguage
@@ -418,6 +420,54 @@ object PocketBaseSyncManager {
             }
         }
 
+    // --- Parent Visit (Kunjungan) Sessions & Records ---
+    suspend fun uploadSingleVisitSession(context: Context, session: VisitSession) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbVisitSessionDto.fromDomain(session)
+                upsertSingleDto(service, "visit_sessions", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleVisitSession ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteVisitSession(context: Context, sessionId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                deleteCollectionByFilter(service, "visit_records", buildSessionFilter(sessionId))
+                service.deleteRecord("visit_sessions", PocketBaseIdCodec.toPbId(sessionId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteVisitSession ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleVisitRecord(context: Context, record: VisitRecord) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbVisitRecordDto.fromDomain(record)
+                upsertSingleDto(service, "visit_records", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleVisitRecord ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteVisitRecord(context: Context, recordId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("visit_records", PocketBaseIdCodec.toPbId(recordId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteVisitRecord ke PocketBase", e)
+            }
+        }
+
     // --- Wali Accounts ---
     suspend fun uploadWaliAccounts(context: Context, accounts: List<WaliAccount>) =
         withContext(Dispatchers.IO) {
@@ -587,6 +637,8 @@ object PocketBaseSyncManager {
             val service = PocketBaseClient.getService(context) ?: return@withContext
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
+            runCatching { deleteCollectionByFilter(service, "visit_records", filter) }
+            runCatching { deleteCollectionByFilter(service, "visit_sessions", filter) }
             runCatching { deleteCollectionByFilter(service, "mengaji_records", filter) }
             runCatching { deleteCollectionByFilter(service, "medical_records", filter) }
             runCatching { deleteCollectionByFilter(service, "haid_records", filter) }
@@ -680,6 +732,93 @@ object PocketBaseSyncManager {
         val filter = buildSchoolFilter(cleanSchoolId)
 
         runCatching { syncShiftMessagesMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    suspend fun syncVisitsOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+
+        runCatching { syncVisitSessionsMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncVisitRecordsMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    private suspend fun syncVisitSessionsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localSessions = repository.getVisitSessionsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listVisitSessions(page = page, perPage = 500, filter = filter)
+        }
+        val remoteSessions = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+
+        val localById = localSessions.associateBy { it.id }
+        val remoteById = remoteSessions.associateBy { it.id }
+
+        val toInsertLocal = remoteSessions.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllVisitSessions(toInsertLocal)
+        }
+
+        val toPushRemote = localSessions.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { s ->
+                val dto = PbVisitSessionDto.fromDomain(s)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "visit_sessions", pairs)
+        }
+    }
+
+    private suspend fun syncVisitRecordsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localRecords = repository.getVisitRecordsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listVisitRecords(page = page, perPage = 500, filter = filter)
+        }
+        val remoteDtos = remoteRes.getOrNull() ?: return
+        val remoteRecords = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
+
+        val localById = localRecords.associateBy { it.id }
+        val remoteById = remoteRecords.associateBy { it.id }
+
+        val toInsertLocal = remoteRecords.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllVisitRecords(toInsertLocal)
+        }
+
+        val toPushRemote = localRecords.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { rec ->
+                val dto = PbVisitRecordDto.fromDomain(rec)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "visit_records", pairs)
+        }
     }
 
     private suspend fun syncFastingSessionsMerged(
@@ -1070,6 +1209,14 @@ object PocketBaseSyncManager {
             // 7. Sinkronkan Riwayat Mengaji Berkelanjutan (mengaji_records)
             runCatching {
                 syncMengajiRecordsMerged(service, cleanSchoolId, filter, repository)
+            }
+
+            // 8. Sinkronkan Sesi & Daftar Hadir Kunjungan Orang Tua (visit_sessions & visit_records)
+            runCatching {
+                syncVisitSessionsMerged(service, cleanSchoolId, filter, repository)
+            }
+            runCatching {
+                syncVisitRecordsMerged(service, cleanSchoolId, filter, repository)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())

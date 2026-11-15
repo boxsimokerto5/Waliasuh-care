@@ -75,6 +75,8 @@ fun QuickMenuTiles(
     todayFastingCount: Int = 0,
     mengajiTodayCount: Int = 0,
     mengajiTotalCount: Int = 0,
+    visitSessionsCount: Int = 0,
+    todayVisitsCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     modifier: Modifier = Modifier
@@ -121,14 +123,19 @@ fun QuickMenuTiles(
                         modifier = Modifier.weight(1f)
                     )
 
+                    val kunjunganBadge = when {
+                        todayVisitsCount > 0 -> "$todayVisitsCount"
+                        visitSessionsCount > 0 -> "$visitSessionsCount Sesi"
+                        else -> if (isEn) "Hub" else "Menu"
+                    }
                     SuperAppGridItem(
-                        title = if (isEn) "Action" else "Tindakan",
-                        imageRes = R.drawable.img_menu_tindakan,
-                        tileBg = Color(0xFFFEF3C7),
-                        badgeText = if (isEn) "Direct" else "Cepat",
-                        badgeBg = Color(0xFFD97706),
-                        onClick = onNavigateToDirectTreatment,
-                        testTag = "tile_tindakan_langsung",
+                        title = if (isEn) "Visits" else "Kunjungan",
+                        imageRes = R.drawable.img_menu_kunjungan,
+                        tileBg = Color(0xFFDBEAFE),
+                        badgeText = kunjunganBadge,
+                        badgeBg = Color(0xFF1D4ED8),
+                        onClick = { onOpenCategoryHub(DashboardCategoryHub.KUNJUNGAN) },
+                        testTag = "category_kunjungan",
                         modifier = Modifier.weight(1f)
                     )
 

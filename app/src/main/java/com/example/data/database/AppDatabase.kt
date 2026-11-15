@@ -24,10 +24,14 @@ import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
 import com.example.data.dao.MengajiRecordDao
+import com.example.data.dao.VisitRecordDao
+import com.example.data.dao.VisitSessionDao
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MengajiRecord
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 
 @Database(
     entities = [
@@ -39,9 +43,11 @@ import com.example.data.model.MengajiRecord
         HaidRecord::class,
         FastingSession::class,
         FastingRecord::class,
-        MengajiRecord::class
+        MengajiRecord::class,
+        VisitSession::class,
+        VisitRecord::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -54,6 +60,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun fastingSessionDao(): FastingSessionDao
     abstract fun fastingRecordDao(): FastingRecordDao
     abstract fun mengajiRecordDao(): MengajiRecordDao
+    abstract fun visitSessionDao(): VisitSessionDao
+    abstract fun visitRecordDao(): VisitRecordDao
 
     companion object {
         @Volatile
@@ -222,6 +230,55 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_16_17 = object : androidx.room.migration.Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS visit_sessions (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        title TEXT NOT NULL,
+                        monthYear TEXT NOT NULL DEFAULT '',
+                        sessionDatesCsv TEXT NOT NULL DEFAULT '',
+                        selectedDistrictsCsv TEXT NOT NULL DEFAULT '',
+                        description TEXT NOT NULL DEFAULT '',
+                        isActive INTEGER NOT NULL DEFAULT 1,
+                        createdBy TEXT NOT NULL DEFAULT 'Admin Sekolah',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS visit_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        sessionId INTEGER NOT NULL,
+                        sessionTitle TEXT NOT NULL DEFAULT '',
+                        visitDate INTEGER NOT NULL DEFAULT 0,
+                        checkedInAt INTEGER NOT NULL DEFAULT 0,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentNik TEXT NOT NULL DEFAULT '',
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        studentDistrict TEXT NOT NULL DEFAULT '',
+                        visitorName TEXT NOT NULL DEFAULT '',
+                        visitorRelation TEXT NOT NULL DEFAULT 'Orang Tua / Wali',
+                        checkInMethod TEXT NOT NULL DEFAULT 'BARCODE',
+                        isOutOfScheduleDistrict INTEGER NOT NULL DEFAULT 0,
+                        waliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        notes TEXT NOT NULL DEFAULT '',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -238,7 +295,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_12_13,
                         MIGRATION_13_14,
                         MIGRATION_14_15,
-                        MIGRATION_15_16
+                        MIGRATION_15_16,
+                        MIGRATION_16_17
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

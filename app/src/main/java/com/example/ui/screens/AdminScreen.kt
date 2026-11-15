@@ -112,14 +112,20 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.rememberDatePickerState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material3.ScrollableTabRow
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingSession
 import com.example.data.model.MengajiHelper
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitSession
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
+import com.example.ui.dialogs.CreateVisitSessionDialog
 import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
@@ -157,6 +163,8 @@ fun AdminScreen(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
 
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
@@ -171,6 +179,11 @@ fun AdminScreen(
     // State untuk Kelola Sesi Puasa (khusus Admin Sekolah)
     var showCreateFastingSessionDialog by remember { mutableStateOf(false) }
     var fastingSessionToDelete by remember { mutableStateOf<FastingSession?>(null) }
+
+    // State untuk Kelola Sesi Kunjungan Orang Tua (khusus Admin Sekolah)
+    var showCreateVisitSessionDialog by remember { mutableStateOf(false) }
+    var visitSessionToEdit by remember { mutableStateOf<VisitSession?>(null) }
+    var visitSessionToDelete by remember { mutableStateOf<VisitSession?>(null) }
 
     // State untuk Kelola Data Siswa
     var studentSearchQuery by remember { mutableStateOf("") }
@@ -207,6 +220,15 @@ fun AdminScreen(
         fastingSessions
             .filter { it.schoolId.equals(activeSchoolCode, ignoreCase = true) }
             .sortedByDescending { it.sessionDate }
+    }
+    val schoolVisitSessions = remember(visitSessions, activeSchoolCode) {
+        visitSessions
+            .filter { it.schoolId.equals(activeSchoolCode, ignoreCase = true) }
+            .sortedWith(
+                compareByDescending<VisitSession> { it.isActive }
+                    .thenByDescending { it.monthYear }
+                    .thenByDescending { it.createdAt }
+            )
     }
 
     val exportStudentsCsvLauncher = rememberLauncherForActivityResult(
@@ -475,7 +497,11 @@ fun AdminScreen(
                     when (selectedAdminTab) {
                         0 -> showAddStudentDialog = true
                         1 -> showAddDialog = true
-                        else -> showCreateFastingSessionDialog = true
+                        2 -> showCreateFastingSessionDialog = true
+                        else -> {
+                            visitSessionToEdit = null
+                            showCreateVisitSessionDialog = true
+                        }
                     }
                 },
                 containerColor = WaliPrimary,
@@ -491,11 +517,13 @@ fun AdminScreen(
                         imageVector = when (selectedAdminTab) {
                             0 -> Icons.Default.PersonAdd
                             2 -> Icons.Default.EventNote
+                            3 -> Icons.Default.CalendarMonth
                             else -> Icons.Default.Add
                         },
                         contentDescription = when (selectedAdminTab) {
                             0 -> if (isEn) "Add Student" else "Tambah Siswa"
                             2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
+                            3 -> if (isEn) "Create Visit Session" else "Buat Sesi Kunjungan"
                             else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
                         },
                         modifier = Modifier.size(20.dp)
@@ -505,6 +533,7 @@ fun AdminScreen(
                         text = when (selectedAdminTab) {
                             0 -> if (isEn) "Add Student" else "Tambah Siswa"
                             2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
+                            3 -> if (isEn) "Create Visit Session" else "Buat Kunjungan"
                             else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
                         },
                         fontWeight = FontWeight.Bold,
@@ -827,10 +856,11 @@ fun AdminScreen(
                     }
                 }
 
-                // Tab Navigasi: Kelola Data Siswa vs Akun Wali vs Sesi Puasa
+                // Tab Navigasi: Kelola Data Siswa vs Akun Wali vs Sesi Puasa vs Kunjungan
                 item {
-                    TabRow(
+                    ScrollableTabRow(
                         selectedTabIndex = selectedAdminTab,
+                        edgePadding = 4.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(10.dp)),
@@ -901,6 +931,28 @@ fun AdminScreen(
                                 }
                             },
                             modifier = Modifier.testTag("tab_admin_sesi_puasa")
+                        )
+                        Tab(
+                            selected = selectedAdminTab == 3,
+                            onClick = { selectedAdminTab = 3 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.CalendarMonth,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isEn) "Visits (${schoolVisitSessions.size})" else "Kunjungan (${schoolVisitSessions.size})",
+                                        fontSize = 11.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = if (selectedAdminTab == 3) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testTag("tab_admin_visit")
                         )
                     }
                 }
@@ -1292,10 +1344,10 @@ fun AdminScreen(
                         )
                     }
                 }
-                } else {
+                } else if (selectedAdminTab == 2) {
                     // ==========================================
                     // TAB 2: KELOLA SESI PUASA (KHUSUS ADMIN)
-                // ==========================================
+                    // ==========================================
                 item {
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth(),
@@ -1494,6 +1546,283 @@ fun AdminScreen(
                         }
                     }
                 }
+                } else {
+                    // ==========================================
+                    // TAB 3: KELOLA SESI KUNJUNGAN & KECAMATAN PESERTA
+                    // ==========================================
+                    item {
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarMonth,
+                                            contentDescription = null,
+                                            tint = Color(0xFF1D4ED8),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = if (isEn) "Parent Visit Sessions" else "Sesi Kunjungan Bulanan",
+                                            fontSize = 14.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color(0xFFDBEAFE))
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "${schoolVisitSessions.count { it.isActive }} Active"
+                                            } else {
+                                                "${schoolVisitSessions.count { it.isActive }} Sesi Aktif"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1D4ED8)
+                                        )
+                                    }
+                                }
+
+                                Text(
+                                    text = if (isEn) {
+                                        "Set monthly visit sessions with multiple scheduled dates (e.g., Week 2–4 Sundays) and select participating districts (Kecamatan) extracted from your school's students."
+                                    } else {
+                                        "Atur jadwal kunjungan per bulan dengan beberapa tanggal (mis. Minggu ke-2, ke-3, ke-4) dan pilih kecamatan peserta secara dinamis sesuai data siswa sekolah."
+                                    },
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+
+                                Button(
+                                    onClick = {
+                                        visitSessionToEdit = null
+                                        showCreateVisitSessionDialog = true
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("btn_admin_create_visit_session")
+                                ) {
+                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isEn) "Create Monthly Visit Session" else "Buat Sesi Kunjungan Baru",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (schoolVisitSessions.isEmpty()) {
+                        item {
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(28.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (isEn) {
+                                            "No visit sessions configured yet. Tap '+ Create Monthly Visit Session' to assign dates and participating districts."
+                                        } else {
+                                            "Belum ada sesi kunjungan bulanan. Tekan '+ Buat Sesi Kunjungan Baru' untuk memilih multi-tanggal & kecamatan pesertanya."
+                                        },
+                                        fontSize = 12.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        val visitDateFmt = SimpleDateFormat("EEE, d MMM", appLanguage.locale)
+                        items(schoolVisitSessions, key = { "admin_visit_${it.id}" }) { session ->
+                            val scheduledList = VisitHelper.scheduledStudentsForSession(session, schoolStudents)
+                            val sessionRecs = visitRecords.filter { it.sessionId == session.id }
+                            val datesList = session.getVisitDatesList()
+                            val districtsList = session.getDistrictsList()
+
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("admin_visit_session_${session.id}"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = session.title,
+                                                fontSize = 14.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = VisitHelper.formatMonthYearLabel(session.monthYear, appLanguage.locale),
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF1D4ED8)
+                                            )
+                                        }
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = if (session.isActive) {
+                                                    if (isEn) "Active" else "Aktif"
+                                                } else {
+                                                    if (isEn) "Closed" else "Selesai"
+                                                },
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (session.isActive) Color(0xFF15803D) else Color(0xFF64748B)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Switch(
+                                                checked = session.isActive,
+                                                onCheckedChange = { viewModel.toggleVisitSessionActive(session) }
+                                            )
+                                        }
+                                    }
+
+                                    if (datesList.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            datesList.forEach { d ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(Color(0xFFEFF6FF))
+                                                        .border(1.dp, Color(0xFFBFDBFE), RoundedCornerShape(8.dp))
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = visitDateFmt.format(Date(d)),
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = Color(0xFF1D4ED8)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (districtsList.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            districtsList.forEach { dist ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .background(Color(0xFFCCFBF1))
+                                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                                                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = Color(0xFF0F766E), modifier = Modifier.size(12.dp))
+                                                        Text(
+                                                            text = VisitHelper.displayDistrict(dist, isEn),
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.SemiBold,
+                                                            color = Color(0xFF0F766E)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (session.description.isNotBlank()) {
+                                        Text(
+                                            text = session.description,
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Scheduled: ${scheduledList.size} Students • Attended: ${sessionRecs.size}"
+                                            } else {
+                                                "Terjadwal: ${scheduledList.size} Siswa • Hadir: ${sessionRecs.size}"
+                                            },
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = {
+                                                    visitSessionToEdit = session
+                                                    showCreateVisitSessionDialog = true
+                                                },
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .testTag("btn_edit_visit_session_${session.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Edit,
+                                                    contentDescription = if (isEn) "Edit Visit Session" else "Edit Sesi Kunjungan",
+                                                    tint = Color(0xFF1D4ED8),
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { visitSessionToDelete = session },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = if (isEn) "Delete Visit Session" else "Hapus Sesi Kunjungan",
+                                                    tint = MaterialTheme.colorScheme.error,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -2018,6 +2347,82 @@ fun AdminScreen(
             },
             dismissButton = {
                 OutlinedButton(onClick = { fastingSessionToDelete = null }) {
+                    Text(appStrings.cancel)
+                }
+            }
+        )
+    }
+
+    if (showCreateVisitSessionDialog) {
+        CreateVisitSessionDialog(
+            students = schoolStudents,
+            initialSession = visitSessionToEdit,
+            onDismiss = {
+                showCreateVisitSessionDialog = false
+                visitSessionToEdit = null
+            },
+            onConfirm = { title, monthYear, dates, districts, description ->
+                val editing = visitSessionToEdit
+                if (editing != null) {
+                    viewModel.updateVisitSession(editing, title, monthYear, dates, districts, description) { updated ->
+                        if (updated != null) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Visit session updated!" else "Sesi kunjungan diperbarui!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                } else {
+                    viewModel.createVisitSession(title, monthYear, dates, districts, description) { created ->
+                        if (created != null) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Visit session \"${created.title}\" created!" else "Sesi kunjungan \"${created.title}\" berhasil dibuat!",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+                showCreateVisitSessionDialog = false
+                visitSessionToEdit = null
+            }
+        )
+    }
+
+    visitSessionToDelete?.let { session ->
+        AlertDialog(
+            onDismissRequest = { visitSessionToDelete = null },
+            icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            title = { Text(if (isEn) "Delete Visit Session?" else "Hapus Sesi Kunjungan?", fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    if (isEn) {
+                        "Visit session \"${session.title}\" and all attendance records inside it will be deleted."
+                    } else {
+                        "Sesi kunjungan \"${session.title}\" beserta riwayat kehadiran di dalamnya akan dihapus."
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.deleteVisitSession(session) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Visit session deleted." else "Sesi kunjungan dihapus.",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                        visitSessionToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(appStrings.delete)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { visitSessionToDelete = null }) {
                     Text(appStrings.cancel)
                 }
             }

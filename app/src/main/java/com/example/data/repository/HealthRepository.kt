@@ -17,10 +17,14 @@ import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
 import com.example.data.dao.MengajiRecordDao
+import com.example.data.dao.VisitRecordDao
+import com.example.data.dao.VisitSessionDao
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MengajiRecord
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 
 class HealthRepository(
     private val studentDao: ChildStudentDao,
@@ -31,7 +35,9 @@ class HealthRepository(
     private val haidRecordDao: HaidRecordDao? = null,
     private val fastingSessionDao: FastingSessionDao? = null,
     private val fastingRecordDao: FastingRecordDao? = null,
-    private val mengajiRecordDao: MengajiRecordDao? = null
+    private val mengajiRecordDao: MengajiRecordDao? = null,
+    private val visitSessionDao: VisitSessionDao? = null,
+    private val visitRecordDao: VisitRecordDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -47,6 +53,8 @@ class HealthRepository(
     val allFastingSessions: Flow<List<FastingSession>> = fastingSessionDao?.getAllSessions() ?: emptyFlow()
     val allFastingRecords: Flow<List<FastingRecord>> = fastingRecordDao?.getAllRecords() ?: emptyFlow()
     val allMengajiRecords: Flow<List<MengajiRecord>> = mengajiRecordDao?.getAllRecords() ?: emptyFlow()
+    val allVisitSessions: Flow<List<VisitSession>> = visitSessionDao?.getAllSessions() ?: emptyFlow()
+    val allVisitRecords: Flow<List<VisitRecord>> = visitRecordDao?.getAllRecords() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -330,5 +338,57 @@ class HealthRepository(
 
     suspend fun deleteMengajiRecordsBySchool(schoolId: String) {
         mengajiRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Parent Visit (Kunjungan) Session & Attendance Record Operations ---
+    suspend fun insertVisitSession(session: VisitSession): Long =
+        visitSessionDao?.insert(session) ?: 0L
+
+    suspend fun insertAllVisitSessions(sessions: List<VisitSession>) {
+        visitSessionDao?.insertAll(sessions)
+    }
+
+    suspend fun getVisitSessionsBySchoolList(schoolId: String): List<VisitSession> =
+        visitSessionDao?.getSessionsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun updateVisitSession(session: VisitSession) {
+        visitSessionDao?.update(session)
+    }
+
+    suspend fun deleteVisitSession(session: VisitSession) {
+        visitRecordDao?.deleteBySessionId(session.id)
+        visitSessionDao?.delete(session)
+    }
+
+    suspend fun deleteVisitSessionsBySchool(schoolId: String) {
+        visitSessionDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertVisitRecord(record: VisitRecord): Long =
+        visitRecordDao?.insert(record) ?: 0L
+
+    suspend fun insertAllVisitRecords(records: List<VisitRecord>) {
+        visitRecordDao?.insertAll(records)
+    }
+
+    suspend fun getAllVisitRecordsList(): List<VisitRecord> =
+        visitRecordDao?.getAllRecordsList() ?: emptyList()
+
+    suspend fun getVisitRecordsBySchoolList(schoolId: String): List<VisitRecord> =
+        visitRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getVisitRecordsBySessionList(sessionId: Long): List<VisitRecord> =
+        visitRecordDao?.getRecordsBySessionList(sessionId) ?: emptyList()
+
+    suspend fun updateVisitRecord(record: VisitRecord) {
+        visitRecordDao?.update(record)
+    }
+
+    suspend fun deleteVisitRecord(record: VisitRecord) {
+        visitRecordDao?.delete(record)
+    }
+
+    suspend fun deleteVisitRecordsBySchool(schoolId: String) {
+        visitRecordDao?.deleteBySchoolId(schoolId)
     }
 }

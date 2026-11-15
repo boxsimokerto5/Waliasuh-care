@@ -108,6 +108,24 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-session_date"
     ): Response<PbListResponse<PbMengajiRecordDto>>
 
+    // --- Visit Sessions (Kunjungan) ---
+    @GET("api/collections/visit_sessions/records")
+    suspend fun listVisitSessions(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbVisitSessionDto>>
+
+    // --- Visit Records (Kehadiran Kunjungan) ---
+    @GET("api/collections/visit_records/records")
+    suspend fun listVisitRecords(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-checked_in_at"
+    ): Response<PbListResponse<PbVisitRecordDto>>
+
     // --- School Profiles ---
     @GET("api/collections/school_profiles/records")
     suspend fun listSchoolProfiles(

@@ -10,6 +10,9 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
@@ -798,6 +801,149 @@ data class PbMengajiRecordDto(
                 fluencyStatus = model.fluencyStatus,
                 notes = model.notes,
                 waliName = model.waliName,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbVisitSessionDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "title") val title: String = "",
+    @Json(name = "month_year") val monthYear: String? = null,
+    @Json(name = "session_dates_csv") val sessionDatesCsv: String? = null,
+    @Json(name = "selected_districts_csv") val selectedDistrictsCsv: String? = null,
+    @Json(name = "description") val description: String? = null,
+    @Json(name = "is_active") val isActive: Boolean? = null,
+    @Json(name = "created_by") val createdBy: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): VisitSession {
+        val now = System.currentTimeMillis()
+        val resolvedCreated = createdAt?.takeIf { it > 0L } ?: now
+        return VisitSession(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            title = title.ifBlank { "Kunjungan Bulanan" },
+            monthYear = monthYear?.takeIf { it.isNotBlank() } ?: VisitHelper.buildDefaultMonthYear(resolvedCreated),
+            sessionDatesCsv = sessionDatesCsv.orEmpty(),
+            selectedDistrictsCsv = selectedDistrictsCsv.orEmpty(),
+            description = description.orEmpty(),
+            isActive = isActive ?: true,
+            createdBy = createdBy?.ifBlank { "Admin Sekolah" } ?: "Admin Sekolah",
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = resolvedCreated,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: VisitSession): PbVisitSessionDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "visit_session:${model.schoolId}:${model.monthYear}:${model.title}:${model.createdAt}"
+            )
+            return PbVisitSessionDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                title = model.title,
+                monthYear = model.monthYear,
+                sessionDatesCsv = model.sessionDatesCsv,
+                selectedDistrictsCsv = model.selectedDistrictsCsv,
+                description = model.description,
+                isActive = model.isActive,
+                createdBy = model.createdBy,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbVisitRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "session_id") val sessionId: Long = 0L,
+    @Json(name = "session_title") val sessionTitle: String? = null,
+    @Json(name = "visit_date") val visitDate: Long? = null,
+    @Json(name = "checked_in_at") val checkedInAt: Long? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "student_district") val studentDistrict: String? = null,
+    @Json(name = "visitor_name") val visitorName: String? = null,
+    @Json(name = "visitor_relation") val visitorRelation: String? = null,
+    @Json(name = "check_in_method") val checkInMethod: String? = null,
+    @Json(name = "is_out_of_schedule_district") val isOutOfScheduleDistrict: Boolean? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): VisitRecord {
+        val now = System.currentTimeMillis()
+        val resolvedVisitDate = visitDate?.takeIf { it > 0L } ?: now
+        val resolvedCheckIn = checkedInAt?.takeIf { it > 0L } ?: resolvedVisitDate
+        return VisitRecord(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            sessionId = sessionId,
+            sessionTitle = sessionTitle.orEmpty(),
+            visitDate = resolvedVisitDate,
+            checkedInAt = resolvedCheckIn,
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            studentDistrict = VisitHelper.normalizeDistrict(studentDistrict),
+            visitorName = visitorName.orEmpty(),
+            visitorRelation = visitorRelation?.ifBlank { "Orang Tua / Wali" } ?: "Orang Tua / Wali",
+            checkInMethod = checkInMethod?.ifBlank { VisitRecord.METHOD_BARCODE } ?: VisitRecord.METHOD_BARCODE,
+            isOutOfScheduleDistrict = isOutOfScheduleDistrict ?: false,
+            waliName = waliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            notes = notes.orEmpty(),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: resolvedCheckIn,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCheckIn
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: VisitRecord): PbVisitRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "visit_rec:${model.schoolId}:${model.sessionId}:${model.studentId}:${model.visitDate}:${model.studentName}"
+            )
+            return PbVisitRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                sessionId = model.sessionId,
+                sessionTitle = model.sessionTitle,
+                visitDate = model.visitDate,
+                checkedInAt = model.checkedInAt,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                studentDistrict = VisitHelper.normalizeDistrict(model.studentDistrict),
+                visitorName = model.visitorName,
+                visitorRelation = model.visitorRelation,
+                checkInMethod = model.checkInMethod,
+                isOutOfScheduleDistrict = model.isOutOfScheduleDistrict,
+                waliName = model.waliName,
+                notes = model.notes,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

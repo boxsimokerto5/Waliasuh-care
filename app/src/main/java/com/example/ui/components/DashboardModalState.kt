@@ -9,9 +9,11 @@ import androidx.compose.runtime.setValue
 
 import com.example.data.model.ChildStudent
 import com.example.data.model.MengajiRecord
+import com.example.data.model.VisitSession
 
 enum class DashboardCategoryHub {
     BEROBAT,
+    KUNJUNGAN,
     PUASA,
     HAID,
     PESAN,
@@ -42,6 +44,16 @@ class DashboardModalState {
     var showKartuMengajiSheet by mutableStateOf(false)
     var mengajiTargetStudent by mutableStateOf<ChildStudent?>(null)
     var mengajiRecordToEdit by mutableStateOf<MengajiRecord?>(null)
+
+    // Modul Kunjungan Orang Tua / Wali
+    var showJadwalKunjunganSheet by mutableStateOf(false)
+    var showDaftarHadirKunjunganSheet by mutableStateOf(false)
+    var daftarHadirKunjunganInitialTab by mutableStateOf(0)
+    var showLaporanKunjunganSheet by mutableStateOf(false)
+    var showSiswaPerKecamatanSheet by mutableStateOf(false)
+    var showCreateVisitSessionDialog by mutableStateOf(false)
+    var visitSessionToEdit by mutableStateOf<VisitSession?>(null)
+    var visitStudentForDetail by mutableStateOf<ChildStudent?>(null)
 }
 
 @Composable

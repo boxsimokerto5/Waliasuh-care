@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.Composable
 import com.example.R
+import com.example.data.model.ChildStudent
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -54,6 +55,9 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ShiftMessage
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 
@@ -921,3 +925,210 @@ internal fun LazyListScope.mengajiCategoryItems(
         }
     }
 }
+
+internal fun LazyListScope.kunjunganCategoryItems(
+    isEn: Boolean,
+    lang: com.example.util.i18n.AppLanguage,
+    students: List<ChildStudent>,
+    visitSessions: List<VisitSession>,
+    visitRecords: List<VisitRecord>,
+    isAdmin: Boolean,
+    onOpenJadwalKunjungan: () -> Unit,
+    onOpenDaftarHadirKunjungan: (Int) -> Unit,
+    onOpenLaporanKunjungan: () -> Unit,
+    onOpenSiswaPerKecamatan: () -> Unit,
+    onOpenCreateVisitSession: () -> Unit
+) {
+    val activeSession = visitSessions.firstOrNull { it.isActive } ?: visitSessions.firstOrNull()
+    val scheduledStudents = if (activeSession == null) {
+        emptyList()
+    } else {
+        VisitHelper.scheduledStudentsForSession(activeSession, students)
+    }
+    val sessionRecords = if (activeSession == null) {
+        emptyList()
+    } else {
+        visitRecords.filter { it.sessionId == activeSession.id }
+    }
+    val presentCount = if (activeSession == null) 0 else {
+        scheduledStudents.count { st -> VisitHelper.findVisitForStudent(sessionRecords, st) != null }
+    }
+    val absentCount = (scheduledStudents.size - presentCount).coerceAtLeast(0)
+    val dynamicDistrictCount = VisitHelper.extractDynamicDistricts(students, isEn).size
+
+    item(key = "hub_kunjungan_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Visit Schedule" else "Jadwal Kunjungan",
+                    subtitle = if (isEn) "Monthly & Multi-Date" else "Per Sesi & Kecamatan",
+                    imageRes = R.drawable.img_menu_kunjungan,
+                    badgeText = if (activeSession != null) {
+                        "${activeSession.getVisitDatesList().size} ${if (isEn) "Dates" else "Tgl"}"
+                    } else {
+                        if (isEn) "Monthly" else "Per Bulan"
+                    },
+                    badgeBg = Color(0xFFDBEAFE),
+                    badgeColor = Color(0xFF1D4ED8),
+                    bgGradient = listOf(Color(0xFFEFF6FF), Color(0xFFDBEAFE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFBFDBFE),
+                    onClick = onOpenJadwalKunjungan,
+                    testTag = "tile_jadwal_kunjungan",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Attendance" else "Daftar Hadir",
+                    subtitle = if (isEn) "Barcode & Manual PDF" else "Barcode & Cetak PDF",
+                    imageRes = R.drawable.img_menu_daftar_puasa,
+                    badgeText = if (isEn) "Scan & PDF" else "Scan & PDF",
+                    badgeBg = Color(0xFFCCFBF1),
+                    badgeColor = Color(0xFF0F766E),
+                    bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFF99F6E4),
+                    onClick = { onOpenDaftarHadirKunjungan(0) },
+                    testTag = "tile_daftar_hadir_kunjungan",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Visit Report" else "Laporan Kehadiran",
+                    subtitle = if (isEn) "Attended vs Pending" else "Hadir vs Belum Hadir",
+                    imageRes = R.drawable.img_menu_checklist_puasa,
+                    badgeText = if (activeSession != null) "$presentCount/${scheduledStudents.size}" else if (isEn) "Recap" else "Rekap",
+                    badgeBg = Color(0xFFDCFCE7),
+                    badgeColor = Color(0xFF15803D),
+                    bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFA7F3D0),
+                    onClick = onOpenLaporanKunjungan,
+                    testTag = "tile_laporan_kunjungan",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "By District" else "Siswa Kecamatan",
+                    subtitle = if (isEn) "District Student List" else "Daftar per Kecamatan",
+                    imageRes = R.drawable.img_menu_anak_asuh,
+                    badgeText = if (dynamicDistrictCount > 0) "$dynamicDistrictCount Kec." else if (isEn) "Districts" else "Dinamis",
+                    badgeBg = Color(0xFFFEF3C7),
+                    badgeColor = Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = onOpenSiswaPerKecamatan,
+                    testTag = "tile_siswa_per_kecamatan",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    item(key = "hub_kunjungan_active_session") {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (activeSession == null) {
+                    Text(
+                        text = if (isEn) {
+                            "No monthly visit session configured yet. School Admin picks scheduled dates and districts (Kecamatan) in Admin → Visit tab."
+                        } else {
+                            "Belum ada sesi kunjungan aktif. Admin Sekolah dapat membuat sesi kunjungan per bulan beserta multi-tanggal dan kecamatan di Halaman Admin → Tab Kunjungan."
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (isAdmin) {
+                        Button(
+                            onClick = onOpenCreateVisitSession,
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_hub_create_visit_session")
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (isEn) "Create Visit Session" else "Buat Sesi Kunjungan Baru", fontSize = 12.5.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                } else {
+                    val dateFmt = java.text.SimpleDateFormat("d MMM", lang.locale)
+                    val dateBadges = activeSession.getVisitDatesList().joinToString(" • ") { dateFmt.format(java.util.Date(it)) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(activeSession.title, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1D4ED8))
+                            Text(
+                                text = "${VisitHelper.formatMonthYearLabel(activeSession.monthYear, lang.locale)}${if (dateBadges.isNotBlank()) " • $dateBadges" else ""}",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        HubStatTile("${scheduledStudents.size}", if (isEn) "Scheduled" else "Terjadwal", Color(0xFFDBEAFE), Color(0xFF1D4ED8), Modifier.weight(1f))
+                        HubStatTile("$presentCount", if (isEn) "Attended" else "Sudah Hadir", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
+                        HubStatTile("$absentCount", if (isEn) "Pending" else "Belum Hadir", Color(0xFFFEE2E2), Color(0xFFDC2626), Modifier.weight(1f))
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { onOpenDaftarHadirKunjungan(0) },
+                            shape = RoundedCornerShape(10.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (isEn) "Scan Check-in" else "Scan Hadir", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        }
+                        OutlinedButton(
+                            onClick = { onOpenDaftarHadirKunjungan(1) },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                        ) {
+                            Text(
+                                if (isEn) "Manual PDF" else "Cetak PDF Manual",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF1D4ED8),
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

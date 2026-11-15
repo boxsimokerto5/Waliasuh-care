@@ -16,6 +16,9 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
 import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.data.remote.pocketbase.PocketBaseSyncManager
@@ -65,7 +68,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.haidRecordDao(),
             db.fastingSessionDao(),
             db.fastingRecordDao(),
-            db.mengajiRecordDao()
+            db.mengajiRecordDao(),
+            db.visitSessionDao(),
+            db.visitRecordDao()
         )
     }
 
@@ -890,6 +895,225 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // Multi-tenant isolated Parent Visit (Kunjungan Orang Tua) sessions & attendance records:
+    val visitSessions: StateFlow<List<VisitSession>> = combine(
+        repository.allVisitSessions,
+        _schoolProfile,
+        _currentUserRole
+    ) { sessions, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            sessions
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            sessions.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val visitRecords: StateFlow<List<VisitRecord>> = combine(
+        repository.allVisitRecords,
+        _schoolProfile,
+        _currentUserRole
+    ) { records, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun createVisitSession(
+        title: String,
+        monthYear: String,
+        visitDates: List<Long>,
+        selectedDistricts: List<String>,
+        description: String = "",
+        onComplete: (VisitSession?) -> Unit = {}
+    ) {
+        val role = _currentUserRole.value
+        if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+            onComplete(null)
+            return
+        }
+        viewModelScope.launch {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val now = System.currentTimeMillis()
+            val creator = _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
+            val newSession = VisitSession(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                title = title.trim(),
+                monthYear = monthYear.trim().ifBlank { VisitHelper.buildDefaultMonthYear(now) },
+                sessionDatesCsv = VisitHelper.formatDatesCsv(visitDates),
+                selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(selectedDistricts),
+                description = description.trim(),
+                isActive = true,
+                createdBy = creator,
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertVisitSession(newSession)
+            onComplete(newSession)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), newSession)
+            }
+        }
+    }
+
+    fun updateVisitSession(
+        session: VisitSession,
+        title: String,
+        monthYear: String,
+        visitDates: List<Long>,
+        selectedDistricts: List<String>,
+        description: String = "",
+        onComplete: (VisitSession?) -> Unit = {}
+    ) {
+        val role = _currentUserRole.value
+        if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+            onComplete(null)
+            return
+        }
+        viewModelScope.launch {
+            val updated = session.copy(
+                title = title.trim(),
+                monthYear = monthYear.trim().ifBlank { session.monthYear },
+                sessionDatesCsv = VisitHelper.formatDatesCsv(visitDates),
+                selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(selectedDistricts),
+                description = description.trim(),
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateVisitSession(updated)
+            onComplete(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), updated)
+            }
+        }
+    }
+
+    fun toggleVisitSessionActive(session: VisitSession, onComplete: () -> Unit = {}) {
+        if (_currentUserRole.value != UserRole.ADMIN && _currentUserRole.value != UserRole.SUPERADMIN) {
+            onComplete()
+            return
+        }
+        viewModelScope.launch {
+            val updated = session.copy(
+                isActive = !session.isActive,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateVisitSession(updated)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), updated)
+            }
+        }
+    }
+
+    fun deleteVisitSession(session: VisitSession, onComplete: () -> Unit = {}) {
+        if (_currentUserRole.value != UserRole.ADMIN && _currentUserRole.value != UserRole.SUPERADMIN) {
+            onComplete()
+            return
+        }
+        viewModelScope.launch {
+            repository.deleteVisitSession(session)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteVisitSession(getApplication(), session.id)
+            }
+        }
+    }
+
+    fun recordStudentVisitCheckIn(
+        session: VisitSession,
+        student: ChildStudent,
+        visitDate: Long = System.currentTimeMillis(),
+        visitorRelation: String = "Orang Tua / Wali",
+        visitorName: String = "",
+        checkInMethod: String = VisitRecord.METHOD_BARCODE,
+        notes: String = "",
+        onResult: (added: Boolean, message: String, record: VisitRecord?) -> Unit = { _, _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val normalizedDay = VisitHelper.normalizeDayStart(visitDate)
+            val existingInSession = repository.getVisitRecordsBySessionList(session.id)
+            val duplicate = VisitHelper.findVisitForStudent(
+                sessionRecords = existingInSession,
+                student = student,
+                targetDayStart = normalizedDay
+            )
+            if (duplicate != null) {
+                val dateFmt = java.text.SimpleDateFormat("d MMM yyyy", java.util.Locale.getDefault())
+                val msg = if (isEn) {
+                    "${student.name} already checked in on ${dateFmt.format(java.util.Date(normalizedDay))} (${session.title})."
+                } else {
+                    "${student.name} sudah tercatat hadir kunjungan pada ${dateFmt.format(java.util.Date(normalizedDay))} (${session.title})."
+                }
+                onResult(false, msg, duplicate)
+                return@launch
+            }
+
+            val now = System.currentTimeMillis()
+            val activeSchool = session.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val studentCleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            val cleanDistrict = VisitHelper.normalizeDistrict(student.district)
+            val outOfSchedule = session.getDistrictsList().isNotEmpty() &&
+                !VisitHelper.isStudentInSessionSchedule(session, student)
+
+            val record = VisitRecord(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                sessionId = session.id,
+                sessionTitle = session.title,
+                visitDate = normalizedDay,
+                checkedInAt = now,
+                studentId = student.id,
+                studentName = student.name,
+                studentNik = studentCleanNik,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                studentDistrict = cleanDistrict,
+                visitorName = visitorName.trim(),
+                visitorRelation = visitorRelation.trim().ifBlank { "Orang Tua / Wali" },
+                checkInMethod = checkInMethod,
+                isOutOfScheduleDistrict = outOfSchedule,
+                waliName = _waliName.value.ifBlank { "Wali Asuh" },
+                notes = notes.trim(),
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertVisitRecord(record)
+            val successMsg = if (isEn) {
+                "Visit check-in recorded for ${student.name}${if (outOfSchedule) " (outside scheduled district)" else ""}."
+            } else {
+                "Kehadiran kunjungan ${student.name} berhasil dicatat${if (outOfSchedule) " (di luar jadwal kecamatan)" else ""}."
+            }
+            onResult(true, successMsg, record)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitRecord(getApplication(), record)
+            }
+        }
+    }
+
+    fun deleteVisitRecord(record: VisitRecord, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteVisitRecord(record)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteVisitRecord(getApplication(), record.id)
+            }
+        }
+    }
+
+    fun syncVisitsOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncVisitsOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
     fun deleteHaidRecordById(id: Long, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             repository.deleteHaidRecordById(id)
@@ -930,6 +1154,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteWaliAccountsBySchool(targetId)
             repository.deleteShiftMessagesBySchool(targetId)
             repository.deleteHaidRecordsBySchool(targetId)
+            repository.deleteVisitRecordsBySchool(targetId)
+            repository.deleteVisitSessionsBySchool(targetId)
             onComplete()
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteStudentsBySchool(getApplication(), targetId)
@@ -2635,6 +2861,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (targetSchoolId.isNotBlank()) {
                 repository.deleteFastingRecordsBySchool(targetSchoolId)
                 repository.deleteFastingSessionsBySchool(targetSchoolId)
+                repository.deleteVisitRecordsBySchool(targetSchoolId)
+                repository.deleteVisitSessionsBySchool(targetSchoolId)
                 repository.deleteMengajiRecordsBySchool(targetSchoolId)
                 repository.deleteHaidRecordsBySchool(targetSchoolId)
                 repository.deleteShiftMessagesBySchool(targetSchoolId)
