@@ -20,6 +20,9 @@ interface ChildStudentDao {
     @Query("SELECT * FROM child_students WHERE id = :id")
     fun getStudentById(id: Long): Flow<ChildStudent?>
 
+    @Query("SELECT * FROM child_students WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): ChildStudent?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(student: ChildStudent): Long
 

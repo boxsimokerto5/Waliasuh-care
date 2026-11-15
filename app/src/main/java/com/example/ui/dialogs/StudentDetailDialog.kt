@@ -591,6 +591,16 @@ fun StudentDetailDialog(
                                             value = student.roomNumber.ifBlank { "-" }
                                         )
                                         ProfileDetailRow(
+                                            label = if (isEn) "Parent WhatsApp / Phone" else "No. HP Orang Tua",
+                                            value = student.parentPhone.ifBlank { "-" }
+                                        )
+                                        if (student.assignedWaliName.isNotBlank()) {
+                                            ProfileDetailRow(
+                                                label = if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
+                                                value = student.assignedWaliName
+                                            )
+                                        }
+                                        ProfileDetailRow(
                                             label = if (isEn) "Guardian / Mother Contact" else "Kontak Wali / Ibu",
                                             value = student.emergencyContact.ifBlank { "-" }
                                         )

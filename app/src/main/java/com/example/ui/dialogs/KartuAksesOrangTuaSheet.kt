@@ -1,0 +1,617 @@
+package com.example.ui.dialogs
+
+import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.data.model.ChildStudent
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.SchoolProfile
+import com.example.util.PasswordGenerator
+import com.example.util.StudentCsvParser
+import com.example.util.i18n.LocalAppStrings
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KartuAksesOrangTuaSheet(
+    students: List<ChildStudent>,
+    parentAccessLinks: List<ParentAccessLink>,
+    schoolProfile: SchoolProfile,
+    isStudentClaimedByCurrentWali: (ChildStudent) -> Boolean,
+    isAdmin: Boolean,
+    onGenerateAccessCard: (ChildStudent) -> Unit,
+    onResetPassword: (ParentAccessLink) -> Unit,
+    onEditStudentProfile: (ChildStudent) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboard = LocalClipboardManager.current
+    val isEn = LocalAppStrings.current.isEnglish
+
+    val hasClaimedStudents = remember(students, isStudentClaimedByCurrentWali) {
+        students.any { isStudentClaimedByCurrentWali(it) }
+    }
+    var searchQuery by remember { mutableStateOf("") }
+    // 0 = Anak Asuh Saya (default bila punya anak asuh & bukan admin), 1 = Semua Siswa
+    var selectedScope by remember(hasClaimedStudents, isAdmin) {
+        mutableStateOf(if (hasClaimedStudents && !isAdmin) 0 else 1)
+    }
+
+    val linkByStudentId = remember(parentAccessLinks) {
+        parentAccessLinks.associateBy { it.studentId }
+    }
+
+    val filteredStudents = remember(students, searchQuery, selectedScope, isStudentClaimedByCurrentWali, linkByStudentId) {
+        val q = searchQuery.trim().lowercase()
+        students.filter { st ->
+            val scopeMatch = if (selectedScope == 0) isStudentClaimedByCurrentWali(st) else true
+            val link = linkByStudentId[st.id]
+            val queryMatch = q.isBlank() ||
+                st.name.lowercase().contains(q) ||
+                st.motherName.lowercase().contains(q) ||
+                st.parentPhone.lowercase().contains(q) ||
+                st.classGrade.lowercase().contains(q) ||
+                st.dormitory.lowercase().contains(q) ||
+                (link?.username?.lowercase()?.contains(q) == true) ||
+                (link?.parentName?.lowercase()?.contains(q) == true)
+            scopeMatch && queryMatch
+        }.sortedWith(
+            compareByDescending<ChildStudent> { linkByStudentId.containsKey(it.id) }
+                .thenBy { it.name }
+        )
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 600.dp)
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEDE9FE)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Badge,
+                                contentDescription = null,
+                                tint = Color(0xFF6D28D9),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = if (isEn) "Parent Access Cards" else "Kartu Akses Orang Tua",
+                                fontSize = 16.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = if (isEn) {
+                                    "Auto-linked to student data & shareable via WhatsApp"
+                                } else {
+                                    "Otomatis terhubung data siswa & bisa dibagikan ke WA"
+                                },
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
+                    }
+                }
+
+                // Search
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = {
+                        Text(if (isEn) "Search student, parent name, or phone..." else "Cari siswa, nama orang tua, atau no. HP...", fontSize = 12.5.sp)
+                    },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = if (isEn) "Clear" else "Bersihkan", modifier = Modifier.size(16.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_search_kartu_ortu")
+                )
+
+                // Scope Chips
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val mineCount = students.count { isStudentClaimedByCurrentWali(it) }
+                    FilterChip(
+                        selected = selectedScope == 0,
+                        onClick = { selectedScope = 0 },
+                        label = { Text(if (isEn) "My Foster ($mineCount)" else "Anak Asuh Saya ($mineCount)", fontSize = 11.5.sp) }
+                    )
+                    FilterChip(
+                        selected = selectedScope == 1,
+                        onClick = { selectedScope = 1 },
+                        label = { Text(if (isEn) "All Students (${students.size})" else "Semua Siswa (${students.size})", fontSize = 11.5.sp) }
+                    )
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .heightIn(min = 200.dp, max = 440.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (filteredStudents.isEmpty()) {
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 28.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (selectedScope == 0) {
+                                        if (isEn) "No foster students claimed yet. Pick students in 'Pilih Anak Asuh' first or switch to 'All Students'."
+                                        else "Belum ada anak asuh dipilih. Pilih siswa di menu 'Pilih Anak Asuh' atau lihat tab 'Semua Siswa'."
+                                    } else {
+                                        if (isEn) "No matching student data." else "Data siswa tidak ditemukan."
+                                    },
+                                    fontSize = 12.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        items(filteredStudents, key = { "parent_card_${it.id}" }) { student ->
+                            val link = linkByStudentId[student.id]
+                            if (link == null) {
+                                Card(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("card_parent_unlinked_${student.id}"),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(student.name, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Parent: ${student.motherName.ifBlank { "-" }} • ${student.classGrade.ifBlank { "-" }}"
+                                                } else {
+                                                    "Orang Tua: ${student.motherName.ifBlank { "-" }} • ${student.classGrade.ifBlank { "-" }}"
+                                                },
+                                                fontSize = 11.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Button(
+                                            onClick = { onGenerateAccessCard(student) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6D28D9)),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 40.dp)
+                                                .testTag("btn_generate_parent_card_${student.id}")
+                                        ) {
+                                            Text(
+                                                text = if (isEn) "Create Card" else "Buat Kartu",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            } else {
+                                ParentDigitalIdCardItem(
+                                    student = student,
+                                    link = link,
+                                    schoolProfile = schoolProfile,
+                                    onCopy = { value, label ->
+                                        clipboard.setText(AnnotatedString(value))
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "$label copied!" else "$label disalin!",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    },
+                                    onResetPassword = { onResetPassword(link) },
+                                    onEditStudentProfile = { onEditStudentProfile(student) },
+                                    onShare = {
+                                        val effectivePhone = student.parentPhone.ifBlank { link.parentPhone }
+                                        val effectiveLink = link.copy(
+                                            parentName = student.motherName.ifBlank { link.parentName },
+                                            parentPhone = effectivePhone,
+                                            studentName = student.name,
+                                            studentClass = student.classGrade,
+                                            studentDorm = student.dormitory
+                                        )
+                                        PasswordGenerator.shareParentAccessCard(
+                                            context = context,
+                                            link = effectiveLink,
+                                            schoolProfile = schoolProfile,
+                                            isEnglish = isEn
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParentDigitalIdCardItem(
+    student: ChildStudent,
+    link: ParentAccessLink,
+    schoolProfile: SchoolProfile,
+    onCopy: (String, String) -> Unit,
+    onResetPassword: () -> Unit,
+    onEditStudentProfile: () -> Unit,
+    onShare: () -> Unit
+) {
+    val isEn = LocalAppStrings.current.isEnglish
+    var passwordVisible by remember { mutableStateOf(false) }
+
+    val displayParentName = student.motherName.trim()
+        .ifBlank { link.parentName.trim() }
+        .ifBlank { if (isEn) "Parent of ${student.name}" else "Orang Tua ${student.name}" }
+    val effectivePhone = student.parentPhone.trim().ifBlank { link.parentPhone.trim() }
+    val hasValidPhone = StudentCsvParser.formatWhatsAppDigits(effectivePhone).length >= 9
+
+    val accentColor = Color(0xFF5B21B6)
+    val bgTint = Color(0xFFF5F3FF)
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("card_parent_access_${student.id}"),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Digital ID Card Header matching AdminScreen WaliAccountCardItem
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Brush.horizontalGradient(listOf(Color(0xFF4F46E5), Color(0xFF7C3AED))))
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isEn) "PARENT DIGITAL ACCESS CARD" else "KARTU AKSES DIGITAL ORANG TUA",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White.copy(alpha = 0.9f)
+                        )
+                        Text(
+                            text = schoolProfile.shortName.ifBlank { schoolProfile.schoolName },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color.White.copy(alpha = 0.22f)
+                    ) {
+                        Text(
+                            text = student.classGrade.ifBlank { student.dormitory.ifBlank { "Siswa" } },
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Parent & Student Identity
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        text = displayParentName,
+                        fontSize = 14.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (isEn) {
+                            "Parent of ${student.name} (${student.dormitory.ifBlank { "-" }})"
+                        } else {
+                            "Orang tua dari ${student.name} (${student.dormitory.ifBlank { "-" }})"
+                        },
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Phone,
+                            contentDescription = null,
+                            tint = if (hasValidPhone) Color(0xFF15803D) else Color(0xFFD97706),
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = if (hasValidPhone) {
+                                "WhatsApp: $effectivePhone"
+                            } else {
+                                if (isEn) "Phone empty — add via Edit Profile or share via regular WA"
+                                else "No. HP belum diisi — tambah lewat Edit Profil atau Share WA biasa"
+                            },
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (hasValidPhone) Color(0xFF15803D) else Color(0xFFB45309)
+                        )
+                    }
+                }
+
+                // Credentials Card
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(10.dp)),
+                    colors = CardDefaults.cardColors(containerColor = bgTint),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Username:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(link.username, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = accentColor)
+                            }
+                            IconButton(
+                                onClick = { onCopy(link.username, "Username") },
+                                modifier = Modifier.size(30.dp)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = "Copy Username", tint = accentColor, modifier = Modifier.size(15.dp))
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Password:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (passwordVisible) link.password else "••••••••",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                IconButton(
+                                    onClick = { passwordVisible = !passwordVisible },
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                        contentDescription = if (passwordVisible) "Hide Password" else "Show Password",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                                IconButton(
+                                    onClick = { onCopy(link.password, "Password") },
+                                    modifier = Modifier.size(30.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = "Copy Password", tint = accentColor, modifier = Modifier.size(15.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Bottom Action Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = onEditStudentProfile,
+                            shape = RoundedCornerShape(8.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier
+                                .heightIn(min = 38.dp)
+                                .testTag("btn_edit_parent_phone_${student.id}")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp), tint = accentColor)
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (hasValidPhone) {
+                                    if (isEn) "Profile" else "Edit Profil"
+                                } else {
+                                    if (isEn) "+ Phone" else "+ No. HP"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = accentColor
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onResetPassword,
+                            modifier = Modifier
+                                .size(38.dp)
+                                .testTag("btn_reset_parent_pass_${student.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = if (isEn) "Reset Password" else "Acak Password",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = onShare,
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .heightIn(min = 38.dp)
+                            .testTag("btn_share_parent_card_${student.id}")
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (hasValidPhone) {
+                                if (isEn) "Send WA" else "Kirim WA"
+                            } else {
+                                if (isEn) "Share WA" else "Share WA"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,5 +1,9 @@
 package com.example.util
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import com.example.data.model.ParentAccessLink
 import com.example.data.model.SchoolProfile
 import com.example.data.model.WaliAccount
 import com.example.util.i18n.AppLanguage
@@ -76,5 +80,96 @@ object PasswordGenerator {
                 _Pesan ini dikirim oleh Administrator ($adminDisplay)._
             """.trimIndent()
         }
+    }
+
+    /**
+     * Format pesan WhatsApp / Share resmi untuk membagikan Kartu Akses Orang Tua.
+     */
+    fun formatParentAccessWhatsAppMessage(
+        link: ParentAccessLink,
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH)
+    ): String {
+        val schoolDisplay = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
+            .ifBlank { if (isEnglish) "School" else "Sekolah" }
+        val parentDisplay = link.parentName.ifBlank {
+            if (isEnglish) "Parent / Guardian of ${link.studentName}" else "Bapak/Ibu Orang Tua dari ${link.studentName}"
+        }
+        val waliDisplay = link.assignedWaliName.ifBlank {
+            if (isEnglish) "Foster Caregiver" else "Wali Asuh"
+        }
+        val enabledPermissions = buildList {
+            if (link.canViewMengaji) add(if (isEnglish) "Mengaji History" else "Riwayat Mengaji")
+            if (link.canViewMedical) add(if (isEnglish) "Medical History" else "Riwayat Sakit")
+            if (link.canViewFasting) add(if (isEnglish) "Fasting History" else "Riwayat Puasa")
+        }.ifEmpty {
+            listOf(if (isEnglish) "Messages with Caregiver" else "Pesan dengan Wali Asuh")
+        }.joinToString(", ")
+
+        return if (isEnglish) {
+            """
+                *PARENT ACCESS CARD — WALI ASUH CARE*
+                _${schoolDisplay}_
+
+                Dear *$parentDisplay*,
+                Here is your official parent login account to monitor *${link.studentName}* (${link.studentClass.ifBlank { "-" }} • ${link.studentDorm.ifBlank { "-" }}):
+
+                👤 *Username:* ${link.username}
+                🔑 *Password:* ${link.password}
+                🏫 *School Code:* ${link.schoolId}
+                👨‍👩‍👧 *Foster Caregiver:* $waliDisplay
+                📋 *Available Access:* $enabledPermissions
+
+                Please open the Wali Asuh Care app and sign in using the username & password above.
+            """.trimIndent()
+        } else {
+            """
+                *KARTU AKSES ORANG TUA — WALI ASUH CARE*
+                _${schoolDisplay}_
+
+                Yth. *$parentDisplay*,
+                Berikut adalah kartu akses login resmi untuk memantau perkembangan ananda *${link.studentName}* (${link.studentClass.ifBlank { "-" }} • ${link.studentDorm.ifBlank { "-" }}):
+
+                👤 *Username:* ${link.username}
+                🔑 *Password:* ${link.password}
+                🏫 *Kode Sekolah:* ${link.schoolId}
+                👨‍👩‍👧 *Wali Asuh Pembina:* $waliDisplay
+                📋 *Akses Dibuka:* $enabledPermissions
+
+                Silakan buka aplikasi Wali Asuh Care dan login menggunakan username & password di atas.
+            """.trimIndent()
+        }
+    }
+
+    /**
+     * Membagikan kartu akses orang tua:
+     * - Jika nomor HP orang tua tersedia (>= 8 digit), buka WhatsApp langsung ke nomor tujuan.
+     * - Jika nomor HP belum diisi, gunakan dialog share standar (share WA biasa).
+     */
+    fun shareParentAccessCard(
+        context: Context,
+        link: ParentAccessLink,
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        isEnglish: Boolean = (AppLanguageManager.currentLanguage == AppLanguage.ENGLISH)
+    ) {
+        val message = formatParentAccessWhatsAppMessage(link, schoolProfile, isEnglish)
+        val waDigits = StudentCsvParser.formatWhatsAppDigits(link.parentPhone)
+        if (waDigits.length >= 9) {
+            val waUrl = "https://wa.me/$waDigits?text=${Uri.encode(message)}"
+            val waIntent = Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val started = runCatching { context.startActivity(waIntent) }.isSuccess
+            if (started) return
+        }
+        val chooserTitle = if (isEnglish) "Share Parent Access Card" else "Bagikan Kartu Akses Orang Tua"
+        val sendIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, message)
+        }
+        val chooser = Intent.createChooser(sendIntent, chooserTitle).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runCatching { context.startActivity(chooser) }
     }
 }

@@ -118,4 +118,32 @@ class ExampleUnitTest {
     assertEquals("Nama Lengkap,Asrama,No WhatsApp,Username,Password", lines[0])
     assertEquals("Ustadz Ahmad,Asrama Putra,081234567890,ustahmad,Pass#1234", lines[1])
   }
+
+  @Test
+  fun testExportStudentsToCsv_preservesParentPhoneColumn() {
+    val student = com.example.data.model.ChildStudent(
+      id = 2L,
+      name = "Farhan Hakim",
+      nis = "3190011223",
+      gender = "L",
+      age = 11,
+      dormitory = "Asrama Putra",
+      classGrade = "V-A",
+      nik = "3506011101120001",
+      noKk = "3506011101120009",
+      birthPlace = "KEDIRI",
+      birthDate = "01-01-2015",
+      motherName = "Aminah Zahra",
+      address = "Jl. Merpati No. 12",
+      district = "Pare",
+      jenjang = "SD",
+      parentPhone = "0812-3456-7890",
+      schoolId = "SRT1-KDR"
+    )
+    val csv = com.example.util.StudentCsvParser.exportStudentsToCsv(listOf(student))
+    val parsed = com.example.util.StudentCsvParser.parseCsv(csv, "SRT1-KDR")
+    assertEquals(1, parsed.size)
+    assertEquals("081234567890", parsed[0].parentPhone)
+    assertEquals("6281234567890", com.example.util.StudentCsvParser.formatWhatsAppDigits(parsed[0].parentPhone))
+  }
 }

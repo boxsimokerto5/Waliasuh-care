@@ -26,10 +26,14 @@ import com.example.data.dao.HaidRecordDao
 import com.example.data.dao.MengajiRecordDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
+import com.example.data.dao.ParentAccessLinkDao
+import com.example.data.dao.ParentMessageDao
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 
@@ -45,9 +49,11 @@ import com.example.data.model.VisitSession
         FastingRecord::class,
         MengajiRecord::class,
         VisitSession::class,
-        VisitRecord::class
+        VisitRecord::class,
+        ParentAccessLink::class,
+        ParentMessage::class
     ],
-    version = 17,
+    version = 18,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -62,6 +68,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun mengajiRecordDao(): MengajiRecordDao
     abstract fun visitSessionDao(): VisitSessionDao
     abstract fun visitRecordDao(): VisitRecordDao
+    abstract fun parentAccessLinkDao(): ParentAccessLinkDao
+    abstract fun parentMessageDao(): ParentMessageDao
 
     companion object {
         @Volatile
@@ -279,6 +287,63 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_17_18 = object : androidx.room.migration.Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN parentPhone TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN assignedWaliUsername TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN assignedWaliName TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS parent_access_links (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        studentId INTEGER NOT NULL,
+                        studentName TEXT NOT NULL,
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        parentName TEXT NOT NULL DEFAULT '',
+                        parentPhone TEXT NOT NULL DEFAULT '',
+                        username TEXT NOT NULL,
+                        password TEXT NOT NULL,
+                        assignedWaliUsername TEXT NOT NULL DEFAULT '',
+                        assignedWaliName TEXT NOT NULL DEFAULT '',
+                        canViewMengaji INTEGER NOT NULL DEFAULT 1,
+                        canViewMedical INTEGER NOT NULL DEFAULT 1,
+                        canViewFasting INTEGER NOT NULL DEFAULT 1,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS parent_messages (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        studentId INTEGER NOT NULL,
+                        studentName TEXT NOT NULL DEFAULT '',
+                        parentName TEXT NOT NULL DEFAULT '',
+                        waliUsername TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL DEFAULT '',
+                        senderRole TEXT NOT NULL DEFAULT 'WALI',
+                        senderName TEXT NOT NULL DEFAULT '',
+                        messageContent TEXT NOT NULL,
+                        isReadByWali INTEGER NOT NULL DEFAULT 0,
+                        isReadByParent INTEGER NOT NULL DEFAULT 0,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -296,7 +361,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_13_14,
                         MIGRATION_14_15,
                         MIGRATION_15_16,
-                        MIGRATION_16_17
+                        MIGRATION_16_17,
+                        MIGRATION_17_18
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
@@ -335,7 +401,8 @@ abstract class AppDatabase : RoomDatabase() {
                             district = obj.optString("district", obj.optString("kecamatan", "")),
                             roomNumber = obj.optString("roomNumber", ""),
                             jenjang = obj.optString("jenjang", ""),
-                            schoolId = "SRT1-KDR"
+                            schoolId = "SRT1-KDR",
+                            parentPhone = obj.optString("parentPhone", obj.optString("noHpOrangTua", ""))
                         )
                     )
                 }

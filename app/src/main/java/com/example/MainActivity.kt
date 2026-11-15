@@ -77,6 +77,7 @@ import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.DashboardScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MedicalRecordScreen
+import com.example.ui.screens.ParentPortalScreen
 import com.example.ui.screens.PlanScreen
 import com.example.ui.screens.ProfileScreen
 import com.example.ui.screens.SplashScreen
@@ -145,6 +146,12 @@ class MainActivity : ComponentActivity() {
                             }
                             userRole == UserRole.ADMIN -> {
                                 AdminScreen(
+                                    viewModel = viewModel,
+                                    onLogout = { viewModel.logout() }
+                                )
+                            }
+                            userRole == UserRole.PARENT -> {
+                                ParentPortalScreen(
                                     viewModel = viewModel,
                                     onLogout = { viewModel.logout() }
                                 )
@@ -236,8 +243,13 @@ private fun WaliAsuhCareAppContent(
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
+    val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
+    val myFosterStudentsCount = remember(students, waliName) {
+        students.count { viewModel.isStudentClaimedByCurrentWali(it) }
+    }
     val inpatientCount = remember(allRecords) {
         allRecords.count { it.isInpatient && it.status != "CANCELLED" }
     }
@@ -531,6 +543,9 @@ private fun WaliAsuhCareAppContent(
                 students = students,
                 visitSessions = visitSessions,
                 visitRecords = visitRecords,
+                parentAccessLinks = parentAccessLinks,
+                parentMessages = parentMessages,
+                myFosterStudentsCount = myFosterStudentsCount,
                 isAdmin = (currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN),
                 onDismiss = { dashboardModalState.activeCategoryHub = null },
                 onNavigateToPlan = {
@@ -645,6 +660,23 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.visitSessionToEdit = null
                     dashboardModalState.showCreateVisitSessionDialog = true
+                },
+                onOpenPilihAnakAsuh = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showPilihAnakAsuhSheet = true
+                },
+                onOpenKartuAksesOrtu = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showKartuAksesOrtuSheet = true
+                },
+                onOpenPilihanAksesOrtu = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showPilihanAksesOrtuSheet = true
+                },
+                onOpenPesanOrtu = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.selectedParentChatStudent = null
+                    dashboardModalState.showPesanOrtuSheet = true
                 }
             )
         }

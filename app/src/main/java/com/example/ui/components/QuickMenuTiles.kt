@@ -77,6 +77,8 @@ fun QuickMenuTiles(
     mengajiTotalCount: Int = 0,
     visitSessionsCount: Int = 0,
     todayVisitsCount: Int = 0,
+    unreadParentMessagesCount: Int = 0,
+    myFosterStudentsCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     modifier: Modifier = Modifier
@@ -139,14 +141,20 @@ fun QuickMenuTiles(
                         modifier = Modifier.weight(1f)
                     )
 
+                    val ortuBadge = when {
+                        unreadParentMessagesCount > 0 -> "$unreadParentMessagesCount Chat"
+                        myFosterStudentsCount > 0 -> "$myFosterStudentsCount"
+                        else -> if (isEn) "Hub" else "Menu"
+                    }
+                    val ortuBadgeBg = if (unreadParentMessagesCount > 0) Color(0xFFDC2626) else Color(0xFF4F46E5)
                     SuperAppGridItem(
-                        title = if (isEn) "Records" else "Rekam Medis",
-                        imageRes = R.drawable.img_menu_rekam_medis,
-                        tileBg = Color(0xFFDCFCE7),
-                        badgeText = null,
-                        badgeBg = Color(0xFF16A34A),
-                        onClick = onNavigateToRecords,
-                        testTag = "tile_rekam_medis",
+                        title = if (isEn) "Parents" else "Hubungan Ortu",
+                        imageRes = R.drawable.img_menu_orang_tua,
+                        tileBg = Color(0xFFE0E7FF),
+                        badgeText = ortuBadge,
+                        badgeBg = ortuBadgeBg,
+                        onClick = { onOpenCategoryHub(DashboardCategoryHub.ORANG_TUA) },
+                        testTag = "category_orang_tua",
                         modifier = Modifier.weight(1f)
                     )
 

@@ -1126,6 +1126,13 @@ fun AdminScreen(
                             AdminStudentCardItem(
                                 student = student,
                                 onViewDetail = { selectedDetailStudent = student },
+                                onReleaseWali = if (student.assignedWaliName.isNotBlank() || student.assignedWaliUsername.isNotBlank()) {
+                                    {
+                                        viewModel.releaseStudentClaim(student) { ok, msg ->
+                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                } else null,
                                 onDelete = { studentToDelete = student }
                             )
                         }
@@ -1869,7 +1876,8 @@ fun AdminScreen(
                     address = newStudent.address,
                     district = newStudent.district,
                     roomNumber = newStudent.roomNumber,
-                    jenjang = newStudent.jenjang
+                    jenjang = newStudent.jenjang,
+                    parentPhone = newStudent.parentPhone
                 )
                 Toast.makeText(
                     context,
@@ -2783,6 +2791,7 @@ fun WaliAccountCardItem(
 fun AdminStudentCardItem(
     student: ChildStudent,
     onViewDetail: () -> Unit,
+    onReleaseWali: (() -> Unit)? = null,
     onDelete: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
@@ -2935,6 +2944,53 @@ fun AdminStudentCardItem(
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    if (student.parentPhone.isNotBlank()) {
+                        Text(
+                            text = if (isEn) "📱 Parent Phone: ${student.parentPhone}" else "📱 HP Ortu: ${student.parentPhone}",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFF0F766E)
+                        )
+                    }
+                    if (student.assignedWaliName.isNotBlank() || student.assignedWaliUsername.isNotBlank()) {
+                        val waliDisplay = student.assignedWaliName.ifBlank { student.assignedWaliUsername }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.padding(top = 2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .background(Color(0xFFEDE9FE))
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = if (isEn) "Wali: $waliDisplay" else "Dibina: $waliDisplay",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF5B21B6)
+                                )
+                            }
+                            if (onReleaseWali != null) {
+                                OutlinedButton(
+                                    onClick = onReleaseWali,
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier
+                                        .height(24.dp)
+                                        .testTag("btn_admin_release_wali_${student.id}")
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Release" else "Lepas",
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFB45309)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

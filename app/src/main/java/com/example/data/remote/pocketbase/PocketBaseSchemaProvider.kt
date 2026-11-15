@@ -30,7 +30,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.40.6 • 12 Koleksi Multi-Tenant + Kunjungan, Mengaji & Kecamatan (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.41.0 • 14 Koleksi Multi-Tenant + Hubungan Orang Tua & Portal Ortu (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -58,7 +58,10 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("address", "text"),
                 PbFieldDef("district", "text"),
                 PbFieldDef("room_number", "text"),
-                PbFieldDef("jenjang", "text")
+                PbFieldDef("jenjang", "text"),
+                PbFieldDef("parent_phone", "text"),
+                PbFieldDef("assigned_wali_username", "text"),
+                PbFieldDef("assigned_wali_name", "text")
             ),
             indexes = listOf("CREATE INDEX idx_cs_school ON child_students (school_id)")
         ),
@@ -323,6 +326,53 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_vr_school ON visit_records (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "parent_access_links",
+            description = "Kartu akses login orang tua & pilihan izin modul per siswa",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("parent_name", "text"),
+                PbFieldDef("parent_phone", "text"),
+                PbFieldDef("username", "text"),
+                PbFieldDef("password", "text"),
+                PbFieldDef("assigned_wali_username", "text"),
+                PbFieldDef("assigned_wali_name", "text"),
+                PbFieldDef("can_view_mengaji", "bool"),
+                PbFieldDef("can_view_medical", "bool"),
+                PbFieldDef("can_view_fasting", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_pal_school ON parent_access_links (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "parent_messages",
+            description = "Pesan dua arah antara Wali Asuh pembina dan Orang Tua siswa",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("parent_name", "text"),
+                PbFieldDef("wali_username", "text"),
+                PbFieldDef("wali_name", "text"),
+                PbFieldDef("sender_role", "text"),
+                PbFieldDef("sender_name", "text"),
+                PbFieldDef("message_content", "text"),
+                PbFieldDef("is_read_by_wali", "bool"),
+                PbFieldDef("is_read_by_parent", "bool"),
+                PbFieldDef("created_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_pm_school ON parent_messages (school_id)")
         )
     )
 

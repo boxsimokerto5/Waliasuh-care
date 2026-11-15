@@ -8,6 +8,8 @@ import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -627,6 +629,42 @@ object PocketBaseSyncManager {
         }
     }
 
+    // --- Parent Access Links & Parent Messages ---
+    suspend fun uploadSingleParentAccessLink(context: Context, link: ParentAccessLink) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbParentAccessLinkDto.fromDomain(link)
+                upsertSingleDto(service, "parent_access_links", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleParentAccessLink ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteParentAccessLink(context: Context, linkId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("parent_access_links", PocketBaseIdCodec.toPbId(linkId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteParentAccessLink ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleParentMessage(context: Context, message: ParentMessage) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbParentMessageDto.fromDomain(message)
+                upsertSingleDto(service, "parent_messages", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleParentMessage ke PocketBase", e)
+            }
+        }
+
     /**
      * Menghapus seluruh data satu tenant sekolah dari PocketBase saat akun sekolah dihapus permanen.
      */
@@ -635,6 +673,8 @@ object PocketBaseSyncManager {
             if (!PocketBaseConfig.isConfigured(context) || schoolId.isBlank()) return@withContext
             val filter = buildSchoolFilter(schoolId)
             val service = PocketBaseClient.getService(context) ?: return@withContext
+            runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
+            runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_records", filter) }
@@ -701,6 +741,21 @@ object PocketBaseSyncManager {
         } catch (e: Exception) {
             Log.e(TAG, "Silent error sync wali_accounts", e)
         }
+
+        try {
+            val remoteParentResult = fetchAllPages { page ->
+                service.listParentAccessLinks(page = page, perPage = 500)
+            }
+            val remoteParents = remoteParentResult.getOrNull()
+                ?.map { it.toDomainModel() }
+                ?.filterNot { PocketBaseConfig.isSchoolCodeDeleted(context, it.schoolId) }
+                .orEmpty()
+            if (remoteParents.isNotEmpty()) {
+                repository.insertAllParentAccessLinks(remoteParents)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Silent error sync parent_access_links", e)
+        }
     }
 
     /**
@@ -746,6 +801,103 @@ object PocketBaseSyncManager {
 
         runCatching { syncVisitSessionsMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncVisitRecordsMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    suspend fun syncParentRelationsOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+
+        runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    private suspend fun syncParentAccessLinksMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localLinks = repository.getParentAccessLinksBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listParentAccessLinks(page = page, perPage = 500, filter = filter)
+        }
+        val remoteLinks = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+
+        val localById = localLinks.associateBy { it.id }
+        val remoteById = remoteLinks.associateBy { it.id }
+
+        val toInsertLocal = remoteLinks.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllParentAccessLinks(toInsertLocal)
+        }
+
+        val toPushRemote = localLinks.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { link ->
+                val dto = PbParentAccessLinkDto.fromDomain(link)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "parent_access_links", pairs)
+        }
+    }
+
+    private suspend fun syncParentMessagesMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localMsgs = repository.getParentMessagesBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listParentMessages(page = page, perPage = 500, filter = filter)
+        }
+        val remoteMsgs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+
+        val localById = localMsgs.associateBy { it.id }
+        val remoteById = remoteMsgs.associateBy { it.id }
+
+        val mergedReadRemote = remoteMsgs.map { rem ->
+            val loc = localById[rem.id]
+            if (loc != null) {
+                rem.copy(
+                    isReadByWali = rem.isReadByWali || loc.isReadByWali,
+                    isReadByParent = rem.isReadByParent || loc.isReadByParent
+                )
+            } else rem
+        }
+        val toInsertLocal = mergedReadRemote.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || loc != rem
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllParentMessages(toInsertLocal)
+        }
+
+        val toPushRemote = localMsgs.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null ||
+                (loc.isReadByWali && !rem.isReadByWali) ||
+                (loc.isReadByParent && !rem.isReadByParent)
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { msg ->
+                val dto = PbParentMessageDto.fromDomain(msg)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "parent_messages", pairs)
+        }
     }
 
     private suspend fun syncVisitSessionsMerged(
@@ -1217,6 +1369,14 @@ object PocketBaseSyncManager {
             }
             runCatching {
                 syncVisitRecordsMerged(service, cleanSchoolId, filter, repository)
+            }
+
+            // 9. Sinkronkan Kartu Akses & Pesan Orang Tua (parent_access_links & parent_messages)
+            runCatching {
+                syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository)
+            }
+            runCatching {
+                syncParentMessagesMerged(service, cleanSchoolId, filter, repository)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())

@@ -13,6 +13,8 @@ import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -41,13 +43,15 @@ enum class UserRole {
     NOT_LOGGED_IN,
     WALI,
     ADMIN,
-    SUPERADMIN
+    SUPERADMIN,
+    PARENT
 }
 
 sealed class LoginResult {
     object SuccessSuperAdmin : LoginResult()
     object SuccessAdmin : LoginResult()
     data class SuccessWali(val account: WaliAccount) : LoginResult()
+    data class SuccessParent(val link: ParentAccessLink) : LoginResult()
     data class Error(val message: String) : LoginResult()
 }
 
@@ -70,7 +74,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.fastingRecordDao(),
             db.mengajiRecordDao(),
             db.visitSessionDao(),
-            db.visitRecordDao()
+            db.visitRecordDao(),
+            db.parentAccessLinkDao(),
+            db.parentMessageDao()
         )
     }
 
@@ -92,10 +98,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             "SUPERADMIN" -> UserRole.SUPERADMIN
             "ADMIN" -> UserRole.ADMIN
             "WALI" -> UserRole.WALI
+            "PARENT" -> UserRole.PARENT
             else -> UserRole.NOT_LOGGED_IN
         }
     )
     val currentUserRole: StateFlow<UserRole> = _currentUserRole.asStateFlow()
+
+    private val _currentParentStudentId = MutableStateFlow(authPrefs.getLong("saved_parent_student_id", 0L))
+    val currentParentStudentId: StateFlow<Long> = _currentParentStudentId.asStateFlow()
 
     // Active Wali Name (Loaded from preferences or active login)
     private val _waliName = MutableStateFlow(
@@ -149,7 +159,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(application)) {
             when (_currentUserRole.value) {
-                UserRole.ADMIN, UserRole.WALI -> {
+                UserRole.ADMIN, UserRole.WALI, UserRole.PARENT -> {
                     val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                     viewModelScope.launch {
                         PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
@@ -184,7 +194,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             while (true) {
                 kotlinx.coroutines.delay(45_000L)
                 val role = _currentUserRole.value
-                if (role != UserRole.ADMIN && role != UserRole.WALI) continue
+                if (role != UserRole.ADMIN && role != UserRole.WALI && role != UserRole.PARENT) continue
                 if (_isSyncing.value) continue
                 if (!PocketBaseConfig.isConfigured(getApplication())) continue
                 val activeCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
@@ -630,7 +640,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
                 UserRole.WALI ->
                     _waliName.value.ifBlank { "Wali Asuh" }
-                UserRole.NOT_LOGGED_IN -> "Wali Asuh"
+                UserRole.PARENT, UserRole.NOT_LOGGED_IN -> "Wali Asuh"
             }
             val newSession = FastingSession(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
@@ -921,6 +931,378 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // ==========================================
+    // HUBUNGAN ORANG TUA (ANAK BINAAN, KARTU AKSES, IZIN & CHAT 2 ARAH)
+    // ==========================================
+    val parentAccessLinks: StateFlow<List<ParentAccessLink>> = combine(
+        repository.allParentAccessLinks,
+        _schoolProfile,
+        _currentUserRole
+    ) { links, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            links
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            links.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val parentMessages: StateFlow<List<ParentMessage>> = combine(
+        repository.allParentMessages,
+        _schoolProfile,
+        _currentUserRole
+    ) { messages, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            messages
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            messages.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val activeParentAccessLink: StateFlow<ParentAccessLink?> = combine(
+        parentAccessLinks,
+        _currentUserRole,
+        _currentUsername,
+        _currentParentStudentId
+    ) { links, role, username, studentId ->
+        if (role != UserRole.PARENT) {
+            null
+        } else {
+            links.firstOrNull { studentId > 0L && it.studentId == studentId }
+                ?: links.firstOrNull { !username.isNullOrBlank() && it.username.equals(username.trim(), ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun isStudentClaimedByOtherWali(student: ChildStudent): Boolean {
+        val claimedUser = student.assignedWaliUsername.trim()
+        val claimedName = student.assignedWaliName.trim()
+        if (claimedUser.isBlank() && claimedName.isBlank()) return false
+        val role = _currentUserRole.value
+        if (role == UserRole.ADMIN || role == UserRole.SUPERADMIN) return false
+        val activeUser = _currentUsername.value?.trim().orEmpty()
+        val activeName = _waliName.value.trim()
+        val matchesUser = activeUser.isNotBlank() && claimedUser.isNotBlank() && claimedUser.equals(activeUser, ignoreCase = true)
+        val matchesName = activeName.isNotBlank() && claimedName.isNotBlank() && claimedName.equals(activeName, ignoreCase = true)
+        return !(matchesUser || matchesName)
+    }
+
+    fun isStudentClaimedByCurrentWali(student: ChildStudent): Boolean {
+        val claimedUser = student.assignedWaliUsername.trim()
+        val claimedName = student.assignedWaliName.trim()
+        if (claimedUser.isBlank() && claimedName.isBlank()) return false
+        val activeUser = _currentUsername.value?.trim().orEmpty()
+        val activeName = _waliName.value.trim()
+        val matchesUser = activeUser.isNotBlank() && claimedUser.isNotBlank() && claimedUser.equals(activeUser, ignoreCase = true)
+        val matchesName = activeName.isNotBlank() && claimedName.isNotBlank() && claimedName.equals(activeName, ignoreCase = true)
+        return matchesUser || matchesName
+    }
+
+    fun canCurrentUserReleaseStudent(student: ChildStudent): Boolean {
+        if (student.assignedWaliUsername.isBlank() && student.assignedWaliName.isBlank()) return false
+        val role = _currentUserRole.value
+        if (role == UserRole.ADMIN || role == UserRole.SUPERADMIN) return true
+        return isStudentClaimedByCurrentWali(student)
+    }
+
+    private fun buildParentAccessUsername(student: ChildStudent, existingUsernames: Set<String>): String {
+        val nameSlug = student.name.trim().lowercase()
+            .replace(Regex("[^a-z0-9]"), "")
+            .take(8)
+            .ifBlank { "siswa" }
+        val codeSuffix = student.nis.filter { it.isLetterOrDigit() }.takeLast(4)
+            .ifBlank { (student.id % 10000L).toString() }
+        var candidate = "ortu_${nameSlug}_$codeSuffix"
+        var attempt = 1
+        while (candidate.lowercase() in existingUsernames) {
+            attempt++
+            candidate = "ortu_${nameSlug}_${codeSuffix}_$attempt"
+        }
+        return candidate
+    }
+
+    private suspend fun createOrSyncParentLinkForStudent(
+        student: ChildStudent,
+        assignedWaliUser: String = student.assignedWaliUsername,
+        assignedWaliDisplay: String = student.assignedWaliName
+    ): ParentAccessLink {
+        val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+        val existing = repository.getParentAccessLinkByStudentId(student.id, activeSchool)
+        val now = System.currentTimeMillis()
+        val cleanPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(student.parentPhone)
+        val resolvedParentName = student.motherName.trim().ifBlank {
+            existing?.parentName?.trim().orEmpty().ifBlank { "Orang Tua ${student.name}" }
+        }
+        val link = if (existing != null) {
+            existing.copy(
+                studentName = student.name,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                parentName = resolvedParentName,
+                parentPhone = cleanPhone.ifBlank { existing.parentPhone },
+                assignedWaliUsername = assignedWaliUser.ifBlank { existing.assignedWaliUsername },
+                assignedWaliName = assignedWaliDisplay.ifBlank { existing.assignedWaliName },
+                updatedAt = now
+            )
+        } else {
+            val allUsernames = repository.getAllParentAccessLinksList().map { it.username.lowercase() }.toSet()
+            ParentAccessLink(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                studentId = student.id,
+                studentName = student.name,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                parentName = resolvedParentName,
+                parentPhone = cleanPhone,
+                username = buildParentAccessUsername(student, allUsernames),
+                password = PasswordGenerator.generateRandomPassword(),
+                assignedWaliUsername = assignedWaliUser,
+                assignedWaliName = assignedWaliDisplay,
+                canViewMengaji = true,
+                canViewMedical = true,
+                canViewFasting = true,
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+        }
+        repository.insertParentAccessLink(link)
+        if (!isUnitTestEnvironment()) {
+            PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), link)
+        }
+        return link
+    }
+
+    fun claimStudentsForCurrentWali(
+        selectedStudents: List<ChildStudent>,
+        onResult: (claimedCount: Int, skippedCount: Int) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val waliDisplay = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val waliUser = _currentUsername.value?.trim().orEmpty().ifBlank {
+                waliDisplay.lowercase().replace(" ", "")
+            }
+            var claimedCount = 0
+            var skippedCount = 0
+            selectedStudents.forEach { st ->
+                val latest = repository.getStudentById(st.id) ?: st
+                if (isStudentClaimedByOtherWali(latest)) {
+                    skippedCount++
+                } else {
+                    val updatedStudent = latest.copy(
+                        assignedWaliUsername = waliUser,
+                        assignedWaliName = waliDisplay
+                    )
+                    repository.updateStudent(updatedStudent)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.uploadSingleStudent(getApplication(), updatedStudent)
+                    }
+                    createOrSyncParentLinkForStudent(updatedStudent, waliUser, waliDisplay)
+                    claimedCount++
+                }
+            }
+            onResult(claimedCount, skippedCount)
+        }
+    }
+
+    fun releaseStudentClaim(
+        student: ChildStudent,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val latest = repository.getStudentById(student.id) ?: student
+            if (!canCurrentUserReleaseStudent(latest)) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Only School Admin or the assigned Wali Asuh can release this student."
+                    } else {
+                        "Hanya Admin Sekolah atau Wali Asuh pembina bersangkutan yang dapat melepas siswa ini."
+                    }
+                )
+                return@launch
+            }
+            val releasedStudent = latest.copy(
+                assignedWaliUsername = "",
+                assignedWaliName = ""
+            )
+            repository.updateStudent(releasedStudent)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), releasedStudent)
+            }
+            val activeSchool = latest.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            repository.getParentAccessLinkByStudentId(latest.id, activeSchool)?.let { existingLink ->
+                val updatedLink = existingLink.copy(
+                    assignedWaliUsername = "",
+                    assignedWaliName = "",
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.updateParentAccessLink(updatedLink)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updatedLink)
+                }
+            }
+            onResult(
+                true,
+                if (isEn) "${latest.name} has been released." else "${latest.name} berhasil dilepas dari binaan."
+            )
+        }
+    }
+
+    fun ensureParentAccessLinkForStudent(
+        student: ChildStudent,
+        onReady: (ParentAccessLink) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val link = createOrSyncParentLinkForStudent(student)
+            onReady(link)
+        }
+    }
+
+    fun resetParentAccessPassword(
+        link: ParentAccessLink,
+        onComplete: (String) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val newPass = PasswordGenerator.generateRandomPassword()
+            val updated = link.copy(
+                password = newPass,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateParentAccessLink(updated)
+            onComplete(newPass)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+        }
+    }
+
+    fun updateParentAccessIdentity(
+        link: ParentAccessLink,
+        parentName: String,
+        parentPhone: String,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val cleanName = parentName.trim().ifBlank { link.parentName }
+            val cleanPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(parentPhone)
+            val updatedLink = link.copy(
+                parentName = cleanName,
+                parentPhone = cleanPhone,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateParentAccessLink(updatedLink)
+            repository.getStudentById(link.studentId)?.let { student ->
+                val updatedStudent = student.copy(
+                    motherName = if (cleanName.isNotBlank() && !cleanName.startsWith("Orang Tua ", ignoreCase = true)) cleanName else student.motherName,
+                    parentPhone = cleanPhone
+                )
+                repository.updateStudent(updatedStudent)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadSingleStudent(getApplication(), updatedStudent)
+                }
+            }
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updatedLink)
+            }
+        }
+    }
+
+    fun updateParentAccessPermissions(
+        link: ParentAccessLink,
+        canMengaji: Boolean,
+        canMedical: Boolean,
+        canFasting: Boolean,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val updated = link.copy(
+                canViewMengaji = canMengaji,
+                canViewMedical = canMedical,
+                canViewFasting = canFasting,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateParentAccessLink(updated)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+        }
+    }
+
+    fun sendParentMessage(
+        student: ChildStudent,
+        messageContent: String,
+        senderRole: String,
+        onComplete: () -> Unit = {}
+    ) {
+        val cleanText = messageContent.trim()
+        if (cleanText.isBlank()) return
+        viewModelScope.launch {
+            val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val existingLink = repository.getParentAccessLinkByStudentId(student.id, activeSchool)
+            val isParentSender = senderRole.equals("PARENT", ignoreCase = true)
+            val senderDisplay = if (isParentSender) {
+                existingLink?.parentName?.ifBlank { student.motherName.ifBlank { "Orang Tua ${student.name}" } }
+                    ?: student.motherName.ifBlank { "Orang Tua ${student.name}" }
+            } else {
+                _waliName.value.trim().ifBlank { "Wali Asuh" }
+            }
+            val waliUser = student.assignedWaliUsername.ifBlank {
+                if (!isParentSender) _currentUsername.value.orEmpty() else existingLink?.assignedWaliUsername.orEmpty()
+            }
+            val waliDisplay = student.assignedWaliName.ifBlank {
+                if (!isParentSender) _waliName.value else existingLink?.assignedWaliName.orEmpty()
+            }
+            val msg = ParentMessage(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                studentId = student.id,
+                studentName = student.name,
+                parentName = existingLink?.parentName?.ifBlank { student.motherName } ?: student.motherName,
+                waliUsername = waliUser,
+                waliName = waliDisplay,
+                senderRole = if (isParentSender) "PARENT" else "WALI",
+                senderName = senderDisplay,
+                messageContent = cleanText,
+                isReadByWali = !isParentSender,
+                isReadByParent = isParentSender,
+                schoolId = activeSchool,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.insertParentMessage(msg)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentMessage(getApplication(), msg)
+            }
+        }
+    }
+
+    fun markParentMessagesAsRead(studentId: Long, readerRole: String) {
+        viewModelScope.launch {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            if (readerRole.equals("PARENT", ignoreCase = true)) {
+                repository.markParentMessagesReadByParent(studentId, activeSchool)
+            } else {
+                repository.markParentMessagesReadByWali(studentId, activeSchool)
+            }
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.syncParentRelationsOnlineQuietly(getApplication(), activeSchool, repository)
+            }
+        }
+    }
+
+    fun syncParentRelationsQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncParentRelationsOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
 
     fun createVisitSession(
         title: String,
@@ -1828,7 +2210,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         address: String = "",
         district: String = "",
         roomNumber: String = "",
-        jenjang: String = ""
+        jenjang: String = "",
+        parentPhone: String = ""
     ) {
         viewModelScope.launch {
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
@@ -1856,6 +2239,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 district = district.trim(),
                 roomNumber = roomNumber.trim(),
                 jenjang = resolvedJenjang,
+                parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(parentPhone),
                 schoolId = activeSchool
             )
             val newId = repository.insertStudent(student)
@@ -1867,6 +2251,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun updateStudent(student: ChildStudent, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
+            val cleanParentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(student.parentPhone)
             val sanitizedStudent = student.copy(
                 name = student.name.trim(),
                 nis = student.nis.trim(),
@@ -1880,9 +2265,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 roomNumber = student.roomNumber.trim(),
                 jenjang = student.jenjang.trim(),
                 nik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
-                noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk)
+                noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk),
+                parentPhone = cleanParentPhone
             )
             repository.updateStudent(sanitizedStudent)
+            val activeSchool = sanitizedStudent.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val existingLink = repository.getParentAccessLinkByStudentId(sanitizedStudent.id, activeSchool)
+            if (existingLink != null) {
+                val syncedLink = existingLink.copy(
+                    studentName = sanitizedStudent.name,
+                    studentNis = sanitizedStudent.nis,
+                    studentClass = sanitizedStudent.classGrade,
+                    studentDorm = sanitizedStudent.dormitory,
+                    parentName = sanitizedStudent.motherName.ifBlank { existingLink.parentName },
+                    parentPhone = cleanParentPhone,
+                    assignedWaliUsername = sanitizedStudent.assignedWaliUsername,
+                    assignedWaliName = sanitizedStudent.assignedWaliName,
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.updateParentAccessLink(syncedLink)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), syncedLink)
+                }
+            }
             onComplete()
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleStudent(getApplication(), sanitizedStudent)
@@ -2162,14 +2567,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 ?: repository.getWaliAccountByUsername(username)
         }
 
+        suspend fun findLocalParentLink(username: String, password: String): ParentAccessLink? {
+            val all = repository.getAllParentAccessLinksList()
+            val candidates = all.filter {
+                it.username.trim().equals(username, ignoreCase = true) ||
+                    it.username.trim().replace(" ", "").equals(username.replace(" ", ""), ignoreCase = true)
+            }
+            return candidates.firstOrNull { it.password.trim() == password }
+                ?: candidates.firstOrNull()
+                ?: repository.getParentAccessLinkByUsername(username)
+        }
+
         // Jika belum ditemukan di lokal (misal baru login di perangkat lain), tarik katalog auth dari PocketBase
         var matchedSchool = findLocalSchoolAdmin(cleanUser)
         var account = if (matchedSchool == null) findLocalWali(cleanUser, cleanPass) else null
-        if (matchedSchool == null && account == null && !isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+        var parentLink = if (matchedSchool == null && account == null) findLocalParentLink(cleanUser, cleanPass) else null
+        if (matchedSchool == null && account == null && parentLink == null && !isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
             PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
             matchedSchool = findLocalSchoolAdmin(cleanUser)
             if (matchedSchool == null) {
                 account = findLocalWali(cleanUser, cleanPass)
+            }
+            if (matchedSchool == null && account == null) {
+                parentLink = findLocalParentLink(cleanUser, cleanPass)
             }
         }
 
@@ -2308,11 +2728,94 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return LoginResult.SuccessWali(account)
         }
 
+        // 4. Cek Akun Orang Tua (Kartu Akses Orang Tua)
+        if (parentLink != null) {
+            if (parentLink.password.trim() != cleanPass) {
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Incorrect password for parent account '${parentLink.username}'. Please check capitalization and try again."
+                    } else {
+                        "Password untuk akun orang tua '${parentLink.username}' salah. Silakan periksa kembali huruf besar/kecil."
+                    }
+                )
+            }
+
+            val matchedSchoolParent = repository.getSchoolByCode(parentLink.schoolId)
+                ?: repository.getAllSchoolRegistrationsList().firstOrNull {
+                    it.generatedSchoolCode.equals(parentLink.schoolId, ignoreCase = true)
+                }
+            if (matchedSchoolParent != null && matchedSchoolParent.status == "SUSPENDED") {
+                return LoginResult.Error(
+                    if (isEn) {
+                        "Sorry, this school account is currently suspended by the admin."
+                    } else {
+                        "Maaf akun sekolah sedang disuspend oleh admin"
+                    }
+                )
+            }
+
+            val displayParentName = parentLink.parentName.trim().ifBlank { "Orang Tua ${parentLink.studentName}" }
+            _currentUserRole.value = UserRole.PARENT
+            _waliName.value = displayParentName
+            _currentUsername.value = parentLink.username
+            _currentParentStudentId.value = parentLink.studentId
+
+            val activeSchoolCode = when {
+                matchedSchoolParent != null -> {
+                    persistSchoolProfile(buildProfileForSchool(matchedSchoolParent), markCustomized = false)
+                    matchedSchoolParent.generatedSchoolCode
+                }
+                parentLink.schoolId.isNotBlank() -> {
+                    val cleanCode = parentLink.schoolId.trim()
+                    if (!_schoolProfile.value.tenantCode.equals(cleanCode, ignoreCase = true)) {
+                        persistSchoolProfile(
+                            SchoolProfile(
+                                schoolName = cleanCode,
+                                shortName = cleanCode,
+                                tenantCode = cleanCode
+                            ),
+                            markCustomized = false
+                        )
+                    }
+                    cleanCode
+                }
+                else -> _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            }
+
+            if (rememberMe) {
+                authPrefs.edit()
+                    .putString("saved_role", "PARENT")
+                    .putString("saved_wali_name", displayParentName)
+                    .putString("saved_username", parentLink.username)
+                    .putLong("saved_parent_student_id", parentLink.studentId)
+                    .apply()
+            }
+
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                viewModelScope.launch {
+                    PocketBaseSyncManager.syncAllSchoolData(
+                        context = getApplication(),
+                        schoolId = activeSchoolCode,
+                        repository = repository,
+                        localSchoolProfile = _schoolProfile.value,
+                        localProfileUpdatedAt = getProfileUpdatedAt(activeSchoolCode),
+                        onRemoteSchoolProfileUpdated = { remoteProfile, remoteTs ->
+                            applyRemoteSchoolProfile(remoteProfile, remoteTs)
+                        },
+                        onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
+                            processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
+                        }
+                    )
+                }
+            }
+            return LoginResult.SuccessParent(parentLink)
+        }
+
         return LoginResult.Error(
             if (isEn) {
-                "Username '$cleanUser' was not found. Make sure the account has been registered by an Administrator."
+                "Username '$cleanUser' was not found. Make sure the account has been registered by an Administrator or Wali Asuh."
             } else {
-                "Username '$cleanUser' tidak ditemukan. Pastikan akun telah didaftarkan oleh Administrator."
+                "Username '$cleanUser' tidak ditemukan. Pastikan akun telah terdaftar di Administrator atau Wali Asuh."
             }
         )
     }
@@ -2583,6 +3086,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     fun logout() {
         _currentUserRole.value = UserRole.NOT_LOGGED_IN
         _currentUsername.value = null
+        _currentParentStudentId.value = 0L
         authPrefs.edit().clear().apply()
         NotificationHelper.cancelAllNotifications(getApplication())
     }
@@ -2859,6 +3363,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             // 1. Bersihkan seluruh data sekolah di Room lokal (students cascade ke medical_records)
             if (targetSchoolId.isNotBlank()) {
+                repository.deleteParentMessagesBySchool(targetSchoolId)
+                repository.deleteParentAccessLinksBySchool(targetSchoolId)
                 repository.deleteFastingRecordsBySchool(targetSchoolId)
                 repository.deleteFastingSessionsBySchool(targetSchoolId)
                 repository.deleteVisitRecordsBySchool(targetSchoolId)

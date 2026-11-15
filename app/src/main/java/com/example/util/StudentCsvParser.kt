@@ -9,14 +9,14 @@ import java.util.Calendar
 object StudentCsvParser {
 
     const val STANDARD_HEADER =
-        "No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN,KECAMATAN"
+        "No,Nama,Kelas,Jenjang,Alamat,Jenis Kelamin,NIK,NO KK,TEMPAT LAHIR,TANGGAL LAHIR,NAMA IBU,NISN,KECAMATAN,NO HP ORANG TUA"
 
     val STANDARD_TEMPLATE_CSV: String = """
         $STANDARD_HEADER
-        1,ADAM JULIAN SHANO,SD 1-2,SD,"Dsn. Manukan Rt 02 Rw 08 Ds. Jabon, Kec. Banyakan, Kab. Kediri",L,3508220907180002,3506220301180009,KEDIRI,09-07-2018,RUMIYATI,3185428544,Banyakan
-        2,AZZURA FAUZIAH,SD 1-2,SD,"Karangtalun, Kec. Kras, Kab. Kediri",P,1771057004190001,3173010601096079,BENGKULU,30-04-2019,AULIA HANIFAH,3196328403,Kras
-        3,AHMAD SYAIFUL ARSYAD,VII-1,SMP,"Pagung, Kec. Semen, Kab. Kediri",L,3506012001140002,3506013107120001,KEDIRI,20-01-2014,SITI MUNJIAH,0141204471,Semen
-        4,ADELIA SUKMAWATI,XI-1 (IPA),SMA,"Dusun Gambiran, Desa Kedak, Kec. Semen, Kab. Kediri",P,3506015105090001,3506010412103889,KEDIRI,11-05-2009,ARI SATUJU,0099412567,Semen
+        1,ADAM JULIAN SHANO,SD 1-2,SD,"Dsn. Manukan Rt 02 Rw 08 Ds. Jabon, Kec. Banyakan, Kab. Kediri",L,3508220907180002,3506220301180009,KEDIRI,09-07-2018,RUMIYATI,3185428544,Banyakan,081234567801
+        2,AZZURA FAUZIAH,SD 1-2,SD,"Karangtalun, Kec. Kras, Kab. Kediri",P,1771057004190001,3173010601096079,BENGKULU,30-04-2019,AULIA HANIFAH,3196328403,Kras,081234567802
+        3,AHMAD SYAIFUL ARSYAD,VII-1,SMP,"Pagung, Kec. Semen, Kab. Kediri",L,3506012001140002,3506013107120001,KEDIRI,20-01-2014,SITI MUNJIAH,0141204471,Semen,081234567803
+        4,ADELIA SUKMAWATI,XI-1 (IPA),SMA,"Dusun Gambiran, Desa Kedak, Kec. Semen, Kab. Kediri",P,3506015105090001,3506010412103889,KEDIRI,11-05-2009,ARI SATUJU,0099412567,Semen,081234567804
     """.trimIndent()
 
     /**
@@ -109,6 +109,35 @@ object StudentCsvParser {
             return cleaned
         }
         return cleaned.filter { it.isDigit() }
+    }
+
+    /**
+     * Membersihkan nomor HP/WhatsApp orang tua dengan mempertahankan awalan '+' jika ada.
+     */
+    fun cleanPhoneNumber(raw: String?): String {
+        val cleaned = cleanText(raw)
+            .replace("'", "")
+            .replace("`", "")
+            .trim()
+        if (cleaned.isBlank()) return ""
+        val hasPlus = cleaned.startsWith("+")
+        val digits = cleaned.filter { it.isDigit() }
+        if (digits.isBlank()) return ""
+        return if (hasPlus) "+$digits" else digits
+    }
+
+    /**
+     * Normalisasi nomor HP ke format internasional WhatsApp (628xxxxxxxxxx).
+     */
+    fun formatWhatsAppDigits(raw: String?): String {
+        val digits = cleanPhoneNumber(raw).filter { it.isDigit() }
+        if (digits.isBlank()) return ""
+        return when {
+            digits.startsWith("62") -> digits
+            digits.startsWith("0") -> "62${digits.drop(1)}"
+            digits.startsWith("8") -> "62$digits"
+            else -> digits
+        }
     }
 
     /**
@@ -231,6 +260,8 @@ object StudentCsvParser {
                 col.contains("tempat lahir") || col.contains("tmp lahir") -> true
                 col.contains("tanggal lahir") || col.contains("tgl lahir") -> true
                 col.contains("nama ibu") || col == "ibu" -> true
+                (col.contains("hp") || col.contains("telp") || col.contains("telepon") || col.contains("wa") || col.contains("whatsapp") || col.contains("phone")) &&
+                    (col.contains("orang tua") || col.contains("ortu") || col.contains("parent") || col.contains("ibu") || col.contains("ayah")) -> true
                 col == "nisn" || col == "nis" || col.contains("nisn") || col.contains("no induk") -> {
                     hasStrongColumn = true
                     true
@@ -307,6 +338,7 @@ object StudentCsvParser {
         var idxBlood = -1
         var idxAllergy = -1
         var idxContact = -1
+        var idxParentPhone = -1
         var idxNotes = -1
 
         if (headerRowIndex != -1) {
@@ -320,6 +352,9 @@ object StudentCsvParser {
                 when {
                     col == "no" || col == "no." || col == "nomor" || col == "urut" ->
                         if (idxNo == -1) idxNo = idx
+                    (col.contains("hp") || col.contains("telp") || col.contains("telepon") || col.contains("wa") || col.contains("whatsapp") || col.contains("phone")) &&
+                        (col.contains("orang tua") || col.contains("ortu") || col.contains("parent") || col.contains("ibu") || col.contains("ayah")) ->
+                        if (idxParentPhone == -1) idxParentPhone = idx
                     col.contains("ibu") || col.contains("orang tua") ->
                         if (idxMother == -1) idxMother = idx
                     col.contains("nama lengkap") || col.contains("nama siswa") || col.contains("nama anak") || col == "nama" ->
@@ -359,11 +394,11 @@ object StudentCsvParser {
                 }
             }
         } else {
-            // Tidak ada baris header: tentukan posisi kolom berdasarkan struktur standar 12-13 kolom vs 10 kolom lama
+            // Tidak ada baris header: tentukan posisi kolom berdasarkan struktur standar 12-14 kolom vs 10 kolom lama
             val sampleRow = tokenizedLines.firstOrNull { it.size >= 6 } ?: tokenizedLines.first()
             if (sampleRow.size >= 12) {
-                // Format Standar Lengkap 12-13 Kolom:
-                // No, Nama, Kelas, Jenjang, Alamat, JK, NIK, NO KK, Tempat Lahir, Tanggal Lahir, Nama Ibu, NISN, [KECAMATAN]
+                // Format Standar Lengkap 12-14 Kolom:
+                // No, Nama, Kelas, Jenjang, Alamat, JK, NIK, NO KK, Tempat Lahir, Tanggal Lahir, Nama Ibu, NISN, [KECAMATAN], [NO HP ORANG TUA]
                 idxNo = 0
                 idxName = 1
                 idxClass = 2
@@ -387,8 +422,21 @@ object StudentCsvParser {
                         if (sampleRow.size >= 14) idxDorm = 13
                     } else {
                         idxDistrict = 12
-                        if (sampleRow.size >= 14) idxRoom = 13
-                        if (sampleRow.size >= 15) idxDorm = 14
+                        if (sampleRow.size >= 14) {
+                            val col13 = cleanText(sampleRow.getOrNull(13))
+                            val col13LooksRoom = col13.startsWith("PL", ignoreCase = true) ||
+                                col13.startsWith("PP", ignoreCase = true) ||
+                                col13.startsWith("AL", ignoreCase = true) ||
+                                col13.startsWith("AP", ignoreCase = true)
+                            if (col13LooksRoom) {
+                                idxRoom = 13
+                                if (sampleRow.size >= 15) idxDorm = 14
+                            } else {
+                                idxParentPhone = 13
+                                if (sampleRow.size >= 15) idxRoom = 14
+                                if (sampleRow.size >= 16) idxDorm = 15
+                            }
+                        }
                     }
                 }
             } else if (sampleRow.size in 9..11) {
@@ -493,6 +541,7 @@ object StudentCsvParser {
                 else -> "Pengasuh $dormitory"
             }
             val specialNotes = cleanText(tokens.getOrNull(idxNotes))
+            val parentPhone = cleanPhoneNumber(tokens.getOrNull(idxParentPhone))
             val age = estimateAge(birthDate)
 
             result.add(
@@ -517,7 +566,8 @@ object StudentCsvParser {
                     district = district,
                     roomNumber = rawRoom,
                     jenjang = jenjangVal,
-                    schoolId = currentSchoolId
+                    schoolId = currentSchoolId,
+                    parentPhone = parentPhone
                 )
             )
         }
@@ -555,7 +605,8 @@ object StudentCsvParser {
                 escapeCsvField(student.birthDate),
                 escapeCsvField(student.motherName),
                 escapeCsvField(student.nis),
-                escapeCsvField(student.district)
+                escapeCsvField(student.district),
+                escapeCsvField(student.parentPhone)
             ).joinToString(",")
             sb.appendLine(row)
         }

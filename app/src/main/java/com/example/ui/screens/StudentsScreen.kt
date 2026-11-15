@@ -299,7 +299,8 @@ fun StudentsScreen(
                     address = newStudent.address,
                     district = newStudent.district,
                     roomNumber = newStudent.roomNumber,
-                    jenjang = newStudent.jenjang
+                    jenjang = newStudent.jenjang,
+                    parentPhone = newStudent.parentPhone
                 )
                 showAddStudentDialog = false
             }

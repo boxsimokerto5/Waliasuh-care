@@ -268,7 +268,7 @@ fun LoginScreen(
                                 errorMessage = null
                             },
                             label = { Text("Username") },
-                            placeholder = { Text(if (isEn) "Wali Asuh or Admin name" else "Nama Wali atau Admin") },
+                            placeholder = { Text(if (isEn) "Wali, Admin, or Parent username" else "Username Wali, Admin, atau Orang Tua") },
                             leadingIcon = {
                                 Icon(Icons.Default.Person, contentDescription = null, tint = WaliPrimary)
                             },
@@ -360,6 +360,17 @@ fun LoginScreen(
                                                 Toast.LENGTH_SHORT
                                             ).show()
                                             onLoginSuccessWali(result.account.name)
+                                        }
+                                        is LoginResult.SuccessParent -> {
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) {
+                                                    "Welcome, ${result.link.parentName.ifBlank { "Parent" }}!"
+                                                } else {
+                                                    "Selamat datang, ${result.link.parentName.ifBlank { "Orang Tua" }}!"
+                                                },
+                                                Toast.LENGTH_SHORT
+                                            ).show()
                                         }
                                         is LoginResult.Error -> {
                                             errorMessage = result.message

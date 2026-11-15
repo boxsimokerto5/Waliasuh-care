@@ -90,6 +90,7 @@ fun AddStudentDialog(
     var birthPlace by remember { mutableStateOf(initialStudent?.birthPlace ?: "") }
     var birthDate by remember { mutableStateOf(initialStudent?.birthDate ?: "") }
     var motherName by remember { mutableStateOf(initialStudent?.motherName ?: "") }
+    var parentPhone by remember { mutableStateOf(initialStudent?.parentPhone ?: "") }
     var address by remember { mutableStateOf(initialStudent?.address ?: "") }
     var district by remember { mutableStateOf(initialStudent?.district ?: "") }
 
@@ -323,11 +324,24 @@ fun AddStudentDialog(
                 OutlinedTextField(
                     value = motherName,
                     onValueChange = { motherName = it },
-                    label = { Text(if (isEn) "Biological Mother's Name" else "Nama Ibu Kandung", fontSize = 12.sp) },
+                    label = { Text(if (isEn) "Biological Mother's / Parent Name" else "Nama Ibu Kandung / Orang Tua", fontSize = 12.sp) },
                     placeholder = { Text(if (isEn) "e.g. DWI MASRUROH" else "misal: DWI MASRUROH", fontSize = 12.sp) },
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = parentPhone,
+                    onValueChange = { raw -> parentPhone = raw.filter { it.isDigit() || it == '+' } },
+                    label = { Text(if (isEn) "Parent WhatsApp / Phone No." else "No. HP / WhatsApp Orang Tua", fontSize = 12.sp) },
+                    placeholder = { Text("0812xxxxxxxx", fontSize = 12.sp) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_student_parent_phone")
                 )
 
                 OutlinedTextField(
@@ -490,6 +504,7 @@ fun AddStudentDialog(
                                     birthPlace = birthPlace.trim(),
                                     birthDate = birthDate.trim(),
                                     motherName = motherName.trim(),
+                                    parentPhone = StudentCsvParser.cleanPhoneNumber(parentPhone),
                                     address = address.trim(),
                                     district = district.trim(),
                                     roomNumber = roomNumber.trim(),

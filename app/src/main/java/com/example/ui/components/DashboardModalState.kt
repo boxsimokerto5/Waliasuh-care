@@ -17,7 +17,8 @@ enum class DashboardCategoryHub {
     PUASA,
     HAID,
     PESAN,
-    MENGAJI
+    MENGAJI,
+    ORANG_TUA
 }
 
 @Stable
@@ -54,6 +55,14 @@ class DashboardModalState {
     var showCreateVisitSessionDialog by mutableStateOf(false)
     var visitSessionToEdit by mutableStateOf<VisitSession?>(null)
     var visitStudentForDetail by mutableStateOf<ChildStudent?>(null)
+
+    // Modul Hubungan Orang Tua
+    var showPilihAnakAsuhSheet by mutableStateOf(false)
+    var showKartuAksesOrtuSheet by mutableStateOf(false)
+    var showPilihanAksesOrtuSheet by mutableStateOf(false)
+    var showPesanOrtuSheet by mutableStateOf(false)
+    var selectedParentChatStudent by mutableStateOf<ChildStudent?>(null)
+    var studentToEditParentPhone by mutableStateOf<ChildStudent?>(null)
 }
 
 @Composable

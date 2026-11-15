@@ -19,10 +19,14 @@ import com.example.data.dao.HaidRecordDao
 import com.example.data.dao.MengajiRecordDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
+import com.example.data.dao.ParentAccessLinkDao
+import com.example.data.dao.ParentMessageDao
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 
@@ -37,7 +41,9 @@ class HealthRepository(
     private val fastingRecordDao: FastingRecordDao? = null,
     private val mengajiRecordDao: MengajiRecordDao? = null,
     private val visitSessionDao: VisitSessionDao? = null,
-    private val visitRecordDao: VisitRecordDao? = null
+    private val visitRecordDao: VisitRecordDao? = null,
+    private val parentAccessLinkDao: ParentAccessLinkDao? = null,
+    private val parentMessageDao: ParentMessageDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -55,6 +61,8 @@ class HealthRepository(
     val allMengajiRecords: Flow<List<MengajiRecord>> = mengajiRecordDao?.getAllRecords() ?: emptyFlow()
     val allVisitSessions: Flow<List<VisitSession>> = visitSessionDao?.getAllSessions() ?: emptyFlow()
     val allVisitRecords: Flow<List<VisitRecord>> = visitRecordDao?.getAllRecords() ?: emptyFlow()
+    val allParentAccessLinks: Flow<List<ParentAccessLink>> = parentAccessLinkDao?.getAllLinks() ?: emptyFlow()
+    val allParentMessages: Flow<List<ParentMessage>> = parentMessageDao?.getAllMessages() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -79,6 +87,9 @@ class HealthRepository(
 
     suspend fun insertStudent(student: ChildStudent): Long =
         studentDao.insert(student)
+
+    suspend fun getStudentById(id: Long): ChildStudent? =
+        studentDao.getById(id)
 
     suspend fun updateStudent(student: ChildStudent) =
         studentDao.update(student)
@@ -390,5 +401,62 @@ class HealthRepository(
 
     suspend fun deleteVisitRecordsBySchool(schoolId: String) {
         visitRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Parent Access Link & Two-Way Messages (Hubungan Orang Tua) ---
+    suspend fun insertParentAccessLink(link: ParentAccessLink): Long =
+        parentAccessLinkDao?.insert(link) ?: 0L
+
+    suspend fun insertAllParentAccessLinks(links: List<ParentAccessLink>) {
+        parentAccessLinkDao?.insertAll(links)
+    }
+
+    suspend fun updateParentAccessLink(link: ParentAccessLink) {
+        parentAccessLinkDao?.update(link)
+    }
+
+    suspend fun deleteParentAccessLink(link: ParentAccessLink) {
+        parentAccessLinkDao?.delete(link)
+    }
+
+    suspend fun getAllParentAccessLinksList(): List<ParentAccessLink> =
+        parentAccessLinkDao?.getAllLinksList() ?: emptyList()
+
+    suspend fun getParentAccessLinksBySchoolList(schoolId: String): List<ParentAccessLink> =
+        parentAccessLinkDao?.getLinksBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getParentAccessLinkByStudentId(studentId: Long, schoolId: String): ParentAccessLink? =
+        parentAccessLinkDao?.getByStudentId(studentId, schoolId)
+
+    suspend fun getParentAccessLinkByUsername(username: String): ParentAccessLink? =
+        parentAccessLinkDao?.getByUsername(username)
+
+    suspend fun deleteParentAccessLinksBySchool(schoolId: String) {
+        parentAccessLinkDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertParentMessage(message: ParentMessage): Long =
+        parentMessageDao?.insert(message) ?: 0L
+
+    suspend fun insertAllParentMessages(messages: List<ParentMessage>) {
+        parentMessageDao?.insertAll(messages)
+    }
+
+    suspend fun getParentMessagesBySchoolList(schoolId: String): List<ParentMessage> =
+        parentMessageDao?.getMessagesBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getParentMessagesForStudentList(studentId: Long, schoolId: String): List<ParentMessage> =
+        parentMessageDao?.getMessagesForStudentList(studentId, schoolId) ?: emptyList()
+
+    suspend fun markParentMessagesReadByWali(studentId: Long, schoolId: String) {
+        parentMessageDao?.markReadByWali(studentId, schoolId)
+    }
+
+    suspend fun markParentMessagesReadByParent(studentId: Long, schoolId: String) {
+        parentMessageDao?.markReadByParent(studentId, schoolId)
+    }
+
+    suspend fun deleteParentMessagesBySchool(schoolId: String) {
+        parentMessageDao?.deleteBySchoolId(schoolId)
     }
 }

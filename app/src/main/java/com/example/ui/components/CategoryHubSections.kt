@@ -54,6 +54,8 @@ import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.ShiftMessage
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
@@ -1131,4 +1133,117 @@ internal fun LazyListScope.kunjunganCategoryItems(
         }
     }
 }
+
+internal fun LazyListScope.orangTuaCategoryItems(
+    isEn: Boolean,
+    students: List<ChildStudent>,
+    parentAccessLinks: List<ParentAccessLink>,
+    parentMessages: List<ParentMessage>,
+    myFosterStudentsCount: Int,
+    onOpenPilihAnakAsuh: () -> Unit,
+    onOpenKartuAksesOrtu: () -> Unit,
+    onOpenPilihanAksesOrtu: () -> Unit,
+    onOpenPesanOrtu: () -> Unit
+) {
+    val unreadParentCount = parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
+    val cardsCount = parentAccessLinks.size
+    val unclaimedCount = students.count { it.assignedWaliUsername.isBlank() && it.assignedWaliName.isBlank() }
+
+    item(key = "hub_orang_tua_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Select Foster Kids" else "Pilih Anak Asuh",
+                    subtitle = if (isEn) "Claim & Search Students" else "Cari & Klaim Binaan",
+                    imageRes = R.drawable.img_menu_anak_asuh,
+                    badgeText = if (myFosterStudentsCount > 0) {
+                        "$myFosterStudentsCount ${if (isEn) "Kids" else "Anak"}"
+                    } else {
+                        if (isEn) "Pick" else "Pilih"
+                    },
+                    badgeBg = Color(0xFFE0E7FF),
+                    badgeColor = Color(0xFF4338CA),
+                    bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFC7D2FE),
+                    onClick = onOpenPilihAnakAsuh,
+                    testTag = "tile_pilih_anak_asuh",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Parent Cards" else "Kartu Akses Ortu",
+                    subtitle = if (isEn) "ID Card & Share WA" else "Akun Login & Share WA",
+                    imageRes = R.drawable.img_menu_orang_tua,
+                    badgeText = if (cardsCount > 0) "$cardsCount ${if (isEn) "Cards" else "Kartu"}" else if (isEn) "Auto" else "Otomatis",
+                    badgeBg = Color(0xFFEDE9FE),
+                    badgeColor = Color(0xFF6D28D9),
+                    bgGradient = listOf(Color(0xFFF5F3FF), Color(0xFFEDE9FE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFDDD6FE),
+                    onClick = onOpenKartuAksesOrtu,
+                    testTag = "tile_kartu_akses_ortu",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Access Options" else "Pilihan Akses",
+                    subtitle = if (isEn) "Mengaji, Sick & Fasting" else "Mengaji, Sakit & Puasa",
+                    imageRes = R.drawable.img_menu_checklist_puasa,
+                    badgeText = if (isEn) "Controls" else "Kontrol",
+                    badgeBg = Color(0xFFDCFCE7),
+                    badgeColor = Color(0xFF15803D),
+                    bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFBBF7D0),
+                    onClick = onOpenPilihanAksesOrtu,
+                    testTag = "tile_pilihan_akses_ortu",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Parent Chat" else "Pesan Orang Tua",
+                    subtitle = if (isEn) "2-Way Parent Chat" else "Chat 2 Arah Orang Tua",
+                    imageRes = R.drawable.img_menu_pesan_shift,
+                    badgeText = if (unreadParentCount > 0) {
+                        "$unreadParentCount ${if (isEn) "New" else "Baru"}"
+                    } else {
+                        "${parentMessages.size} Chat"
+                    },
+                    badgeBg = if (unreadParentCount > 0) Color(0xFFFEE2E2) else Color(0xFFFEF3C7),
+                    badgeColor = if (unreadParentCount > 0) Color(0xFFDC2626) else Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = onOpenPesanOrtu,
+                    testTag = "tile_pesan_ortu",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    item(key = "hub_orang_tua_summary") {
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                HubStatTile("$myFosterStudentsCount", if (isEn) "My Foster" else "Binaan Saya", Color(0xFFE0E7FF), Color(0xFF4338CA), Modifier.weight(1f))
+                HubStatTile("$cardsCount", if (isEn) "Cards Active" else "Kartu Akses", Color(0xFFEDE9FE), Color(0xFF6D28D9), Modifier.weight(1f))
+                HubStatTile("$unclaimedCount", if (isEn) "Unassigned" else "Belum Wali", Color(0xFFFEF3C7), Color(0xFFB45309), Modifier.weight(1f))
+                HubStatTile("$unreadParentCount", if (isEn) "Unread" else "Chat Baru", Color(0xFFFEE2E2), Color(0xFFDC2626), Modifier.weight(1f))
+            }
+        }
+    }
+}
+
 

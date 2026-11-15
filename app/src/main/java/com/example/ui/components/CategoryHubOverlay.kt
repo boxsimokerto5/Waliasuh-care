@@ -63,6 +63,8 @@ import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
 import com.example.data.model.VisitRecord
@@ -85,6 +87,9 @@ fun CategoryHubOverlay(
     students: List<ChildStudent> = emptyList(),
     visitSessions: List<VisitSession> = emptyList(),
     visitRecords: List<VisitRecord> = emptyList(),
+    parentAccessLinks: List<ParentAccessLink> = emptyList(),
+    parentMessages: List<ParentMessage> = emptyList(),
+    myFosterStudentsCount: Int = 0,
     isAdmin: Boolean = false,
     onDismiss: () -> Unit,
     onNavigateToPlan: () -> Unit,
@@ -112,7 +117,11 @@ fun CategoryHubOverlay(
     onOpenDaftarHadirKunjungan: (Int) -> Unit = {},
     onOpenLaporanKunjungan: () -> Unit = {},
     onOpenSiswaPerKecamatan: () -> Unit = {},
-    onOpenCreateVisitSession: () -> Unit = {}
+    onOpenCreateVisitSession: () -> Unit = {},
+    onOpenPilihAnakAsuh: () -> Unit = {},
+    onOpenKartuAksesOrtu: () -> Unit = {},
+    onOpenPilihanAksesOrtu: () -> Unit = {},
+    onOpenPesanOrtu: () -> Unit = {}
 ) {
     var lastCategory by remember { mutableStateOf(category) }
     if (category != null) {
@@ -144,6 +153,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.HAID -> listOf(Color(0xFF9D174D), Color(0xFFDB2777))
             DashboardCategoryHub.PESAN -> listOf(Color(0xFFB45309), Color(0xFFD97706))
             DashboardCategoryHub.MENGAJI -> listOf(Color(0xFF047857), Color(0xFF0F766E))
+            DashboardCategoryHub.ORANG_TUA -> listOf(Color(0xFF4338CA), Color(0xFF7C3AED))
         }
 
         val heroTitle = when (current) {
@@ -153,6 +163,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.HAID -> if (isEn) "Haid & Fiqih Care" else "Pendataan & Fiqih Haid"
             DashboardCategoryHub.PESAN -> if (isEn) "Shift Handover Notes" else "Pesan & Operan Shift"
             DashboardCategoryHub.MENGAJI -> if (isEn) "Mengaji & Progress Card" else "Mengaji & Kartu Kendali"
+            DashboardCategoryHub.ORANG_TUA -> if (isEn) "Parent Connect Center" else "Hubungan Orang Tua"
         }
 
         val heroSubtitle = when (current) {
@@ -192,6 +203,14 @@ fun CategoryHubOverlay(
                     "$todayCount setoran hari ini • ${mengajiRecords.size} total catatan"
                 }
             }
+            DashboardCategoryHub.ORANG_TUA -> {
+                val unreadCount = parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
+                if (isEn) {
+                    "$myFosterStudentsCount foster kids • ${parentAccessLinks.size} access cards • $unreadCount unread"
+                } else {
+                    "$myFosterStudentsCount anak asuh • ${parentAccessLinks.size} kartu akses • $unreadCount pesan baru"
+                }
+            }
         }
 
         val heroImage = when (current) {
@@ -201,6 +220,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.HAID -> R.drawable.img_menu_daftar_haid
             DashboardCategoryHub.PESAN -> R.drawable.img_menu_pesan_shift
             DashboardCategoryHub.MENGAJI -> R.drawable.img_menu_mengaji
+            DashboardCategoryHub.ORANG_TUA -> R.drawable.img_menu_orang_tua
         }
 
         val contextPillText = schoolProfile.shortName
@@ -301,6 +321,7 @@ fun CategoryHubOverlay(
                                 DashboardCategoryHub.HAID -> if (isEn) "Scan Input Haid" else "Scan Input Haid"
                                 DashboardCategoryHub.PESAN -> if (isEn) "Write Note" else "Tulis Pesan"
                                 DashboardCategoryHub.MENGAJI -> if (isEn) "Scan Input Mengaji" else "Scan Input Mengaji"
+                                DashboardCategoryHub.ORANG_TUA -> if (isEn) "Pick Foster Students" else "Pilih Anak Asuh"
                             }
                             Surface(
                                 shape = CircleShape,
@@ -317,6 +338,7 @@ fun CategoryHubOverlay(
                                             DashboardCategoryHub.HAID -> onOpenInputHaid()
                                             DashboardCategoryHub.PESAN -> onOpenCreateShiftMessage()
                                             DashboardCategoryHub.MENGAJI -> onOpenInputMengaji()
+                                            DashboardCategoryHub.ORANG_TUA -> onOpenPilihAnakAsuh()
                                         }
                                     }
                                     .testTag("btn_quick_action_category_hub")
@@ -456,6 +478,17 @@ fun CategoryHubOverlay(
                                     onOpenLaporanKunjungan = onOpenLaporanKunjungan,
                                     onOpenSiswaPerKecamatan = onOpenSiswaPerKecamatan,
                                     onOpenCreateVisitSession = onOpenCreateVisitSession
+                                )
+                                DashboardCategoryHub.ORANG_TUA -> orangTuaCategoryItems(
+                                    isEn = isEn,
+                                    students = students,
+                                    parentAccessLinks = parentAccessLinks,
+                                    parentMessages = parentMessages,
+                                    myFosterStudentsCount = myFosterStudentsCount,
+                                    onOpenPilihAnakAsuh = onOpenPilihAnakAsuh,
+                                    onOpenKartuAksesOrtu = onOpenKartuAksesOrtu,
+                                    onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu,
+                                    onOpenPesanOrtu = onOpenPesanOrtu
                                 )
                             }
                         }

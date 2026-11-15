@@ -135,6 +135,24 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-updated_at"
     ): Response<PbListResponse<PbSchoolProfileDto>>
 
+    // --- Parent Access Links (Kartu Akses & Pilihan Akses Orang Tua) ---
+    @GET("api/collections/parent_access_links/records")
+    suspend fun listParentAccessLinks(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "student_name"
+    ): Response<PbListResponse<PbParentAccessLinkDto>>
+
+    // --- Parent Messages (Pesan Dua Arah Wali Asuh <-> Orang Tua) ---
+    @GET("api/collections/parent_messages/records")
+    suspend fun listParentMessages(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "created_at"
+    ): Response<PbListResponse<PbParentMessageDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

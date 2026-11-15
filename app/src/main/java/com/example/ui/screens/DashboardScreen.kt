@@ -94,6 +94,7 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.components.TodayShiftMessagesStrip
 import com.example.ui.components.rememberDashboardModalState
+import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreateFastingSessionDialog
 import com.example.ui.dialogs.CreatePlanDialog
@@ -114,8 +115,12 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocalHospital
 import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.dialogs.JadwalKunjunganSheet
+import com.example.ui.dialogs.KartuAksesOrangTuaSheet
 import com.example.ui.dialogs.KartuMengajiSheet
 import com.example.ui.dialogs.LaporanKunjunganSheet
+import com.example.ui.dialogs.PesanOrangTuaSheet
+import com.example.ui.dialogs.PilihAnakAsuhSheet
+import com.example.ui.dialogs.PilihanAksesOrangTuaSheet
 import com.example.ui.dialogs.PrintPdfDialog
 import com.example.ui.dialogs.RankingPuasaSheet
 import com.example.ui.dialogs.RiwayatMengajiSheet
@@ -166,8 +171,16 @@ fun DashboardScreen(
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
+    val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
+    val myFosterStudentsCount = remember(students, waliName) {
+        students.count { viewModel.isStudentClaimedByCurrentWali(it) }
+    }
+    val unreadParentMessagesCount = remember(parentMessages) {
+        parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
+    }
     var recordToRefer by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToDiagnose by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordPlanToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -752,6 +765,8 @@ fun DashboardScreen(
                             mengajiTotalCount = mengajiRecords.size,
                             visitSessionsCount = visitSessions.size,
                             todayVisitsCount = visitRecords.count { DateUtils.isToday(it.visitDate) },
+                            unreadParentMessagesCount = unreadParentMessagesCount,
+                            myFosterStudentsCount = myFosterStudentsCount,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
                         )
@@ -949,6 +964,9 @@ fun DashboardScreen(
                 students = students,
                 visitSessions = visitSessions,
                 visitRecords = visitRecords,
+                parentAccessLinks = parentAccessLinks,
+                parentMessages = parentMessages,
+                myFosterStudentsCount = myFosterStudentsCount,
                 isAdmin = isAdminUser,
                 onDismiss = { modalState.activeCategoryHub = null },
                 onNavigateToPlan = {
@@ -1001,6 +1019,13 @@ fun DashboardScreen(
                 onOpenCreateVisitSession = {
                     modalState.visitSessionToEdit = null
                     modalState.showCreateVisitSessionDialog = true
+                },
+                onOpenPilihAnakAsuh = { modalState.showPilihAnakAsuhSheet = true },
+                onOpenKartuAksesOrtu = { modalState.showKartuAksesOrtuSheet = true },
+                onOpenPilihanAksesOrtu = { modalState.showPilihanAksesOrtuSheet = true },
+                onOpenPesanOrtu = {
+                    modalState.selectedParentChatStudent = null
+                    modalState.showPesanOrtuSheet = true
                 }
             )
         }
@@ -1820,6 +1845,123 @@ fun DashboardScreen(
             mengajiRecords = mengajiRecords,
             fastingRecords = fastingRecords,
             onDismiss = { modalState.visitStudentForDetail = null }
+        )
+    }
+
+    // Modal Hubungan Orang Tua 1: Pilih Anak Asuh (Klaim Eksklusif & Lepas oleh Admin / Wali Bersangkutan)
+    if (modalState.showPilihAnakAsuhSheet) {
+        PilihAnakAsuhSheet(
+            students = students,
+            currentWaliDisplayName = waliName,
+            isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
+            isStudentClaimedByOtherWali = { viewModel.isStudentClaimedByOtherWali(it) },
+            canReleaseStudent = { viewModel.canCurrentUserReleaseStudent(it) },
+            onClaimStudents = { selectedList ->
+                viewModel.claimStudentsForCurrentWali(selectedList) { claimed, skipped ->
+                    val msg = if (isEn) {
+                        "Claimed $claimed student(s)" + if (skipped > 0) ", $skipped already assigned." else "!"
+                    } else {
+                        "$claimed anak asuh dipilih & kartu akses dibuat!" + if (skipped > 0) " ($skipped sudah dibina wali lain)" else ""
+                    }
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onReleaseStudent = { st ->
+                viewModel.releaseStudentClaim(st) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showPilihAnakAsuhSheet = false }
+        )
+    }
+
+    // Modal Hubungan Orang Tua 2: Kartu Akses Orang Tua Otomatis + Share WA / Biasa
+    if (modalState.showKartuAksesOrtuSheet) {
+        KartuAksesOrangTuaSheet(
+            students = students,
+            parentAccessLinks = parentAccessLinks,
+            schoolProfile = schoolProfile,
+            isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
+            isAdmin = isAdminUser,
+            onGenerateAccessCard = { st ->
+                viewModel.ensureParentAccessLinkForStudent(st) {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Parent access card ready for ${st.name}!" else "Kartu akses orang tua untuk ${st.name} siap!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onResetPassword = { link ->
+                viewModel.resetParentAccessPassword(link) { newPass ->
+                    Toast.makeText(
+                        context,
+                        if (isEn) "New password generated: $newPass" else "Password baru dibuat: $newPass",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            },
+            onEditStudentProfile = { st ->
+                modalState.studentToEditParentPhone = st
+            },
+            onDismiss = { modalState.showKartuAksesOrtuSheet = false }
+        )
+    }
+
+    // Modal Hubungan Orang Tua 3: Pilihan Akses (Mengaji, Sakit, Puasa)
+    if (modalState.showPilihanAksesOrtuSheet) {
+        PilihanAksesOrangTuaSheet(
+            students = students,
+            parentAccessLinks = parentAccessLinks,
+            isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
+            isAdmin = isAdminUser,
+            onEnsureAccessLink = { st ->
+                viewModel.ensureParentAccessLinkForStudent(st)
+            },
+            onUpdatePermissions = { link, canMengaji, canMedical, canFasting ->
+                viewModel.updateParentAccessPermissions(link, canMengaji, canMedical, canFasting)
+            },
+            onDismiss = { modalState.showPilihanAksesOrtuSheet = false }
+        )
+    }
+
+    // Modal Hubungan Orang Tua 4: Pesan Chat 2 Arah dengan Orang Tua
+    if (modalState.showPesanOrtuSheet) {
+        PesanOrangTuaSheet(
+            students = students,
+            parentMessages = parentMessages,
+            isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
+            isAdmin = isAdminUser,
+            initialSelectedStudent = modalState.selectedParentChatStudent,
+            onSendMessage = { st, content ->
+                viewModel.sendParentMessage(st, content, "WALI")
+            },
+            onMarkRead = { stId ->
+                viewModel.markParentMessagesAsRead(stId, "WALI")
+            },
+            onDismiss = {
+                modalState.showPesanOrtuSheet = false
+                modalState.selectedParentChatStudent = null
+            }
+        )
+    }
+
+    // Dialog Edit Profil / Tambah No. HP Orang Tua langsung dari Kartu Akses Orang Tua
+    modalState.studentToEditParentPhone?.let { editingStudent ->
+        AddStudentDialog(
+            initialStudent = editingStudent,
+            activeSchoolId = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" },
+            onDismiss = { modalState.studentToEditParentPhone = null },
+            onConfirmStudent = { updated ->
+                viewModel.updateStudent(updated) {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Profile & parent phone updated!" else "Profil & No. HP orang tua diperbarui!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                modalState.studentToEditParentPhone = null
+            }
         )
     }
 }

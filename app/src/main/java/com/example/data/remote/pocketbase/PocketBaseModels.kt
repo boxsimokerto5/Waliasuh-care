@@ -7,6 +7,8 @@ import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -111,7 +113,10 @@ data class PbStudentDto(
     @Json(name = "address") val address: String? = null,
     @Json(name = "district") val district: String? = null,
     @Json(name = "room_number") val roomNumber: String? = null,
-    @Json(name = "jenjang") val jenjang: String? = null
+    @Json(name = "jenjang") val jenjang: String? = null,
+    @Json(name = "parent_phone") val parentPhone: String? = null,
+    @Json(name = "assigned_wali_username") val assignedWaliUsername: String? = null,
+    @Json(name = "assigned_wali_name") val assignedWaliName: String? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ChildStudent {
         return ChildStudent(
@@ -135,7 +140,10 @@ data class PbStudentDto(
             district = district ?: "",
             roomNumber = roomNumber ?: "",
             jenjang = jenjang ?: "",
-            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(parentPhone),
+            assignedWaliUsername = assignedWaliUsername ?: "",
+            assignedWaliName = assignedWaliName ?: ""
         )
     }
 
@@ -168,7 +176,10 @@ data class PbStudentDto(
                 address = model.address,
                 district = model.district,
                 roomNumber = model.roomNumber,
-                jenjang = model.jenjang
+                jenjang = model.jenjang,
+                parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(model.parentPhone),
+                assignedWaliUsername = model.assignedWaliUsername,
+                assignedWaliName = model.assignedWaliName
             )
         }
     }
@@ -946,6 +957,144 @@ data class PbVisitRecordDto(
                 notes = model.notes,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbParentAccessLinkDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "parent_name") val parentName: String? = null,
+    @Json(name = "parent_phone") val parentPhone: String? = null,
+    @Json(name = "username") val username: String = "",
+    @Json(name = "password") val password: String = "",
+    @Json(name = "assigned_wali_username") val assignedWaliUsername: String? = null,
+    @Json(name = "assigned_wali_name") val assignedWaliName: String? = null,
+    @Json(name = "can_view_mengaji") val canViewMengaji: Boolean? = null,
+    @Json(name = "can_view_medical") val canViewMedical: Boolean? = null,
+    @Json(name = "can_view_fasting") val canViewFasting: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ParentAccessLink {
+        val now = System.currentTimeMillis()
+        val resolvedCreated = createdAt?.takeIf { it > 0L } ?: now
+        return ParentAccessLink(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            studentId = studentId,
+            studentName = studentName,
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            parentName = parentName.orEmpty(),
+            parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(parentPhone),
+            username = username,
+            password = password,
+            assignedWaliUsername = assignedWaliUsername.orEmpty(),
+            assignedWaliName = assignedWaliName.orEmpty(),
+            canViewMengaji = canViewMengaji ?: true,
+            canViewMedical = canViewMedical ?: true,
+            canViewFasting = canViewFasting ?: true,
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = resolvedCreated,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: ParentAccessLink): PbParentAccessLinkDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "parent_access:${model.schoolId}:${model.studentId}:${model.username}"
+            )
+            return PbParentAccessLinkDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                parentName = model.parentName,
+                parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(model.parentPhone),
+                username = model.username,
+                password = model.password,
+                assignedWaliUsername = model.assignedWaliUsername,
+                assignedWaliName = model.assignedWaliName,
+                canViewMengaji = model.canViewMengaji,
+                canViewMedical = model.canViewMedical,
+                canViewFasting = model.canViewFasting,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbParentMessageDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String? = null,
+    @Json(name = "parent_name") val parentName: String? = null,
+    @Json(name = "wali_username") val waliUsername: String? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "sender_role") val senderRole: String? = null,
+    @Json(name = "sender_name") val senderName: String? = null,
+    @Json(name = "message_content") val messageContent: String = "",
+    @Json(name = "is_read_by_wali") val isReadByWali: Boolean? = null,
+    @Json(name = "is_read_by_parent") val isReadByParent: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ParentMessage {
+        val now = System.currentTimeMillis()
+        return ParentMessage(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            studentId = studentId,
+            studentName = studentName.orEmpty(),
+            parentName = parentName.orEmpty(),
+            waliUsername = waliUsername.orEmpty(),
+            waliName = waliName.orEmpty(),
+            senderRole = senderRole?.ifBlank { "WALI" } ?: "WALI",
+            senderName = senderName.orEmpty(),
+            messageContent = messageContent,
+            isReadByWali = isReadByWali ?: false,
+            isReadByParent = isReadByParent ?: false,
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: ParentMessage): PbParentMessageDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "parent_msg:${model.schoolId}:${model.studentId}:${model.createdAt}:${model.senderRole}"
+            )
+            return PbParentMessageDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                parentName = model.parentName,
+                waliUsername = model.waliUsername,
+                waliName = model.waliName,
+                senderRole = model.senderRole,
+                senderName = model.senderName,
+                messageContent = model.messageContent,
+                isReadByWali = model.isReadByWali,
+                isReadByParent = model.isReadByParent,
+                createdAt = model.createdAt
             )
         }
     }

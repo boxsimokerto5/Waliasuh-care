@@ -622,7 +622,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(12, jsonSchema.length())
+    assertEquals(14, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -640,7 +640,9 @@ class ExampleRobolectricTest {
       "mengaji_records",
       "school_profiles",
       "visit_sessions",
-      "visit_records"
+      "visit_records",
+      "parent_access_links",
+      "parent_messages"
     )
     expectedCollections.forEach { col ->
       org.junit.Assert.assertTrue(
@@ -649,7 +651,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(12, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(14, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -2366,7 +2368,8 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("category_berobat").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_tindakan_langsung").assertDoesNotExist()
     composeTestRule.onNodeWithTag("category_kunjungan").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("tile_rekam_medis").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("category_orang_tua").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_rekam_medis").assertDoesNotExist()
     composeTestRule.onNodeWithTag("tile_anak_asuh").assertIsDisplayed()
     composeTestRule.onNodeWithTag("category_puasa").assertIsDisplayed()
     composeTestRule.onNodeWithTag("category_haid").assertIsDisplayed()
@@ -2377,6 +2380,9 @@ class ExampleRobolectricTest {
 
     composeTestRule.onNodeWithTag("category_kunjungan").performClick()
     assertEquals(com.example.ui.components.DashboardCategoryHub.KUNJUNGAN, openedHub)
+
+    composeTestRule.onNodeWithTag("category_orang_tua").performClick()
+    assertEquals(com.example.ui.components.DashboardCategoryHub.ORANG_TUA, openedHub)
 
     composeTestRule.onNodeWithTag("category_puasa").performClick()
     assertEquals(com.example.ui.components.DashboardCategoryHub.PUASA, openedHub)
@@ -3781,5 +3787,212 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("today_shift_messages_strip").assertIsDisplayed()
     composeTestRule.onNodeWithTag("card_today_shift_msg_8802").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify Hubungan Orang Tua hub opens 4 tiles and enforces exclusive claim and Admin or Owner release`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val waliA = com.example.data.model.WaliAccount(
+      id = 9101L,
+      name = "Ustadz Ridwan",
+      username = "ustridwan",
+      password = "Pass#1111",
+      dormitory = "Asrama Putra",
+      schoolId = activeSchool
+    )
+    val waliB = com.example.data.model.WaliAccount(
+      id = 9102L,
+      name = "Ustadzah Sari",
+      username = "ustsari",
+      password = "Pass#2222",
+      dormitory = "Asrama Putri",
+      schoolId = activeSchool
+    )
+    db.waliAccountDao().insert(waliA)
+    db.waliAccountDao().insert(waliB)
+
+    val student = com.example.data.model.ChildStudent(
+      id = 9201L,
+      name = "Zaid Al-Farisi",
+      nis = "31990011",
+      gender = "L",
+      age = 12,
+      dormitory = "Asrama Putra",
+      classGrade = "VI-A",
+      motherName = "Ibu Fatimah",
+      parentPhone = "081234567890",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val loginA = vm.executeLogin("ustridwan", "Pass#1111")
+    org.junit.Assert.assertTrue(loginA is com.example.ui.LoginResult.SuccessWali)
+
+    var claimedRes = 0
+    vm.claimStudentsForCurrentWali(listOf(student)) { claimed, _ ->
+      claimedRes = claimed
+    }
+    var waitLoops = 0
+    while (waitLoops < 25 && claimedRes == 0) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      waitLoops++
+    }
+    org.junit.Assert.assertEquals(1, claimedRes)
+    val afterClaimStudent = db.childStudentDao().getById(9201L)!!
+    org.junit.Assert.assertEquals("ustridwan", afterClaimStudent.assignedWaliUsername)
+    org.junit.Assert.assertNotNull(db.parentAccessLinkDao().getByStudentId(9201L, activeSchool))
+
+    // Wali B logs in -> student is claimed by another Wali and cannot be released by Wali B
+    val loginB = vm.executeLogin("ustsari", "Pass#2222")
+    org.junit.Assert.assertTrue(loginB is com.example.ui.LoginResult.SuccessWali)
+    org.junit.Assert.assertTrue(vm.isStudentClaimedByOtherWali(afterClaimStudent))
+    org.junit.Assert.assertFalse(vm.canCurrentUserReleaseStudent(afterClaimStudent))
+
+    var releaseByBAllowed: Boolean? = null
+    vm.releaseStudentClaim(afterClaimStudent) { ok, _ -> releaseByBAllowed = ok }
+    waitLoops = 0
+    while (waitLoops < 25 && releaseByBAllowed == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      waitLoops++
+    }
+    org.junit.Assert.assertEquals(false, releaseByBAllowed)
+
+    // School Admin can release the student
+    vm.switchRoleToAdmin()
+    org.junit.Assert.assertTrue(vm.canCurrentUserReleaseStudent(afterClaimStudent))
+    var releasedByAdmin = false
+    vm.releaseStudentClaim(afterClaimStudent) { ok, _ -> releasedByAdmin = ok }
+    waitLoops = 0
+    while (waitLoops < 25 && !releasedByAdmin) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      waitLoops++
+    }
+    org.junit.Assert.assertTrue(releasedByAdmin)
+    org.junit.Assert.assertEquals("", db.childStudentDao().getById(9201L)!!.assignedWaliUsername)
+
+    // Open Dashboard Hubungan Orang Tua overlay and verify all 4 feature tiles render
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = "Admin Utama",
+          activePlans = emptyList(),
+          students = listOf(student),
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {},
+          renderInlineCategoryHub = true
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_orang_tua").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("category_hub_overlay_orang_tua").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_pilih_anak_asuh").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_kartu_akses_ortu").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_pilihan_akses_ortu").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_pesan_ortu").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify Parent Portal login hides unchecked modules and supports 2-way messaging`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val student = com.example.data.model.ChildStudent(
+      id = 9301L,
+      name = "Nadia Rahma",
+      nis = "31990022",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "VII-B",
+      motherName = "Ibu Khadijah",
+      parentPhone = "081987654321",
+      assignedWaliUsername = "ustsari",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val link = com.example.data.model.ParentAccessLink(
+      id = 9311L,
+      studentId = 9301L,
+      studentName = "Nadia Rahma",
+      studentNis = "31990022",
+      studentClass = "VII-B",
+      studentDorm = "Asrama Putri",
+      parentName = "Ibu Khadijah",
+      parentPhone = "081987654321",
+      username = "ortu_nadia_0022",
+      password = "Ortu#7788",
+      assignedWaliUsername = "ustsari",
+      assignedWaliName = "Ustadzah Sari",
+      canViewMengaji = true,
+      canViewMedical = false,
+      canViewFasting = false,
+      schoolId = activeSchool
+    )
+    db.parentAccessLinkDao().insert(link)
+
+    val loginRes = vm.executeLogin("ortu_nadia_0022", "Ortu#7788")
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+    org.junit.Assert.assertEquals(com.example.ui.UserRole.PARENT, vm.currentUserRole.value)
+
+    var loops = 0
+    while (loops < 25 && vm.activeParentAccessLink.value == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.ParentPortalScreen(
+          viewModel = vm,
+          onLogout = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_portal_screen").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_home").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_tab_medical").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("parent_tab_fasting").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("parent_tab_messages").assertIsDisplayed()
+
+    // Open Messages tab and send a message from Parent to Wali Asuh
+    composeTestRule.onNodeWithTag("parent_tab_messages").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("input_parent_portal_message").performTextInput("Assalamualaikum ustadzah, bagaimana kabar Nadia?")
+    composeTestRule.onNodeWithTag("btn_parent_portal_send").performClick()
+    loops = 0
+    while (loops < 25 && vm.parentMessages.value.none { it.studentId == 9301L }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    composeTestRule.waitForIdle()
+    org.junit.Assert.assertTrue(
+      vm.parentMessages.value.any { it.studentId == 9301L && it.senderRole == "PARENT" }
+    )
   }
 }
