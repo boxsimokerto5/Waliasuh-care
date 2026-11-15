@@ -69,7 +69,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
@@ -226,14 +228,37 @@ fun DashboardScreen(
                         )
                     }
 
+                    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                    val heroGradient = if (isDarkSurface) {
+                        listOf(Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF047857))
+                    } else {
+                        listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7), Color(0xFFD1FAE5))
+                    }
+                    val heroBorderColor = if (isDarkSurface) {
+                        Color(0xFF34D399).copy(alpha = 0.45f)
+                    } else {
+                        Color(0xFF86EFAC)
+                    }
+                    val heroTitleColor = if (isDarkSurface) Color(0xFFECFDF5) else Color(0xFF064E3B)
+                    val heroSubtitleColor = if (isDarkSurface) Color(0xFFA7F3D0) else Color(0xFF14532D)
+                    val heroAccentGreen = if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857)
+                    val heroDateBg = if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.88f)
+                    val heroDateText = if (isDarkSurface) Color(0xFF6EE7B7) else Color(0xFF065F46)
+
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("card_summary_today"),
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
                         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Brush.linearGradient(heroGradient))
+                                .border(1.dp, heroBorderColor, RoundedCornerShape(16.dp))
+                        ) {
                         Column(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -256,19 +281,20 @@ fun DashboardScreen(
                                             text = if (isEn) "Today's Care" else "Berobat Hari Ini",
                                             fontSize = 14.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
+                                            color = heroTitleColor,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Surface(
                                             shape = RoundedCornerShape(6.dp),
-                                            color = WaliPrimary.copy(alpha = 0.12f)
+                                            color = heroDateBg,
+                                            border = BorderStroke(0.8.dp, heroBorderColor.copy(alpha = 0.8f))
                                         ) {
                                             Text(
                                                 text = todayShortFormatted,
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = WaliPrimary,
+                                                color = heroDateText,
                                                 maxLines = 1,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
@@ -287,14 +313,14 @@ fun DashboardScreen(
                                             Icon(
                                                 imageVector = Icons.Default.Person,
                                                 contentDescription = null,
-                                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                tint = heroSubtitleColor,
                                                 modifier = Modifier.size(12.dp)
                                             )
                                             Text(
                                                 text = "Wali: $waliName",
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = heroSubtitleColor,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
@@ -309,8 +335,8 @@ fun DashboardScreen(
                                     },
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(
-                                        containerColor = WaliPrimary,
-                                        contentColor = Color.White
+                                        containerColor = heroAccentGreen,
+                                        contentColor = if (isDarkSurface) Color(0xFF022C22) else Color.White
                                     ),
                                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
                                     modifier = Modifier
@@ -344,23 +370,31 @@ fun DashboardScreen(
                                 sortedFaskesEntries.forEach { (faskesName, count, faskesInpatients) ->
                                     val hasActive = count > 0 || faskesInpatients.isNotEmpty()
                                     val faskesSlug = faskesName.lowercase().replace(" ", "_")
+                                    val pillBg = when {
+                                        isDarkSurface && hasActive -> Color(0xFF022C22).copy(alpha = 0.85f)
+                                        isDarkSurface -> Color(0xFF022C22).copy(alpha = 0.55f)
+                                        hasActive -> Color.White
+                                        else -> Color.White.copy(alpha = 0.85f)
+                                    }
+                                    val pillBorder = when {
+                                        isDarkSurface && hasActive -> Color(0xFF6EE7B7).copy(alpha = 0.7f)
+                                        isDarkSurface -> Color(0xFF34D399).copy(alpha = 0.3f)
+                                        hasActive -> Color(0xFF34D399)
+                                        else -> Color(0xFFA7F3D0)
+                                    }
+                                    val pillLabelColor = when {
+                                        isDarkSurface -> Color(0xFFECFDF5)
+                                        hasActive -> Color(0xFF064E3B)
+                                        else -> Color(0xFF1E293B)
+                                    }
                                     Row(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(
-                                                if (hasActive) WaliPrimary.copy(alpha = 0.10f)
-                                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                                            )
-                                            .then(
-                                                if (hasActive) {
-                                                    Modifier.border(
-                                                        width = 1.dp,
-                                                        color = WaliPrimary.copy(alpha = 0.30f),
-                                                        shape = RoundedCornerShape(10.dp)
-                                                    )
-                                                } else {
-                                                    Modifier
-                                                }
+                                            .background(pillBg)
+                                            .border(
+                                                width = 1.dp,
+                                                color = pillBorder,
+                                                shape = RoundedCornerShape(10.dp)
                                             )
                                             .padding(horizontal = 9.dp, vertical = 5.dp)
                                             .testTag("pill_faskes_$faskesSlug"),
@@ -374,8 +408,8 @@ fun DashboardScreen(
                                                 .background(
                                                     when {
                                                         faskesInpatients.isNotEmpty() -> Color(0xFFDC2626)
-                                                        count > 0 -> WaliPrimary
-                                                        else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                                        count > 0 -> heroAccentGreen
+                                                        else -> if (isDarkSurface) Color(0xFF6EE7B7).copy(alpha = 0.6f) else Color(0xFF64748B).copy(alpha = 0.55f)
                                                     }
                                                 )
                                         )
@@ -383,12 +417,16 @@ fun DashboardScreen(
                                             text = faskesName,
                                             fontSize = 11.5.sp,
                                             fontWeight = if (hasActive) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (hasActive) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = pillLabelColor,
                                             maxLines = 1
                                         )
                                         Surface(
                                             shape = CircleShape,
-                                            color = if (count > 0) WaliPrimary else MaterialTheme.colorScheme.surface.copy(alpha = 0.85f)
+                                            color = when {
+                                                count > 0 -> heroAccentGreen
+                                                isDarkSurface -> Color(0xFF065F46)
+                                                else -> Color(0xFFECFDF5)
+                                            }
                                         ) {
                                             Text(
                                                 text = if (count > 0) {
@@ -398,7 +436,11 @@ fun DashboardScreen(
                                                 },
                                                 fontSize = 10.5.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = if (count > 0) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = when {
+                                                    count > 0 -> if (isDarkSurface) Color(0xFF022C22) else Color.White
+                                                    isDarkSurface -> Color(0xFFA7F3D0)
+                                                    else -> Color(0xFF065F46)
+                                                },
                                                 maxLines = 1,
                                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
                                             )
@@ -414,7 +456,7 @@ fun DashboardScreen(
                                                     }
                                                 },
                                                 shape = RoundedCornerShape(8.dp),
-                                                color = Color(0xFFDC2626).copy(alpha = 0.14f),
+                                                color = Color(0xFFFEE2E2),
                                                 modifier = Modifier.testTag("badge_inpatient_$faskesSlug")
                                             ) {
                                                 Row(
@@ -451,10 +493,10 @@ fun DashboardScreen(
                                     Row(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(10.dp))
-                                            .background(Color(0xFFDC2626).copy(alpha = 0.08f))
+                                            .background(Color.White.copy(alpha = if (isDarkSurface) 0.12f else 0.92f))
                                             .border(
                                                 width = 1.dp,
-                                                color = Color(0xFFDC2626).copy(alpha = 0.25f),
+                                                color = Color(0xFFDC2626).copy(alpha = 0.35f),
                                                 shape = RoundedCornerShape(10.dp)
                                             )
                                             .padding(horizontal = 9.dp, vertical = 5.dp),
@@ -465,7 +507,7 @@ fun DashboardScreen(
                                             text = faskesName,
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface,
+                                            color = if (isDarkSurface) Color(0xFFECFDF5) else Color(0xFF0F172A),
                                             maxLines = 1
                                         )
                                         Surface(
@@ -478,7 +520,7 @@ fun DashboardScreen(
                                                 }
                                             },
                                             shape = RoundedCornerShape(8.dp),
-                                            color = Color(0xFFDC2626).copy(alpha = 0.14f),
+                                            color = Color(0xFFFEE2E2),
                                             modifier = Modifier.testTag("badge_inpatient_custom")
                                         ) {
                                             Row(
@@ -519,8 +561,8 @@ fun DashboardScreen(
                                         .fillMaxWidth()
                                         .height(4.dp)
                                         .clip(RoundedCornerShape(2.dp)),
-                                    color = WaliPrimary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                    color = heroAccentGreen,
+                                    trackColor = if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.65f) else Color.White.copy(alpha = 0.75f)
                                 )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -534,19 +576,20 @@ fun DashboardScreen(
                                             "$totalToday/$totalSchoolStudents Siswa Dijadwalkan"
                                         },
                                         fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = heroSubtitleColor
                                     )
                                     if (upcomingPlans.isNotEmpty()) {
                                         Text(
                                             text = if (isEn) "+${upcomingPlans.size} upcoming" else "+${upcomingPlans.size} mendatang",
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = WaliPrimary
+                                            color = heroDateText
                                         )
                                     }
                                 }
                             }
+                        }
                         }
                     }
                 }
