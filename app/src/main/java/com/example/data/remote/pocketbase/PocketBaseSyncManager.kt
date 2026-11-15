@@ -798,6 +798,52 @@ object PocketBaseSyncManager {
         }.getOrNull()
     }
 
+    internal fun parsePocketBaseUploadError(raw: String, httpCode: Int, isEn: Boolean): String {
+        val json = runCatching { JSONObject(raw) }.getOrNull()
+        val message = json?.optString("message")?.trim().orEmpty()
+        val dataObj = json?.optJSONObject("data")
+        val fieldDetails = mutableListOf<String>()
+        if (dataObj != null) {
+            val keys = dataObj.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val childObj = dataObj.optJSONObject(key)
+                if (childObj != null) {
+                    val fMsg = childObj.optString("message").trim()
+                    val fCode = childObj.optString("code").trim()
+                    val combined = listOfNotNull(
+                        fMsg.takeIf { it.isNotBlank() },
+                        fCode.takeIf { it.isNotBlank() }?.let { "($it)" }
+                    ).joinToString(" ")
+                    if (combined.isNotBlank()) fieldDetails.add("$key: $combined")
+                } else {
+                    val strVal = dataObj.optString(key).trim()
+                    if (strVal.isNotBlank()) fieldDetails.add("$key: $strVal")
+                }
+            }
+        }
+        val baseErr = buildString {
+            append(message.ifBlank { "HTTP $httpCode" })
+            if (fieldDetails.isNotEmpty()) {
+                append(" [")
+                append(fieldDetails.joinToString("; "))
+                append("]")
+            }
+        }
+        val looksLikeRecordCreateFailure = message.contains("Failed to create record", ignoreCase = true) ||
+            httpCode == 400
+        return if (looksLikeRecordCreateFailure && fieldDetails.isEmpty()) {
+            val hint = if (isEn) {
+                "Check PocketBase Settings -> Files storage (S3): set Region to 'auto' (not 'Asia-Pacific') and Endpoint without trailing bucket name."
+            } else {
+                "Periksa Settings -> Files storage (S3) di PocketBase: ubah Region menjadi 'auto' (bukan 'Asia-Pacific') dan pastikan Endpoint tanpa nama bucket."
+            }
+            "$baseErr — $hint"
+        } else {
+            baseErr
+        }
+    }
+
     suspend fun uploadBannerImageToCloud(
         context: Context,
         imageUri: Uri,
@@ -825,11 +871,9 @@ object PocketBaseSyncManager {
         val safeFilename = "banner_${now}.jpg"
         val cleanBannerId = bannerId.ifBlank { "banner_$now" }
         val localHash = PocketBaseIdCodec.stablePositiveHash("banner_media:$cleanBannerId:$now")
-        val targetRecordId = PocketBaseIdCodec.toPbId(localHash)
 
         val multipartBody = MultipartBody.Builder()
             .setType(MultipartBody.FORM)
-            .addFormDataPart("id", targetRecordId)
             .addFormDataPart("local_id", localHash.toString())
             .addFormDataPart("school_id", "__GLOBAL__")
             .addFormDataPart("banner_id", cleanBannerId)
@@ -869,8 +913,8 @@ object PocketBaseSyncManager {
                     )
                 }
                 if (!resp.isSuccessful) {
-                    val errMsg = runCatching { JSONObject(raw).optString("message") }.getOrNull()
-                        ?.takeIf { it.isNotBlank() } ?: "HTTP ${resp.code}"
+                    Log.e(TAG, "Banner upload HTTP ${resp.code}: $raw")
+                    val errMsg = parsePocketBaseUploadError(raw, resp.code, isEn)
                     return@withContext Result.failure(
                         Exception(
                             if (isEn) "Failed to upload banner image: $errMsg" else "Gagal mengunggah gambar banner: $errMsg"
@@ -878,7 +922,7 @@ object PocketBaseSyncManager {
                     )
                 }
                 val json = JSONObject(raw)
-                val recordId = json.optString("id", targetRecordId).ifBlank { targetRecordId }
+                val recordId = json.optString("id", "").trim()
                 val collectionId = json.optString("collectionId", "dashboard_banners").ifBlank { "dashboard_banners" }
                 val uploadedFilename = when {
                     json.has("image") && json.optJSONArray("image") != null -> {
@@ -886,10 +930,10 @@ object PocketBaseSyncManager {
                     }
                     else -> json.optString("image", "")
                 }.trim()
-                if (uploadedFilename.isBlank()) {
+                if (recordId.isBlank() || uploadedFilename.isBlank()) {
                     return@withContext Result.failure(
                         Exception(
-                            if (isEn) "PocketBase did not return uploaded image filename." else "PocketBase tidak mengembalikan nama file gambar."
+                            if (isEn) "PocketBase did not return uploaded image metadata." else "PocketBase tidak mengembalikan metadata gambar."
                         )
                     )
                 }

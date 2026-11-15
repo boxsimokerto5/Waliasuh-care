@@ -4875,5 +4875,26 @@ class ExampleRobolectricTest {
 
     db.waliAccountDao().delete(normalWali)
   }
+
+  @Test
+  fun `verify PocketBaseSyncManager parsePocketBaseUploadError extracts data fields and R2 Region hint`() {
+    val withFieldData = """{"status":400,"message":"Failed to create record.","data":{"image":{"code":"validation_invalid_mime_type","message":"Invalid mime type."}}}"""
+    val parsedWithField = com.example.data.remote.pocketbase.PocketBaseSyncManager.parsePocketBaseUploadError(
+      raw = withFieldData,
+      httpCode = 400,
+      isEn = false
+    )
+    org.junit.Assert.assertTrue(parsedWithField.contains("Failed to create record."))
+    org.junit.Assert.assertTrue(parsedWithField.contains("image: Invalid mime type. (validation_invalid_mime_type)"))
+
+    val genericS3Fail = """{"status":400,"message":"Failed to create record.","data":{}}"""
+    val parsedGenericId = com.example.data.remote.pocketbase.PocketBaseSyncManager.parsePocketBaseUploadError(
+      raw = genericS3Fail,
+      httpCode = 400,
+      isEn = false
+    )
+    org.junit.Assert.assertTrue(parsedGenericId.contains("Region menjadi 'auto'"))
+    org.junit.Assert.assertTrue(parsedGenericId.contains("Asia-Pacific"))
+  }
 }
 
