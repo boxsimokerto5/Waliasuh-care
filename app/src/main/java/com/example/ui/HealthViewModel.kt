@@ -2,10 +2,13 @@ package com.example.ui
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardBannerConfig
+import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
@@ -19,10 +22,12 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.remote.pocketbase.PbSchoolProfileDto
 import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.data.remote.pocketbase.PocketBaseSyncManager
 import com.example.data.repository.HealthRepository
@@ -254,6 +259,174 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         saveDashboardIconOrder(DashboardIconKey.DEFAULT_ORDER, onResult)
     }
 
+    // Global Dashboard Banner Carousel Preferences (Synced via PocketBase + Cloudflare R2 CDN across all Wali Asuh)
+    private val bannerPrefs = application.getSharedPreferences("waliasuh_dashboard_banner_prefs", Context.MODE_PRIVATE)
+    private val _dashboardBannerConfig = MutableStateFlow(loadSavedDashboardBannerConfig())
+    val dashboardBannerConfig: StateFlow<DashboardBannerConfig> = _dashboardBannerConfig.asStateFlow()
+
+    private val _isSavingDashboardBanner = MutableStateFlow(false)
+    val isSavingDashboardBanner: StateFlow<Boolean> = _isSavingDashboardBanner.asStateFlow()
+
+    private val _isUploadingBannerImage = MutableStateFlow(false)
+    val isUploadingBannerImage: StateFlow<Boolean> = _isUploadingBannerImage.asStateFlow()
+
+    private fun loadSavedDashboardBannerConfig(): DashboardBannerConfig {
+        val raw = bannerPrefs.getString("banner_config_json", null)
+        return DashboardBannerConfig.fromJsonString(raw) ?: DashboardBannerConfig.defaultConfig()
+    }
+
+    private fun persistDashboardBannerConfig(config: DashboardBannerConfig) {
+        val normalized = config.normalized()
+        _dashboardBannerConfig.value = normalized
+        bannerPrefs.edit()
+            .putString("banner_config_json", normalized.toJsonString())
+            .apply()
+    }
+
+    fun applyRemoteDashboardBannerConfig(remoteConfig: DashboardBannerConfig) {
+        val localTs = _dashboardBannerConfig.value.updatedAt
+        if (remoteConfig.updatedAt >= localTs) {
+            persistDashboardBannerConfig(remoteConfig)
+        }
+    }
+
+    fun syncDashboardBannersNow() {
+        if (isUnitTestEnvironment() || !PocketBaseConfig.isConfigured(getApplication())) return
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncDashboardBannerConfigQuietly(
+                context = getApplication(),
+                localConfig = _dashboardBannerConfig.value,
+                allowPushToCloud = isAnakSuperAdmin.value,
+                onRemoteBannerUpdated = { remoteConfig ->
+                    applyRemoteDashboardBannerConfig(remoteConfig)
+                }
+            )
+        }
+    }
+
+    fun uploadBannerImageToCloud(
+        imageUri: Uri,
+        bannerId: String,
+        title: String,
+        onResult: (Boolean, String, UploadedBannerMedia?) -> Unit
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!isAnakSuperAdmin.value) {
+            onResult(
+                false,
+                if (isEn) {
+                    "Only anaksuperadmin can upload banner images."
+                } else {
+                    "Hanya akun anaksuperadmin yang dapat mengunggah gambar banner."
+                },
+                null
+            )
+            return
+        }
+        if (isUnitTestEnvironment()) {
+            val mockMedia = UploadedBannerMedia(
+                pbRecordId = "testrecord00001",
+                pbCollectionId = "dashboard_banners",
+                pbFilename = "banner_test.jpg",
+                cdnImageUrl = DashboardBannerItem.buildR2CdnUrl("dashboard_banners", "testrecord00001", "banner_test.jpg"),
+                fallbackApiFileUrl = DashboardBannerItem.buildPbApiFileUrl(
+                    DashboardBannerItem.DEFAULT_POCKETBASE_BASE_URL,
+                    "dashboard_banners",
+                    "testrecord00001",
+                    "banner_test.jpg"
+                )
+            )
+            onResult(true, "CDN Ready", mockMedia)
+            return
+        }
+        viewModelScope.launch {
+            _isUploadingBannerImage.value = true
+            val res = PocketBaseSyncManager.uploadBannerImageToCloud(
+                context = getApplication(),
+                imageUri = imageUri,
+                bannerId = bannerId,
+                title = title
+            )
+            _isUploadingBannerImage.value = false
+            if (res.isSuccess) {
+                val media = res.getOrNull()
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Image uploaded to R2 CDN!"
+                    } else {
+                        "Gambar diunggah ke R2 CDN (${DashboardBannerItem.R2_CDN_BASE_URL})!"
+                    },
+                    media
+                )
+            } else {
+                onResult(
+                    false,
+                    res.exceptionOrNull()?.message
+                        ?: if (isEn) "Failed to upload banner image." else "Gagal mengunggah gambar banner.",
+                    null
+                )
+            }
+        }
+    }
+
+    fun saveDashboardBannerConfig(
+        newConfig: DashboardBannerConfig,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!isAnakSuperAdmin.value) {
+            onResult(
+                false,
+                if (isEn) {
+                    "Only anaksuperadmin can modify dashboard banners."
+                } else {
+                    "Hanya akun anaksuperadmin yang dapat mengatur banner dashboard."
+                }
+            )
+            return
+        }
+        val stamped = newConfig.copy(updatedAt = System.currentTimeMillis()).normalized()
+        persistDashboardBannerConfig(stamped)
+
+        if (isUnitTestEnvironment()) {
+            onResult(
+                true,
+                if (isEn) "Dashboard banners saved!" else "Pengaturan banner dashboard berhasil disimpan!"
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _isSavingDashboardBanner.value = true
+            val res = PocketBaseSyncManager.uploadDashboardBannerConfig(
+                context = getApplication(),
+                config = stamped
+            )
+            _isSavingDashboardBanner.value = false
+            if (res.isSuccess) {
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Global banners & timer synced via PocketBase!"
+                    } else {
+                        "Banner global & durasi geser disinkronkan ke semua Wali Asuh!"
+                    }
+                )
+            } else {
+                val errDetail = res.exceptionOrNull()?.message.orEmpty()
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Saved locally, but PocketBase sync failed: $errDetail"
+                    } else {
+                        "Tersimpan di perangkat, namun sinkronisasi PocketBase gagal: $errDetail"
+                    }
+                )
+            }
+        }
+    }
+
     // School Profile & Tenant Customization
     private val schoolPrefs = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
     private fun parseFaskesList(raw: String?): List<String> {
@@ -300,6 +473,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             allowPushDashboardLayout = isAnakSuperAdmin.value,
             onRemoteDashboardLayoutUpdated = { remoteOrder, remoteTs ->
                 applyRemoteDashboardIconOrder(remoteOrder, remoteTs)
+            },
+            localDashboardBannerConfig = _dashboardBannerConfig.value,
+            allowPushDashboardBanners = isAnakSuperAdmin.value,
+            onRemoteDashboardBannerUpdated = { remoteBannerConfig ->
+                applyRemoteDashboardBannerConfig(remoteBannerConfig)
             },
             onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
                 processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
@@ -408,7 +586,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private fun applyRemoteSchoolProfile(profile: SchoolProfile, updatedAt: Long) {
         val codeUpper = profile.tenantCode.trim().uppercase()
         if (codeUpper.isNotBlank() &&
-            codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+            codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+            codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID
         ) {
             _remoteSchoolProfiles.value = _remoteSchoolProfiles.value.toMutableMap().apply {
                 put(codeUpper, profile.copy(tenantCode = codeUpper) to updatedAt)
@@ -564,10 +743,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             .filter {
                 it.status.equals("APPROVED", ignoreCase = true) &&
                     it.generatedSchoolCode.isNotBlank() &&
-                    !it.generatedSchoolCode.equals(
-                        com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID,
-                        ignoreCase = true
-                    )
+                    !it.generatedSchoolCode.equals(PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID, ignoreCase = true) &&
+                    !it.generatedSchoolCode.equals(PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID, ignoreCase = true)
             }
             .forEach { reg ->
                 val codeUpper = reg.generatedSchoolCode.trim().uppercase()
@@ -593,7 +770,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         // 3. Profil sekolah jarak jauh dari PocketBase yang mungkin belum ada di Room registrations
         remoteProfiles.forEach { (codeUpper, pair) ->
             if (codeUpper !in blockedCodes &&
-                codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+                codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+                codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID &&
                 !optionsMap.containsKey(codeUpper)
             ) {
                 val prof = pair.first
@@ -608,7 +786,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
         // 4. Pastikan sekolah aktif saat ini selalu masuk dalam opsi bila valid
         if (activeUpper !in blockedCodes &&
-            activeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+            activeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+            activeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID &&
             !optionsMap.containsKey(activeUpper)
         ) {
             optionsMap[activeUpper] = SwitchableSchoolOption(
@@ -644,7 +823,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     remoteList.forEach { (prof, ts) ->
                         val codeUpper = prof.tenantCode.trim().uppercase()
                         if (codeUpper.isNotBlank() &&
-                            codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+                            codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+                            codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID
                         ) {
                             updatedMap[codeUpper] = prof.copy(tenantCode = codeUpper) to ts
                         }
@@ -678,7 +858,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
         val cleanCode = targetSchoolCode.trim().uppercase()
         if (cleanCode.isBlank() ||
-            cleanCode == com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+            cleanCode == PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID ||
+            cleanCode == PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID
         ) {
             onResult(
                 false,
@@ -2948,7 +3129,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         remoteList.forEach { (prof, ts) ->
                             val codeUpper = prof.tenantCode.trim().uppercase()
                             if (codeUpper.isNotBlank() &&
-                                codeUpper != com.example.data.remote.pocketbase.PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID
+                                codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID &&
+                                codeUpper != PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID
                             ) {
                                 updatedMap[codeUpper] = prof.copy(tenantCode = codeUpper) to ts
                             }

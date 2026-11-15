@@ -151,6 +151,7 @@ fun QuickMenuTiles(
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     iconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
+    showPuskesmasCard: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val isEn = LocalAppStrings.current.isEnglish
@@ -317,12 +318,14 @@ fun QuickMenuTiles(
             }
         }
 
-        // Baris 3: Puskesmas Rujukan (Banner Horisontal Cantik)
-        PuskesmasWideCard(
-            faskesSubtitle = faskesBannerSubtitle,
-            onClick = onShowPuskesmasInfo,
-            modifier = Modifier.fillMaxWidth()
-        )
+        // Baris 3: Puskesmas Rujukan (Banner Horisontal Cantik — opsional bila digantikan Carousel)
+        if (showPuskesmasCard) {
+            PuskesmasWideCard(
+                faskesSubtitle = faskesBannerSubtitle,
+                onClick = onShowPuskesmasInfo,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

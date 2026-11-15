@@ -1,6 +1,7 @@
 package com.example.data.remote.pocketbase
 
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DashboardIconLayoutConfig
 import com.example.data.model.FastingRecord
@@ -720,8 +721,14 @@ data class PbSchoolProfileDto(
         )
     }
 
+    fun toDashboardBannerConfig(): DashboardBannerConfig? {
+        val parsed = DashboardBannerConfig.fromJsonString(additionalFaskesJson) ?: return null
+        return parsed.copy(updatedAt = maxOf(parsed.updatedAt, updatedAt ?: 0L))
+    }
+
     companion object {
         const val GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID = "__GLOBAL_DASHBOARD_LAYOUT__"
+        const val GLOBAL_DASHBOARD_BANNER_SCHOOL_ID = "__GLOBAL_DASHBOARD_BANNER__"
 
         fun fromDomain(profile: SchoolProfile, updatedAt: Long): PbSchoolProfileDto {
             val cleanCode = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
@@ -767,6 +774,30 @@ data class PbSchoolProfileDto(
                 additionalFaskesJson = DashboardIconKey.serializeJson(order),
                 faskesContactsJson = "[]",
                 updatedAt = updatedAt
+            )
+        }
+
+        fun fromDashboardBannerConfig(
+            config: DashboardBannerConfig
+        ): PbSchoolProfileDto {
+            val clean = config.normalized()
+            val localHash = PocketBaseIdCodec.stablePositiveHash(
+                "school_profile:${GLOBAL_DASHBOARD_BANNER_SCHOOL_ID}"
+            )
+            return PbSchoolProfileDto(
+                id = PocketBaseIdCodec.toPbSchoolProfileId(GLOBAL_DASHBOARD_BANNER_SCHOOL_ID),
+                localId = localHash,
+                schoolId = GLOBAL_DASHBOARD_BANNER_SCHOOL_ID,
+                schoolName = "Global Dashboard Banner Carousel",
+                shortName = "Global Banner",
+                adminName = "anaksuperadmin",
+                address = "",
+                city = "Global",
+                primaryFaskesName = "UKS Sekolah",
+                secondaryFaskesName = "",
+                additionalFaskesJson = clean.toJsonString(),
+                faskesContactsJson = "[]",
+                updatedAt = clean.updatedAt
             )
         }
     }

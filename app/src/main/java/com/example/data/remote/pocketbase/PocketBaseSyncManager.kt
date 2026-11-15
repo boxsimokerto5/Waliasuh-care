@@ -1,8 +1,13 @@
 package com.example.data.remote.pocketbase
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardBannerConfig
+import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DashboardIconLayoutConfig
 import com.example.data.model.FastingRecord
@@ -15,6 +20,7 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
@@ -26,7 +32,16 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
 import retrofit2.Response
+import java.io.ByteArrayOutputStream
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
 object PocketBaseSyncManager {
@@ -645,6 +660,7 @@ object PocketBaseSyncManager {
                     val rawSchoolId = dto.schoolId?.trim().orEmpty()
                     if (rawSchoolId.isBlank() ||
                         rawSchoolId.equals(PbSchoolProfileDto.GLOBAL_DASHBOARD_LAYOUT_SCHOOL_ID, ignoreCase = true) ||
+                        rawSchoolId.equals(PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID, ignoreCase = true) ||
                         PocketBaseConfig.isSchoolCodeDeleted(context, rawSchoolId)
                     ) {
                         null
@@ -739,6 +755,237 @@ object PocketBaseSyncManager {
                 localUpdatedAt = localUpdatedAt,
                 allowPushToCloud = allowPushToCloud,
                 onRemoteLayoutUpdated = onRemoteLayoutUpdated
+            )
+        }
+    }
+
+    // --- Global Dashboard Banner Carousel & Cloudflare R2 CDN Image Upload ---
+    private fun compressBannerImageBytes(context: Context, imageUri: Uri): ByteArray? {
+        return runCatching {
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(imageUri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, boundsOpts)
+            }
+            val srcW = boundsOpts.outWidth
+            val srcH = boundsOpts.outHeight
+            var sampleSize = 1
+            if (srcW > 1440 || srcH > 1440) {
+                while ((srcW / sampleSize) > 1440 || (srcH / sampleSize) > 1440) {
+                    sampleSize *= 2
+                }
+            }
+            val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val decoded = context.contentResolver.openInputStream(imageUri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, decodeOpts)
+            } ?: return@runCatching null
+
+            val maxDim = 1280
+            val scaled = if (decoded.width > maxDim || decoded.height > maxDim) {
+                val ratio = minOf(maxDim.toFloat() / decoded.width, maxDim.toFloat() / decoded.height)
+                val targetW = (decoded.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (decoded.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(decoded, targetW, targetH, true).also {
+                    if (it !== decoded) decoded.recycle()
+                }
+            } else {
+                decoded
+            }
+            ByteArrayOutputStream().use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 85, out)
+                scaled.recycle()
+                out.toByteArray()
+            }
+        }.getOrNull()
+    }
+
+    suspend fun uploadBannerImageToCloud(
+        context: Context,
+        imageUri: Uri,
+        bannerId: String,
+        title: String
+    ): Result<UploadedBannerMedia> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+        val imageBytes = compressBannerImageBytes(context, imageUri)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Unable to read selected image." else "Gagal membaca file gambar yang dipilih.")
+            )
+
+        val now = System.currentTimeMillis()
+        val safeFilename = "banner_${now}.jpg"
+        val cleanBannerId = bannerId.ifBlank { "banner_$now" }
+        val localHash = PocketBaseIdCodec.stablePositiveHash("banner_media:$cleanBannerId:$now")
+        val targetRecordId = PocketBaseIdCodec.toPbId(localHash)
+
+        val multipartBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("id", targetRecordId)
+            .addFormDataPart("local_id", localHash.toString())
+            .addFormDataPart("school_id", "__GLOBAL__")
+            .addFormDataPart("banner_id", cleanBannerId)
+            .addFormDataPart("title", title.ifBlank { "Dashboard Banner" })
+            .addFormDataPart("is_enabled", "true")
+            .addFormDataPart("updated_at", now.toString())
+            .addFormDataPart(
+                "image",
+                safeFilename,
+                imageBytes.toRequestBody("image/jpeg".toMediaType())
+            )
+            .build()
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(45, TimeUnit.SECONDS)
+            .writeTimeout(45, TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url("$baseUrl/api/collections/dashboard_banners/records")
+            .post(multipartBody)
+            .build()
+
+        return@withContext try {
+            client.newCall(request).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (resp.code == 404) {
+                    return@withContext Result.failure(
+                        Exception(
+                            if (isEn) {
+                                "Collection 'dashboard_banners' not synced on server yet. Run Sync Schema in SuperAdmin or paste an image URL."
+                            } else {
+                                "Koleksi 'dashboard_banners' belum disinkronkan di server. Jalankan Sync Skema di menu SuperAdmin atau tempel URL gambar."
+                            }
+                        )
+                    )
+                }
+                if (!resp.isSuccessful) {
+                    val errMsg = runCatching { JSONObject(raw).optString("message") }.getOrNull()
+                        ?.takeIf { it.isNotBlank() } ?: "HTTP ${resp.code}"
+                    return@withContext Result.failure(
+                        Exception(
+                            if (isEn) "Failed to upload banner image: $errMsg" else "Gagal mengunggah gambar banner: $errMsg"
+                        )
+                    )
+                }
+                val json = JSONObject(raw)
+                val recordId = json.optString("id", targetRecordId).ifBlank { targetRecordId }
+                val collectionId = json.optString("collectionId", "dashboard_banners").ifBlank { "dashboard_banners" }
+                val uploadedFilename = when {
+                    json.has("image") && json.optJSONArray("image") != null -> {
+                        json.optJSONArray("image")?.optString(0, "").orEmpty()
+                    }
+                    else -> json.optString("image", "")
+                }.trim()
+                if (uploadedFilename.isBlank()) {
+                    return@withContext Result.failure(
+                        Exception(
+                            if (isEn) "PocketBase did not return uploaded image filename." else "PocketBase tidak mengembalikan nama file gambar."
+                        )
+                    )
+                }
+                val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+                val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+                Result.success(
+                    UploadedBannerMedia(
+                        pbRecordId = recordId,
+                        pbCollectionId = collectionId,
+                        pbFilename = uploadedFilename,
+                        cdnImageUrl = cdnUrl,
+                        fallbackApiFileUrl = fallbackUrl
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadBannerImageToCloud", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadDashboardBannerConfig(
+        context: Context,
+        config: DashboardBannerConfig
+    ): Result<Boolean> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase is not configured yet." else "PocketBase belum terkonfigurasi.")
+            )
+        }
+        val service = PocketBaseClient.getService(context)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Failed to connect to PocketBase." else "Gagal terhubung ke layanan PocketBase.")
+            )
+        return@withContext try {
+            val dto = PbSchoolProfileDto.fromDashboardBannerConfig(config)
+            val ok = upsertSingleDto(service, "school_profiles", dto.id!!, dto)
+            if (ok) {
+                PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
+                Result.success(true)
+            } else {
+                Result.failure(
+                    Exception(
+                        if (isEn) "Failed to save dashboard banners to PocketBase cloud." else "Gagal menyimpan banner dashboard ke cloud PocketBase."
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadDashboardBannerConfig", e)
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun syncDashboardBannerConfigMerged(
+        service: PocketBaseService,
+        localConfig: DashboardBannerConfig,
+        allowPushToCloud: Boolean,
+        onRemoteBannerUpdated: ((DashboardBannerConfig) -> Unit)?
+    ) {
+        val globalFilter = buildSchoolFilter(PbSchoolProfileDto.GLOBAL_DASHBOARD_BANNER_SCHOOL_ID)
+        val remoteRes = fetchAllPages { page ->
+            service.listSchoolProfiles(page = page, perPage = 10, filter = globalFilter)
+        }
+        if (!remoteRes.isSuccess) return
+        val remoteConfig = remoteRes.getOrNull()
+            ?.mapNotNull { it.toDashboardBannerConfig() }
+            ?.maxByOrNull { it.updatedAt }
+
+        if (remoteConfig != null) {
+            if (remoteConfig.updatedAt > localConfig.updatedAt) {
+                onRemoteBannerUpdated?.invoke(remoteConfig)
+            } else if (allowPushToCloud && localConfig.updatedAt > remoteConfig.updatedAt) {
+                val dto = PbSchoolProfileDto.fromDashboardBannerConfig(localConfig)
+                upsertSingleDto(service, "school_profiles", dto.id!!, dto)
+            }
+        } else if (allowPushToCloud && localConfig.updatedAt > 0L) {
+            val dto = PbSchoolProfileDto.fromDashboardBannerConfig(localConfig)
+            upsertSingleDto(service, "school_profiles", dto.id!!, dto)
+        }
+    }
+
+    suspend fun syncDashboardBannerConfigQuietly(
+        context: Context,
+        localConfig: DashboardBannerConfig,
+        allowPushToCloud: Boolean = false,
+        onRemoteBannerUpdated: (DashboardBannerConfig) -> Unit
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        runCatching {
+            syncDashboardBannerConfigMerged(
+                service = service,
+                localConfig = localConfig,
+                allowPushToCloud = allowPushToCloud,
+                onRemoteBannerUpdated = onRemoteBannerUpdated
             )
         }
     }
@@ -1271,6 +1518,9 @@ object PocketBaseSyncManager {
         localDashboardLayoutUpdatedAt: Long = 0L,
         allowPushDashboardLayout: Boolean = false,
         onRemoteDashboardLayoutUpdated: ((List<DashboardIconKey>, Long) -> Unit)? = null,
+        localDashboardBannerConfig: DashboardBannerConfig = DashboardBannerConfig.defaultConfig(),
+        allowPushDashboardBanners: Boolean = false,
+        onRemoteDashboardBannerUpdated: ((DashboardBannerConfig) -> Unit)? = null,
         onNewRemoteMedicalRecords: ((List<MedicalRecord>, List<ChildStudent>, String) -> Unit)? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
@@ -1320,6 +1570,16 @@ object PocketBaseSyncManager {
                     localUpdatedAt = localDashboardLayoutUpdatedAt,
                     allowPushToCloud = allowPushDashboardLayout,
                     onRemoteLayoutUpdated = onRemoteDashboardLayoutUpdated
+                )
+            }
+
+            // 0c. Sinkronkan Banner Carousel Global Dashboard (untuk semua Wali Asuh)
+            runCatching {
+                syncDashboardBannerConfigMerged(
+                    service = service,
+                    localConfig = localDashboardBannerConfig,
+                    allowPushToCloud = allowPushDashboardBanners,
+                    onRemoteBannerUpdated = onRemoteDashboardBannerUpdated
                 )
             }
 

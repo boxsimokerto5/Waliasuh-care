@@ -2,6 +2,8 @@
 
 package com.example.ui.screens
 
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -82,10 +84,14 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
+import com.example.data.model.DashboardBannerActionType
+import com.example.data.model.DashboardBannerFeatureTarget
+import com.example.data.model.DashboardBannerItem
 import com.example.data.model.MedicalRecord
 import com.example.data.model.ShiftMessage
 import com.example.ui.HealthViewModel
 import com.example.ui.components.CategoryHubOverlay
+import com.example.ui.components.DashboardBannerCarousel
 import com.example.ui.components.DashboardCategoryHub
 import com.example.ui.components.DashboardModalState
 import com.example.ui.components.FaskesBadge
@@ -105,6 +111,7 @@ import com.example.ui.dialogs.DaftarHaidSheet
 import com.example.ui.dialogs.DaftarHadirKunjunganSheet
 import com.example.ui.dialogs.DaftarPuasaSheet
 import com.example.ui.dialogs.DaftarSuciSheet
+import com.example.ui.dialogs.DashboardBannerEditorSheet
 import com.example.ui.dialogs.DashboardLayoutEditorSheet
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
@@ -179,10 +186,14 @@ fun DashboardScreen(
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
     val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
+    val dashboardBannerConfig by viewModel.dashboardBannerConfig.collectAsStateWithLifecycle()
+    val isSavingDashboardBanner by viewModel.isSavingDashboardBanner.collectAsStateWithLifecycle()
+    val isUploadingBannerImage by viewModel.isUploadingBannerImage.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
 
     LaunchedEffect(Unit) {
         viewModel.syncDashboardIconLayoutNow()
+        viewModel.syncDashboardBannersNow()
     }
     val myFosterStudents = remember(students, waliName) {
         students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
@@ -207,7 +218,98 @@ fun DashboardScreen(
     var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
     var showLayoutEditorSheet by remember { mutableStateOf(false) }
+    var showBannerEditorSheet by remember { mutableStateOf(false) }
     var selectedTodayShiftMessageId by remember { mutableStateOf<Long?>(null) }
+
+    fun handleBannerItemClick(banner: DashboardBannerItem) {
+        TopOnAdManager.onUserActionClick(context)
+        when (banner.actionType) {
+            DashboardBannerActionType.NONE -> Unit
+            DashboardBannerActionType.EXTERNAL_LINK -> {
+                val rawUrl = banner.actionTarget.trim()
+                if (rawUrl.isBlank()) return
+                val normalizedUrl = if (rawUrl.startsWith("http://", ignoreCase = true) ||
+                    rawUrl.startsWith("https://", ignoreCase = true)
+                ) {
+                    rawUrl
+                } else {
+                    "https://$rawUrl"
+                }
+                val opened = runCatching {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(normalizedUrl)).apply {
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    context.startActivity(intent)
+                }.isSuccess
+                if (!opened) {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Unable to open link: $normalizedUrl" else "Tidak dapat membuka tautan: $normalizedUrl",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+            DashboardBannerActionType.INTERNAL_FEATURE -> {
+                when (DashboardBannerFeatureTarget.fromKey(banner.actionTarget)) {
+                    DashboardBannerFeatureTarget.FEATURE_FASKES_INFO -> modalState.showPuskesmasInfoSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_BEROBAT_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.BEROBAT
+                    DashboardBannerFeatureTarget.FEATURE_CREATE_PLAN -> modalState.showCreateDialog = true
+                    DashboardBannerFeatureTarget.FEATURE_DIRECT_TREATMENT -> modalState.showDirectTreatmentDialog = true
+                    DashboardBannerFeatureTarget.FEATURE_PLAN_PAGE -> onNavigateToPlan()
+                    DashboardBannerFeatureTarget.FEATURE_RECORDS_PAGE -> onNavigateToRecords()
+
+                    DashboardBannerFeatureTarget.FEATURE_PUASA_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.PUASA
+                    DashboardBannerFeatureTarget.FEATURE_INPUT_PUASA -> modalState.showInputPuasaDialog = true
+                    DashboardBannerFeatureTarget.FEATURE_CREATE_PUASA_SESSION -> modalState.showCreatePuasaSessionDialog = true
+                    DashboardBannerFeatureTarget.FEATURE_DAFTAR_PUASA -> modalState.showDaftarPuasaSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_CHECKLIST_PUASA -> modalState.showChecklistPuasaSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_RANKING_PUASA -> modalState.showRankingPuasaSheet = true
+
+                    DashboardBannerFeatureTarget.FEATURE_HAID_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.HAID
+                    DashboardBannerFeatureTarget.FEATURE_INPUT_HAID -> modalState.showInputHaidDialog = true
+                    DashboardBannerFeatureTarget.FEATURE_DAFTAR_HAID -> modalState.showDaftarHaidSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_DAFTAR_SUCI -> modalState.showDaftarSuciSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_FIQIH_HAID -> modalState.showFiqihHaidDialog = true
+
+                    DashboardBannerFeatureTarget.FEATURE_MENGAJI_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.MENGAJI
+                    DashboardBannerFeatureTarget.FEATURE_INPUT_MENGAJI -> {
+                        modalState.mengajiTargetStudent = null
+                        modalState.mengajiRecordToEdit = null
+                        modalState.showInputMengajiDialog = true
+                    }
+                    DashboardBannerFeatureTarget.FEATURE_RIWAYAT_MENGAJI -> modalState.showRiwayatMengajiSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_KARTU_MENGAJI -> {
+                        modalState.mengajiTargetStudent = null
+                        modalState.showKartuMengajiSheet = true
+                    }
+
+                    DashboardBannerFeatureTarget.FEATURE_PESAN_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.PESAN
+                    DashboardBannerFeatureTarget.FEATURE_DAFTAR_PESAN -> modalState.showShiftMessagesSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_BUAT_PESAN -> modalState.showCreateShiftMessageDialog = true
+                    DashboardBannerFeatureTarget.FEATURE_RIWAYAT_PESAN -> modalState.showShiftHistorySheet = true
+
+                    DashboardBannerFeatureTarget.FEATURE_ORTU_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.ORANG_TUA
+                    DashboardBannerFeatureTarget.FEATURE_PILIH_ANAK_ASUH -> modalState.showPilihAnakAsuhSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_KARTU_AKSES_ORTU -> modalState.showKartuAksesOrtuSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_PILIHAN_AKSES_ORTU -> modalState.showPilihanAksesOrtuSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_CHAT_ORTU -> modalState.showPesanOrtuSheet = true
+
+                    DashboardBannerFeatureTarget.FEATURE_KUNJUNGAN_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.KUNJUNGAN
+                    DashboardBannerFeatureTarget.FEATURE_JADWAL_KUNJUNGAN -> modalState.showJadwalKunjunganSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_DAFTAR_HADIR_KUNJUNGAN -> {
+                        modalState.daftarHadirKunjunganInitialTab = 0
+                        modalState.showDaftarHadirKunjunganSheet = true
+                    }
+                    DashboardBannerFeatureTarget.FEATURE_LAPORAN_KUNJUNGAN -> modalState.showLaporanKunjunganSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_SISWA_PER_KECAMATAN -> modalState.showSiswaPerKecamatanSheet = true
+
+                    DashboardBannerFeatureTarget.FEATURE_STUDENTS_PAGE -> onNavigateToStudents()
+                    DashboardBannerFeatureTarget.FEATURE_PROFILE_PAGE -> onNavigateToProfile()
+                    null -> modalState.showPuskesmasInfoSheet = true
+                }
+            }
+        }
+    }
 
     val todayDateFormatted = remember(s.language) {
         DateUtils.formatFullDate(Calendar.getInstance().timeInMillis)
@@ -816,7 +918,20 @@ fun DashboardScreen(
                             myFosterStudentsCount = myFosterStudentsCount,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
-                            iconOrder = dashboardIconOrder
+                            iconOrder = dashboardIconOrder,
+                            showPuskesmasCard = false
+                        )
+                    }
+                    item {
+                        DashboardBannerCarousel(
+                            config = dashboardBannerConfig,
+                            faskesDefaultSubtitle = schoolProfile.getReferralFaskesSummary(),
+                            isAnakSuperAdmin = isAnakSuperAdmin,
+                            onBannerClick = { banner -> handleBannerItemClick(banner) },
+                            onManageBannersClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showBannerEditorSheet = true
+                            }
                         )
                     }
                 }
@@ -2057,6 +2172,31 @@ fun DashboardScreen(
                         message,
                         if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
                     ).show()
+                }
+            }
+        )
+    }
+
+    // Modal Bottom Sheet: Atur Banner Slider Global + Cloudflare R2 CDN (Khusus Anak Superadmin)
+    if (showBannerEditorSheet && isAnakSuperAdmin) {
+        DashboardBannerEditorSheet(
+            currentConfig = dashboardBannerConfig,
+            isSaving = isSavingDashboardBanner,
+            isUploadingImage = isUploadingBannerImage,
+            onUploadImage = { uri, bannerId, title, onResult ->
+                viewModel.uploadBannerImageToCloud(uri, bannerId, title, onResult)
+            },
+            onDismiss = { showBannerEditorSheet = false },
+            onSave = { newConfig ->
+                viewModel.saveDashboardBannerConfig(newConfig) { success, message ->
+                    Toast.makeText(
+                        context,
+                        message,
+                        if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
+                    ).show()
+                    if (success) {
+                        showBannerEditorSheet = false
+                    }
                 }
             }
         )

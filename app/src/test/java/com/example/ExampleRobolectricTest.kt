@@ -4663,5 +4663,217 @@ class ExampleRobolectricTest {
     db.schoolRegistrationDao().deleteBySchoolCode("SRT-SBY02")
     db.waliAccountDao().delete(normalWali)
   }
+
+  @Test
+  fun `verify DashboardBannerConfig R2 CDN url, 2-to-5s interval, Faskes deletion, and global sync`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_dashboard_banner_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    // 1. Cek builder URL Cloudflare R2 CDN dan fallback API files PocketBase
+    val cdnUrl = com.example.data.model.DashboardBannerItem.buildR2CdnUrl(
+      collectionId = "pbc_1234567890",
+      recordId = "w0000000000abc1",
+      filename = "banner_1731680000.jpg"
+    )
+    org.junit.Assert.assertEquals(
+      "https://waliasuhcareapp.areksurabaya.my.id/pbc_1234567890/w0000000000abc1/banner_1731680000.jpg",
+      cdnUrl
+    )
+    val pbFallbackUrl = com.example.data.model.DashboardBannerItem.buildPbApiFileUrl(
+      pbBaseUrl = "https://waliasuh.areksurabaya.my.id",
+      collectionId = "pbc_1234567890",
+      recordId = "w0000000000abc1",
+      filename = "banner_1731680000.jpg"
+    )
+    org.junit.Assert.assertEquals(
+      "https://waliasuh.areksurabaya.my.id/api/files/pbc_1234567890/w0000000000abc1/banner_1731680000.jpg",
+      pbFallbackUrl
+    )
+
+    // 2. Cek interval geser di-clamp ke 2, 3, 4, atau 5 detik (invalid fallback ke 3)
+    org.junit.Assert.assertEquals(2, com.example.data.model.DashboardBannerConfig.clampIntervalSeconds(2))
+    org.junit.Assert.assertEquals(5, com.example.data.model.DashboardBannerConfig.clampIntervalSeconds(5))
+    org.junit.Assert.assertEquals(3, com.example.data.model.DashboardBannerConfig.clampIntervalSeconds(99))
+
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+
+    // Default awal: ada 1 banner Faskes bawaan dengan durasi 3 detik
+    org.junit.Assert.assertEquals(3, vm.dashboardBannerConfig.value.slideIntervalSeconds)
+    org.junit.Assert.assertTrue(vm.dashboardBannerConfig.value.items.any { it.isDefaultFaskes })
+
+    // 3. Login sebagai anaksuperadmin -> hapus Faskes, tambah 2 banner custom (1 buka fitur, 1 link eksternal) dengan interval 5 detik
+    val loginRes = vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = false)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessWali)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val customBannerFeature = com.example.data.model.DashboardBannerItem(
+      id = "banner_haid_promo",
+      title = "Panduan Fiqih Haid Terbaru",
+      subtitle = "Ketuk untuk membuka panduan haid",
+      badgeText = "INFO",
+      imageUrl = cdnUrl,
+      fallbackImageUrl = pbFallbackUrl,
+      pbCollectionId = "pbc_1234567890",
+      pbRecordId = "w0000000000abc1",
+      pbFilename = "banner_1731680000.jpg",
+      actionType = com.example.data.model.DashboardBannerActionType.INTERNAL_FEATURE,
+      actionTarget = com.example.data.model.DashboardBannerFeatureTarget.FEATURE_FIQIH_HAID.key,
+      isDefaultFaskes = false,
+      isEnabled = true,
+      sortOrder = 0
+    )
+    val customBannerExternal = com.example.data.model.DashboardBannerItem(
+      id = "banner_kemensos_link",
+      title = "Portal Sekolah Rakyat",
+      subtitle = "Kunjungi website resmi",
+      badgeText = "WEB",
+      imageUrl = "https://waliasuhcareapp.areksurabaya.my.id/col1/rec2/portal.jpg",
+      actionType = com.example.data.model.DashboardBannerActionType.EXTERNAL_LINK,
+      actionTarget = "https://kemensos.go.id",
+      isDefaultFaskes = false,
+      isEnabled = true,
+      sortOrder = 1
+    )
+    val savedConfig = com.example.data.model.DashboardBannerConfig(
+      items = listOf(customBannerFeature, customBannerExternal),
+      slideIntervalSeconds = 5,
+      updatedAt = 1731690000000L
+    )
+
+    var savedOk = false
+    vm.saveDashboardBannerConfig(savedConfig) { ok, _ -> savedOk = ok }
+    org.junit.Assert.assertTrue(savedOk)
+    org.junit.Assert.assertEquals(5, vm.dashboardBannerConfig.value.slideIntervalSeconds)
+    org.junit.Assert.assertFalse(vm.dashboardBannerConfig.value.items.any { it.isDefaultFaskes })
+    org.junit.Assert.assertEquals(2, vm.dashboardBannerConfig.value.items.size)
+
+    // 4. PocketBase DTO round-trip dengan sentinel __GLOBAL_DASHBOARD_BANNER__ & tetap terfilter dari school switcher
+    val pbDto = com.example.data.remote.pocketbase.PbSchoolProfileDto.fromDashboardBannerConfig(vm.dashboardBannerConfig.value)
+    org.junit.Assert.assertEquals("__GLOBAL_DASHBOARD_BANNER__", pbDto.schoolId)
+    val decoded = pbDto.toDashboardBannerConfig()
+    org.junit.Assert.assertNotNull(decoded)
+    org.junit.Assert.assertEquals(5, decoded?.slideIntervalSeconds)
+    org.junit.Assert.assertEquals(2, decoded?.items?.size)
+    org.junit.Assert.assertEquals(
+      com.example.data.model.DashboardBannerFeatureTarget.FEATURE_FIQIH_HAID.key,
+      decoded?.items?.get(0)?.actionTarget
+    )
+    org.junit.Assert.assertFalse(
+      vm.availableSchoolsForSwitch.value.any { it.tenantCode == "__GLOBAL_DASHBOARD_BANNER__" }
+    )
+
+    // 5. Akun Wali Asuh biasa tidak dapat mengubah banner, tetapi menerima pembaruan global dari cloud
+    val normalWali = com.example.data.model.WaliAccount(
+      name = "Wali Biasa Banner",
+      username = "walibiasa_banner_test",
+      password = "Pass#Banner1",
+      dormitory = "Asrama Putra",
+      schoolId = "SRT1-KDR"
+    )
+    db.waliAccountDao().insert(normalWali)
+    vm.executeLogin("walibiasa_banner_test", "Pass#Banner1", rememberMe = false)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    org.junit.Assert.assertFalse(vm.isAnakSuperAdmin.value)
+
+    var blockedForWali = false
+    vm.saveDashboardBannerConfig(
+      com.example.data.model.DashboardBannerConfig(items = emptyList(), slideIntervalSeconds = 2)
+    ) { ok, _ -> blockedForWali = !ok }
+    org.junit.Assert.assertTrue(blockedForWali)
+
+    val newerRemote = com.example.data.model.DashboardBannerConfig(
+      items = listOf(customBannerExternal.copy(sortOrder = 0)),
+      slideIntervalSeconds = 4,
+      updatedAt = System.currentTimeMillis() + 120_000L
+    )
+    vm.applyRemoteDashboardBannerConfig(newerRemote)
+    org.junit.Assert.assertEquals(4, vm.dashboardBannerConfig.value.slideIntervalSeconds)
+    org.junit.Assert.assertEquals(1, vm.dashboardBannerConfig.value.items.size)
+    org.junit.Assert.assertEquals("banner_kemensos_link", vm.dashboardBannerConfig.value.items.first().id)
+
+    db.waliAccountDao().delete(normalWali)
+  }
+
+  @Test
+  fun `verify DashboardScreen shows banner manager only for anaksuperadmin and supports deleting Faskes banner`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_dashboard_banner_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val normalWali = com.example.data.model.WaliAccount(
+      name = "Wali Biasa Banner UI",
+      username = "walibiasa_banner_ui_test",
+      password = "Pass#Ui1",
+      dormitory = "Asrama C",
+      schoolId = "SRT1-KDR"
+    )
+    db.waliAccountDao().insert(normalWali)
+
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    // 1. Login sebagai anaksuperadmin -> tombol Atur Banner & Faskes card terlihat
+    vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = false)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val plans by vm.activePlans.collectAsStateWithLifecycle()
+        val students by vm.students.collectAsStateWithLifecycle()
+        val waliName by vm.waliName.collectAsStateWithLifecycle()
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = waliName,
+          activePlans = plans,
+          students = students,
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dashboard_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_manage_dashboard_banners"))
+    composeTestRule.onNodeWithTag("btn_manage_dashboard_banners").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("dashboard_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_puskesmas_info"))
+    composeTestRule.onNodeWithTag("tile_puskesmas_info").assertIsDisplayed()
+
+    // Buka Editor Banner -> pilih interval 4 Detik -> hapus banner Faskes -> Simpan
+    composeTestRule.onNodeWithTag("dashboard_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_manage_dashboard_banners"))
+    composeTestRule.onNodeWithTag("btn_manage_dashboard_banners").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("chip_banner_interval_4").assertIsDisplayed().performClick()
+    composeTestRule.onNodeWithTag("btn_delete_banner_default_faskes_banner").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("btn_save_dashboard_banners").performClick()
+    composeTestRule.waitForIdle()
+
+    org.junit.Assert.assertEquals(4, vm.dashboardBannerConfig.value.slideIntervalSeconds)
+    org.junit.Assert.assertTrue(vm.dashboardBannerConfig.value.items.isEmpty())
+    composeTestRule.onNodeWithTag("dashboard_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("banner_empty_admin_card"))
+    composeTestRule.onNodeWithTag("banner_empty_admin_card").assertIsDisplayed()
+
+    // 2. Beralih ke Wali Biasa -> tombol Atur Banner tersembunyi & Faskes sudah terhapus
+    vm.executeLogin("walibiasa_banner_ui_test", "Pass#Ui1", rememberMe = false)
+    for (i in 1..15) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (!vm.isAnakSuperAdmin.value) break
+      kotlinx.coroutines.delay(20)
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_manage_dashboard_banners").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("tile_puskesmas_info").assertDoesNotExist()
+
+    db.waliAccountDao().delete(normalWali)
+  }
 }
 

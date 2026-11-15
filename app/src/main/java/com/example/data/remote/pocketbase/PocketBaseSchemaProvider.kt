@@ -30,7 +30,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.41.0 • 14 Koleksi Multi-Tenant + Hubungan Orang Tua & Portal Ortu (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.42.0 • 15 Koleksi Multi-Tenant + Banner R2 CDN (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -375,6 +375,29 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("created_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_pm_school ON parent_messages (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "dashboard_banners",
+            description = "Banner slider global dashboard (Cloudflare R2 file & CDN URL + target fitur/eksternal)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("banner_id", "text"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("subtitle", "text"),
+                PbFieldDef("badge_text", "text"),
+                PbFieldDef("image", "file"),
+                PbFieldDef("cdn_image_url", "text"),
+                PbFieldDef("action_type", "text"),
+                PbFieldDef("action_target", "text"),
+                PbFieldDef("sort_order", "number"),
+                PbFieldDef("is_enabled", "bool"),
+                PbFieldDef("is_default_faskes", "bool"),
+                PbFieldDef("slide_interval_seconds", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_db_school ON dashboard_banners (school_id)")
         )
     )
 
@@ -404,11 +427,22 @@ object PocketBaseSchemaProvider {
             val fieldsArr = JSONArray().apply {
                 put(buildIdFieldJson())
                 for (field in col.fields) {
-                    put(
-                        JSONObject()
-                            .put("name", field.name)
-                            .put("type", field.type)
-                    )
+                    val obj = JSONObject()
+                        .put("name", field.name)
+                        .put("type", field.type)
+                    if (field.type == "file") {
+                        obj.put("maxSelect", 1)
+                        obj.put("maxSize", 10485760)
+                        obj.put(
+                            "mimeTypes",
+                            JSONArray().apply {
+                                put("image/jpeg")
+                                put("image/png")
+                                put("image/webp")
+                            }
+                        )
+                    }
+                    put(obj)
                 }
             }
             val indexesArr = JSONArray().apply {
