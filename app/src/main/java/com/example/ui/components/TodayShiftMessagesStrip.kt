@@ -475,10 +475,9 @@ fun ShiftMessageDetailSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 18.dp)
-                    .padding(bottom = 26.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(bottom = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -532,154 +531,182 @@ fun ShiftMessageDetailSheet(
                     }
                 }
 
-                FlowRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(priorityBg)
-                            .padding(horizontal = 9.dp, vertical = 4.dp)
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = when {
-                                isUrgent -> "URGENT"
-                                isSedang -> if (isEn) "MEDIUM" else "SEDANG"
-                                else -> if (isEn) "NORMAL" else "BIASA"
-                            },
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = priorityColor
-                        )
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(Color(0xFFE0F2FE))
-                            .padding(horizontal = 9.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            text = message.shift,
-                            fontSize = 10.5.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = WaliPrimary
-                        )
-                    }
-
-                    if (message.isCompleted) {
                         Box(
                             modifier = Modifier
                                 .clip(RoundedCornerShape(7.dp))
-                                .background(Color(0xFFDCFCE7))
+                                .background(priorityBg)
                                 .padding(horizontal = 9.dp, vertical = 4.dp)
                         ) {
                             Text(
-                                text = if (isEn) {
-                                    "Done (${message.completedBy.ifBlank { "Wali" }})"
-                                } else {
-                                    "Selesai (${message.completedBy.ifBlank { "Wali" }})"
+                                text = when {
+                                    isUrgent -> "URGENT"
+                                    isSedang -> if (isEn) "MEDIUM" else "SEDANG"
+                                    else -> if (isEn) "NORMAL" else "BIASA"
                                 },
                                 fontSize = 10.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF15803D)
+                                color = priorityColor
                             )
                         }
-                    }
-                }
 
-                Text(
-                    text = message.title,
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = WaliPrimary,
-                                modifier = Modifier.size(15.dp)
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "From ${message.senderName} → To ${message.targetWali}"
-                                } else {
-                                    "Dari ${message.senderName} → Kepada ${message.targetWali}"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CalendarToday,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "${if (isEn) "Schedule" else "Jadwal"}: ${DateUtils.formatFullDate(message.followUpDate, s.language)}",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AccessTime,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Text(
-                                text = "${if (isEn) "Sent at" else "Dikirim pukul"}: ${DateUtils.formatTime(message.createdAt)} WIB",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-
-                Card(
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFF8FAFC)
-                    ),
-                    border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    SelectionContainer {
-                        Text(
-                            text = message.messageContent,
-                            fontSize = 13.5.sp,
-                            lineHeight = 20.sp,
-                            color = Color(0xFF0F172A),
+                        Box(
                             modifier = Modifier
-                                .padding(14.dp)
-                                .testTag("shift_message_detail_content")
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(Color(0xFFE0F2FE))
+                                .padding(horizontal = 9.dp, vertical = 4.dp)
+                        ) {
+                            Text(
+                                text = message.shift,
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = WaliPrimary
+                            )
+                        }
+
+                        if (message.isCompleted) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(7.dp))
+                                    .background(Color(0xFFDCFCE7))
+                                    .padding(horizontal = 9.dp, vertical = 4.dp)
+                            ) {
+                                Text(
+                                    text = if (isEn) {
+                                        "Done (${message.completedBy.ifBlank { "Wali" }})"
+                                    } else {
+                                        "Selesai (${message.completedBy.ifBlank { "Wali" }})"
+                                    },
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF15803D)
+                                )
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = message.title,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.14f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = WaliPrimary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "From ${message.senderName} → To ${message.targetWali}"
+                                    } else {
+                                        "Dari ${message.senderName} → Kepada ${message.targetWali}"
+                                    },
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarToday,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "${if (isEn) "Schedule" else "Jadwal"}: ${DateUtils.formatFullDate(message.followUpDate, s.language)}",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AccessTime,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "${if (isEn) "Sent at" else "Dikirim pukul"}: ${DateUtils.formatTime(message.createdAt)} WIB",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    Card(
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = Color(0xFFF8FAFC)
+                        ),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                text = message.messageContent,
+                                fontSize = 13.5.sp,
+                                lineHeight = 20.sp,
+                                color = Color(0xFF0F172A),
+                                modifier = Modifier
+                                    .padding(14.dp)
+                                    .testTag("shift_message_detail_content")
+                            )
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            onDismiss()
+                            onOpenAllMessages()
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_open_all_from_detail")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) "Open Full Shift Messages" else "Buka Halaman Pesan Shift Lengkap",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -739,28 +766,6 @@ fun ShiftMessageDetailSheet(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(2.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        onDismiss()
-                        onOpenAllMessages()
-                    },
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                        .testTag("btn_open_all_from_detail")
-                ) {
-                    Icon(Icons.AutoMirrored.Filled.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = if (isEn) "Open Full Shift Messages" else "Buka Halaman Pesan Shift Lengkap",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
                 }
             }
         }

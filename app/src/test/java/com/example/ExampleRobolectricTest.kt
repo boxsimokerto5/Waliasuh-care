@@ -3698,7 +3698,7 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("shift_message_detail_sheet").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("shift_message_detail_content").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("shift_message_detail_content").performScrollTo().assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_toggle_complete_shift_detail").performClick()
     composeTestRule.waitForIdle()
     org.junit.Assert.assertTrue(toggledComplete)
