@@ -6,7 +6,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +18,9 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
@@ -23,6 +28,9 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,6 +117,34 @@ private data class GridTileSpec(
     val testTag: String,
     val onClick: () -> Unit
 )
+
+internal data class TwoRowGridColumn<T>(
+    val top: T,
+    val bottom: T?
+)
+
+/**
+ * Menyusun daftar menu menjadi kolom-kolom 2 baris (atas & bawah) untuk LazyRow geser horizontal.
+ * 8 menu pertama mempertahankan tata letak 2x4 standar (baris atas indeks 0..3, baris bawah 4..7),
+ * sementara menu ke-9, ke-10, dst. otomatis berpasangan vertikal (atas-bawah) per kolom baru
+ * sehingga ketika digeser sedikit-sedikit layar tetap terisi penuh 2x4 tanpa halaman kosong.
+ */
+internal fun <T> buildTwoRowCarouselColumns(items: List<T>): List<TwoRowGridColumn<T>> {
+    if (items.isEmpty()) return emptyList()
+    val result = mutableListOf<TwoRowGridColumn<T>>()
+    val head = items.take(8)
+    val topCount = minOf(4, head.size)
+    for (col in 0 until topCount) {
+        val bottomItem = head.getOrNull(col + 4)
+        result.add(TwoRowGridColumn(top = head[col], bottom = bottomItem))
+    }
+    if (items.size > 8) {
+        items.drop(8).chunked(2).forEach { pair ->
+            result.add(TwoRowGridColumn(top = pair[0], bottom = pair.getOrNull(1)))
+        }
+    }
+    return result
+}
 
 @Composable
 fun QuickMenuTiles(
@@ -279,40 +315,173 @@ fun QuickMenuTiles(
         }
     }
 
+    val carouselColumns = remember(orderedSpecs) {
+        buildTwoRowCarouselColumns(orderedSpecs)
+    }
+    val lazyRowState = rememberLazyListState()
+    val canScrollBackward by remember { derivedStateOf { lazyRowState.canScrollBackward } }
+    val canScrollForward by remember { derivedStateOf { lazyRowState.canScrollForward } }
+    val showScrollIndicator by remember {
+        derivedStateOf { canScrollBackward || canScrollForward || carouselColumns.size > 4 }
+    }
+    val scrollProgress by remember {
+        derivedStateOf {
+            val layoutInfo = lazyRowState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            if (totalItems <= 1) {
+                0f
+            } else {
+                val viewportWidth = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).coerceAtLeast(1)
+                val firstItem = layoutInfo.visibleItemsInfo.firstOrNull()
+                val itemStep = ((firstItem?.size ?: 1) + layoutInfo.mainAxisItemSpacing).coerceAtLeast(1)
+                val totalContentWidth = totalItems * itemStep - layoutInfo.mainAxisItemSpacing +
+                    layoutInfo.beforeContentPadding + layoutInfo.afterContentPadding
+                val maxScroll = (totalContentWidth - viewportWidth).coerceAtLeast(1)
+                val currentScroll = lazyRowState.firstVisibleItemIndex * itemStep +
+                    lazyRowState.firstVisibleItemScrollOffset
+                (currentScroll.toFloat() / maxScroll.toFloat()).coerceIn(0f, 1f)
+            }
+        }
+    }
+    val thumbFraction by remember {
+        derivedStateOf {
+            val layoutInfo = lazyRowState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            if (totalItems <= 0) {
+                1f
+            } else {
+                val viewportWidth = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).coerceAtLeast(1)
+                val firstItem = layoutInfo.visibleItemsInfo.firstOrNull()
+                val itemStep = ((firstItem?.size ?: 1) + layoutInfo.mainAxisItemSpacing).coerceAtLeast(1)
+                val totalContentWidth = (totalItems * itemStep - layoutInfo.mainAxisItemSpacing +
+                    layoutInfo.beforeContentPadding + layoutInfo.afterContentPadding).coerceAtLeast(viewportWidth)
+                (viewportWidth.toFloat() / totalContentWidth.toFloat()).coerceIn(0.28f, 0.85f)
+            }
+        }
+    }
+
     Column(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Super-App 2x4 Hub Grid ala Gojek (Semua kategori langsung terlihat dalam 1 layar)
+        // Super-App 2-Baris Geser Mulus Per Kolom (tetap penuh saat menu bertambah)
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(16.dp),
             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
         ) {
+            val cardBg = MaterialTheme.colorScheme.surface
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .padding(top = 12.dp, bottom = if (showScrollIndicator) 9.dp else 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                orderedSpecs.chunked(4).forEach { rowSpecs ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        rowSpecs.forEach { spec ->
-                            SuperAppGridItem(
-                                title = spec.meta.title,
-                                imageRes = spec.meta.imageRes,
-                                tileBg = spec.meta.tileBg,
-                                badgeText = spec.badgeText,
-                                badgeBg = spec.badgeBg,
-                                onClick = spec.onClick,
-                                testTag = spec.testTag,
-                                modifier = Modifier.weight(1f)
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val horizontalPadding = 8.dp
+                    val itemSpacing = 2.dp
+                    val innerWidth = (maxWidth - horizontalPadding * 2).coerceAtLeast(240.dp)
+                    // 3.65 kolom terlihat pada ponsel agar kolom ke-4 mengintip halus (mengajak geser sedikit-sedikit)
+                    // dan tetap membuat seluruh 4 kolom awal mudah dijangkau tanpa halaman kosong saat menu > 8.
+                    val columnWidth = ((innerWidth - itemSpacing * 3) / 3.65f).coerceIn(72.dp, 108.dp)
+
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        LazyRow(
+                            state = lazyRowState,
+                            contentPadding = PaddingValues(horizontal = horizontalPadding),
+                            horizontalArrangement = Arrangement.spacedBy(itemSpacing),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("quick_menu_carousel_row")
+                        ) {
+                            itemsIndexed(
+                                items = carouselColumns,
+                                key = { _, col -> col.top.testTag }
+                            ) { _, col ->
+                                Column(
+                                    modifier = Modifier.width(columnWidth),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    SuperAppGridItem(
+                                        title = col.top.meta.title,
+                                        imageRes = col.top.meta.imageRes,
+                                        tileBg = col.top.meta.tileBg,
+                                        badgeText = col.top.badgeText,
+                                        badgeBg = col.top.badgeBg,
+                                        onClick = col.top.onClick,
+                                        testTag = col.top.testTag,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+                                    val bottom = col.bottom
+                                    if (bottom != null) {
+                                        SuperAppGridItem(
+                                            title = bottom.meta.title,
+                                            imageRes = bottom.meta.imageRes,
+                                            tileBg = bottom.meta.tileBg,
+                                            badgeText = bottom.badgeText,
+                                            badgeBg = bottom.badgeBg,
+                                            onClick = bottom.onClick,
+                                            testTag = bottom.testTag,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    } else {
+                                        Spacer(modifier = Modifier.height(98.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        if (canScrollBackward) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterStart)
+                                    .width(14.dp)
+                                    .height(206.dp)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(cardBg.copy(alpha = 0.92f), Color.Transparent)
+                                        )
+                                    )
                             )
                         }
+                        if (canScrollForward) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .width(18.dp)
+                                    .height(206.dp)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            listOf(Color.Transparent, cardBg.copy(alpha = 0.94f))
+                                        )
+                                    )
+                            )
+                        }
+                    }
+                }
+
+                if (showScrollIndicator) {
+                    val trackWidth = 56.dp
+                    val thumbWidth = trackWidth * thumbFraction
+                    Box(
+                        modifier = Modifier
+                            .width(trackWidth)
+                            .height(4.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                            .testTag("quick_menu_scroll_indicator")
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .offset(x = (trackWidth - thumbWidth) * scrollProgress)
+                                .width(thumbWidth)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(WaliPrimary)
+                        )
                     }
                 }
             }
@@ -395,16 +564,23 @@ fun SuperAppGridItem(
 
         Spacer(modifier = Modifier.height(5.dp))
 
-        Text(
-            text = title,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.Center,
-            maxLines = 2,
-            lineHeight = 13.sp,
-            overflow = TextOverflow.Ellipsis
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 28.dp),
+            contentAlignment = Alignment.TopCenter
+        ) {
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 2,
+                lineHeight = 13.sp,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

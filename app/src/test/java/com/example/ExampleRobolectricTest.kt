@@ -5520,6 +5520,47 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     assertEquals(com.example.data.model.WaliAccount.ROLE_GURU_NGAJI, chosenRoleFromDialog)
   }
+
+  @Test
+  fun `verify QuickMenuTiles renders horizontal two-row carousel with scroll indicator and preserves column pairing for future 10 icons`() {
+    // 1. Uji logika penyusunan kolom: 8 ikon mempertahankan tata letak 2x4,
+    //    sedangkan tambahan ke-9 & ke-10 (mis. Tabungan & Konseling) mengisi kolom ke-5 atas-bawah.
+    val cols8 = com.example.ui.components.buildTwoRowCarouselColumns((0..7).toList())
+    assertEquals(4, cols8.size)
+    assertEquals(0, cols8[0].top)
+    assertEquals(4, cols8[0].bottom)
+    assertEquals(3, cols8[3].top)
+    assertEquals(7, cols8[3].bottom)
+
+    val cols10 = com.example.ui.components.buildTwoRowCarouselColumns((0..9).toList())
+    assertEquals(5, cols10.size)
+    assertEquals(8, cols10[4].top)
+    assertEquals(9, cols10[4].bottom)
+
+    // 2. Uji UI Compose QuickMenuTiles dengan wadah LazyRow geser horizontal + indikator kapsul
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.components.QuickMenuTiles(
+          onNavigateToPlan = {},
+          onNavigateToDirectTreatment = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onShowPuskesmasInfo = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("quick_menu_carousel_row").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("quick_menu_scroll_indicator").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("quick_menu_carousel_row")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("category_mengaji"))
+    composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_anak_asuh").assertIsDisplayed()
+  }
 }
 
 
