@@ -294,8 +294,13 @@ fun AdminScreen(
         val matchSearch = searchQuery.isBlank() ||
                 account.name.contains(searchQuery, ignoreCase = true) ||
                 effUser.contains(searchQuery, ignoreCase = true) ||
-                account.phone.contains(searchQuery, ignoreCase = true)
-        val matchDorm = if (selectedFilterDormitory == "Semua") true else account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
+                account.phone.contains(searchQuery, ignoreCase = true) ||
+                account.roleLabel(isEn).contains(searchQuery, ignoreCase = true)
+        val matchDorm = when (selectedFilterDormitory) {
+            "Semua" -> true
+            "Guru Ngaji" -> account.isGuruNgaji()
+            else -> account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
+        }
         matchSearch && matchDorm
     }
 
@@ -1239,13 +1244,16 @@ fun AdminScreen(
                         )
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            listOf("Semua", "Putra", "Putri").forEach { dormFilter ->
+                            listOf("Semua", "Putra", "Putri", "Guru Ngaji").forEach { dormFilter ->
                                 val chipLabel = when (dormFilter) {
                                     "Semua" -> if (isEn) "All" else "Semua"
+                                    "Guru Ngaji" -> if (isEn) "Mengaji Teacher" else "Guru Ngaji"
                                     else -> dormFilter
                                 }
                                 FilterChip(
@@ -1839,8 +1847,8 @@ fun AdminScreen(
         AddWaliAccountDialog(
             schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
             onDismiss = { showAddDialog = false },
-            onConfirm = { name, username, dormitory, phone, password ->
-                viewModel.addWaliAccount(name, username, dormitory, phone, password) {
+            onConfirm = { name, username, dormitory, phone, password, role ->
+                viewModel.addWaliAccount(name, username, dormitory, phone, password, role) {
                     Toast.makeText(
                         context,
                         if (isEn) "Access card for $name created!" else "Kartu akun untuk $name berhasil dibuat!",
@@ -1931,6 +1939,9 @@ fun AdminScreen(
                 selectedDetailStudent = null
                 studentToEdit = toEdit
             },
+            onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
+            onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
             onDismiss = { selectedDetailStudent = null }
         )
     }
@@ -2478,9 +2489,18 @@ fun WaliAccountCardItem(
     val isEn = LocalAppStrings.current.isEnglish
     var passwordVisible by remember { mutableStateOf(false) }
 
+    val isGuruNgaji = account.isGuruNgaji()
     val isPutri = account.dormitory.contains("Putri", ignoreCase = true)
-    val dormAccentColor = if (isPutri) Color(0xFFBE185D) else Color(0xFF0369A1)
-    val dormBgColor = if (isPutri) Color(0xFFFDF2F8) else Color(0xFFF0F9FF)
+    val dormAccentColor = when {
+        isGuruNgaji -> Color(0xFF047857)
+        isPutri -> Color(0xFFBE185D)
+        else -> Color(0xFF0369A1)
+    }
+    val dormBgColor = when {
+        isGuruNgaji -> Color(0xFFECFDF5)
+        isPutri -> Color(0xFFFDF2F8)
+        else -> Color(0xFFF0F9FF)
+    }
 
     val effectiveUsername = account.username.ifBlank {
         account.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
@@ -2513,7 +2533,12 @@ fun WaliAccountCardItem(
                 ) {
                     Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(
-                            text = if (isEn) "WALI ASUH ACCESS CARD" else "KARTU AKSES WALI ASUH",
+                            text = when {
+                                isGuruNgaji && isEn -> "MENGAJI TEACHER ACCESS CARD"
+                                isGuruNgaji -> "KARTU AKSES GURU NGAJI"
+                                isEn -> "WALI ASUH ACCESS CARD"
+                                else -> "KARTU AKSES WALI ASUH"
+                            },
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color.White,
@@ -2535,7 +2560,7 @@ fun WaliAccountCardItem(
                             .padding(horizontal = 7.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = account.dormitory,
+                            text = if (isGuruNgaji) account.roleLabel(isEn) else account.dormitory,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -2551,7 +2576,7 @@ fun WaliAccountCardItem(
                     .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Info Identitas Wali Asuh
+                // Info Identitas Wali Asuh / Guru Ngaji
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -2582,13 +2607,22 @@ fun WaliAccountCardItem(
                         )
                         if (account.phone.isNotBlank()) {
                             Text(
-                                text = "WhatsApp: ${account.phone}",
+                                text = if (isGuruNgaji) {
+                                    "${account.roleLabel(isEn)} • WhatsApp: ${account.phone}"
+                                } else {
+                                    "WhatsApp: ${account.phone}"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
                             Text(
-                                text = if (isEn) "Active Wali Asuh • ${account.dormitory}" else "Wali Asuh Aktif • ${account.dormitory}",
+                                text = when {
+                                    isGuruNgaji && isEn -> "Active Mengaji Teacher • Mengaji Portal Only"
+                                    isGuruNgaji -> "Guru Ngaji Aktif • Khusus Halaman Mengaji"
+                                    isEn -> "Active Wali Asuh • ${account.dormitory}"
+                                    else -> "Wali Asuh Aktif • ${account.dormitory}"
+                                },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )

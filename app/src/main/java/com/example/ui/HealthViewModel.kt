@@ -10,6 +10,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
+import com.example.data.model.DeletionLog
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -31,6 +32,7 @@ import com.example.data.remote.pocketbase.PbSchoolProfileDto
 import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.data.remote.pocketbase.PocketBaseSyncManager
 import com.example.data.repository.HealthRepository
+import com.example.util.DateUtils
 import com.example.util.NotificationHelper
 import com.example.util.PasswordGenerator
 import com.example.util.i18n.AppLanguage
@@ -55,6 +57,7 @@ data class SwitchableSchoolOption(
 enum class UserRole {
     NOT_LOGGED_IN,
     WALI,
+    GURU_NGAJI,
     ADMIN,
     SUPERADMIN,
     PARENT
@@ -64,6 +67,7 @@ sealed class LoginResult {
     object SuccessSuperAdmin : LoginResult()
     object SuccessAdmin : LoginResult()
     data class SuccessWali(val account: WaliAccount) : LoginResult()
+    data class SuccessGuruNgaji(val account: WaliAccount) : LoginResult()
     data class SuccessParent(val link: ParentAccessLink) : LoginResult()
     data class Error(val message: String) : LoginResult()
 }
@@ -89,7 +93,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.visitSessionDao(),
             db.visitRecordDao(),
             db.parentAccessLinkDao(),
-            db.parentMessageDao()
+            db.parentMessageDao(),
+            db.deletionLogDao()
         )
     }
 
@@ -111,6 +116,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             "SUPERADMIN" -> UserRole.SUPERADMIN
             "ADMIN" -> UserRole.ADMIN
             "WALI" -> UserRole.WALI
+            "GURU_NGAJI" -> UserRole.GURU_NGAJI
             "PARENT" -> UserRole.PARENT
             else -> UserRole.NOT_LOGGED_IN
         }
@@ -481,6 +487,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             },
             onNewRemoteMedicalRecords = { newRecords, schoolStudents, syncedSchoolId ->
                 processIncomingRemoteMedicalRecords(newRecords, schoolStudents, syncedSchoolId)
+            },
+            onNewRemoteDeletionLogs = { newLogs, syncedSchoolId ->
+                processIncomingRemoteDeletionLogs(newLogs, syncedSchoolId)
             }
         )
     }
@@ -1208,7 +1217,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val creator = when (role) {
                 UserRole.ADMIN, UserRole.SUPERADMIN ->
                     _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
-                UserRole.WALI ->
+                UserRole.WALI, UserRole.GURU_NGAJI ->
                     _waliName.value.ifBlank { "Wali Asuh" }
                 UserRole.PARENT, UserRole.NOT_LOGGED_IN -> "Wali Asuh"
             }
@@ -1349,9 +1358,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deleteFastingRecord(record: FastingRecord) {
         viewModelScope.launch {
+            val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val dateTs = record.sessionDate.takeIf { it > 0L } ?: record.createdAt
+            val summary = "${record.sessionTitle.ifBlank { "Sesi Puasa" }} • ${DateUtils.formatShortDate(dateTs)}"
+            val log = createAndRecordDeletionLog(
+                category = DeletionLog.CATEGORY_PUASA,
+                studentId = record.studentId,
+                studentName = record.studentName,
+                studentClass = record.studentClass,
+                recordId = record.id,
+                deletedSummary = summary,
+                schoolId = activeSchool
+            )
             repository.deleteFastingRecord(record)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteRemoteFastingRecord(getApplication(), record.id)
+                PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), log)
             }
         }
     }
@@ -1399,7 +1421,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val cleanPage = pageOrVerse.trim().ifBlank { "Hal. 1" }
             val parsedStart = MengajiHelper.extractStartingPageNumber(cleanPage)
             val parsedEnd = MengajiHelper.extractEndingPageNumber(cleanPage)
-            val signerName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val signerName = _waliName.value.trim().ifBlank {
+                if (_currentUserRole.value == UserRole.GURU_NGAJI) "Guru Ngaji" else "Wali Asuh"
+            }
 
             val record = if (existingRecordId != null && existingRecordId > 0L) {
                 val existing = repository.getAllMengajiRecordsList().firstOrNull { it.id == existingRecordId }
@@ -1459,10 +1483,25 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun deleteMengajiRecord(record: MengajiRecord) {
+        if (_currentUserRole.value == UserRole.GURU_NGAJI || _currentUserRole.value == UserRole.PARENT) {
+            return
+        }
         viewModelScope.launch {
+            val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val summary = "${MengajiHelper.formatCompactPosition(record)} (${MengajiHelper.fluencyLabel(record.fluencyStatus, false)}, ${DateUtils.formatShortDate(record.sessionDate)})"
+            val log = createAndRecordDeletionLog(
+                category = DeletionLog.CATEGORY_MENGAJI,
+                studentId = record.studentId,
+                studentName = record.studentName,
+                studentClass = record.studentClass,
+                recordId = record.id,
+                deletedSummary = summary,
+                schoolId = activeSchool
+            )
             repository.deleteMengajiRecord(record)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteRemoteMengajiRecord(getApplication(), record.id)
+                PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), log)
             }
         }
     }
@@ -2323,6 +2362,195 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private data class DeletionActorContext(
+        val role: UserRole,
+        val username: String?,
+        val waliName: String,
+        val seenVersion: Long
+    )
+
+    private val _deletionSeenVersion = MutableStateFlow(0L)
+
+    val deletionLogs: StateFlow<List<DeletionLog>> = combine(
+        repository.allDeletionLogs,
+        _schoolProfile,
+        _currentUserRole
+    ) { logs, profile, role ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        val filtered = if (role == UserRole.SUPERADMIN) {
+            logs
+        } else {
+            logs.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+        filtered.sortedByDescending { it.createdAt }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    private val deletionActorContextFlow = combine(
+        _currentUserRole,
+        _currentUsername,
+        _waliName,
+        _deletionSeenVersion
+    ) { role, username, wali, version ->
+        DeletionActorContext(role, username, wali, version)
+    }
+
+    val unreadDeletionLogsCount: StateFlow<Int> = combine(
+        deletionLogs,
+        _schoolProfile,
+        deletionActorContextFlow
+    ) { logs, profile, ctx ->
+        if (ctx.role == UserRole.NOT_LOGGED_IN || ctx.role == UserRole.PARENT) {
+            0
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            val seenIds = getSeenDeletionLogIds(tenant, ctx.username, ctx.waliName)
+            logs.count { log ->
+                log.id !in seenIds && !isDeletionLogByCurrentUser(log, ctx.username, ctx.waliName)
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    private fun seenDeletionKey(schoolId: String, username: String?, waliDisplayName: String): String {
+        val cleanSchool = schoolId.trim().uppercase().ifBlank { "SRT1-KDR" }
+        val actorToken = username?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+            ?: waliDisplayName.trim().lowercase().replace(Regex("[^a-z0-9]"), "_").ifBlank { "wali" }
+        return "seen_deletion_log_ids_${cleanSchool}_$actorToken"
+    }
+
+    private fun getSeenDeletionLogIds(
+        schoolId: String,
+        username: String? = _currentUsername.value,
+        waliDisplayName: String = _waliName.value
+    ): Set<Long> {
+        val raw = notifPrefs.getString(seenDeletionKey(schoolId, username, waliDisplayName), "").orEmpty()
+        if (raw.isBlank()) return emptySet()
+        return raw.split(",").mapNotNull { it.toLongOrNull() }.toSet()
+    }
+
+    private fun markDeletionLogIdsSeen(
+        schoolId: String,
+        ids: List<Long>,
+        username: String? = _currentUsername.value,
+        waliDisplayName: String = _waliName.value
+    ) {
+        val validIds = ids.filter { it > 0L }
+        if (validIds.isEmpty()) return
+        val key = seenDeletionKey(schoolId, username, waliDisplayName)
+        val existing = notifPrefs.getString(key, "").orEmpty()
+            .split(",")
+            .filter { it.isNotBlank() }
+            .toMutableList()
+        var changed = false
+        validIds.forEach { id ->
+            val str = id.toString()
+            if (!existing.contains(str)) {
+                existing.add(str)
+                changed = true
+            }
+        }
+        if (changed) {
+            val trimmed = if (existing.size > 500) existing.takeLast(500) else existing
+            notifPrefs.edit().putString(key, trimmed.joinToString(",")).apply()
+        }
+        _deletionSeenVersion.value = _deletionSeenVersion.value + 1L
+    }
+
+    fun isDeletionLogByCurrentUser(
+        log: DeletionLog,
+        username: String? = _currentUsername.value,
+        waliDisplayName: String = _waliName.value
+    ): Boolean {
+        val cleanUser = username?.trim().orEmpty()
+        val logUser = log.deletedByUsername.trim()
+        if (cleanUser.isNotBlank() && logUser.isNotBlank()) {
+            return cleanUser.equals(logUser, ignoreCase = true)
+        }
+        val cleanWali = waliDisplayName.trim()
+        val logActor = log.deletedBy.trim()
+        return cleanWali.isNotBlank() &&
+            !cleanWali.equals("Wali Asuh", ignoreCase = true) &&
+            cleanWali.equals(logActor, ignoreCase = true)
+    }
+
+    fun markDeletionLogsRead() {
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        val currentIds = deletionLogs.value.map { it.id }
+        markDeletionLogIdsSeen(activeSchool, currentIds)
+    }
+
+    private suspend fun createAndRecordDeletionLog(
+        category: String,
+        studentId: Long,
+        studentName: String,
+        studentClass: String,
+        recordId: Long,
+        deletedSummary: String,
+        schoolId: String
+    ): DeletionLog {
+        val cleanSchool = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val actorDisplayName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+        val actorUsername = _currentUsername.value?.trim().orEmpty()
+        val newId = PocketBaseSyncManager.generateCloudSafeId()
+        val log = DeletionLog(
+            id = newId,
+            category = category,
+            studentId = studentId,
+            studentName = studentName,
+            studentClass = studentClass,
+            recordId = recordId,
+            deletedSummary = deletedSummary,
+            deletedBy = actorDisplayName,
+            deletedByUsername = actorUsername,
+            schoolId = cleanSchool,
+            createdAt = System.currentTimeMillis()
+        )
+        // Tandai langsung sebagai sudah dilihat oleh penghapus agar badge loncengnya tetap 0
+        markDeletionLogIdsSeen(cleanSchool, listOf(newId), actorUsername, actorDisplayName)
+        repository.insertDeletionLog(log)
+        return log
+    }
+
+    private fun deletionPushNotifKey(schoolId: String): String {
+        val clean = schoolId.trim().uppercase().ifBlank { "SRT1-KDR" }
+        return "notified_deletion_log_ids_$clean"
+    }
+
+    fun processIncomingRemoteDeletionLogs(
+        newLogs: List<DeletionLog>,
+        syncedSchoolId: String
+    ): Int {
+        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN ||
+            _currentUserRole.value == UserRole.PARENT ||
+            _currentUserRole.value == UserRole.GURU_NGAJI
+        ) return 0
+        val cleanSchool = syncedSchoolId.trim().ifBlank { "SRT1-KDR" }
+        if (!shouldTriggerNotificationForStudent(cleanSchool)) return 0
+
+        val pushKey = deletionPushNotifKey(cleanSchool)
+        val alreadyPushed = notifPrefs.getString(pushKey, "").orEmpty()
+            .split(",")
+            .mapNotNull { it.toLongOrNull() }
+            .toMutableSet()
+
+        val peerLogs = newLogs.filter { log ->
+            log.id > 0L &&
+                log.id !in alreadyPushed &&
+                !isDeletionLogByCurrentUser(log)
+        }
+        if (peerLogs.isEmpty()) return 0
+
+        peerLogs.forEach { alreadyPushed.add(it.id) }
+        val trimmed = alreadyPushed.toList().let { if (it.size > 400) it.takeLast(400) else it }
+        notifPrefs.edit().putString(pushKey, trimmed.joinToString(",")).apply()
+
+        NotificationHelper.showDeletionAlertNotification(
+            context = getApplication(),
+            logs = peerLogs.sortedByDescending { it.createdAt },
+            schoolName = _schoolProfile.value.shortName
+        )
+        return peerLogs.size
+    }
+
     /**
      * Memverifikasi apakah notifikasi boleh dimunculkan untuk siswa tertentu.
      * Dalam arsitektur Multi-Tenant:
@@ -2348,7 +2576,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         studentSchoolId: String,
         syncedSchoolId: String
     ): Boolean {
-        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN) return false
+        if (_currentUserRole.value == UserRole.NOT_LOGGED_IN ||
+            _currentUserRole.value == UserRole.PARENT ||
+            _currentUserRole.value == UserRole.GURU_NGAJI
+        ) return false
         val targetSyncedSchool = syncedSchoolId.trim().ifBlank { "SRT1-KDR" }
         val targetStudentSchool = studentSchoolId.trim().ifBlank { targetSyncedSchool }
         if (!shouldTriggerNotificationForStudent(targetSyncedSchool)) return false
@@ -2759,9 +2990,25 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Delete record
     fun deleteRecord(record: MedicalRecord) {
         viewModelScope.launch {
+            val student = if (record.studentId > 0L) repository.getStudentById(record.studentId) else null
+            val activeSchool = student?.schoolId?.ifBlank { null }
+                ?: _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val dateTs = record.treatmentDate ?: record.planDate
+            val detail = record.complaint.ifBlank { record.diagnosis }.ifBlank { "Rekam Medis" }
+            val summary = "${record.faskes.ifBlank { "Faskes" }} • $detail (${DateUtils.formatShortDate(dateTs)})"
+            val log = createAndRecordDeletionLog(
+                category = DeletionLog.CATEGORY_BEROBAT,
+                studentId = record.studentId,
+                studentName = student?.name?.ifBlank { null } ?: record.studentName,
+                studentClass = student?.classGrade.orEmpty(),
+                recordId = record.id,
+                deletedSummary = summary,
+                schoolId = activeSchool
+            )
             repository.deleteRecord(record)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteRemoteRecord(getApplication(), record.id)
+                PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), log)
             }
         }
     }
@@ -3267,11 +3514,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
 
-            _currentUserRole.value = UserRole.WALI
+            val resolvedRole = if (account.isGuruNgaji()) UserRole.GURU_NGAJI else UserRole.WALI
+            _currentUserRole.value = resolvedRole
             _waliName.value = account.name
             _currentUsername.value = account.username
 
-            // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh
+            // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh / Guru Ngaji
             val activeSchoolCode = when {
                 matchedSchoolWali != null -> {
                     persistSchoolProfile(buildProfileForSchool(matchedSchoolWali), markCustomized = false)
@@ -3300,7 +3548,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             if (rememberMe) {
                 authPrefs.edit()
-                    .putString("saved_role", "WALI")
+                    .putString("saved_role", if (resolvedRole == UserRole.GURU_NGAJI) "GURU_NGAJI" else "WALI")
                     .putString("saved_wali_name", account.name)
                     .putString("saved_username", account.username)
                     .apply()
@@ -3311,7 +3559,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     runUnifiedSchoolCloudSync(activeSchoolCode)
                 }
             }
-            return LoginResult.SuccessWali(account)
+            return if (resolvedRole == UserRole.GURU_NGAJI) {
+                LoginResult.SuccessGuruNgaji(account)
+            } else {
+                LoginResult.SuccessWali(account)
+            }
         }
 
         // 4. Cek Akun Orang Tua (Kartu Akses Orang Tua)
@@ -3685,6 +3937,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         dormitory: String,
         phone: String,
         customPassword: String? = null,
+        role: String = WaliAccount.ROLE_WALI,
         onComplete: (WaliAccount) -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -3698,6 +3951,12 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali${System.currentTimeMillis() % 1000}" }
             }
 
+            val normalizedRole = if (role.trim().equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true)) {
+                WaliAccount.ROLE_GURU_NGAJI
+            } else {
+                WaliAccount.ROLE_WALI
+            }
+
             val newAccount = WaliAccount(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
                 name = name.trim(),
@@ -3705,7 +3964,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 password = password,
                 dormitory = dormitory.ifBlank { "Asrama Putra" },
                 phone = phone.trim(),
-                schoolId = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                schoolId = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" },
+                role = normalizedRole
             )
 
             val id = repository.insertWaliAccount(newAccount)
@@ -3798,7 +4058,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.updateWaliAccount(updated)
                 _waliName.value = cleanName
                 _currentUsername.value = updated.username
-                if (authPrefs.getString("saved_role", "") == "WALI") {
+                val savedRole = authPrefs.getString("saved_role", "")
+                if (savedRole == "WALI" || savedRole == "GURU_NGAJI") {
                     authPrefs.edit()
                         .putString("saved_wali_name", cleanName)
                         .putString("saved_username", updated.username)
@@ -3965,6 +4226,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             // 1. Bersihkan seluruh data sekolah di Room lokal (students cascade ke medical_records)
             if (targetSchoolId.isNotBlank()) {
+                repository.deleteDeletionLogsBySchool(targetSchoolId)
                 repository.deleteParentMessagesBySchool(targetSchoolId)
                 repository.deleteParentAccessLinksBySchool(targetSchoolId)
                 repository.deleteFastingRecordsBySchool(targetSchoolId)

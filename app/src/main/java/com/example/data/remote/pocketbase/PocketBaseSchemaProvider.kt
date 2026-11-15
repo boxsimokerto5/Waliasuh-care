@@ -30,7 +30,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.42.0 • 15 Koleksi Multi-Tenant + Banner R2 CDN (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.44.0 • 16 Koleksi Multi-Tenant + Peran Guru Ngaji (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -126,7 +126,7 @@ object PocketBaseSchemaProvider {
         ),
         PocketBaseCollectionMeta(
             collectionName = "wali_accounts",
-            description = "Akun login Wali Asuh & sinkronisasi kata sandi",
+            description = "Akun login Wali Asuh & Guru Ngaji serta sinkronisasi kata sandi",
             multiTenantField = "school_id",
             fields = listOf(
                 PbFieldDef("local_id", "number"),
@@ -136,6 +136,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("password", "text"),
                 PbFieldDef("dormitory", "text"),
                 PbFieldDef("phone", "text"),
+                PbFieldDef("role", "text"),
                 PbFieldDef("created_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_wa_school ON wali_accounts (school_id)")
@@ -398,6 +399,25 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_db_school ON dashboard_banners (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "deletion_logs",
+            description = "Log audit & notifikasi penghapusan riwayat mengaji, puasa, dan berobat per sekolah",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("category", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("record_id", "number"),
+                PbFieldDef("deleted_summary", "text"),
+                PbFieldDef("deleted_by", "text"),
+                PbFieldDef("deleted_by_username", "text"),
+                PbFieldDef("created_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_dl_school ON deletion_logs (school_id)")
         )
     )
 

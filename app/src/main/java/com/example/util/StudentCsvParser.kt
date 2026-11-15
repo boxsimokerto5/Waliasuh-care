@@ -615,7 +615,7 @@ object StudentCsvParser {
 
     fun exportWaliToCsv(accounts: List<WaliAccount>): String {
         val sb = StringBuilder()
-        sb.appendLine("Nama Lengkap,Asrama,No WhatsApp,Username,Password")
+        sb.appendLine("Nama Lengkap,Asrama,No WhatsApp,Username,Password,Peran")
         accounts.forEach { acc ->
             val effUser = acc.username.trim().ifBlank {
                 acc.name.trim().lowercase().replace(" ", "").filter { it.isLetterOrDigit() }
@@ -625,7 +625,8 @@ object StudentCsvParser {
                 escapeCsvField(acc.dormitory),
                 escapeCsvField(acc.phone),
                 escapeCsvField(effUser),
-                escapeCsvField(acc.password)
+                escapeCsvField(acc.password),
+                escapeCsvField(acc.role)
             ).joinToString(",")
             sb.appendLine(row)
         }

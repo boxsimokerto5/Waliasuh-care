@@ -48,6 +48,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.WaliAccount
 import com.example.ui.theme.WaliPrimary
 import com.example.util.PasswordGenerator
 import com.example.util.i18n.LocalAppStrings
@@ -57,7 +58,7 @@ import com.example.util.i18n.LocalAppStrings
 fun AddWaliAccountDialog(
     schoolName: String = "",
     onDismiss: () -> Unit,
-    onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String) -> Unit
+    onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String, role: String) -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     val resolvedSchoolName = schoolName.ifBlank { if (isEn) "Your School" else "Sekolah Anda" }
@@ -65,6 +66,7 @@ fun AddWaliAccountDialog(
     var username by remember { mutableStateOf("") }
     var userEditedUsername by remember { mutableStateOf(false) }
     var selectedDormitory by remember { mutableStateOf("Asrama Putra") }
+    var selectedRole by remember { mutableStateOf(WaliAccount.ROLE_WALI) }
     var phone by remember { mutableStateOf("") }
     var password by remember { mutableStateOf(PasswordGenerator.generateRandomPassword()) }
     var passwordVisible by remember { mutableStateOf(true) }
@@ -169,6 +171,62 @@ fun AddWaliAccountDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
+
+                // Peran Akun (Wali Asuh vs Guru Ngaji)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (isEn) "Account Role & Access:" else "Peran & Hak Akses Akun:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedRole == WaliAccount.ROLE_WALI,
+                            onClick = { selectedRole = WaliAccount.ROLE_WALI },
+                            label = {
+                                Text(
+                                    if (isEn) "Wali Asuh (Full)" else "Wali Asuh (Penuh)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("chip_add_role_wali")
+                        )
+                        FilterChip(
+                            selected = selectedRole == WaliAccount.ROLE_GURU_NGAJI,
+                            onClick = {
+                                selectedRole = WaliAccount.ROLE_GURU_NGAJI
+                                selectedDormitory = "Umum"
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Mengaji Teacher (Mengaji Only)" else "Guru Ngaji (Hanya Mengaji)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("chip_add_role_guru_ngaji")
+                        )
+                    }
+                    if (selectedRole == WaliAccount.ROLE_GURU_NGAJI) {
+                        Text(
+                            text = if (isEn) {
+                                "This account opens ONLY the Mengaji portal (all students) for inputting progress, scanning student QR cards, and printing Mengaji cards — without medical/health access or deletion rights."
+                            } else {
+                                "Akun ini hanya membuka halaman Mengaji (semua siswa) untuk input setoran, scan QR kartu siswa, dan cetak Kartu Mengaji — tanpa akses data medis maupun tombol hapus."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF047857),
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
 
                 // Pilihan Asrama Binaan
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -288,7 +346,14 @@ fun AddWaliAccountDialog(
                             } else if (password.isBlank()) {
                                 errorMessage = if (isEn) "Password cannot be empty." else "Password tidak boleh kosong."
                             } else {
-                                onConfirm(name.trim(), username.trim().lowercase(), selectedDormitory, phone.trim(), password.trim())
+                                onConfirm(
+                                    name.trim(),
+                                    username.trim().lowercase(),
+                                    selectedDormitory,
+                                    phone.trim(),
+                                    password.trim(),
+                                    selectedRole
+                                )
                             }
                         },
                         shape = RoundedCornerShape(10.dp),

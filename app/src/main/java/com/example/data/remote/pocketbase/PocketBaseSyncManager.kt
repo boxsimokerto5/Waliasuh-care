@@ -10,6 +10,7 @@ import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DashboardIconLayoutConfig
+import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -1070,6 +1071,18 @@ object PocketBaseSyncManager {
             }
         }
 
+    suspend fun uploadSingleDeletionLog(context: Context, log: DeletionLog) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbDeletionLogDto.fromDomain(log)
+                upsertSingleDto(service, "deletion_logs", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleDeletionLog ke PocketBase", e)
+            }
+        }
+
     /**
      * Menghapus seluruh data satu tenant sekolah dari PocketBase saat akun sekolah dihapus permanen.
      */
@@ -1078,6 +1091,7 @@ object PocketBaseSyncManager {
             if (!PocketBaseConfig.isConfigured(context) || schoolId.isBlank()) return@withContext
             val filter = buildSchoolFilter(schoolId)
             val service = PocketBaseClient.getService(context) ?: return@withContext
+            runCatching { deleteCollectionByFilter(service, "deletion_logs", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
@@ -1177,8 +1191,16 @@ object PocketBaseSyncManager {
         val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
         val filter = buildSchoolFilter(cleanSchoolId)
 
+        val mergedLogs = runCatching {
+            syncDeletionLogsMerged(service, cleanSchoolId, filter, repository, null)
+        }.getOrDefault(repository.getDeletionLogsBySchoolList(cleanSchoolId))
+        val deletedPuasaIds = mergedLogs
+            .filter { it.category == DeletionLog.CATEGORY_PUASA && it.recordId > 0L }
+            .map { it.recordId }
+            .toSet()
+
         runCatching { syncFastingSessionsMerged(service, cleanSchoolId, filter, repository) }
-        runCatching { syncFastingRecordsMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncFastingRecordsMerged(service, cleanSchoolId, filter, repository, deletedPuasaIds) }
     }
 
     suspend fun syncShiftMessagesOnlineQuietly(
@@ -1414,25 +1436,71 @@ object PocketBaseSyncManager {
         }
     }
 
+    private suspend fun syncDeletionLogsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository,
+        onNewRemoteDeletionLogs: ((List<DeletionLog>, String) -> Unit)? = null
+    ): List<DeletionLog> {
+        val localLogs = repository.getDeletionLogsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listDeletionLogs(page = page, perPage = 500, filter = filter)
+        }
+        val remoteLogs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) }
+            ?: return localLogs
+
+        val localById = localLogs.associateBy { it.id }
+        val remoteById = remoteLogs.associateBy { it.id }
+
+        val toInsertLocal = remoteLogs.filter { localById[it.id] == null }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllDeletionLogs(toInsertLocal)
+            onNewRemoteDeletionLogs?.invoke(toInsertLocal, cleanSchoolId)
+        }
+
+        val toPushRemote = localLogs.filter { remoteById[it.id] == null }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { log ->
+                val dto = PbDeletionLogDto.fromDomain(log)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "deletion_logs", pairs)
+        }
+
+        return repository.getDeletionLogsBySchoolList(cleanSchoolId)
+    }
+
     private suspend fun syncFastingRecordsMerged(
         service: PocketBaseService,
         cleanSchoolId: String,
         filter: String,
-        repository: HealthRepository
+        repository: HealthRepository,
+        deletedRecordIds: Set<Long> = emptySet()
     ) {
-        val localRecords = repository.getFastingRecordsBySchoolList(cleanSchoolId)
+        val localRecordsAll = repository.getFastingRecordsBySchoolList(cleanSchoolId)
+        if (deletedRecordIds.isNotEmpty()) {
+            localRecordsAll.filter { it.id in deletedRecordIds }.forEach {
+                repository.deleteFastingRecord(it)
+            }
+        }
+        val localRecords = localRecordsAll.filter { it.id !in deletedRecordIds }
+
         val remoteRes = fetchAllPages { page ->
             service.listFastingRecords(page = page, perPage = 500, filter = filter)
         }
         val remoteDtos = remoteRes.getOrNull() ?: return
-        val remoteRecords = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
+        val remoteRecords = remoteDtos
+            .map { it.toDomainModel(cleanSchoolId) }
+            .filter { it.id !in deletedRecordIds }
 
         val localById = localRecords.associateBy { it.id }
         val remoteById = remoteRecords.associateBy { it.id }
         val dirtyRemoteIds = remoteDtos.mapNotNull { dto ->
             val rawNik = dto.studentNik.orEmpty()
             val cleanedNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawNik)
-            if (rawNik != cleanedNik) PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id) else null
+            val resolvedId = PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id)
+            if (rawNik != cleanedNik && resolvedId !in deletedRecordIds) resolvedId else null
         }.toSet()
 
         val toInsertLocal = remoteRecords.filter { rem ->
@@ -1461,21 +1529,32 @@ object PocketBaseSyncManager {
         service: PocketBaseService,
         cleanSchoolId: String,
         filter: String,
-        repository: HealthRepository
+        repository: HealthRepository,
+        deletedRecordIds: Set<Long> = emptySet()
     ) {
-        val localRecords = repository.getMengajiRecordsBySchoolList(cleanSchoolId)
+        val localRecordsAll = repository.getMengajiRecordsBySchoolList(cleanSchoolId)
+        if (deletedRecordIds.isNotEmpty()) {
+            localRecordsAll.filter { it.id in deletedRecordIds }.forEach {
+                repository.deleteMengajiRecord(it)
+            }
+        }
+        val localRecords = localRecordsAll.filter { it.id !in deletedRecordIds }
+
         val remoteRes = fetchAllPages { page ->
             service.listMengajiRecords(page = page, perPage = 500, filter = filter)
         }
         val remoteDtos = remoteRes.getOrNull() ?: return
-        val remoteRecords = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
+        val remoteRecords = remoteDtos
+            .map { it.toDomainModel(cleanSchoolId) }
+            .filter { it.id !in deletedRecordIds }
 
         val localById = localRecords.associateBy { it.id }
         val remoteById = remoteRecords.associateBy { it.id }
         val dirtyRemoteIds = remoteDtos.mapNotNull { dto ->
             val rawNik = dto.studentNik.orEmpty()
             val cleanedNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawNik)
-            if (rawNik != cleanedNik) PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id) else null
+            val resolvedId = PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id)
+            if (rawNik != cleanedNik && resolvedId !in deletedRecordIds) resolvedId else null
         }.toSet()
 
         val toInsertLocal = remoteRecords.filter { rem ->
@@ -1565,7 +1644,8 @@ object PocketBaseSyncManager {
         localDashboardBannerConfig: DashboardBannerConfig = DashboardBannerConfig.defaultConfig(),
         allowPushDashboardBanners: Boolean = false,
         onRemoteDashboardBannerUpdated: ((DashboardBannerConfig) -> Unit)? = null,
-        onNewRemoteMedicalRecords: ((List<MedicalRecord>, List<ChildStudent>, String) -> Unit)? = null
+        onNewRemoteMedicalRecords: ((List<MedicalRecord>, List<ChildStudent>, String) -> Unit)? = null,
+        onNewRemoteDeletionLogs: ((List<DeletionLog>, String) -> Unit)? = null
     ): Result<String> = withContext(Dispatchers.IO) {
         val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
         if (!PocketBaseConfig.isConfigured(context)) {
@@ -1693,17 +1773,48 @@ object PocketBaseSyncManager {
                 }
             }
 
+            // 2b. Sinkronkan Log Audit Hapus Riwayat (deletion_logs) SEBELUM rekam medis/puasa/mengaji
+            // agar catatan yang sudah dihapus Wali Asuh lain tidak terunggah ulang (tombstone anti-resurrection)
+            val mergedDeletionLogs = runCatching {
+                syncDeletionLogsMerged(
+                    service = service,
+                    cleanSchoolId = cleanSchoolId,
+                    filter = filter,
+                    repository = repository,
+                    onNewRemoteDeletionLogs = onNewRemoteDeletionLogs
+                )
+            }.getOrDefault(repository.getDeletionLogsBySchoolList(cleanSchoolId))
+
+            val deletedMedicalIds = mergedDeletionLogs
+                .filter { it.category == DeletionLog.CATEGORY_BEROBAT && it.recordId > 0L }
+                .map { it.recordId }
+                .toSet()
+            val deletedFastingIds = mergedDeletionLogs
+                .filter { it.category == DeletionLog.CATEGORY_PUASA && it.recordId > 0L }
+                .map { it.recordId }
+                .toSet()
+            val deletedMengajiIds = mergedDeletionLogs
+                .filter { it.category == DeletionLog.CATEGORY_MENGAJI && it.recordId > 0L }
+                .map { it.recordId }
+                .toSet()
+
             // 3. Sinkronkan Rekam Medis & Kontrol (medical_records) - Merge by timestamp
             var recordCount = 0
             runCatching {
-                val localRecords = repository.getAllRecordsList().filter { it.studentId in validStudentIds }
+                val allSchoolLocalRecords = repository.getAllRecordsList().filter { it.studentId in validStudentIds }
+                if (deletedMedicalIds.isNotEmpty()) {
+                    allSchoolLocalRecords.filter { it.id in deletedMedicalIds }.forEach {
+                        repository.deleteRecord(it)
+                    }
+                }
+                val localRecords = allSchoolLocalRecords.filter { it.id !in deletedMedicalIds }
                 val remoteRecRes = fetchAllPages { page ->
                     service.listMedicalRecords(page = page, perPage = 500, filter = filter)
                 }
                 if (remoteRecRes.isSuccess) {
                     val remoteRecords = (remoteRecRes.getOrNull() ?: emptyList())
                         .map { it.toDomainModel() }
-                        .filter { it.studentId in validStudentIds }
+                        .filter { it.studentId in validStudentIds && it.id !in deletedMedicalIds }
 
                     val localById = localRecords.associateBy { it.id }
                     val remoteById = remoteRecords.associateBy { it.id }
@@ -1788,12 +1899,12 @@ object PocketBaseSyncManager {
                 syncFastingSessionsMerged(service, cleanSchoolId, filter, repository)
             }
             runCatching {
-                syncFastingRecordsMerged(service, cleanSchoolId, filter, repository)
+                syncFastingRecordsMerged(service, cleanSchoolId, filter, repository, deletedFastingIds)
             }
 
             // 7. Sinkronkan Riwayat Mengaji Berkelanjutan (mengaji_records)
             runCatching {
-                syncMengajiRecordsMerged(service, cleanSchoolId, filter, repository)
+                syncMengajiRecordsMerged(service, cleanSchoolId, filter, repository, deletedMengajiIds)
             }
 
             // 8. Sinkronkan Sesi & Daftar Hadir Kunjungan Orang Tua (visit_sessions & visit_records)

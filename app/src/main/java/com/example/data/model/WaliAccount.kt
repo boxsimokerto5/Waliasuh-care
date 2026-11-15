@@ -13,5 +13,19 @@ data class WaliAccount(
     val dormitory: String = "Asrama Putra", // Asrama Putra / Asrama Putri / Umum
     val phone: String = "",
     val createdAt: Long = System.currentTimeMillis(),
-    val schoolId: String = "SRT1-KDR"
-)
+    val schoolId: String = "SRT1-KDR",
+    val role: String = ROLE_WALI
+) {
+    fun isGuruNgaji(): Boolean = role.trim().equals(ROLE_GURU_NGAJI, ignoreCase = true)
+
+    fun roleLabel(isEnglish: Boolean = false): String = if (isGuruNgaji()) {
+        if (isEnglish) "Mengaji Teacher" else "Guru Ngaji"
+    } else {
+        "Wali Asuh"
+    }
+
+    companion object {
+        const val ROLE_WALI = "WALI"
+        const val ROLE_GURU_NGAJI = "GURU_NGAJI"
+    }
+}

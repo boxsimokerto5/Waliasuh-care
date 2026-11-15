@@ -349,6 +349,9 @@ fun StudentsScreen(
                 selectedStudentForDetail = null
                 studentToEdit = toEdit
             },
+            onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
+            onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
             onDismiss = { selectedStudentForDetail = null }
         )
     }

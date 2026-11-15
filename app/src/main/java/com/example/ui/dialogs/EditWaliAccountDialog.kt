@@ -70,6 +70,7 @@ fun EditWaliAccountDialog(
         ) 
     }
     var selectedDormitory by remember { mutableStateOf(account.dormitory) }
+    var selectedRole by remember { mutableStateOf(account.role.ifBlank { WaliAccount.ROLE_WALI }) }
     var phone by remember { mutableStateOf(account.phone) }
     var password by remember { mutableStateOf(account.password) }
     var passwordVisible by remember { mutableStateOf(true) }
@@ -169,6 +170,47 @@ fun EditWaliAccountDialog(
                     singleLine = true,
                     shape = RoundedCornerShape(10.dp)
                 )
+
+                // Peran Akun
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (isEn) "Account Role & Access:" else "Peran & Hak Akses Akun:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        FilterChip(
+                            selected = selectedRole.equals(WaliAccount.ROLE_WALI, ignoreCase = true),
+                            onClick = { selectedRole = WaliAccount.ROLE_WALI },
+                            label = {
+                                Text(
+                                    if (isEn) "Wali Asuh (Full)" else "Wali Asuh (Penuh)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("chip_edit_role_wali")
+                        )
+                        FilterChip(
+                            selected = selectedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true),
+                            onClick = { selectedRole = WaliAccount.ROLE_GURU_NGAJI },
+                            label = {
+                                Text(
+                                    if (isEn) "Mengaji Teacher (Mengaji Only)" else "Guru Ngaji (Hanya Mengaji)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag("chip_edit_role_guru_ngaji")
+                        )
+                    }
+                }
 
                 // Pilihan Asrama Binaan
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -294,7 +336,8 @@ fun EditWaliAccountDialog(
                                         username = username.trim().lowercase(),
                                         dormitory = selectedDormitory,
                                         phone = phone.trim(),
-                                        password = password.trim()
+                                        password = password.trim(),
+                                        role = selectedRole
                                     )
                                 )
                             }

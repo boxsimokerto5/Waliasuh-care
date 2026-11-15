@@ -13,6 +13,7 @@ import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
+import com.example.data.dao.DeletionLogDao
 import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
@@ -21,6 +22,7 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentMessageDao
+import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -43,7 +45,8 @@ class HealthRepository(
     private val visitSessionDao: VisitSessionDao? = null,
     private val visitRecordDao: VisitRecordDao? = null,
     private val parentAccessLinkDao: ParentAccessLinkDao? = null,
-    private val parentMessageDao: ParentMessageDao? = null
+    private val parentMessageDao: ParentMessageDao? = null,
+    private val deletionLogDao: DeletionLogDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -63,6 +66,7 @@ class HealthRepository(
     val allVisitRecords: Flow<List<VisitRecord>> = visitRecordDao?.getAllRecords() ?: emptyFlow()
     val allParentAccessLinks: Flow<List<ParentAccessLink>> = parentAccessLinkDao?.getAllLinks() ?: emptyFlow()
     val allParentMessages: Flow<List<ParentMessage>> = parentMessageDao?.getAllMessages() ?: emptyFlow()
+    val allDeletionLogs: Flow<List<DeletionLog>> = deletionLogDao?.getAllLogs() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -458,5 +462,24 @@ class HealthRepository(
 
     suspend fun deleteParentMessagesBySchool(schoolId: String) {
         parentMessageDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Deletion Logs (Audit & Notifikasi Hapus Riwayat Mengaji/Puasa/Berobat) ---
+    suspend fun insertDeletionLog(log: DeletionLog): Long =
+        deletionLogDao?.insert(log) ?: 0L
+
+    suspend fun insertAllDeletionLogs(logs: List<DeletionLog>) {
+        deletionLogDao?.insertAll(logs)
+    }
+
+    suspend fun getDeletionLogsBySchoolList(schoolId: String): List<DeletionLog> =
+        deletionLogDao?.getLogsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteDeletionLogsBySchool(schoolId: String) {
+        deletionLogDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun deleteOldDeletionLogs(cutoffTimestamp: Long) {
+        deletionLogDao?.deleteOlderThan(cutoffTimestamp)
     }
 }

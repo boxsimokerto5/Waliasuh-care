@@ -20,6 +20,7 @@ import com.example.util.TopOnAdManager
 import com.example.util.i18n.AppLanguageManager
 import com.example.util.i18n.LocalAppStrings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,8 +37,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -47,6 +52,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -156,6 +162,12 @@ class MainActivity : ComponentActivity() {
                                     onLogout = { viewModel.logout() }
                                 )
                             }
+                            userRole == UserRole.GURU_NGAJI -> {
+                                com.example.ui.screens.GuruNgajiScreen(
+                                    viewModel = viewModel,
+                                    onLogout = { viewModel.logout() }
+                                )
+                            }
                             else -> {
                                 WaliAsuhCareApp(
                                     isDarkTheme = isDarkTheme,
@@ -245,6 +257,8 @@ private fun WaliAsuhCareAppContent(
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
+    val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
+    val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
     val myFosterStudents = remember(students, waliName) {
@@ -274,9 +288,10 @@ private fun WaliAsuhCareAppContent(
             contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             WaliTopBar(
-                notificationCount = pendingControls.size + activePlans.size,
+                notificationCount = pendingControls.size + activePlans.size + unreadDeletionLogsCount,
                 onNotificationClick = {
                     TopOnAdManager.onUserActionClick(context)
+                    viewModel.markDeletionLogsRead()
                     showNotifModal = true
                 },
                 onProfileClick = {
@@ -706,6 +721,7 @@ private fun WaliAsuhCareAppContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .widthIn(max = 600.dp)
+                        .verticalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -730,7 +746,7 @@ private fun WaliAsuhCareAppContent(
                         colors = CardDefaults.cardColors(
                             containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
                         ),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                        shape = RoundedCornerShape(10.dp)
                     ) {
                         Column(
                             modifier = Modifier.padding(12.dp),
@@ -778,6 +794,137 @@ private fun WaliAsuhCareAppContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                    // Notifikasi & Riwayat Penghapusan Data Siswa (Mengaji / Puasa / Berobat)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("notif_deletion_logs_section"),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteSweep,
+                                contentDescription = null,
+                                tint = androidx.compose.ui.graphics.Color(0xFFB45309),
+                                modifier = Modifier.size(19.dp)
+                            )
+                            Text(
+                                text = if (s.isEnglish) {
+                                    "History Deletion Log (Wali Asuh)"
+                                } else {
+                                    "Notifikasi Hapus Riwayat (Wali Asuh)"
+                                },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        if (deletionLogs.isEmpty()) {
+                            Text(
+                                text = if (s.isEnglish) {
+                                    "No student Mengaji, Fasting, or Medical history has been deleted."
+                                } else {
+                                    "Belum ada penghapusan riwayat Mengaji, Puasa, maupun Berobat."
+                                },
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            deletionLogs.take(20).forEach { log ->
+                                val (catLabel, catBg, catFg) = when (log.category.uppercase()) {
+                                    com.example.data.model.DeletionLog.CATEGORY_MENGAJI -> Triple(
+                                        "Mengaji",
+                                        androidx.compose.ui.graphics.Color(0xFFDCFCE7),
+                                        androidx.compose.ui.graphics.Color(0xFF166534)
+                                    )
+                                    com.example.data.model.DeletionLog.CATEGORY_PUASA -> Triple(
+                                        if (s.isEnglish) "Fasting" else "Puasa",
+                                        androidx.compose.ui.graphics.Color(0xFFFEF3C7),
+                                        androidx.compose.ui.graphics.Color(0xFF92400E)
+                                    )
+                                    else -> Triple(
+                                        if (s.isEnglish) "Medical" else "Berobat",
+                                        androidx.compose.ui.graphics.Color(0xFFFEE2E2),
+                                        androidx.compose.ui.graphics.Color(0xFFB91C1C)
+                                    )
+                                }
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                            RoundedCornerShape(10.dp)
+                                        )
+                                        .testTag("notif_deletion_log_item_${log.id}")
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(catBg, RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 7.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = catLabel,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = catFg
+                                                )
+                                            }
+                                            Text(
+                                                text = DateUtils.formatDateTime(log.createdAt),
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        val clsSuffix = if (log.studentClass.isNotBlank()) " (${log.studentClass})" else ""
+                                        Text(
+                                            text = "${log.studentName}$clsSuffix",
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        if (log.deletedSummary.isNotBlank()) {
+                                            Text(
+                                                text = log.deletedSummary,
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Text(
+                                            text = if (s.isEnglish) {
+                                                "Deleted by: ${log.deletedBy}"
+                                            } else {
+                                                "Dihapus oleh: ${log.deletedBy}"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = androidx.compose.ui.graphics.Color(0xFFB45309)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Row(
@@ -786,7 +933,7 @@ private fun WaliAsuhCareAppContent(
                     ) {
                         Button(
                             onClick = { showNotifModal = false },
-                            shape = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             Text(s.nav.legalUnderstoodBtn, fontSize = 12.sp)
                         }

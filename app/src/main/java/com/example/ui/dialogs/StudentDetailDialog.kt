@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HistoryEdu
 import androidx.compose.material.icons.filled.LocalHospital
@@ -48,7 +49,10 @@ import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -116,6 +120,9 @@ fun StudentDetailDialog(
     onInputMengaji: ((ChildStudent) -> Unit)? = null,
     onPrintKartuMengaji: ((ChildStudent) -> Unit)? = null,
     onEditStudent: ((ChildStudent) -> Unit)? = null,
+    onDeleteMengajiRecord: ((MengajiRecord) -> Unit)? = null,
+    onDeleteMedicalRecord: ((MedicalRecord) -> Unit)? = null,
+    onDeleteFastingRecord: ((FastingRecord) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -131,6 +138,9 @@ fun StudentDetailDialog(
     var showCardGeneratorForStudent by remember { mutableStateOf(false) }
     var showInlineKartuMengaji by remember { mutableStateOf(false) }
     var showAllMengajiHistory by remember { mutableStateOf(false) }
+    var pendingDeleteMengaji by remember { mutableStateOf<MengajiRecord?>(null) }
+    var pendingDeleteMedical by remember { mutableStateOf<MedicalRecord?>(null) }
+    var pendingDeleteFasting by remember { mutableStateOf<FastingRecord?>(null) }
     val orderedMengajiRecords = remember(mengajiRecords, student) {
         MengajiHelper.recordsForStudent(mengajiRecords, student)
     }
@@ -776,18 +786,36 @@ fun StudentDetailDialog(
                                                         )
                                                     }
                                                 }
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(6.dp))
-                                                        .background(if (isFluent) Color(0xFFDCFCE7) else Color(0xFFFEE2E2))
-                                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                                                 ) {
-                                                    Text(
-                                                        text = MengajiHelper.fluencyLabel(rec.fluencyStatus, isEn),
-                                                        fontSize = 10.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isFluent) Color(0xFF15803D) else Color(0xFFB91C1C)
-                                                    )
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(if (isFluent) Color(0xFFDCFCE7) else Color(0xFFFEE2E2))
+                                                            .padding(horizontal = 7.dp, vertical = 3.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = MengajiHelper.fluencyLabel(rec.fluencyStatus, isEn),
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isFluent) Color(0xFF15803D) else Color(0xFFB91C1C)
+                                                        )
+                                                    }
+                                                    if (onDeleteMengajiRecord != null) {
+                                                        IconButton(
+                                                            onClick = { pendingDeleteMengaji = rec },
+                                                            modifier = Modifier.testTag("btn_delete_mengaji_${rec.id}")
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.DeleteOutline,
+                                                                contentDescription = if (isEn) "Delete Mengaji record" else "Hapus riwayat mengaji",
+                                                                tint = MaterialTheme.colorScheme.error,
+                                                                modifier = Modifier.size(19.dp)
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -894,14 +922,29 @@ fun StudentDetailDialog(
                                                     verticalAlignment = Alignment.CenterVertically
                                                 ) {
                                                     FaskesBadge(faskes = record.faskes)
-                                                    val dateStr = record.treatmentDate?.let { DateUtils.formatShortDate(it) }
-                                                        ?: DateUtils.formatShortDate(record.planDate)
-                                                    Text(
-                                                        text = dateStr,
-                                                        fontSize = 10.5.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        val dateStr = record.treatmentDate?.let { DateUtils.formatShortDate(it) }
+                                                            ?: DateUtils.formatShortDate(record.planDate)
+                                                        Text(
+                                                            text = dateStr,
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                        if (onDeleteMedicalRecord != null) {
+                                                            IconButton(
+                                                                onClick = { pendingDeleteMedical = record },
+                                                                modifier = Modifier.testTag("btn_delete_medical_${record.id}")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.DeleteOutline,
+                                                                    contentDescription = if (isEn) "Delete medical record" else "Hapus riwayat berobat",
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                    modifier = Modifier.size(19.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
                                                 }
 
                                                 Text(
@@ -1054,13 +1097,28 @@ fun StudentDetailDialog(
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        text = DateUtils.formatShortDate(recDate, s.language),
-                                                        fontSize = 10.5.sp,
-                                                        fontWeight = FontWeight.Medium,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = DateUtils.formatShortDate(recDate, s.language),
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                        if (onDeleteFastingRecord != null) {
+                                                            IconButton(
+                                                                onClick = { pendingDeleteFasting = rec },
+                                                                modifier = Modifier.testTag("btn_delete_fasting_${rec.id}")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.DeleteOutline,
+                                                                    contentDescription = if (isEn) "Delete fasting record" else "Hapus riwayat puasa",
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                    modifier = Modifier.size(19.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
                                                 }
 
                                                 Text(
@@ -1179,6 +1237,140 @@ fun StudentDetailDialog(
                 onInputMengaji?.invoke(st)
             },
             onDismiss = { showInlineKartuMengaji = false }
+        )
+    }
+
+    pendingDeleteMengaji?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDeleteMengaji = null },
+            title = {
+                Text(
+                    text = if (isEn) "Delete Mengaji Record?" else "Hapus Riwayat Mengaji?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEn) {
+                        "Are you sure you want to delete ${MengajiHelper.formatCompactPosition(target)} for ${student.name}? Colleague Wali Asuh will receive a notification on the bell icon."
+                    } else {
+                        "Yakin ingin menghapus catatan ${MengajiHelper.formatCompactPosition(target)} milik ${student.name}? Rekan Wali Asuh di sekolah akan mendapat notifikasi pada ikon lonceng."
+                    },
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteMengajiRecord?.invoke(target)
+                        pendingDeleteMengaji = null
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Mengaji record deleted" else "Riwayat mengaji dihapus & rekan Wali Asuh diberi notifikasi",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("btn_confirm_delete_student_history")
+                ) {
+                    Text(if (isEn) "Delete" else "Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteMengaji = null }) {
+                    Text(if (isEn) "Cancel" else "Batal")
+                }
+            }
+        )
+    }
+
+    pendingDeleteMedical?.let { target ->
+        val summary = target.complaint.ifBlank { target.diagnosis }.ifBlank { target.faskes }
+        AlertDialog(
+            onDismissRequest = { pendingDeleteMedical = null },
+            title = {
+                Text(
+                    text = if (isEn) "Delete Medical Record?" else "Hapus Riwayat Berobat?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEn) {
+                        "Are you sure you want to delete medical record ($summary) for ${student.name}? Colleague Wali Asuh will receive a notification on the bell icon."
+                    } else {
+                        "Yakin ingin menghapus riwayat berobat ($summary) milik ${student.name}? Rekan Wali Asuh di sekolah akan mendapat notifikasi pada ikon lonceng."
+                    },
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteMedicalRecord?.invoke(target)
+                        pendingDeleteMedical = null
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Medical record deleted" else "Riwayat berobat dihapus & rekan Wali Asuh diberi notifikasi",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("btn_confirm_delete_student_history")
+                ) {
+                    Text(if (isEn) "Delete" else "Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteMedical = null }) {
+                    Text(if (isEn) "Cancel" else "Batal")
+                }
+            }
+        )
+    }
+
+    pendingDeleteFasting?.let { target ->
+        val sessionLabel = target.sessionTitle.ifBlank { if (isEn) "Fasting Session" else "Sesi Puasa" }
+        AlertDialog(
+            onDismissRequest = { pendingDeleteFasting = null },
+            title = {
+                Text(
+                    text = if (isEn) "Delete Fasting Record?" else "Hapus Riwayat Puasa?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEn) {
+                        "Are you sure you want to delete fasting record ($sessionLabel) for ${student.name}? Colleague Wali Asuh will receive a notification on the bell icon."
+                    } else {
+                        "Yakin ingin menghapus riwayat puasa ($sessionLabel) milik ${student.name}? Rekan Wali Asuh di sekolah akan mendapat notifikasi pada ikon lonceng."
+                    },
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteFastingRecord?.invoke(target)
+                        pendingDeleteFasting = null
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Fasting record deleted" else "Riwayat puasa dihapus & rekan Wali Asuh diberi notifikasi",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("btn_confirm_delete_student_history")
+                ) {
+                    Text(if (isEn) "Delete" else "Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteFasting = null }) {
+                    Text(if (isEn) "Cancel" else "Batal")
+                }
+            }
         )
     }
 }

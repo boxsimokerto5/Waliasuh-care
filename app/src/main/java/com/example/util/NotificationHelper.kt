@@ -153,6 +153,105 @@ object NotificationHelper {
     }
 
     /**
+     * Menampilkan notifikasi sistem Android saat rekan Wali Asuh menghapus riwayat Mengaji, Puasa, atau Berobat.
+     */
+    fun showDeletionAlertNotification(
+        context: Context,
+        logs: List<com.example.data.model.DeletionLog>,
+        schoolName: String = "",
+        notificationId: Int = 8801
+    ) {
+        if (logs.isEmpty()) return
+        try {
+            val isEn = AppLanguageManager.getLanguage(context) == com.example.util.i18n.AppLanguage.ENGLISH
+            createNotificationChannel(context)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val permission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                )
+                if (permission != PackageManager.PERMISSION_GRANTED) return
+            }
+
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                notificationId,
+                intent,
+                pendingIntentFlags
+            )
+
+            val schoolBadge = if (schoolName.isNotBlank()) "[$schoolName] " else ""
+            val latest = logs.first()
+            fun catLabel(cat: String): String = when (cat.uppercase()) {
+                com.example.data.model.DeletionLog.CATEGORY_MENGAJI -> "Mengaji"
+                com.example.data.model.DeletionLog.CATEGORY_PUASA -> if (isEn) "Fasting" else "Puasa"
+                com.example.data.model.DeletionLog.CATEGORY_BEROBAT -> if (isEn) "Medical" else "Berobat"
+                else -> cat
+            }
+
+            val title = if (logs.size == 1) {
+                if (isEn) "${schoolBadge}History Deleted: ${catLabel(latest.category)}"
+                else "${schoolBadge}Riwayat ${catLabel(latest.category)} Dihapus"
+            } else {
+                if (isEn) "${schoolBadge}${logs.size} Student History Entries Deleted"
+                else "${schoolBadge}${logs.size} Riwayat Siswa Dihapus"
+            }
+
+            val shortText = if (isEn) {
+                "${latest.deletedBy} deleted ${catLabel(latest.category)} for ${latest.studentName}"
+            } else {
+                "${latest.deletedBy} menghapus riwayat ${catLabel(latest.category)} ${latest.studentName}"
+            }
+
+            val expanded = buildString {
+                logs.take(5).forEach { item ->
+                    val cls = if (item.studentClass.isNotBlank()) " (${item.studentClass})" else ""
+                    val sum = if (item.deletedSummary.isNotBlank()) ": ${item.deletedSummary}" else ""
+                    append("• [${catLabel(item.category)}] ${item.studentName}$cls$sum — ${item.deletedBy}\n")
+                }
+                if (logs.size > 5) {
+                    append(if (isEn) "...and ${logs.size - 5} more." else "...dan ${logs.size - 5} lainnya.")
+                }
+            }.trim()
+
+            val largeIconBitmap = try {
+                android.graphics.BitmapFactory.decodeResource(context.resources, R.drawable.logo_sr_care)
+            } catch (_: Exception) {
+                null
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID_HEALTH_ALERT)
+                .setSmallIcon(R.drawable.ic_notification)
+                .apply {
+                    if (largeIconBitmap != null) setLargeIcon(largeIconBitmap)
+                }
+                .setContentTitle(title)
+                .setContentText(shortText)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(expanded))
+                .setColor(0xFFD97706.toInt())
+                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setCategory(NotificationCompat.CATEGORY_EVENT)
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+
+            with(NotificationManagerCompat.from(context)) {
+                notify(notificationId, builder.build())
+            }
+        } catch (e: Exception) {
+            Log.e("NotificationHelper", "Failed to show deletion alert notification", e)
+        }
+    }
+
+    /**
      * Notifikasi uji coba (test) agar pengguna dapat langsung memverifikasi fitur di perangkatnya.
      */
     fun showTestNotification(context: Context, schoolName: String = "") {

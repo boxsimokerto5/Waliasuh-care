@@ -765,8 +765,11 @@ fun SuperadminSchoolDetailSheet(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Column(modifier = Modifier.weight(1f)) {
+                                                    val roleBadge = if (wali.isGuruNgaji()) {
+                                                        if (isEn) " • [Mengaji Teacher]" else " • [Guru Ngaji]"
+                                                    } else ""
                                                     Text(
-                                                        text = "${index + 1}. ${wali.name}",
+                                                        text = "${index + 1}. ${wali.name}$roleBadge",
                                                         fontSize = 12.5.sp,
                                                         fontWeight = FontWeight.SemiBold,
                                                         color = MaterialTheme.colorScheme.onSurface

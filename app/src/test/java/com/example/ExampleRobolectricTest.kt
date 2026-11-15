@@ -622,7 +622,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(14, jsonSchema.length())
+    assertEquals(16, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -642,7 +642,9 @@ class ExampleRobolectricTest {
       "visit_sessions",
       "visit_records",
       "parent_access_links",
-      "parent_messages"
+      "parent_messages",
+      "dashboard_banners",
+      "deletion_logs"
     )
     expectedCollections.forEach { col ->
       org.junit.Assert.assertTrue(
@@ -651,7 +653,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(14, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(16, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -4896,5 +4898,628 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertTrue(parsedGenericId.contains("Region menjadi 'auto'"))
     org.junit.Assert.assertTrue(parsedGenericId.contains("Asia-Pacific"))
   }
+
+  @Test
+  fun `verify PbDeletionLogDto preserves schoolId category recordId and actor`() {
+    val log = com.example.data.model.DeletionLog(
+      id = 910001L,
+      category = com.example.data.model.DeletionLog.CATEGORY_MENGAJI,
+      studentId = 123L,
+      studentName = "Abimanyu Satria Pamungkas",
+      studentClass = "X-4",
+      recordId = 555L,
+      deletedSummary = "Iqro' Jilid 1 Hal. 10 (Lancar)",
+      deletedBy = "Ustadz Ahmad",
+      deletedByUsername = "ustadz_ahmad",
+      schoolId = "SRT1-KDR",
+      createdAt = 1763200000000L
+    )
+
+    val dto = com.example.data.remote.pocketbase.PbDeletionLogDto.fromDomain(log)
+    assertEquals("SRT1-KDR", dto.schoolId)
+    assertEquals("MENGAJI", dto.category)
+    assertEquals(555L, dto.recordId)
+    assertEquals("Ustadz Ahmad", dto.deletedBy)
+    assertEquals("ustadz_ahmad", dto.deletedByUsername)
+
+    val restored = dto.toDomainModel()
+    assertEquals(log.id, restored.id)
+    assertEquals(log.category, restored.category)
+    assertEquals(log.studentId, restored.studentId)
+    assertEquals(log.studentName, restored.studentName)
+    assertEquals(log.studentClass, restored.studentClass)
+    assertEquals(log.recordId, restored.recordId)
+    assertEquals(log.deletedSummary, restored.deletedSummary)
+    assertEquals(log.deletedBy, restored.deletedBy)
+    assertEquals(log.deletedByUsername, restored.deletedByUsername)
+    assertEquals(log.schoolId, restored.schoolId)
+  }
+
+  @Test
+  fun `verify history deletions log deletion_logs with 0 badge for deleter and active badge for colleague wali`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_notif_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val schoolA = "SCH-DEL-LOG-A"
+    val schoolC = "SCH-DEL-LOG-C"
+
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.deletionLogDao().deleteBySchoolId(schoolA)
+    db.deletionLogDao().deleteBySchoolId(schoolC)
+    db.mengajiRecordDao().deleteBySchoolId(schoolA)
+    db.mengajiRecordDao().deleteBySchoolId(schoolC)
+    db.fastingRecordDao().deleteBySchoolId(schoolA)
+    db.fastingRecordDao().deleteBySchoolId(schoolC)
+    db.medicalRecordDao().deleteAll()
+
+    val regA = com.example.data.model.SchoolRegistration(
+      schoolName = "Sekolah Uji Hapus A",
+      address = "Jl. A",
+      city = "Kediri",
+      estimatedWaliCount = 3,
+      picName = "PIC A",
+      picEmail = "a@test.id",
+      picPhone = "0811",
+      status = "APPROVED",
+      generatedSchoolCode = schoolA,
+      generatedAdminUsername = "admin_del_a",
+      generatedAdminPassword = "Pass#DelA1"
+    )
+    val regC = com.example.data.model.SchoolRegistration(
+      schoolName = "Sekolah Uji Hapus C",
+      address = "Jl. C",
+      city = "Malang",
+      estimatedWaliCount = 2,
+      picName = "PIC C",
+      picEmail = "c@test.id",
+      picPhone = "0822",
+      status = "APPROVED",
+      generatedSchoolCode = schoolC,
+      generatedAdminUsername = "admin_del_c",
+      generatedAdminPassword = "Pass#DelC1"
+    )
+    db.schoolRegistrationDao().insert(regA)
+    db.schoolRegistrationDao().insert(regC)
+
+    val waliA = com.example.data.model.WaliAccount(
+      name = "Ustadz Penghapus",
+      username = "wali_del_a1",
+      password = "Pass#Wali1",
+      dormitory = "Asrama Putra",
+      schoolId = schoolA
+    )
+    val waliB = com.example.data.model.WaliAccount(
+      name = "Ustadz Rekan",
+      username = "wali_del_a2",
+      password = "Pass#Wali2",
+      dormitory = "Asrama Putra",
+      schoolId = schoolA
+    )
+    val waliC = com.example.data.model.WaliAccount(
+      name = "Ustadz Sekolah Lain",
+      username = "wali_del_c1",
+      password = "Pass#Wali3",
+      dormitory = "Asrama Putra",
+      schoolId = schoolC
+    )
+    db.waliAccountDao().insert(waliA)
+    db.waliAccountDao().insert(waliB)
+    db.waliAccountDao().insert(waliC)
+
+    val studentA = com.example.data.model.ChildStudent(
+      id = 441001L,
+      name = "Santri Uji Hapus",
+      nis = "441001",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-4",
+      schoolId = schoolA
+    )
+    db.childStudentDao().insert(studentA)
+
+    val mengajiRec = com.example.data.model.MengajiRecord(
+      id = 551001L,
+      studentId = studentA.id,
+      studentName = studentA.name,
+      studentClass = "X-4",
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 1",
+      pageOrVerse = "Hal. 10",
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+      sessionDate = System.currentTimeMillis(),
+      waliName = waliA.name,
+      schoolId = schoolA
+    )
+    val fastingRec = com.example.data.model.FastingRecord(
+      id = 551002L,
+      sessionId = 9001L,
+      sessionTitle = "Puasa Senin",
+      sessionDate = System.currentTimeMillis(),
+      studentId = studentA.id,
+      studentName = studentA.name,
+      studentClass = "X-4",
+      isSahurChecked = true,
+      isBukaChecked = false,
+      waliName = waliA.name,
+      schoolId = schoolA
+    )
+    val medicalRec = com.example.data.model.MedicalRecord(
+      id = 551003L,
+      studentId = studentA.id,
+      studentName = studentA.name,
+      studentDormitory = "Asrama Putra",
+      faskes = "Puskesmas",
+      complaint = "Demam Tinggi",
+      diagnosis = "Febris",
+      planDate = System.currentTimeMillis(),
+      treatmentDate = System.currentTimeMillis(),
+      status = "COMPLETED"
+    )
+    db.mengajiRecordDao().insert(mengajiRec)
+    db.fastingRecordDao().insert(fastingRec)
+    db.medicalRecordDao().insert(medicalRec)
+
+    val vm = com.example.ui.HealthViewModel(app)
+
+    // 1. Login sebagai Wali A di Sekolah A lalu hapus ketiga riwayat
+    val loginResA = vm.executeLogin("wali_del_a1", "Pass#Wali1", rememberMe = false)
+    org.junit.Assert.assertTrue(loginResA is com.example.ui.LoginResult.SuccessWali)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    vm.deleteMengajiRecord(mengajiRec)
+    vm.deleteFastingRecord(fastingRec)
+    vm.deleteRecord(medicalRec)
+
+    var logsInDb: List<com.example.data.model.DeletionLog> = emptyList()
+    for (attempt in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      logsInDb = db.deletionLogDao().getLogsBySchoolList(schoolA)
+      if (logsInDb.size == 3 && vm.deletionLogs.value.size == 3) break
+      kotlinx.coroutines.delay(40)
+    }
+    assertEquals(3, logsInDb.size)
+    assertEquals(3, vm.deletionLogs.value.size)
+
+    // Poin 2 disetujui: Bagi Wali Asuh yang menghapus sendiri, badge lonceng tetap 0!
+    assertEquals(0, vm.unreadDeletionLogsCount.value)
+    org.junit.Assert.assertTrue(logsInDb.all { it.schoolId == schoolA && it.deletedByUsername == "wali_del_a1" })
+
+    // 2. Beralih login ke Wali B (rekan satu sekolah di Sekolah A) -> Badge lonceng harus terisi 3
+    val loginResB = vm.executeLogin("wali_del_a2", "Pass#Wali2", rememberMe = false)
+    org.junit.Assert.assertTrue(loginResB is com.example.ui.LoginResult.SuccessWali)
+    for (attempt in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.unreadDeletionLogsCount.value == 3) break
+      kotlinx.coroutines.delay(40)
+    }
+    assertEquals(3, vm.unreadDeletionLogsCount.value)
+
+    // Setelah Wali B membuka ikon lonceng -> markDeletionLogsRead() mereset badge ke 0 tapi riwayat tetap ada
+    vm.markDeletionLogsRead()
+    for (attempt in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.unreadDeletionLogsCount.value == 0) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(0, vm.unreadDeletionLogsCount.value)
+    assertEquals(3, vm.deletionLogs.value.size)
+
+    // 3. Login ke Wali C di Sekolah C -> Tenant isolation memastikan 0 log & 0 unread count
+    val loginResC = vm.executeLogin("wali_del_c1", "Pass#Wali3", rememberMe = false)
+    org.junit.Assert.assertTrue(loginResC is com.example.ui.LoginResult.SuccessWali)
+    for (attempt in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.deletionLogs.value.isEmpty() && vm.unreadDeletionLogsCount.value == 0) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(0, vm.deletionLogs.value.size)
+    assertEquals(0, vm.unreadDeletionLogsCount.value)
+  }
+
+  @Test
+  fun `verify StudentDetailDialog delete button shows confirmation and invokes callback across Mengaji Berobat and Puasa tabs`() {
+    val student = com.example.data.model.ChildStudent(
+      id = 8801L,
+      name = "Abimanyu Satria Pamungkas",
+      nis = "108346824",
+      gender = "L",
+      age = 16,
+      dormitory = "Asrama Putra",
+      classGrade = "X-4",
+      schoolId = "SRT1-KDR"
+    )
+    val mengajiRec = com.example.data.model.MengajiRecord(
+      id = 701L,
+      studentId = 8801L,
+      studentName = student.name,
+      studentClass = "X-4",
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 1",
+      pageOrVerse = "Hal. 10",
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+      sessionDate = 1763200000000L,
+      waliName = "Ustadz Budi",
+      schoolId = "SRT1-KDR"
+    )
+    val medicalRec = com.example.data.model.MedicalRecord(
+      id = 702L,
+      studentId = 8801L,
+      studentName = student.name,
+      studentDormitory = "Asrama Putra",
+      faskes = "Puskesmas Kediri",
+      complaint = "Demam",
+      diagnosis = "Febris",
+      planDate = 1763200000000L,
+      treatmentDate = 1763200000000L,
+      status = "COMPLETED"
+    )
+    val fastingRec = com.example.data.model.FastingRecord(
+      id = 703L,
+      sessionId = 9001L,
+      sessionTitle = "Puasa Kamis",
+      sessionDate = 1763200000000L,
+      studentId = 8801L,
+      studentName = student.name,
+      studentClass = "X-4",
+      isSahurChecked = true,
+      isBukaChecked = true,
+      waliName = "Ustadz Budi",
+      schoolId = "SRT1-KDR"
+    )
+
+    var deletedMengaji: com.example.data.model.MengajiRecord? = null
+    var deletedMedical: com.example.data.model.MedicalRecord? = null
+    var deletedFasting: com.example.data.model.FastingRecord? = null
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.StudentDetailDialog(
+          student = student,
+          studentRecords = listOf(medicalRec),
+          mengajiRecords = listOf(mengajiRec),
+          fastingRecords = listOf(fastingRec),
+          onDeleteMengajiRecord = { deletedMengaji = it },
+          onDeleteMedicalRecord = { deletedMedical = it },
+          onDeleteFastingRecord = { deletedFasting = it },
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Tab Mengaji
+    composeTestRule.onNodeWithTag("tab_student_detail_mengaji").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_delete_mengaji_701").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_confirm_delete_student_history").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(701L, deletedMengaji?.id)
+
+    // 2. Tab Berobat
+    composeTestRule.onNodeWithTag("tab_student_detail_berobat").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_delete_medical_702").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_confirm_delete_student_history").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(702L, deletedMedical?.id)
+
+    // 3. Tab Puasa
+    composeTestRule.onNodeWithTag("tab_student_detail_puasa").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_delete_fasting_703").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_confirm_delete_student_history").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(703L, deletedFasting?.id)
+  }
+
+  @Test
+  fun `verify Guru Ngaji account role round-trip, input-only permissions, and login persistence`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val schoolId = "SRT-GURU-NGAJI-01"
+
+    // 1. Verifikasi DTO & skema PocketBase memiliki field role pada wali_accounts
+    val guruDomain = com.example.data.model.WaliAccount(
+      id = 661001L,
+      name = "Ustadz Mansyur",
+      username = "gurumansyur",
+      password = "Ngaji#2026",
+      dormitory = "Umum",
+      phone = "081355556666",
+      role = com.example.data.model.WaliAccount.ROLE_GURU_NGAJI,
+      schoolId = schoolId
+    )
+    val pbGuru = com.example.data.remote.pocketbase.PbWaliAccountDto.fromDomain(guruDomain)
+    assertEquals(com.example.data.model.WaliAccount.ROLE_GURU_NGAJI, pbGuru.role)
+    val restoredGuru = pbGuru.toDomainModel()
+    assertEquals(com.example.data.model.WaliAccount.ROLE_GURU_NGAJI, restoredGuru.role)
+    org.junit.Assert.assertTrue(restoredGuru.isGuruNgaji())
+
+    val waliCol = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS
+      .first { it.collectionName == "wali_accounts" }
+    org.junit.Assert.assertTrue(waliCol.fields.any { it.name == "role" && it.type == "text" })
+
+    // Bersihkan data uji untuk sekolah terkait
+    db.waliAccountDao().deleteBySchoolId(schoolId)
+    db.childStudentDao().deleteBySchoolId(schoolId)
+    db.mengajiRecordDao().deleteBySchoolId(schoolId)
+    db.deletionLogDao().deleteBySchoolId(schoolId)
+
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "Sekolah Uji Guru Ngaji",
+        address = "Jl. Pesantren No. 7",
+        city = "Kediri",
+        estimatedWaliCount = 4,
+        picName = "Admin Sekolah",
+        picEmail = "admin@ngaji.id",
+        picPhone = "081234",
+        status = "APPROVED",
+        generatedSchoolCode = schoolId,
+        generatedAdminUsername = "admin_guru_ngaji",
+        generatedAdminPassword = "Admin#Ngaji1"
+      )
+    )
+
+    val putra = com.example.data.model.ChildStudent(
+      id = 662001L,
+      name = "Ahmad Putra",
+      nis = "662001",
+      gender = "L",
+      age = 14,
+      dormitory = "Asrama Putra",
+      classGrade = "VIII-A",
+      schoolId = schoolId
+    )
+    val putri = com.example.data.model.ChildStudent(
+      id = 662002L,
+      name = "Aisyah Putri",
+      nis = "662002",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "VII-B",
+      schoolId = schoolId
+    )
+    db.childStudentDao().insert(putra)
+    db.childStudentDao().insert(putri)
+
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.switchRoleToAdmin()
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = schoolId,
+        schoolName = "Sekolah Uji Guru Ngaji",
+        shortName = "Sekolah Ngaji"
+      )
+    )
+
+    // 2. Admin membuat akun Guru Ngaji
+    var createdAccount: com.example.data.model.WaliAccount? = null
+    vm.addWaliAccount(
+      name = "Ustadz Mansyur",
+      username = "gurumansyur",
+      dormitory = "Umum",
+      phone = "081355556666",
+      customPassword = "Ngaji#2026",
+      role = com.example.data.model.WaliAccount.ROLE_GURU_NGAJI
+    ) { acc ->
+      createdAccount = acc
+    }
+    for (attempt in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (createdAccount != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    org.junit.Assert.assertNotNull(createdAccount)
+    assertEquals(com.example.data.model.WaliAccount.ROLE_GURU_NGAJI, createdAccount?.role)
+
+    // 3. Login sebagai Guru Ngaji -> masuk ke SuccessGuruNgaji + UserRole.GURU_NGAJI + rememberMe=true
+    val loginRes = vm.executeLogin("gurumansyur", "Ngaji#2026", rememberMe = true)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessGuruNgaji)
+    assertEquals(com.example.ui.UserRole.GURU_NGAJI, vm.currentUserRole.value)
+    assertEquals("Ustadz Mansyur", vm.waliName.value)
+
+    // Tunggu students termuat (harus mencakup Putra & Putri)
+    for (attempt in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.students.value.size == 2) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(2, vm.students.value.size)
+
+    // 4. Guru Ngaji BISA input setoran untuk Putra & Putri
+    var savedPutra = false
+    var savedPutri = false
+    vm.saveMengajiRecord(
+      student = putra,
+      sessionDate = System.currentTimeMillis(),
+      bookType = "Al-Qur'an",
+      jilidOrJuz = "Juz 30",
+      pageOrVerse = "An-Naba 1-15",
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+      notes = "Tajwid bagus"
+    ) { ok, _ -> savedPutra = ok }
+    vm.saveMengajiRecord(
+      student = putri,
+      sessionDate = System.currentTimeMillis(),
+      bookType = "Iqro'",
+      jilidOrJuz = "Jilid 4",
+      pageOrVerse = "Hal. 12",
+      fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_TIDAK_LANCAR,
+      notes = "Perlu murajaah mad"
+    ) { ok, _ -> savedPutri = ok }
+
+    var schoolRecords: List<com.example.data.model.MengajiRecord> = emptyList()
+    for (attempt in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      schoolRecords = db.mengajiRecordDao().getRecordsBySchoolList(schoolId)
+      if (savedPutra && savedPutri && schoolRecords.size == 2) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(2, schoolRecords.size)
+
+    // 5. Guru Ngaji TIDAK BISA menghapus catatan mengaji (input-only defense)
+    val targetDelete = schoolRecords.first()
+    vm.deleteMengajiRecord(targetDelete)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    kotlinx.coroutines.delay(150)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    val recordsAfterAttemptedDelete = db.mengajiRecordDao().getRecordsBySchoolList(schoolId)
+    assertEquals(2, recordsAfterAttemptedDelete.size)
+    assertEquals(0, db.deletionLogDao().getLogsBySchoolList(schoolId).size)
+
+    // 6. Fresh ViewModel restore sesi rememberMe -> tetap UserRole.GURU_NGAJI
+    val restoredVm = com.example.ui.HealthViewModel(app)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    assertEquals(com.example.ui.UserRole.GURU_NGAJI, restoredVm.currentUserRole.value)
+    assertEquals("gurumansyur", restoredVm.currentUsername.value)
+  }
+
+  @Test
+  fun `verify GuruNgajiScreen displays all students, history without delete buttons, and AddWaliAccountDialog selects Guru Ngaji role`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val schoolId = "SRT-GN-UI-01"
+
+    db.waliAccountDao().deleteBySchoolId(schoolId)
+    db.childStudentDao().deleteBySchoolId(schoolId)
+    db.mengajiRecordDao().deleteBySchoolId(schoolId)
+
+    db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        id = 771001L,
+        name = "Ustadzah Halimah",
+        username = "guruhalimah",
+        password = "Pass#Halimah1",
+        dormitory = "Umum",
+        role = com.example.data.model.WaliAccount.ROLE_GURU_NGAJI,
+        schoolId = schoolId
+      )
+    )
+    db.childStudentDao().insert(
+      com.example.data.model.ChildStudent(
+        id = 772001L,
+        name = "Zaid Putra",
+        nis = "772001",
+        gender = "L",
+        age = 15,
+        dormitory = "Asrama Putra",
+        classGrade = "X-1",
+        schoolId = schoolId
+      )
+    )
+    db.childStudentDao().insert(
+      com.example.data.model.ChildStudent(
+        id = 772002L,
+        name = "Zahra Putri",
+        nis = "772002",
+        gender = "P",
+        age = 14,
+        dormitory = "Asrama Putri",
+        classGrade = "IX-A",
+        schoolId = schoolId
+      )
+    )
+    db.mengajiRecordDao().insert(
+      com.example.data.model.MengajiRecord(
+        id = 773001L,
+        studentId = 772002L,
+        studentName = "Zahra Putri",
+        studentClass = "IX-A",
+        bookType = "Al-Qur'an",
+        jilidOrJuz = "Juz 1",
+        pageOrVerse = "Al-Baqarah 1-10",
+        fluencyStatus = com.example.data.model.MengajiHelper.FLUENCY_LANCAR,
+        sessionDate = System.currentTimeMillis(),
+        waliName = "Ustadzah Halimah",
+        schoolId = schoolId
+      )
+    )
+
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = schoolId,
+        schoolName = "Sekolah UI Guru Ngaji",
+        shortName = "Sekolah UI"
+      )
+    )
+    val loginRes = vm.executeLogin("guruhalimah", "Pass#Halimah1", rememberMe = false)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessGuruNgaji)
+
+    for (attempt in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.students.value.size == 2 && vm.mengajiRecords.value.size == 1) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    var chosenRoleFromDialog: String? = null
+    val showAddDialog = androidx.compose.runtime.mutableStateOf(false)
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        if (showAddDialog.value) {
+          com.example.ui.dialogs.AddWaliAccountDialog(
+            schoolName = "Sekolah UI Guru Ngaji",
+            onDismiss = { showAddDialog.value = false },
+            onConfirm = { _, _, _, _, _, role ->
+              chosenRoleFromDialog = role
+              showAddDialog.value = false
+            }
+          )
+        } else {
+          com.example.ui.screens.GuruNgajiScreen(
+            viewModel = vm,
+            onLogout = {}
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Verifikasi elemen utama GuruNgajiScreen tampil: Input, Scan QR, Kartu PDF, dan kedua siswa Putra & Putri
+    composeTestRule.onNodeWithTag("btn_guru_ngaji_input").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_guru_ngaji_scan_qr").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_guru_ngaji_kartu").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("guru_ngaji_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("guru_ngaji_student_card_772001"))
+    composeTestRule.onNodeWithText("Zaid Putra").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("guru_ngaji_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("guru_ngaji_student_card_772002"))
+    composeTestRule.onNodeWithText("Zahra Putri").assertIsDisplayed()
+
+    // Pindah ke tab Riwayat Setoran dan pastikan TIDAK ada tombol hapus sama sekali
+    composeTestRule.onNodeWithTag("guru_ngaji_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tab_guru_ngaji_history"))
+    composeTestRule.onNodeWithTag("tab_guru_ngaji_history").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("guru_ngaji_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("guru_ngaji_history_item_773001"))
+    composeTestRule.onNodeWithText("Al-Qur'an • Juz 1 • Al-Baqarah 1-10", substring = true).assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_delete_mengaji_773001").assertDoesNotExist()
+
+    // Uji AddWaliAccountDialog memilih peran Guru Ngaji
+    showAddDialog.value = true
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("input_wali_name").performTextInput("Ustadz Yusuf")
+    composeTestRule.onNodeWithTag("chip_add_role_guru_ngaji").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("btn_save_wali_account").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(com.example.data.model.WaliAccount.ROLE_GURU_NGAJI, chosenRoleFromDialog)
+  }
 }
+
 

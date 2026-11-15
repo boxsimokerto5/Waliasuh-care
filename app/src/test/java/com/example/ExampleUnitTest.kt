@@ -111,12 +111,23 @@ class ExampleUnitTest {
         dormitory = "Asrama Putra",
         phone = "081234567890",
         schoolId = "SRT1-KDR"
+      ),
+      com.example.data.model.WaliAccount(
+        id = 2L,
+        name = "Ustadzah Fatimah",
+        username = "ustfatimah",
+        password = "Ngaji#5678",
+        dormitory = "Umum",
+        phone = "081298765432",
+        role = com.example.data.model.WaliAccount.ROLE_GURU_NGAJI,
+        schoolId = "SRT1-KDR"
       )
     )
     val csv = com.example.util.StudentCsvParser.exportWaliToCsv(accounts)
     val lines = csv.lines()
-    assertEquals("Nama Lengkap,Asrama,No WhatsApp,Username,Password", lines[0])
-    assertEquals("Ustadz Ahmad,Asrama Putra,081234567890,ustahmad,Pass#1234", lines[1])
+    assertEquals("Nama Lengkap,Asrama,No WhatsApp,Username,Password,Peran", lines[0])
+    assertEquals("Ustadz Ahmad,Asrama Putra,081234567890,ustahmad,Pass#1234,WALI", lines[1])
+    assertEquals("Ustadzah Fatimah,Umum,081298765432,ustfatimah,Ngaji#5678,GURU_NGAJI", lines[2])
   }
 
   @Test

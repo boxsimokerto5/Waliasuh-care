@@ -2007,6 +2007,9 @@ fun DashboardScreen(
             waliName = waliName,
             mengajiRecords = mengajiRecords,
             fastingRecords = fastingRecords,
+            onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
+            onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
             onDismiss = { modalState.visitStudentForDetail = null }
         )
     }

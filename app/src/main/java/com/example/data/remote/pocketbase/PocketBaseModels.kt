@@ -4,6 +4,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DashboardIconLayoutConfig
+import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -369,9 +370,12 @@ data class PbWaliAccountDto(
     @Json(name = "password") val password: String = "",
     @Json(name = "dormitory") val dormitory: String? = null,
     @Json(name = "phone") val phone: String? = null,
+    @Json(name = "role") val role: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): WaliAccount {
+        val resolvedRole = role?.trim()?.uppercase()?.ifBlank { WaliAccount.ROLE_WALI }
+            ?: WaliAccount.ROLE_WALI
         return WaliAccount(
             id = PocketBaseIdCodec.resolveLocalId(localId, id),
             name = name,
@@ -380,7 +384,8 @@ data class PbWaliAccountDto(
             dormitory = dormitory?.ifBlank { "Asrama Putra" } ?: "Asrama Putra",
             phone = phone ?: "",
             createdAt = createdAt?.takeIf { it > 0L } ?: System.currentTimeMillis(),
-            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            role = resolvedRole
         )
     }
 
@@ -398,6 +403,7 @@ data class PbWaliAccountDto(
                 password = model.password,
                 dormitory = model.dormitory,
                 phone = model.phone,
+                role = model.role.trim().uppercase().ifBlank { WaliAccount.ROLE_WALI },
                 createdAt = model.createdAt
             )
         }
@@ -1167,6 +1173,61 @@ data class PbParentMessageDto(
                 messageContent = model.messageContent,
                 isReadByWali = model.isReadByWali,
                 isReadByParent = model.isReadByParent,
+                createdAt = model.createdAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbDeletionLogDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "category") val category: String = "",
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "record_id") val recordId: Long = 0L,
+    @Json(name = "deleted_summary") val deletedSummary: String? = null,
+    @Json(name = "deleted_by") val deletedBy: String? = null,
+    @Json(name = "deleted_by_username") val deletedByUsername: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): DeletionLog {
+        val now = System.currentTimeMillis()
+        return DeletionLog(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            category = category.trim().uppercase().ifBlank { DeletionLog.CATEGORY_MENGAJI },
+            studentId = studentId,
+            studentName = studentName,
+            studentClass = studentClass.orEmpty(),
+            recordId = recordId,
+            deletedSummary = deletedSummary.orEmpty(),
+            deletedBy = deletedBy?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            deletedByUsername = deletedByUsername.orEmpty(),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: DeletionLog): PbDeletionLogDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "del_log:${model.schoolId}:${model.category}:${model.recordId}:${model.createdAt}"
+            )
+            return PbDeletionLogDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                category = model.category,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentClass = model.studentClass,
+                recordId = model.recordId,
+                deletedSummary = model.deletedSummary,
+                deletedBy = model.deletedBy,
+                deletedByUsername = model.deletedByUsername,
                 createdAt = model.createdAt
             )
         }

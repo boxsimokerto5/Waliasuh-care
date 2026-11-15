@@ -47,6 +47,41 @@ object PasswordGenerator {
         val adminDisplay = schoolProfile.adminName.ifBlank {
             if (isEnglish) "School Administrator" else "Administrator Sekolah"
         }
+        if (account.isGuruNgaji()) {
+            return if (isEnglish) {
+                """
+                    *MENGAJI TEACHER ACCESS CARD — WALI ASUH CARE*
+                    _${schoolDisplay}_
+                    
+                    Dear *${account.name}*,
+                    Here is your official login account (Mengaji Input Portal):
+                    
+                    👤 *Username:* $effectiveUser
+                    🔑 *Password:* ${account.password}
+                    📖 *Access Scope:* Student Mengaji Progress & Card (All Students)
+                    
+                    Use the account above to record and monitor student Mengaji sessions.
+                    
+                    _Sent by Administrator ($adminDisplay)._
+                """.trimIndent()
+            } else {
+                """
+                    *KARTU AKSES LOGIN GURU NGAJI — WALI ASUH CARE*
+                    _${schoolDisplay}_
+                    
+                    Yth. Bapak/Ibu *${account.name}*,
+                    Berikut adalah akun akses resmi khusus untuk **Halaman Mengaji** di aplikasi Wali Asuh Care:
+                    
+                    👤 *Username:* $effectiveUser
+                    🔑 *Password:* ${account.password}
+                    📖 *Hak Akses:* Input Setoran Mengaji & Kartu Mengaji (Semua Siswa)
+                    
+                    Gunakan akun di atas untuk mencatat setoran mengaji santri secara langsung.
+                    
+                    _Pesan ini dikirim oleh Administrator ($adminDisplay)._
+                """.trimIndent()
+            }
+        }
         return if (isEnglish) {
             """
                 *WALI ASUH CARE APP LOGIN ACCESS CARD*

@@ -20,6 +20,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 
+import com.example.data.dao.DeletionLogDao
 import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
@@ -28,6 +29,7 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentMessageDao
+import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
@@ -51,9 +53,10 @@ import com.example.data.model.VisitSession
         VisitSession::class,
         VisitRecord::class,
         ParentAccessLink::class,
-        ParentMessage::class
+        ParentMessage::class,
+        DeletionLog::class
     ],
-    version = 19,
+    version = 21,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -70,6 +73,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun visitRecordDao(): VisitRecordDao
     abstract fun parentAccessLinkDao(): ParentAccessLinkDao
     abstract fun parentMessageDao(): ParentMessageDao
+    abstract fun deletionLogDao(): DeletionLogDao
 
     companion object {
         @Volatile
@@ -357,6 +361,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_19_20 = object : androidx.room.migration.Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS deletion_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        category TEXT NOT NULL,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        recordId INTEGER NOT NULL DEFAULT 0,
+                        deletedSummary TEXT NOT NULL DEFAULT '',
+                        deletedBy TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        deletedByUsername TEXT NOT NULL DEFAULT '',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_20_21 = object : androidx.room.migration.Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE wali_accounts ADD COLUMN role TEXT NOT NULL DEFAULT 'WALI'")
+                } catch (_: Exception) {
+                    // Column may already exist
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -376,7 +412,9 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_15_16,
                         MIGRATION_16_17,
                         MIGRATION_17_18,
-                        MIGRATION_18_19
+                        MIGRATION_18_19,
+                        MIGRATION_19_20,
+                        MIGRATION_20_21
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

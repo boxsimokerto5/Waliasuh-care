@@ -153,6 +153,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "created_at"
     ): Response<PbListResponse<PbParentMessageDto>>
 
+    // --- Deletion Logs (Log Audit Hapus Riwayat) ---
+    @GET("api/collections/deletion_logs/records")
+    suspend fun listDeletionLogs(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbDeletionLogDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(
