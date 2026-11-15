@@ -82,14 +82,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.MedicalRecord
+import com.example.data.model.ShiftMessage
 import com.example.ui.HealthViewModel
 import com.example.ui.components.CategoryHubOverlay
 import com.example.ui.components.DashboardCategoryHub
 import com.example.ui.components.DashboardModalState
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.QuickMenuTiles
+import com.example.ui.components.ShiftMessageDetailSheet
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
+import com.example.ui.components.TodayShiftMessagesStrip
 import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreateFastingSessionDialog
@@ -174,12 +177,34 @@ fun DashboardScreen(
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
     var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
+    var selectedTodayShiftMessageId by remember { mutableStateOf<Long?>(null) }
 
     val todayDateFormatted = remember(s.language) {
         DateUtils.formatFullDate(Calendar.getInstance().timeInMillis)
     }
     val todayShortFormatted = remember(s.language) {
         DateUtils.formatShortDate(Calendar.getInstance().timeInMillis, s.language)
+    }
+
+    val todayShiftMessages = remember(shiftMessages) {
+        shiftMessages
+            .filter { DateUtils.isToday(it.followUpDate) }
+            .sortedWith(
+                compareBy<ShiftMessage> { it.isCompleted }
+                    .thenBy {
+                        when (it.priority) {
+                            "URGENT" -> 0
+                            "SEDANG" -> 1
+                            else -> 2
+                        }
+                    }
+                    .thenByDescending { it.createdAt }
+            )
+    }
+    val selectedTodayShiftMessage = remember(todayShiftMessages, shiftMessages, selectedTodayShiftMessageId) {
+        val targetId = selectedTodayShiftMessageId ?: return@remember null
+        shiftMessages.firstOrNull { it.id == targetId }
+            ?: todayShiftMessages.firstOrNull { it.id == targetId }
     }
 
     val todayPlans = remember(activePlans) {
@@ -214,7 +239,8 @@ fun DashboardScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = 640.dp),
+                    .widthIn(max = 640.dp)
+                    .testTag("dashboard_lazy_list"),
                 contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -728,6 +754,22 @@ fun DashboardScreen(
                             todayVisitsCount = visitRecords.count { DateUtils.isToday(it.visitDate) },
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary()
+                        )
+                    }
+                }
+
+                if (todayShiftMessages.isNotEmpty()) {
+                    item {
+                        TodayShiftMessagesStrip(
+                            messages = todayShiftMessages,
+                            onMessageClick = { msg ->
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedTodayShiftMessageId = msg.id
+                            },
+                            onOpenAllMessages = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.showShiftMessagesSheet = true
+                            }
                         )
                     }
                 }
@@ -1309,6 +1351,20 @@ fun DashboardScreen(
             viewModel = viewModel,
             messages = shiftMessages,
             onDismiss = { modalState.showShiftHistorySheet = false }
+        )
+    }
+
+    selectedTodayShiftMessage?.let { msgDetail ->
+        ShiftMessageDetailSheet(
+            message = msgDetail,
+            onToggleComplete = {
+                TopOnAdManager.onUserActionClick(context)
+                viewModel.toggleShiftMessageCompleted(msgDetail)
+            },
+            onOpenAllMessages = {
+                modalState.showShiftMessagesSheet = true
+            },
+            onDismiss = { selectedTodayShiftMessageId = null }
         )
     }
 

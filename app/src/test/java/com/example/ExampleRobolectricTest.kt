@@ -3602,4 +3602,184 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("tile_laporan_kunjungan").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_siswa_per_kecamatan").assertIsDisplayed()
   }
+
+  @Test
+  fun `verify TodayShiftMessagesStrip hides when empty, shows today's pending and completed cards, and opens full detail`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val now = System.currentTimeMillis()
+    val longMessageText = "Mohon pantau kondisi Ananda Fajar di Asrama Putra setiap 2 jam sekali karena tadi malam sempat demam 38.2 C dan sudah minum paracetamol pukul 04.30 WIB. Pastikan sarapan bubur hangat dahulu."
+
+    val testMessages = androidx.compose.runtime.mutableStateOf<List<com.example.data.model.ShiftMessage>>(emptyList())
+    val openedMessage = androidx.compose.runtime.mutableStateOf<com.example.data.model.ShiftMessage?>(null)
+    var toggledComplete = false
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        androidx.compose.foundation.layout.Column {
+          com.example.ui.components.TodayShiftMessagesStrip(
+            messages = testMessages.value,
+            onMessageClick = { openedMessage.value = it },
+            onOpenAllMessages = {}
+          )
+          openedMessage.value?.let { msg ->
+            com.example.ui.components.ShiftMessageDetailSheet(
+              message = msg,
+              onToggleComplete = {
+                toggledComplete = true
+                openedMessage.value = msg.copy(isCompleted = !msg.isCompleted, completedBy = "Wali Test")
+              },
+              onOpenAllMessages = {},
+              onDismiss = { openedMessage.value = null }
+            )
+          }
+        }
+      }
+    }
+
+    // 1. Empty list -> strip tidak muncul sama sekali
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("today_shift_messages_strip").assertDoesNotExist()
+
+    // 2. Populate today's messages (1 pending + 1 urgent + 1 completed)
+    val msg1 = com.example.data.model.ShiftMessage(
+      id = 101L,
+      title = "Pantau Demam Fajar",
+      followUpDate = now,
+      shift = "Shift Pagi",
+      targetWali = "Ustadz Budi",
+      messageContent = longMessageText,
+      priority = "URGENT",
+      senderName = "Ustadz Ahmad",
+      isCompleted = false
+    )
+    val msg2 = com.example.data.model.ShiftMessage(
+      id = 102L,
+      title = "Obat Sirup Habis",
+      followUpDate = now,
+      shift = "Shift Siang",
+      targetWali = "Semua Wali",
+      messageContent = "Tolong belikan stok sirup paracetamol di apotek depan.",
+      priority = "SEDANG",
+      senderName = "Ustadzah Sari",
+      isCompleted = false
+    )
+    val msgCompleted = com.example.data.model.ShiftMessage(
+      id = 103L,
+      title = "Sudah Ambil Rujukan",
+      followUpDate = now,
+      shift = "Shift Pagi",
+      targetWali = "Semua Wali",
+      messageContent = "Surat rujukan ke Puskesmas Wates sudah diambil oleh wali piket.",
+      priority = "BIASA",
+      senderName = "Ustadzah Rina",
+      isCompleted = true,
+      completedBy = "Ustadz Budi"
+    )
+    testMessages.value = listOf(msg1, msg2, msgCompleted)
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("today_shift_messages_strip").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("today_shift_messages_carousel").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_today_shift_msg_101").assertIsDisplayed()
+
+    // Scroll horizontal carousel to completed card to confirm it stays visible per user choice
+    composeTestRule.onNodeWithTag("today_shift_messages_carousel")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_today_shift_msg_103"))
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_today_shift_msg_103").assertIsDisplayed()
+
+    // Scroll back to card 101 and click to open full detail sheet
+    composeTestRule.onNodeWithTag("today_shift_messages_carousel")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_today_shift_msg_101"))
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_today_shift_msg_101").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("shift_message_detail_sheet").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("shift_message_detail_content").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_toggle_complete_shift_detail").performClick()
+    composeTestRule.waitForIdle()
+    org.junit.Assert.assertTrue(toggledComplete)
+  }
+
+  @Test
+  fun `verify DashboardScreen hides yesterday shift messages and renders today's shift message below Faskes`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.switchRoleToWali()
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+    db.shiftMessageDao().deleteBySchoolId(activeSchool)
+
+    // Insert ONLY yesterday message -> strip must remain hidden
+    val yesterday = System.currentTimeMillis() - 86_400_000L * 2
+    db.shiftMessageDao().insert(
+      com.example.data.model.ShiftMessage(
+        id = 8801L,
+        title = "Pesan Kemarin",
+        followUpDate = yesterday,
+        shift = "Shift Malam",
+        targetWali = "Semua Wali",
+        messageContent = "Tidak boleh muncul di blok pesan hari ini",
+        priority = "BIASA",
+        senderName = "Wali A",
+        schoolId = activeSchool
+      )
+    )
+    kotlinx.coroutines.delay(100)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = "Abisarwan Rafif",
+          activePlans = emptyList(),
+          students = emptyList(),
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {},
+          renderInlineCategoryHub = false
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("today_shift_messages_strip").assertDoesNotExist()
+
+    // Insert 1 message scheduled for TODAY -> strip automatically appears
+    db.shiftMessageDao().insert(
+      com.example.data.model.ShiftMessage(
+        id = 8802L,
+        title = "Cek Suhu Anak Sore",
+        followUpDate = System.currentTimeMillis(),
+        shift = "Shift Sore",
+        targetWali = "Wali Asrama",
+        messageContent = "Pastikan cek suhu ulang pukul 16.00 WIB",
+        priority = "URGENT",
+        senderName = "Ustadzah Nisa",
+        schoolId = activeSchool
+      )
+    )
+    var ticks = 0
+    while (ticks < 25 && vm.shiftMessages.value.none { it.id == 8802L }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      ticks++
+    }
+    composeTestRule.waitForIdle()
+    org.junit.Assert.assertTrue(vm.shiftMessages.value.any { it.id == 8802L })
+    composeTestRule.onNodeWithTag("dashboard_lazy_list")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("today_shift_messages_strip"))
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("today_shift_messages_strip").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_today_shift_msg_8802").assertIsDisplayed()
+  }
 }
