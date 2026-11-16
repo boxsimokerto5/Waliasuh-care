@@ -87,6 +87,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardBannerActionType
 import com.example.data.model.DashboardBannerFeatureTarget
 import com.example.data.model.DashboardBannerItem
+import com.example.data.model.KonselingHelper
 import com.example.data.model.MedicalRecord
 import com.example.data.model.ShiftMessage
 import com.example.data.model.TabunganHelper
@@ -119,6 +120,7 @@ import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.InputHaidDialog
+import com.example.ui.dialogs.InputKonselingDialog
 import com.example.ui.dialogs.InputMengajiDialog
 import com.example.ui.dialogs.InputPuasaDialog
 import com.example.ui.dialogs.InputTabunganDialog
@@ -128,6 +130,10 @@ import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.dialogs.JadwalKunjunganSheet
 import com.example.ui.dialogs.KartuAksesOrangTuaSheet
 import com.example.ui.dialogs.KartuMengajiSheet
+import com.example.ui.dialogs.KonselingFollowUpSheet
+import com.example.ui.dialogs.KonselingGuideDialog
+import com.example.ui.dialogs.KonselingHistoryLogsSheet
+import com.example.ui.dialogs.KonselingStudentDetailSheet
 import com.example.ui.dialogs.LaporanKunjunganSheet
 import com.example.ui.dialogs.PesanOrangTuaSheet
 import com.example.ui.dialogs.PilihAnakAsuhSheet
@@ -193,7 +199,10 @@ fun DashboardScreen(
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val tabunganTransactions by viewModel.tabunganTransactions.collectAsStateWithLifecycle()
     val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
+    val konselingRecords by viewModel.konselingRecords.collectAsStateWithLifecycle()
+    val konselingLogs by viewModel.konselingLogs.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
     val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
@@ -208,11 +217,13 @@ fun DashboardScreen(
     }
     LaunchedEffect(
         modalState.activeCategoryHub,
+        modalState.showInputTabunganDialog,
         modalState.showTabunganStudentListSheet,
         modalState.showTabunganHistoryLogsSheet,
         modalState.tabunganStudentForDetail
     ) {
         if (modalState.activeCategoryHub == DashboardCategoryHub.TABUNGAN ||
+            modalState.showInputTabunganDialog ||
             modalState.showTabunganStudentListSheet ||
             modalState.showTabunganHistoryLogsSheet ||
             modalState.tabunganStudentForDetail != null
@@ -220,10 +231,29 @@ fun DashboardScreen(
             viewModel.syncTabunganOnlineQuietly()
         }
     }
+    LaunchedEffect(
+        modalState.activeCategoryHub,
+        modalState.showInputKonselingDialog,
+        modalState.showKonselingFollowUpSheet,
+        modalState.showKonselingHistoryLogsSheet,
+        modalState.konselingStudentForDetail
+    ) {
+        if (modalState.activeCategoryHub == DashboardCategoryHub.KONSELING ||
+            modalState.showInputKonselingDialog ||
+            modalState.showKonselingFollowUpSheet ||
+            modalState.showKonselingHistoryLogsSheet ||
+            modalState.konselingStudentForDetail != null
+        ) {
+            viewModel.syncKonselingOnlineQuietly()
+        }
+    }
     val tabunganTotals = remember(tabunganTransactions) {
         TabunganHelper.computeAggregateTotals(tabunganTransactions)
     }
-    val myFosterStudents = remember(students, waliName) {
+    val konselingStats = remember(konselingRecords) {
+        KonselingHelper.computeAggregateStats(konselingRecords)
+    }
+    val myFosterStudents = remember(students, waliName, currentUsername) {
         students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
     }
     val myFosterStudentIds = remember(myFosterStudents) {
@@ -245,6 +275,7 @@ fun DashboardScreen(
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
     var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var readyTabunganSummaryPdf by remember { mutableStateOf<File?>(null) }
+    var readyKonselingSummaryPdf by remember { mutableStateOf<File?>(null) }
     var showGridTiles by remember { mutableStateOf(true) }
     var showLayoutEditorSheet by remember { mutableStateOf(false) }
     var showBannerEditorSheet by remember { mutableStateOf(false) }
@@ -332,6 +363,7 @@ fun DashboardScreen(
                     DashboardBannerFeatureTarget.FEATURE_LAPORAN_KUNJUNGAN -> modalState.showLaporanKunjunganSheet = true
                     DashboardBannerFeatureTarget.FEATURE_SISWA_PER_KECAMATAN -> modalState.showSiswaPerKecamatanSheet = true
                     DashboardBannerFeatureTarget.FEATURE_TABUNGAN_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.TABUNGAN
+                    DashboardBannerFeatureTarget.FEATURE_KONSELING_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.KONSELING
 
                     DashboardBannerFeatureTarget.FEATURE_STUDENTS_PAGE -> onNavigateToStudents()
                     DashboardBannerFeatureTarget.FEATURE_PROFILE_PAGE -> onNavigateToProfile()
@@ -948,6 +980,8 @@ fun DashboardScreen(
                             myFosterStudentsCount = myFosterStudentsCount,
                             tabunganTotalBalance = tabunganTotals.totalBalance,
                             tabunganHoldersCount = tabunganTotals.holdersCount,
+                            konselingFollowUpCount = konselingStats.followUpCount,
+                            konselingTotalCount = konselingStats.totalEntries,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
                             iconOrder = dashboardIconOrder,
@@ -1227,6 +1261,7 @@ fun DashboardScreen(
                 claimedFosterStudents = myFosterStudents,
                 isAnakSuperAdmin = isAnakSuperAdmin,
                 onOpenInputTabungan = { defaultType, targetStudent ->
+                    modalState.tabunganTxToEdit = null
                     modalState.inputTabunganDefaultType = defaultType
                     modalState.inputTabunganTargetStudent = targetStudent
                     modalState.showInputTabunganDialog = true
@@ -1238,11 +1273,11 @@ fun DashboardScreen(
                     modalState.showTabunganHistoryLogsSheet = true
                 },
                 onOpenTabunganPdfSummary = {
-                    val summaryStudents = if (myFosterStudents.isNotEmpty()) {
-                        myFosterStudents
-                    } else {
-                        students.filter { st -> tabunganTransactions.any { tx -> TabunganHelper.matchesStudent(tx, st) } }
-                    }
+                    val summaryStudents = TabunganHelper.buildSummaryStudents(
+                        myFosterStudents = myFosterStudents,
+                        allStudents = students,
+                        transactions = tabunganTransactions
+                    )
                     val pdf = PdfReportGenerator.generateTabunganSummaryPdf(
                         context = context,
                         students = summaryStudents,
@@ -1256,6 +1291,39 @@ fun DashboardScreen(
                         Toast.makeText(
                             context,
                             if (isEn) "Failed to generate savings recap PDF." else "Gagal membuat PDF rekap tabungan.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                konselingRecords = konselingRecords,
+                konselingLogs = konselingLogs,
+                onOpenInputKonseling = { defaultEntryType, targetStudent ->
+                    modalState.konselingRecordToEdit = null
+                    modalState.inputKonselingDefaultEntryType = defaultEntryType
+                    modalState.inputKonselingTargetStudent = targetStudent
+                    modalState.showInputKonselingDialog = true
+                },
+                onOpenKonselingFollowUp = { modalState.showKonselingFollowUpSheet = true },
+                onOpenKonselingStudentDetail = { student -> modalState.konselingStudentForDetail = student },
+                onOpenKonselingHistory = { initialTab ->
+                    modalState.konselingHistoryInitialTab = initialTab
+                    modalState.showKonselingHistoryLogsSheet = true
+                },
+                onOpenKonselingGuide = { modalState.showKonselingGuideDialog = true },
+                onOpenKonselingPdfSummary = {
+                    val pdf = PdfReportGenerator.generateKonselingSummaryPdf(
+                        context = context,
+                        students = myFosterStudents,
+                        records = konselingRecords,
+                        waliName = waliName,
+                        schoolProfile = schoolProfile
+                    )
+                    if (pdf != null) {
+                        readyKonselingSummaryPdf = pdf
+                    } else {
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Failed to generate confidential counseling PDF." else "Gagal membuat PDF rekap konseling rahasia.",
                             Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -2276,7 +2344,7 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Tabungan 1: Input Titip Masuk (+) / Pengeluaran (-)
+    // Modal Tabungan 1: Input / Edit Titip Masuk (+) / Pengeluaran (-)
     if (modalState.showInputTabunganDialog) {
         InputTabunganDialog(
             claimedStudents = myFosterStudents,
@@ -2284,26 +2352,48 @@ fun DashboardScreen(
             transactions = tabunganTransactions,
             defaultType = modalState.inputTabunganDefaultType,
             initialStudent = modalState.inputTabunganTargetStudent,
+            txToEdit = modalState.tabunganTxToEdit,
             isAnakSuperAdmin = isAnakSuperAdmin,
             onOpenPilihAnakAsuh = { modalState.showPilihAnakAsuhSheet = true },
-            onSave = { targetStudent, txType, amount, title, notes ->
-                viewModel.saveTabunganTransaction(
-                    student = targetStudent,
-                    transactionType = txType,
-                    amount = amount,
-                    title = title,
-                    notes = notes
-                ) { ok, msg ->
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    if (ok) {
-                        modalState.showInputTabunganDialog = false
-                        modalState.inputTabunganTargetStudent = null
+            onSave = { targetStudent, txType, amount, title, notes, transactionDate, existingTx ->
+                if (existingTx != null) {
+                    viewModel.editTabunganTransaction(
+                        existingTx = existingTx,
+                        transactionType = txType,
+                        amount = amount,
+                        title = title,
+                        notes = notes,
+                        transactionDate = transactionDate
+                    ) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) {
+                            modalState.showInputTabunganDialog = false
+                            modalState.inputTabunganTargetStudent = null
+                            modalState.tabunganTxToEdit = null
+                        }
+                    }
+                } else {
+                    viewModel.saveTabunganTransaction(
+                        student = targetStudent,
+                        transactionType = txType,
+                        amount = amount,
+                        title = title,
+                        notes = notes,
+                        transactionDate = transactionDate
+                    ) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) {
+                            modalState.showInputTabunganDialog = false
+                            modalState.inputTabunganTargetStudent = null
+                            modalState.tabunganTxToEdit = null
+                        }
                     }
                 }
             },
             onDismiss = {
                 modalState.showInputTabunganDialog = false
                 modalState.inputTabunganTargetStudent = null
+                modalState.tabunganTxToEdit = null
             }
         )
     }
@@ -2320,6 +2410,7 @@ fun DashboardScreen(
                 modalState.tabunganStudentForDetail = selectedSt
             },
             onQuickDeposit = { selectedSt ->
+                modalState.tabunganTxToEdit = null
                 modalState.inputTabunganDefaultType = TabunganHelper.TYPE_IN
                 modalState.inputTabunganTargetStudent = selectedSt
                 modalState.showInputTabunganDialog = true
@@ -2329,13 +2420,18 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Tabungan 3: Pop-Up Detail Tabungan Anak (Pemasukan, Pengeluaran, Batalkan, Hapus & Log)
+    // Modal Tabungan 3: Pop-Up Detail Tabungan Anak (Pemasukan, Pengeluaran, Ubah, Batalkan, Hapus & Log)
     modalState.tabunganStudentForDetail?.let { detailStudent ->
         val studentTxs = remember(tabunganTransactions, detailStudent) {
             tabunganTransactions.filter { TabunganHelper.matchesStudent(it, detailStudent) }
         }
-        val studentLogs = remember(tabunganLogs, detailStudent) {
-            tabunganLogs.filter { it.studentId == detailStudent.id || it.studentName.equals(detailStudent.name, ignoreCase = true) }
+        val studentTxIds = remember(studentTxs) { studentTxs.map { it.id }.toSet() }
+        val studentLogs = remember(tabunganLogs, detailStudent, studentTxIds) {
+            tabunganLogs.filter { log ->
+                (detailStudent.id > 0L && log.studentId == detailStudent.id) ||
+                    (log.transactionId > 0L && log.transactionId in studentTxIds) ||
+                    (log.studentId <= 0L && log.studentName.equals(detailStudent.name, ignoreCase = true))
+            }
         }
         TabunganStudentDetailSheet(
             student = detailStudent,
@@ -2344,7 +2440,14 @@ fun DashboardScreen(
             waliName = waliName,
             schoolProfile = schoolProfile,
             onQuickInput = { type ->
+                modalState.tabunganTxToEdit = null
                 modalState.inputTabunganDefaultType = type
+                modalState.inputTabunganTargetStudent = detailStudent
+                modalState.showInputTabunganDialog = true
+            },
+            onEditTransaction = { tx ->
+                modalState.tabunganTxToEdit = tx
+                modalState.inputTabunganDefaultType = tx.transactionType
                 modalState.inputTabunganTargetStudent = detailStudent
                 modalState.showInputTabunganDialog = true
             },
@@ -2365,11 +2468,11 @@ fun DashboardScreen(
     // Modal Tabungan 4: Riwayat Transaksi & Log Audit Pribadi
     if (modalState.showTabunganHistoryLogsSheet) {
         val summaryStudents = remember(myFosterStudents, students, tabunganTransactions) {
-            if (myFosterStudents.isNotEmpty()) {
-                myFosterStudents
-            } else {
-                students.filter { st -> tabunganTransactions.any { tx -> TabunganHelper.matchesStudent(tx, st) } }
-            }
+            TabunganHelper.buildSummaryStudents(
+                myFosterStudents = myFosterStudents,
+                allStudents = students,
+                transactions = tabunganTransactions
+            )
         }
         TabunganHistoryLogsSheet(
             transactions = tabunganTransactions,
@@ -2379,12 +2482,30 @@ fun DashboardScreen(
             schoolProfile = schoolProfile,
             initialTab = modalState.tabunganHistoryInitialTab,
             onOpenStudentById = { studentId ->
-                val target = myFosterStudents.firstOrNull { it.id == studentId }
-                    ?: students.firstOrNull { it.id == studentId }
+                val target = TabunganHelper.resolveStudentByIdOrFallback(
+                    studentId = studentId,
+                    myFosterStudents = myFosterStudents,
+                    allStudents = students,
+                    transactions = tabunganTransactions,
+                    logs = tabunganLogs
+                )
                 if (target != null) {
                     modalState.showTabunganHistoryLogsSheet = false
                     modalState.tabunganStudentForDetail = target
                 }
+            },
+            onEditTransaction = { tx ->
+                val target = TabunganHelper.resolveStudentByIdOrFallback(
+                    studentId = tx.studentId,
+                    myFosterStudents = myFosterStudents,
+                    allStudents = students,
+                    transactions = tabunganTransactions,
+                    logs = tabunganLogs
+                )
+                modalState.tabunganTxToEdit = tx
+                modalState.inputTabunganDefaultType = tx.transactionType
+                modalState.inputTabunganTargetStudent = target
+                modalState.showInputTabunganDialog = true
             },
             onCancelTransaction = { tx, reason ->
                 viewModel.cancelTabunganTransaction(tx, reason) { _, msg ->
@@ -2429,6 +2550,234 @@ fun DashboardScreen(
                             pdfFile = file,
                             subject = if (isEn) "Private Savings Recap" else "Rekap Tabungan Anak Binaan",
                             text = if (isEn) "Attached is the private student savings balance recap PDF." else "Terlampir rekap saldo tabungan pribadi wali asuh."
+                        )
+                    }
+                ) {
+                    Text(if (isEn) "Share PDF" else "Bagikan")
+                }
+            }
+        )
+    }
+
+    // =====================================================================
+    // MODUL KONSELING RAHASIA WALI ASUH (HANYA DILIHAT WALI BERSANGKUTAN)
+    // =====================================================================
+    if (modalState.showInputKonselingDialog) {
+        InputKonselingDialog(
+            claimedStudents = myFosterStudents,
+            defaultEntryType = modalState.inputKonselingDefaultEntryType,
+            initialStudent = modalState.inputKonselingTargetStudent,
+            recordToEdit = modalState.konselingRecordToEdit,
+            onOpenPilihAnakAsuh = {
+                modalState.showInputKonselingDialog = false
+                modalState.showPilihAnakAsuhSheet = true
+            },
+            onSave = { student, entryType, topic, urgencyLevel, moodLevel, title, summary, intervention, followUpPlan, followUpDate, sessionDate, markCompleted, existingRecord ->
+                TopOnAdManager.onUserActionClick(context)
+                if (existingRecord == null) {
+                    viewModel.saveKonselingRecord(
+                        student = student,
+                        entryType = entryType,
+                        topic = topic,
+                        urgencyLevel = urgencyLevel,
+                        moodLevel = moodLevel,
+                        title = title,
+                        summary = summary,
+                        intervention = intervention,
+                        followUpPlan = followUpPlan,
+                        followUpDate = followUpDate,
+                        sessionDate = sessionDate,
+                        markCompleted = markCompleted
+                    ) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) {
+                            modalState.showInputKonselingDialog = false
+                            modalState.konselingRecordToEdit = null
+                            modalState.inputKonselingTargetStudent = null
+                        }
+                    }
+                } else {
+                    viewModel.editKonselingRecord(
+                        existingRecord = existingRecord,
+                        entryType = entryType,
+                        topic = topic,
+                        urgencyLevel = urgencyLevel,
+                        moodLevel = moodLevel,
+                        title = title,
+                        summary = summary,
+                        intervention = intervention,
+                        followUpPlan = followUpPlan,
+                        followUpDate = followUpDate,
+                        sessionDate = sessionDate,
+                        markCompleted = markCompleted
+                    ) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) {
+                            modalState.showInputKonselingDialog = false
+                            modalState.konselingRecordToEdit = null
+                            modalState.inputKonselingTargetStudent = null
+                        }
+                    }
+                }
+            },
+            onDismiss = {
+                modalState.showInputKonselingDialog = false
+                modalState.konselingRecordToEdit = null
+                modalState.inputKonselingTargetStudent = null
+            }
+        )
+    }
+
+    modalState.konselingStudentForDetail?.let { detailStudent ->
+        val studentRecs = remember(konselingRecords, detailStudent) {
+            konselingRecords.filter { KonselingHelper.matchesStudent(it, detailStudent) }
+        }
+        val studentLogItems = remember(konselingLogs, detailStudent) {
+            konselingLogs.filter {
+                it.studentId == detailStudent.id ||
+                    it.studentName.equals(detailStudent.name, ignoreCase = true)
+            }
+        }
+        KonselingStudentDetailSheet(
+            student = detailStudent,
+            studentRecords = studentRecs,
+            studentLogs = studentLogItems,
+            waliName = waliName,
+            schoolProfile = schoolProfile,
+            onQuickInput = { entryType ->
+                modalState.konselingRecordToEdit = null
+                modalState.inputKonselingDefaultEntryType = entryType
+                modalState.inputKonselingTargetStudent = detailStudent
+                modalState.showInputKonselingDialog = true
+            },
+            onEditRecord = { rec ->
+                modalState.konselingRecordToEdit = rec
+                modalState.inputKonselingDefaultEntryType = rec.entryType
+                modalState.inputKonselingTargetStudent = detailStudent
+                modalState.showInputKonselingDialog = true
+            },
+            onToggleStatus = { rec ->
+                viewModel.toggleKonselingStatus(rec) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDeleteRecord = { rec ->
+                viewModel.deleteKonselingRecord(rec) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.konselingStudentForDetail = null }
+        )
+    }
+
+    if (modalState.showKonselingFollowUpSheet) {
+        KonselingFollowUpSheet(
+            records = konselingRecords,
+            onOpenStudentById = { studentId ->
+                val target = KonselingHelper.resolveStudentByIdOrFallback(
+                    studentId = studentId,
+                    myFosterStudents = myFosterStudents,
+                    records = konselingRecords,
+                    logs = konselingLogs
+                )
+                if (target != null) {
+                    modalState.showKonselingFollowUpSheet = false
+                    modalState.konselingStudentForDetail = target
+                }
+            },
+            onToggleStatus = { rec ->
+                viewModel.toggleKonselingStatus(rec) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showKonselingFollowUpSheet = false }
+        )
+    }
+
+    if (modalState.showKonselingHistoryLogsSheet) {
+        KonselingHistoryLogsSheet(
+            records = konselingRecords,
+            logs = konselingLogs,
+            studentsForSummary = myFosterStudents,
+            waliName = waliName,
+            schoolProfile = schoolProfile,
+            initialTab = modalState.konselingHistoryInitialTab,
+            onOpenStudentById = { studentId ->
+                val target = KonselingHelper.resolveStudentByIdOrFallback(
+                    studentId = studentId,
+                    myFosterStudents = myFosterStudents,
+                    records = konselingRecords,
+                    logs = konselingLogs
+                )
+                if (target != null) {
+                    modalState.showKonselingHistoryLogsSheet = false
+                    modalState.konselingStudentForDetail = target
+                }
+            },
+            onEditRecord = { rec ->
+                val target = KonselingHelper.resolveStudentByIdOrFallback(
+                    studentId = rec.studentId,
+                    myFosterStudents = myFosterStudents,
+                    records = konselingRecords,
+                    logs = konselingLogs
+                )
+                modalState.konselingRecordToEdit = rec
+                modalState.inputKonselingDefaultEntryType = rec.entryType
+                modalState.inputKonselingTargetStudent = target
+                modalState.showInputKonselingDialog = true
+            },
+            onToggleStatus = { rec ->
+                viewModel.toggleKonselingStatus(rec) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDeleteRecord = { rec ->
+                viewModel.deleteKonselingRecord(rec) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showKonselingHistoryLogsSheet = false }
+        )
+    }
+
+    if (modalState.showKonselingGuideDialog) {
+        KonselingGuideDialog(
+            onDismiss = { modalState.showKonselingGuideDialog = false }
+        )
+    }
+
+    readyKonselingSummaryPdf?.let { file ->
+        AlertDialog(
+            onDismissRequest = { readyKonselingSummaryPdf = null },
+            title = { Text(if (isEn) "Confidential Counseling PDF Ready" else "PDF Rekap Konseling Rahasia Siap") },
+            text = {
+                Text(
+                    if (isEn) {
+                        "Strictly confidential for your Wali Asuh account only. Choose to open or share carefully."
+                    } else {
+                        "Dokumen bersifat RAHASIA dan hanya untuk Wali Asuh bersangkutan. Pilih untuk membuka atau membagikan secara terbatas."
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        readyKonselingSummaryPdf = null
+                        PdfReportGenerator.openPdfFile(context, file)
+                    }
+                ) {
+                    Text(if (isEn) "Open PDF" else "Buka PDF")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        readyKonselingSummaryPdf = null
+                        PdfReportGenerator.shareFastingPdf(
+                            context = context,
+                            pdfFile = file,
+                            subject = if (isEn) "Confidential Counseling Recap" else "Rekap Konseling Rahasia Wali Asuh",
+                            text = if (isEn) "Attached is the confidential foster student counseling recap PDF." else "Terlampir rekap konseling rahasia anak binaan Wali Asuh."
                         )
                     }
                 ) {

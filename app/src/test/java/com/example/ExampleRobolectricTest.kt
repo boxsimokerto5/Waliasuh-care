@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -622,7 +623,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(16, jsonSchema.length())
+    assertEquals(20, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -644,7 +645,11 @@ class ExampleRobolectricTest {
       "parent_access_links",
       "parent_messages",
       "dashboard_banners",
-      "deletion_logs"
+      "deletion_logs",
+      "tabungan_transactions",
+      "tabungan_logs",
+      "konseling_records",
+      "konseling_logs"
     )
     expectedCollections.forEach { col ->
       org.junit.Assert.assertTrue(
@@ -653,7 +658,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(16, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(20, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -4152,7 +4157,7 @@ class ExampleRobolectricTest {
           isAdmin = false,
           onOpenPilihAnakAsuh = { claimedState.value = true },
           onEnsureAccessLink = {},
-          onUpdatePermissions = { _, _, _, _, _, canProfile ->
+          onUpdatePermissions = { _, _, _, _, _, canProfile, _ ->
             lastUpdatedProfile.value = canProfile
           },
           onDismiss = {}
@@ -4338,7 +4343,9 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.ANAK_ASUH,
       com.example.data.model.DashboardIconKey.HAID,
       com.example.data.model.DashboardIconKey.PESAN,
-      com.example.data.model.DashboardIconKey.BEROBAT
+      com.example.data.model.DashboardIconKey.BEROBAT,
+      com.example.data.model.DashboardIconKey.TABUNGAN,
+      com.example.data.model.DashboardIconKey.KONSELING
     )
     var saveOk = false
     vm.saveDashboardIconOrder(customOrder) { success, _ -> saveOk = success }
@@ -4383,7 +4390,9 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.ORANG_TUA,
       com.example.data.model.DashboardIconKey.ANAK_ASUH,
       com.example.data.model.DashboardIconKey.PUASA,
-      com.example.data.model.DashboardIconKey.PESAN
+      com.example.data.model.DashboardIconKey.PESAN,
+      com.example.data.model.DashboardIconKey.TABUNGAN,
+      com.example.data.model.DashboardIconKey.KONSELING
     )
     vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
     org.junit.Assert.assertEquals(cloudOrder, vm.dashboardIconOrder.value)
@@ -4594,7 +4603,9 @@ class ExampleRobolectricTest {
     app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
 
     val db = com.example.data.database.AppDatabase.getDatabase(app)
-    db.schoolRegistrationDao().deleteBySchoolCode("SRT-SBY02")
+    db.schoolRegistrationDao().getAllRegistrationsList().forEach {
+      db.schoolRegistrationDao().delete(it)
+    }
     db.schoolRegistrationDao().insert(
       com.example.data.model.SchoolRegistration(
         schoolName = "Sekolah Rakyat Sidoarjo",
@@ -4654,7 +4665,7 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("card_anaksuperadmin_school_switcher").assertIsDisplayed()
     composeTestRule.onNodeWithTag("dropdown_anaksuperadmin_school").assertIsDisplayed().performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("school_option_SRT-SBY02").assertIsDisplayed().performClick()
+    composeTestRule.onNodeWithTag("school_option_SRT-SBY02").performScrollTo().assertIsDisplayed().performClick()
     for (i in 1..25) {
       org.robolectric.shadows.ShadowLooper.idleMainLooper()
       if (vm.schoolProfile.value.tenantCode == "SRT-SBY02") break
@@ -5560,6 +5571,1235 @@ class ExampleRobolectricTest {
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("category_mengaji"))
     composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_anak_asuh").assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify TabunganHelper privacy isolation summary aggregation NIS fallback and student resolution`() {
+    val schoolA = "SCH-TAB-01"
+    val student1 = com.example.data.model.ChildStudent(
+      id = 88101L,
+      name = "Farhan Maulana",
+      nis = "31988101",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-A",
+      assignedWaliUsername = "walia",
+      assignedWaliName = "Ustadz Ali",
+      schoolId = schoolA
+    )
+    val student1DupId = student1.copy(id = 999101L)
+
+    val txs = listOf(
+      com.example.data.model.TabunganTransaction(
+        id = 1L,
+        studentId = 88101L,
+        studentName = "Farhan Maulana",
+        studentNis = "31988101",
+        ownerWaliUsername = "walia",
+        ownerWaliName = "Ustadz Ali",
+        transactionType = com.example.data.model.TabunganHelper.TYPE_IN,
+        amount = 50_000L,
+        title = "Titip Mingguan",
+        status = com.example.data.model.TabunganHelper.STATUS_ACTIVE,
+        schoolId = schoolA
+      ),
+      com.example.data.model.TabunganTransaction(
+        id = 2L,
+        studentId = 999101L, // Different synthetic ID, same NIS
+        studentName = "Farhan Maulana",
+        studentNis = "31988101",
+        ownerWaliUsername = "walia",
+        ownerWaliName = "Ustadz Ali",
+        transactionType = com.example.data.model.TabunganHelper.TYPE_OUT,
+        amount = 15_000L,
+        title = "Beli Buku",
+        status = com.example.data.model.TabunganHelper.STATUS_ACTIVE,
+        schoolId = schoolA
+      ),
+      com.example.data.model.TabunganTransaction(
+        id = 3L,
+        studentId = 88101L,
+        studentName = "Farhan Maulana",
+        studentNis = "31988101",
+        ownerWaliUsername = "walia",
+        ownerWaliName = "Ustadz Ali",
+        transactionType = com.example.data.model.TabunganHelper.TYPE_OUT,
+        amount = 10_000L,
+        title = "Batal Jajan",
+        status = com.example.data.model.TabunganHelper.STATUS_CANCELLED,
+        schoolId = schoolA
+      ),
+      com.example.data.model.TabunganTransaction(
+        id = 4L,
+        studentId = 88102L,
+        studentName = "Bilal Haidar",
+        studentNis = "31988102",
+        ownerWaliUsername = "walib",
+        ownerWaliName = "Ustadz Budi",
+        transactionType = com.example.data.model.TabunganHelper.TYPE_IN,
+        amount = 80_000L,
+        title = "Kiriman Ortu",
+        status = com.example.data.model.TabunganHelper.STATUS_ACTIVE,
+        schoolId = schoolA
+      )
+    )
+
+    val logs = listOf(
+      com.example.data.model.TabunganLog(
+        id = 11L,
+        transactionId = 1L,
+        studentId = 88101L,
+        studentName = "Farhan Maulana",
+        ownerWaliUsername = "walia",
+        ownerWaliName = "Ustadz Ali",
+        actionType = com.example.data.model.TabunganHelper.LOG_INPUT_IN,
+        amount = 50_000L,
+        balanceBefore = 0L,
+        balanceAfter = 50_000L,
+        schoolId = schoolA
+      ),
+      com.example.data.model.TabunganLog(
+        id = 12L,
+        transactionId = 4L,
+        studentId = 88102L,
+        studentName = "Bilal Haidar",
+        ownerWaliUsername = "walib",
+        ownerWaliName = "Ustadz Budi",
+        actionType = com.example.data.model.TabunganHelper.LOG_INPUT_IN,
+        amount = 80_000L,
+        balanceBefore = 0L,
+        balanceAfter = 80_000L,
+        schoolId = schoolA
+      )
+    )
+
+    // Strict privacy isolation per role
+    val waliATxs = com.example.data.model.TabunganHelper.filterPrivateTransactions(
+      txs, schoolA, com.example.ui.UserRole.WALI, isAnakSuperAdmin = false, currentUsername = "walia", currentWaliName = "Ustadz Ali"
+    )
+    assertEquals(3, waliATxs.size)
+    val waliBTxs = com.example.data.model.TabunganHelper.filterPrivateTransactions(
+      txs, schoolA, com.example.ui.UserRole.WALI, isAnakSuperAdmin = false, currentUsername = "walib", currentWaliName = "Ustadz Budi"
+    )
+    assertEquals(1, waliBTxs.size)
+    assertEquals(0, com.example.data.model.TabunganHelper.filterPrivateTransactions(
+      txs, schoolA, com.example.ui.UserRole.ADMIN, isAnakSuperAdmin = false, currentUsername = "admin", currentWaliName = "Admin"
+    ).size)
+    assertEquals(0, com.example.data.model.TabunganHelper.filterPrivateTransactions(
+      txs, schoolA, com.example.ui.UserRole.GURU_NGAJI, isAnakSuperAdmin = false, currentUsername = "guru", currentWaliName = "Guru"
+    ).size)
+    assertEquals(4, com.example.data.model.TabunganHelper.filterPrivateTransactions(
+      txs, schoolA, com.example.ui.UserRole.WALI, isAnakSuperAdmin = true, currentUsername = "anaksuperadmin", currentWaliName = "Anak Super"
+    ).size)
+    assertEquals(1, com.example.data.model.TabunganHelper.filterPrivateLogs(
+      logs, schoolA, com.example.ui.UserRole.WALI, isAnakSuperAdmin = false, currentUsername = "walia", currentWaliName = "Ustadz Ali"
+    ).size)
+
+    // Summary & NIS fallback & multi-ID deduplication
+    val summary = com.example.data.model.TabunganHelper.computeSummaryForStudent(waliATxs, student1DupId)
+    assertEquals(50_000L, summary.totalIn)
+    assertEquals(15_000L, summary.totalOut)
+    assertEquals(35_000L, summary.balance)
+    assertEquals(2, summary.activeCount)
+    assertEquals(1, summary.cancelledCount)
+
+    val byIdSummary = com.example.data.model.TabunganHelper.computeSummaryByStudentId(waliATxs, 88101L, "31988101")
+    assertEquals(35_000L, byIdSummary.balance)
+
+    val aggWaliA = com.example.data.model.TabunganHelper.computeAggregateTotals(waliATxs)
+    assertEquals(35_000L, aggWaliA.totalBalance)
+    assertEquals(1, aggWaliA.holdersCount) // Two active txs across 2 IDs with same NIS count as 1 holder
+
+    val summaryStudents = com.example.data.model.TabunganHelper.buildSummaryStudents(
+      myFosterStudents = emptyList(),
+      allStudents = listOf(student1),
+      transactions = txs
+    )
+    assertEquals(2, summaryStudents.size)
+    assertNotNull(
+      com.example.data.model.TabunganHelper.resolveStudentByIdOrFallback(
+        studentId = 88102L,
+        myFosterStudents = emptyList(),
+        allStudents = emptyList(),
+        transactions = txs,
+        logs = logs
+      )
+    )
+    assertEquals("Diubah", com.example.data.model.TabunganHelper.logActionLabel(com.example.data.model.TabunganHelper.LOG_EDIT, isEn = false))
+    assertEquals("Edited", com.example.data.model.TabunganHelper.logActionLabel(com.example.data.model.TabunganHelper.LOG_EDIT, isEn = true))
+  }
+
+  @Test
+  fun `verify HealthViewModel Tabungan CRUD edit overdraft guards privacy and ParentPortal access`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val schoolId = "SCH-TAB-VM"
+    db.tabunganTransactionDao().deleteBySchoolId(schoolId)
+    db.tabunganLogDao().deleteBySchoolId(schoolId)
+    db.deletionLogDao().deleteBySchoolId(schoolId)
+    db.parentAccessLinkDao().deleteBySchoolId(schoolId)
+    db.childStudentDao().deleteBySchoolId(schoolId)
+    db.waliAccountDao().deleteBySchoolId(schoolId)
+
+    db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        id = 882001L,
+        name = "Ustadz Hasan",
+        username = "walihasan",
+        password = "Pass#Hasan1",
+        dormitory = "Asrama Putra",
+        role = com.example.data.model.WaliAccount.ROLE_WALI,
+        schoolId = schoolId
+      )
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 882011L,
+      name = "Rafi Pratama",
+      nis = "31988211",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama Putra",
+      classGrade = "VIII-B",
+      assignedWaliUsername = "walihasan",
+      assignedWaliName = "Ustadz Hasan",
+      schoolId = schoolId
+    )
+    db.childStudentDao().insert(student)
+
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.updateSchoolProfile(
+      com.example.data.model.SchoolProfile(
+        tenantCode = schoolId,
+        schoolName = "Pesantren Tabungan Test",
+        shortName = "TabunganTest"
+      )
+    )
+    val loginWali = vm.executeLogin("walihasan", "Pass#Hasan1", rememberMe = false)
+    org.junit.Assert.assertTrue(loginWali is com.example.ui.LoginResult.SuccessWali)
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.students.value.any { it.id == student.id }) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    // 1. Save Deposit (+100_000)
+    var saveInOk: Boolean? = null
+    vm.saveTabunganTransaction(student, com.example.data.model.TabunganHelper.TYPE_IN, 100_000L, "Titipan Ortu") { ok, _ ->
+      saveInOk = ok
+    }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (saveInOk != null && vm.tabunganTransactions.value.size == 1) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, saveInOk)
+    val depositTx = vm.tabunganTransactions.value.first()
+
+    // 2. Reject Overdraft Expense (+120_000 > 100_000)
+    var overdraftOk: Boolean? = null
+    vm.saveTabunganTransaction(student, com.example.data.model.TabunganHelper.TYPE_OUT, 120_000L, "Beli Sepatu") { ok, _ ->
+      overdraftOk = ok
+    }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (overdraftOk != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(false, overdraftOk)
+
+    // 3. Save Valid Expense (-40_000 -> balance 60_000)
+    var saveOutOk: Boolean? = null
+    vm.saveTabunganTransaction(student, com.example.data.model.TabunganHelper.TYPE_OUT, 40_000L, "Buku Paket") { ok, _ ->
+      saveOutOk = ok
+    }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (saveOutOk != null && vm.tabunganTransactions.value.size == 2) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, saveOutOk)
+    val expenseTx = vm.tabunganTransactions.value.first { !com.example.data.model.TabunganHelper.isIncome(it.transactionType) }
+
+    // 4. Block cancelling or deleting Deposit because Expense (40k) depends on it
+    var cancelDepositOk: Boolean? = null
+    vm.cancelTabunganTransaction(depositTx, "Salah input") { ok, _ -> cancelDepositOk = ok }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (cancelDepositOk != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(false, cancelDepositOk)
+
+    var deleteDepositOk: Boolean? = null
+    vm.deleteTabunganTransaction(depositTx) { ok, _ -> deleteDepositOk = ok }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (deleteDepositOk != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(false, deleteDepositOk)
+
+    // 5. Reject editing Deposit down to 30_000 (30_000 - 40_000 < 0), then allow editing to 90_000
+    var badEditOk: Boolean? = null
+    vm.editTabunganTransaction(depositTx, com.example.data.model.TabunganHelper.TYPE_IN, 30_000L, "Titipan Ortu") { ok, _ ->
+      badEditOk = ok
+    }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (badEditOk != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(false, badEditOk)
+
+    var goodEditOk: Boolean? = null
+    vm.editTabunganTransaction(depositTx, com.example.data.model.TabunganHelper.TYPE_IN, 90_000L, "Titipan Revisi", "Catatan revisi") { ok, _ ->
+      goodEditOk = ok
+    }
+    for (i in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (goodEditOk != null &&
+        vm.tabunganTransactions.value.any { it.amount == 90_000L } &&
+        vm.tabunganLogs.value.any { it.actionType == com.example.data.model.TabunganHelper.LOG_EDIT }
+      ) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, goodEditOk)
+    org.junit.Assert.assertTrue(vm.tabunganLogs.value.any { it.actionType == com.example.data.model.TabunganHelper.LOG_EDIT })
+    assertEquals(50_000L, com.example.data.model.TabunganHelper.computeSummaryForStudent(vm.tabunganTransactions.value, student).balance)
+
+    // 6. Cancel Expense (40k -> balance returns to 90k), then delete cancelled Expense permanently (NO DeletionLog!)
+    var cancelExpOk: Boolean? = null
+    vm.cancelTabunganTransaction(expenseTx, "Batal beli") { ok, _ -> cancelExpOk = ok }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (cancelExpOk != null && vm.tabunganLogs.value.any { it.actionType == com.example.data.model.TabunganHelper.LOG_CANCEL }) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, cancelExpOk)
+    assertEquals(90_000L, com.example.data.model.TabunganHelper.computeSummaryForStudent(vm.tabunganTransactions.value, student).balance)
+
+    val cancelledExpTx = db.tabunganTransactionDao().getTransactionsBySchoolList(schoolId).first { it.id == expenseTx.id }
+    var deleteExpOk: Boolean? = null
+    vm.deleteTabunganTransaction(cancelledExpTx) { ok, _ -> deleteExpOk = ok }
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (deleteExpOk != null && vm.tabunganLogs.value.any { it.actionType == com.example.data.model.TabunganHelper.LOG_DELETE }) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, deleteExpOk)
+    // Verify ZERO public DeletionLogs emitted for private Tabungan deletions
+    assertEquals(0, db.deletionLogDao().getLogsBySchoolList(schoolId).size)
+
+    // 7. Parent Portal access strictly gated by canViewTabungan
+    db.parentAccessLinkDao().insert(
+      com.example.data.model.ParentAccessLink(
+        id = 882091L,
+        studentId = student.id,
+        studentName = student.name,
+        studentNis = student.nis,
+        studentClass = student.classGrade,
+        studentDorm = student.dormitory,
+        parentName = "Ibu Sari",
+        username = "ortu_rafi_tab",
+        password = "Ortu#Tab1",
+        canViewTabungan = false,
+        schoolId = schoolId
+      )
+    )
+    val loginParent = vm.executeLogin("ortu_rafi_tab", "Ortu#Tab1", rememberMe = false)
+    org.junit.Assert.assertTrue(loginParent is com.example.ui.LoginResult.SuccessParent)
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.activeParentAccessLink.value != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(0, vm.parentTabunganTransactions.value.size)
+
+    // Enable canViewTabungan -> parent sees active transaction (90k)
+    val currentLink = db.parentAccessLinkDao().getByStudentId(student.id, schoolId)!!
+    db.parentAccessLinkDao().insert(currentLink.copy(canViewTabungan = true))
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.parentTabunganTransactions.value.size == 1) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(1, vm.parentTabunganTransactions.value.size)
+    assertEquals(90_000L, vm.parentTabunganTransactions.value.first().amount)
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+  }
+
+  @Test
+  fun `verify Tabungan PocketBase DTO roundtrip and SchemaProvider fields`() {
+    val tx = com.example.data.model.TabunganTransaction(
+      id = 777001L,
+      studentId = 101L,
+      studentName = "Salman Al-Farisi",
+      studentNis = "31900101",
+      studentClass = "IX-C",
+      studentDorm = "Putra 2",
+      ownerWaliUsername = "walia",
+      ownerWaliName = "Ustadz Ali",
+      isPrivate = true,
+      transactionType = com.example.data.model.TabunganHelper.TYPE_OUT,
+      amount = 25_000L,
+      title = "Alat Tulis",
+      notes = "Pulpen & buku",
+      transactionDate = 1_730_000_000_000L,
+      status = com.example.data.model.TabunganHelper.STATUS_ACTIVE,
+      schoolId = "SRT1-KDR"
+    )
+    val txDto = com.example.data.remote.pocketbase.PbTabunganTransactionDto.fromDomain(tx)
+    val txRound = txDto.toDomainModel("SRT1-KDR")
+    assertEquals(tx.id, txRound.id)
+    assertEquals(tx.studentNis, txRound.studentNis)
+    assertEquals(tx.amount, txRound.amount)
+    assertEquals(tx.transactionType, txRound.transactionType)
+    assertEquals(tx.notes, txRound.notes)
+
+    val log = com.example.data.model.TabunganLog(
+      id = 777002L,
+      transactionId = 777001L,
+      studentId = 101L,
+      studentName = "Salman Al-Farisi",
+      studentClass = "IX-C",
+      ownerWaliUsername = "walia",
+      ownerWaliName = "Ustadz Ali",
+      actionType = com.example.data.model.TabunganHelper.LOG_EDIT,
+      amount = 25_000L,
+      balanceBefore = 50_000L,
+      balanceAfter = 25_000L,
+      summary = "Edit: Alat Tulis",
+      actorName = "Ustadz Ali",
+      actorUsername = "walia",
+      schoolId = "SRT1-KDR"
+    )
+    val logDto = com.example.data.remote.pocketbase.PbTabunganLogDto.fromDomain(log)
+    val logRound = logDto.toDomainModel("SRT1-KDR")
+    assertEquals(log.id, logRound.id)
+    assertEquals(log.transactionId, logRound.transactionId)
+    assertEquals(com.example.data.model.TabunganHelper.LOG_EDIT, logRound.actionType)
+    assertEquals(25_000L, logRound.balanceAfter)
+
+    val link = com.example.data.model.ParentAccessLink(
+      id = 777003L,
+      studentId = 101L,
+      studentName = "Salman Al-Farisi",
+      username = "ortu_salman",
+      password = "Ortu#Salman1",
+      canViewTabungan = true,
+      schoolId = "SRT1-KDR"
+    )
+    val linkRound = com.example.data.remote.pocketbase.PbParentAccessLinkDto.fromDomain(link).toDomainModel("SRT1-KDR")
+    assertEquals(true, linkRound.canViewTabungan)
+
+    val collectionNames = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.map { it.collectionName }
+    org.junit.Assert.assertTrue(collectionNames.contains("tabungan_transactions"))
+    org.junit.Assert.assertTrue(collectionNames.contains("tabungan_logs"))
+  }
+
+  @Test
+  fun `verify Tabungan Compose dialogs support empty prompt edit mode overdraft block and detail actions`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 883001L,
+      name = "Nadia Aulia",
+      nis = "31988301",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-A",
+      assignedWaliUsername = "walisiti",
+      assignedWaliName = "Ustadzah Siti",
+      schoolId = "SRT1-KDR"
+    )
+    val existingDeposit = com.example.data.model.TabunganTransaction(
+      id = 883101L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      ownerWaliUsername = "walisiti",
+      ownerWaliName = "Ustadzah Siti",
+      transactionType = com.example.data.model.TabunganHelper.TYPE_IN,
+      amount = 50_000L,
+      title = "Uang Saku Awal",
+      status = com.example.data.model.TabunganHelper.STATUS_ACTIVE,
+      schoolId = "SRT1-KDR"
+    )
+    val existingExpense = com.example.data.model.TabunganTransaction(
+      id = 883102L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      ownerWaliUsername = "walisiti",
+      ownerWaliName = "Ustadzah Siti",
+      transactionType = com.example.data.model.TabunganHelper.TYPE_OUT,
+      amount = 30_000L,
+      title = "Jajan Kantin",
+      status = com.example.data.model.TabunganHelper.STATUS_ACTIVE,
+      schoolId = "SRT1-KDR"
+    )
+    val editLog = com.example.data.model.TabunganLog(
+      id = 883201L,
+      transactionId = existingDeposit.id,
+      studentId = student.id,
+      studentName = student.name,
+      studentClass = student.classGrade,
+      ownerWaliUsername = "walisiti",
+      ownerWaliName = "Ustadzah Siti",
+      actionType = com.example.data.model.TabunganHelper.LOG_EDIT,
+      amount = 65_000L,
+      balanceBefore = 20_000L,
+      balanceAfter = 35_000L,
+      summary = "Edit: Uang Saku Awal",
+      actorName = "Ustadzah Siti",
+      actorUsername = "walisiti",
+      schoolId = "SRT1-KDR"
+    )
+
+    val modeState = androidx.compose.runtime.mutableIntStateOf(0) // 0=empty input, 1=edit input, 2=detail, 3=history
+    var editedAmount: Long? = null
+    var openedEditTx: com.example.data.model.TabunganTransaction? = null
+    var openedStudentIdFromLog: Long? = null
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        when (modeState.intValue) {
+          0 -> com.example.ui.dialogs.InputTabunganDialog(
+            claimedStudents = emptyList(),
+            transactions = emptyList(),
+            onOpenPilihAnakAsuh = {},
+            onSave = { _, _, _, _, _, _, _ -> },
+            onDismiss = {}
+          )
+          1 -> com.example.ui.dialogs.InputTabunganDialog(
+            claimedStudents = listOf(student),
+            transactions = listOf(existingDeposit, existingExpense),
+            initialStudent = student,
+            txToEdit = existingDeposit,
+            onOpenPilihAnakAsuh = {},
+            onSave = { _, _, amount, _, _, _, tx ->
+              if (tx != null) editedAmount = amount
+            },
+            onDismiss = {}
+          )
+          2 -> com.example.ui.dialogs.TabunganStudentDetailSheet(
+            student = student,
+            studentTransactions = listOf(existingDeposit, existingExpense),
+            studentLogs = listOf(editLog),
+            waliName = "Ustadzah Siti",
+            schoolProfile = com.example.data.model.SchoolProfile(),
+            onQuickInput = {},
+            onEditTransaction = { openedEditTx = it },
+            onCancelTransaction = { _, _ -> },
+            onDeleteTransaction = {},
+            onDismiss = {}
+          )
+          else -> com.example.ui.dialogs.TabunganHistoryLogsSheet(
+            transactions = listOf(existingDeposit, existingExpense),
+            logs = listOf(editLog),
+            studentsForSummary = listOf(student),
+            waliName = "Ustadzah Siti",
+            schoolProfile = com.example.data.model.SchoolProfile(),
+            initialTab = 1,
+            onOpenStudentById = { openedStudentIdFromLog = it },
+            onEditTransaction = {},
+            onCancelTransaction = { _, _ -> },
+            onDeleteTransaction = {},
+            onDismiss = {}
+          )
+        }
+      }
+    }
+
+    // 1. Empty claimed students state
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("empty_input_tabungan_no_claimed").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_input_tabungan_open_pilih").assertIsDisplayed()
+
+    // 2. Edit transaction mode: date picker visible, overdraft (<30k) disables save, valid (65k) saves
+    modeState.intValue = 1
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_tabungan_pick_date").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("input_tabungan_amount").performScrollTo()
+    composeTestRule.onNodeWithTag("input_tabungan_amount").performTextClearance()
+    composeTestRule.onNodeWithTag("input_tabungan_amount").performTextInput("20000")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_save_tabungan_tx").performScrollTo().assertIsNotEnabled()
+
+    composeTestRule.onNodeWithTag("input_tabungan_amount").performScrollTo()
+    composeTestRule.onNodeWithTag("input_tabungan_amount").performTextClearance()
+    composeTestRule.onNodeWithTag("input_tabungan_amount").performTextInput("65000")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_save_tabungan_tx").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(65_000L, editedAmount)
+
+    // 3. Detail sheet: summary & edit button trigger onEditTransaction
+    modeState.intValue = 2
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_tabungan_detail_summary").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_edit_tabungan_tx_${existingDeposit.id}").performClick()
+    assertEquals(existingDeposit.id, openedEditTx?.id)
+
+    // 4. History & Audit log sheet: EDIT badge renders & student click navigates
+    modeState.intValue = 3
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_tabungan_log_${editLog.id}").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Diubah").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Nadia Aulia (VIII-A)").performClick()
+    assertEquals(student.id, openedStudentIdFromLog)
+  }
+
+  @Test
+  fun `verify KonselingHelper strict owner-only isolation across roles walis schools and stats calculation`() {
+    val studentA = com.example.data.model.ChildStudent(
+      id = 9101L,
+      name = "Farhan Hidayat",
+      nis = "3199101",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "IX-A",
+      assignedWaliUsername = "walifajar",
+      assignedWaliName = "Ustadz Fajar",
+      schoolId = "SRT1-KDR"
+    )
+    val ownedSession = com.example.data.model.KonselingRecord(
+      id = 910001L,
+      studentId = studentA.id,
+      studentName = studentA.name,
+      studentNis = studentA.nis,
+      studentClass = studentA.classGrade,
+      studentDorm = studentA.dormitory,
+      ownerWaliUsername = "walifajar",
+      ownerWaliName = "Ustadz Fajar",
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_ADAPTASI,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_PRIORITAS,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_SEDIH,
+      title = "Rindu Rumah Awal Semester",
+      summary = "Anak sempat menangis malam hari.",
+      status = com.example.data.model.KonselingHelper.STATUS_DIPANTAU,
+      schoolId = "SRT1-KDR"
+    )
+    val ownedGrowth = com.example.data.model.KonselingRecord(
+      id = 910002L,
+      studentId = studentA.id,
+      studentName = studentA.name,
+      studentNis = studentA.nis,
+      studentClass = studentA.classGrade,
+      studentDorm = studentA.dormitory,
+      ownerWaliUsername = "walifajar",
+      ownerWaliName = "Ustadz Fajar",
+      entryType = com.example.data.model.KonselingHelper.ENTRY_PERKEMBANGAN,
+      topic = com.example.data.model.KonselingHelper.TOPIC_APRESIASI,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_RINGAN,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_BAIK,
+      title = "Sudah Aktif Belajar Kelompok",
+      summary = "Mulai percaya diri di kelas.",
+      status = com.example.data.model.KonselingHelper.STATUS_SELESAI,
+      schoolId = "SRT1-KDR"
+    )
+    val otherWaliRecord = ownedSession.copy(
+      id = 910003L,
+      ownerWaliUsername = "wali_lain",
+      ownerWaliName = "Ustadz Lain"
+    )
+    val otherSchoolRecord = ownedSession.copy(
+      id = 910004L,
+      schoolId = "SCH-OTHER"
+    )
+    val allRecords = listOf(ownedSession, ownedGrowth, otherWaliRecord, otherSchoolRecord)
+
+    // 1. Only owning WALI in same school sees own records
+    val visibleOwner = com.example.data.model.KonselingHelper.filterPrivateRecords(
+      allRecords = allRecords,
+      schoolId = "SRT1-KDR",
+      role = com.example.ui.UserRole.WALI,
+      currentUsername = "walifajar",
+      currentWaliName = "Ustadz Fajar"
+    )
+    assertEquals(2, visibleOwner.size)
+
+    // 2. Non-WALI roles (ADMIN, SUPERADMIN, GURU_NGAJI, PARENT, NOT_LOGGED_IN) get ZERO records
+    listOf(
+      com.example.ui.UserRole.ADMIN,
+      com.example.ui.UserRole.SUPERADMIN,
+      com.example.ui.UserRole.GURU_NGAJI,
+      com.example.ui.UserRole.PARENT,
+      com.example.ui.UserRole.NOT_LOGGED_IN
+    ).forEach { role ->
+      val blocked = com.example.data.model.KonselingHelper.filterPrivateRecords(
+        allRecords = allRecords,
+        schoolId = "SRT1-KDR",
+        role = role,
+        currentUsername = "walifajar",
+        currentWaliName = "Ustadz Fajar"
+      )
+      assertEquals("Role $role must receive 0 confidential records", 0, blocked.size)
+    }
+
+    // 3. Another Wali Asuh gets 0 of walifajar's records
+    val otherWaliVisible = com.example.data.model.KonselingHelper.filterPrivateRecords(
+      allRecords = allRecords,
+      schoolId = "SRT1-KDR",
+      role = com.example.ui.UserRole.WALI,
+      currentUsername = "walihasan",
+      currentWaliName = "Ustadz Hasan"
+    )
+    assertEquals(0, otherWaliVisible.size)
+
+    // 4. Stats accuracy
+    val studentStats = com.example.data.model.KonselingHelper.computeStudentStats(visibleOwner, studentA)
+    assertEquals(2, studentStats.totalEntries)
+    assertEquals(1, studentStats.sessionsCount)
+    assertEquals(1, studentStats.growthCount)
+    assertEquals(1, studentStats.followUpCount)
+    assertEquals(1, studentStats.completedCount)
+    assertEquals(1, studentStats.highPriorityCount)
+
+    val aggStats = com.example.data.model.KonselingHelper.computeAggregateStats(visibleOwner)
+    assertEquals(2, aggStats.totalEntries)
+    assertEquals(1, aggStats.followUpCount)
+    assertEquals(1, aggStats.highPriorityCount)
+    assertEquals(1, aggStats.growthCount)
+    assertEquals(1, aggStats.counseledStudentsCount)
+  }
+
+  @Test
+  fun `verify HealthViewModel Konseling CRUD status toggle owner-only rejection and private deletion audit log`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+
+    val schoolId = "SCH-KSL-TEST"
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.konselingRecordDao().deleteBySchoolId(schoolId)
+    db.konselingLogDao().deleteBySchoolId(schoolId)
+    db.deletionLogDao().deleteBySchoolId(schoolId)
+
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "Sekolah Uji Konseling",
+        address = "Jl. Konseling 1",
+        city = "Kediri",
+        estimatedWaliCount = 2,
+        picName = "PIC KSL",
+        picEmail = "ksl@test.id",
+        picPhone = "08199",
+        status = "APPROVED",
+        generatedSchoolCode = schoolId,
+        generatedAdminUsername = "admin_ksl_test",
+        generatedAdminPassword = "Admin#Ksl1"
+      )
+    )
+    db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        name = "Ustadz Rahmat",
+        username = "wali_ksl_1",
+        password = "Wali#Ksl1",
+        dormitory = "Asrama Putra",
+        schoolId = schoolId
+      )
+    )
+    db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        name = "Ustadz Rekan",
+        username = "wali_ksl_2",
+        password = "Wali#Ksl2",
+        dormitory = "Asrama Putra",
+        schoolId = schoolId
+      )
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 992001L,
+      name = "Bintang Pratama",
+      nis = "31999201",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "IX-B",
+      assignedWaliUsername = "wali_ksl_1",
+      assignedWaliName = "Ustadz Rahmat",
+      schoolId = schoolId
+    )
+    db.childStudentDao().insert(student)
+
+    val vm = com.example.ui.HealthViewModel(app)
+
+    // 1. Wali 1 logs in and saves confidential session
+    val login1 = vm.executeLogin("wali_ksl_1", "Wali#Ksl1", rememberMe = false)
+    org.junit.Assert.assertTrue(login1 is com.example.ui.LoginResult.SuccessWali)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    var saveOk: Boolean? = null
+    vm.saveKonselingRecord(
+      student = student,
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_EMOSI,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_PRIORITAS,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_TERTEKAN,
+      title = "Pendampingan Konflik Kamar",
+      summary = "Bintang sempat berselisih dengan teman sekamar.",
+      intervention = "Mediasi empat mata dan refleksi tenang.",
+      followUpPlan = "Cek ulang keakraban kamar Jumat malam",
+      followUpDate = 1_765_000_000_000L,
+      markCompleted = false
+    ) { ok, _ -> saveOk = ok }
+
+    for (i in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (saveOk != null && vm.konselingRecords.value.size == 1 && vm.konselingLogs.value.size == 1) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, saveOk)
+    assertEquals(1, vm.konselingRecords.value.size)
+    assertEquals(1, vm.konselingLogs.value.size)
+    val savedRec = vm.konselingRecords.value.first()
+    assertEquals(com.example.data.model.KonselingHelper.STATUS_DIPANTAU, savedRec.status)
+
+    // 2. Edit & toggle status (DIPANTAU -> SELESAI)
+    var editOk: Boolean? = null
+    vm.editKonselingRecord(
+      existingRecord = savedRec,
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_EMOSI,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_PANTAU,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_NETRAL,
+      title = "Mediasi Kamar Berjalan Baik",
+      summary = "Sudah saling memaafkan.",
+      intervention = "Doa bersama sebelum tidur.",
+      followUpPlan = "Pantau 1 pekan",
+      markCompleted = false
+    ) { ok, _ -> editOk = ok }
+
+    for (i in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (editOk != null && vm.konselingLogs.value.any { it.actionType == com.example.data.model.KonselingHelper.LOG_EDIT }) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, editOk)
+    val editedRec = vm.konselingRecords.value.first()
+    assertEquals("Mediasi Kamar Berjalan Baik", editedRec.title)
+
+    var toggleOk: Boolean? = null
+    vm.toggleKonselingStatus(editedRec) { ok, _ -> toggleOk = ok }
+    for (i in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (toggleOk != null && vm.konselingLogs.value.any { it.actionType == com.example.data.model.KonselingHelper.LOG_COMPLETE }) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, toggleOk)
+    assertEquals(com.example.data.model.KonselingHelper.STATUS_SELESAI, vm.konselingRecords.value.first().status)
+
+    // 3. Wali 2 in SAME school sees ZERO records/logs and CANNOT edit/toggle/delete Wali 1's record
+    val login2 = vm.executeLogin("wali_ksl_2", "Wali#Ksl2", rememberMe = false)
+    org.junit.Assert.assertTrue(login2 is com.example.ui.LoginResult.SuccessWali)
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.konselingRecords.value.isEmpty() && vm.konselingLogs.value.isEmpty()) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(0, vm.konselingRecords.value.size)
+    assertEquals(0, vm.konselingLogs.value.size)
+
+    var blockedEdit: Boolean? = null
+    vm.editKonselingRecord(
+      existingRecord = editedRec,
+      entryType = editedRec.entryType,
+      topic = editedRec.topic,
+      urgencyLevel = editedRec.urgencyLevel,
+      moodLevel = editedRec.moodLevel,
+      title = "Hack",
+      summary = "Hack"
+    ) { ok, _ -> blockedEdit = ok }
+    assertEquals(false, blockedEdit)
+
+    var blockedDelete: Boolean? = null
+    vm.deleteKonselingRecord(editedRec) { ok, _ -> blockedDelete = ok }
+    assertEquals(false, blockedDelete)
+
+    // 4. School Admin ALSO sees ZERO records & cannot write
+    val loginAdmin = vm.executeLogin("admin_ksl_test", "Admin#Ksl1", rememberMe = false)
+    org.junit.Assert.assertTrue(loginAdmin is com.example.ui.LoginResult.SuccessAdmin)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    assertEquals(0, vm.konselingRecords.value.size)
+    var blockedAdminSave: Boolean? = null
+    vm.saveKonselingRecord(
+      student = student,
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_ADAPTASI,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_RINGAN,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_NETRAL,
+      title = "Admin Note",
+      summary = "Should block"
+    ) { ok, _ -> blockedAdminSave = ok }
+    assertEquals(false, blockedAdminSave)
+
+    // 5. Switch back to Wali 1 and delete -> private LOG_DELETE written & ZERO public DeletionLog!
+    vm.executeLogin("wali_ksl_1", "Wali#Ksl1", rememberMe = false)
+    for (i in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.konselingRecords.value.size == 1) break
+      kotlinx.coroutines.delay(30)
+    }
+    var deleteOk: Boolean? = null
+    vm.deleteKonselingRecord(vm.konselingRecords.value.first()) { ok, _ -> deleteOk = ok }
+    for (i in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (deleteOk != null && vm.konselingRecords.value.isEmpty() &&
+        vm.konselingLogs.value.any { it.actionType == com.example.data.model.KonselingHelper.LOG_DELETE }
+      ) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, deleteOk)
+    assertEquals(0, vm.konselingRecords.value.size)
+    assertEquals(0, db.deletionLogDao().getLogsBySchoolList(schoolId).size)
+
+    db.konselingRecordDao().deleteBySchoolId(schoolId)
+    db.konselingLogDao().deleteBySchoolId(schoolId)
+    db.childStudentDao().deleteBySchoolId(schoolId)
+    db.schoolRegistrationDao().deleteBySchoolCode(schoolId)
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+  }
+
+  @Test
+  fun `verify Konseling PocketBase DTO roundtrip SchemaProvider collections and confidential PDF generation`() {
+    val ctx = ApplicationProvider.getApplicationContext<Context>()
+    val student = com.example.data.model.ChildStudent(
+      id = 993001L,
+      name = "Aisyah Humaira",
+      nis = "31999301",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-C",
+      assignedWaliUsername = "walihana",
+      assignedWaliName = "Ustadzah Hana",
+      schoolId = "SRT1-KDR"
+    )
+    val rec = com.example.data.model.KonselingRecord(
+      id = 993101L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      ownerWaliUsername = "walihana",
+      ownerWaliName = "Ustadzah Hana",
+      isConfidential = true,
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_KELUARGA,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_PANTAU,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_SEDIH,
+      title = "Rindu Orang Tua",
+      summary = "Membantu menenangkan perasaan setelah jadwal kunjungan.",
+      intervention = "Video call terjadwal bersama orang tua via wali.",
+      followUpPlan = "Observasi 3 hari ke depan",
+      followUpDate = 1_765_500_000_000L,
+      status = com.example.data.model.KonselingHelper.STATUS_DIPANTAU,
+      sessionDate = 1_765_000_000_000L,
+      schoolId = "SRT1-KDR"
+    )
+    val recRound = com.example.data.remote.pocketbase.PbKonselingRecordDto.fromDomain(rec).toDomainModel("SRT1-KDR")
+    assertEquals(rec.id, recRound.id)
+    assertEquals(rec.ownerWaliUsername, recRound.ownerWaliUsername)
+    assertEquals(rec.topic, recRound.topic)
+    assertEquals(rec.moodLevel, recRound.moodLevel)
+    assertEquals(rec.followUpPlan, recRound.followUpPlan)
+    assertEquals(true, recRound.isConfidential)
+
+    val log = com.example.data.model.KonselingLog(
+      id = 993201L,
+      recordId = rec.id,
+      studentId = student.id,
+      studentName = student.name,
+      studentClass = student.classGrade,
+      ownerWaliUsername = "walihana",
+      ownerWaliName = "Ustadzah Hana",
+      isConfidential = true,
+      actionType = com.example.data.model.KonselingHelper.LOG_INPUT_SESI,
+      summary = "Rindu Orang Tua • Keluarga & Rindu Rumah",
+      actorName = "Ustadzah Hana",
+      actorUsername = "walihana",
+      schoolId = "SRT1-KDR"
+    )
+    val logRound = com.example.data.remote.pocketbase.PbKonselingLogDto.fromDomain(log).toDomainModel("SRT1-KDR")
+    assertEquals(log.id, logRound.id)
+    assertEquals(log.recordId, logRound.recordId)
+    assertEquals(com.example.data.model.KonselingHelper.LOG_INPUT_SESI, logRound.actionType)
+
+    val collectionNames = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.map { it.collectionName }
+    org.junit.Assert.assertTrue(collectionNames.contains("konseling_records"))
+    org.junit.Assert.assertTrue(collectionNames.contains("konseling_logs"))
+
+    val studentBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKonselingStudentPages(
+      context = ctx,
+      student = student,
+      records = listOf(rec),
+      waliName = "Ustadzah Hana",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        studentBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
+    )
+    org.junit.Assert.assertTrue(studentBitmaps.isNotEmpty())
+    studentBitmaps.forEach { it.recycle() }
+
+    val manyRecords = (1..10).map { i -> rec.copy(id = 993100L + i, title = "Sesi Konseling $i") }
+    val multiPageStudentBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKonselingStudentPages(
+      context = ctx,
+      student = student,
+      records = manyRecords,
+      waliName = "Ustadzah Hana",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        multiPageStudentBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
+    )
+    org.junit.Assert.assertTrue(multiPageStudentBitmaps.size >= 2)
+    multiPageStudentBitmaps.forEach { it.recycle() }
+
+    val summaryBitmaps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKonselingSummaryPages(
+      context = ctx,
+      students = listOf(student),
+      records = listOf(rec),
+      waliName = "Ustadzah Hana",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        summaryBitmaps.add(bmp)
+        android.graphics.Canvas(bmp)
+      }
+    )
+    org.junit.Assert.assertTrue(summaryBitmaps.isNotEmpty())
+    summaryBitmaps.forEach { it.recycle() }
+  }
+
+  @Test
+  fun `verify Konseling Compose dialogs hub cards and sheets enforce confidentiality declaration and actions`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 994001L,
+      name = "Rayyan Zaki",
+      nis = "31999401",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "IX-D",
+      assignedWaliUsername = "walirayyan",
+      assignedWaliName = "Ustadz Karim",
+      schoolId = "SRT1-KDR"
+    )
+    val activeSession = com.example.data.model.KonselingRecord(
+      id = 994101L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      ownerWaliUsername = "walirayyan",
+      ownerWaliName = "Ustadz Karim",
+      isConfidential = true,
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_AKADEMIK,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_PRIORITAS,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_TERTEKAN,
+      title = "Kesulitan Konsentrasi Ujian",
+      summary = "Merasa tertekan menjelang ujian praktik.",
+      intervention = "Latihan manajemen waktu belajar.",
+      followUpPlan = "Evaluasi nilai try-out pekan depan",
+      status = com.example.data.model.KonselingHelper.STATUS_DIPANTAU,
+      schoolId = "SRT1-KDR"
+    )
+    val logEntry = com.example.data.model.KonselingLog(
+      id = 994201L,
+      recordId = activeSession.id,
+      studentId = student.id,
+      studentName = student.name,
+      studentClass = student.classGrade,
+      ownerWaliUsername = "walirayyan",
+      ownerWaliName = "Ustadz Karim",
+      isConfidential = true,
+      actionType = com.example.data.model.KonselingHelper.LOG_INPUT_SESI,
+      summary = "Kesulitan Konsentrasi Ujian • Akademik & Belajar",
+      actorName = "Ustadz Karim",
+      actorUsername = "walirayyan",
+      schoolId = "SRT1-KDR"
+    )
+
+    val modeState = androidx.compose.runtime.mutableIntStateOf(0) // 0=hub overlay, 1=empty input, 2=edit input, 3=detail, 4=followup, 5=history, 6=guide
+    var savedTitle: String? = null
+    var openedEditRec: com.example.data.model.KonselingRecord? = null
+    var openedFromFollowUpId: Long? = null
+    var openedGuideFromHub = false
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        when (modeState.intValue) {
+          0 -> com.example.ui.components.CategoryHubOverlay(
+            category = com.example.ui.components.DashboardCategoryHub.KONSELING,
+            schoolProfile = com.example.data.model.SchoolProfile(),
+            activePlans = emptyList(),
+            inpatientCount = 0,
+            fastingSessions = emptyList(),
+            fastingRecords = emptyList(),
+            activeHaidRecords = emptyList(),
+            suciRecords = emptyList(),
+            shiftMessages = emptyList(),
+            students = listOf(student),
+            claimedFosterStudents = listOf(student),
+            konselingRecords = listOf(activeSession),
+            konselingLogs = listOf(logEntry),
+            onDismiss = {},
+            onNavigateToPlan = {},
+            onNavigateToRecords = {},
+            onOpenCreatePlan = {},
+            onOpenDirectTreatment = {},
+            onOpenFaskesInfo = {},
+            onOpenInputPuasa = {},
+            onOpenDaftarPuasa = {},
+            onOpenChecklistPuasa = {},
+            onOpenRankingPuasa = {},
+            onOpenInputHaid = {},
+            onOpenDaftarHaid = {},
+            onOpenDaftarSuci = {},
+            onOpenFiqihHaid = {},
+            onOpenShiftMessages = {},
+            onOpenCreateShiftMessage = {},
+            onOpenShiftHistory = {},
+            onOpenKonselingGuide = { openedGuideFromHub = true }
+          )
+          1 -> com.example.ui.dialogs.InputKonselingDialog(
+            claimedStudents = emptyList(),
+            onOpenPilihAnakAsuh = {},
+            onSave = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+            onDismiss = {}
+          )
+          2 -> com.example.ui.dialogs.InputKonselingDialog(
+            claimedStudents = listOf(student),
+            initialStudent = student,
+            recordToEdit = activeSession,
+            onOpenPilihAnakAsuh = {},
+            onSave = { _, _, _, _, _, title, _, _, _, _, _, _, existing ->
+              if (existing != null) savedTitle = title
+            },
+            onDismiss = {}
+          )
+          3 -> com.example.ui.dialogs.KonselingStudentDetailSheet(
+            student = student,
+            studentRecords = listOf(activeSession),
+            studentLogs = listOf(logEntry),
+            waliName = "Ustadz Karim",
+            schoolProfile = com.example.data.model.SchoolProfile(),
+            onQuickInput = {},
+            onEditRecord = { openedEditRec = it },
+            onToggleStatus = {},
+            onDeleteRecord = {},
+            onDismiss = {}
+          )
+          4 -> com.example.ui.dialogs.KonselingFollowUpSheet(
+            records = listOf(activeSession),
+            onOpenStudentById = { openedFromFollowUpId = it },
+            onToggleStatus = {},
+            onDismiss = {}
+          )
+          5 -> com.example.ui.dialogs.KonselingHistoryLogsSheet(
+            records = listOf(activeSession),
+            logs = listOf(logEntry),
+            studentsForSummary = listOf(student),
+            waliName = "Ustadz Karim",
+            schoolProfile = com.example.data.model.SchoolProfile(),
+            initialTab = 1,
+            onOpenStudentById = {},
+            onEditRecord = {},
+            onToggleStatus = {},
+            onDeleteRecord = {},
+            onDismiss = {}
+          )
+          else -> com.example.ui.dialogs.KonselingGuideDialog(onDismiss = {})
+        }
+      }
+    }
+
+    // 1. CategoryHubOverlay (KONSELING): displays confidentiality declaration, totals, guide submenu, and student card
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_konseling_privacy_declaration"))
+    composeTestRule.onNodeWithTag("card_konseling_privacy_declaration").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_konseling_totals"))
+    composeTestRule.onNodeWithTag("card_konseling_totals").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_konseling_panduan"))
+    composeTestRule.onNodeWithTag("tile_konseling_panduan").performClick()
+    org.junit.Assert.assertTrue(openedGuideFromHub)
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_konseling_student_${student.id}"))
+    composeTestRule.onNodeWithTag("card_konseling_student_${student.id}").assertIsDisplayed()
+
+    // 2. Empty claimed state + confidentiality notice
+    modeState.intValue = 1
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_input_konseling_privacy").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("empty_input_konseling_no_claimed").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_input_konseling_open_pilih").assertIsDisplayed()
+
+    // 3. Edit dialog state: date picker & edit title saves cleanly
+    modeState.intValue = 2
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_konseling_pick_date").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("input_konseling_title").performScrollTo()
+    composeTestRule.onNodeWithTag("input_konseling_title").performTextClearance()
+    composeTestRule.onNodeWithTag("input_konseling_title").performTextInput("Fokus Belajar Meningkat")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_save_konseling").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("Fokus Belajar Meningkat", savedTitle)
+
+    // 4. Detail sheet: summary card & edit trigger
+    modeState.intValue = 3
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_konseling_detail_summary").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_edit_konseling_${activeSession.id}").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(activeSession.id, openedEditRec?.id)
+
+    // 5. Follow-Up sheet: displays item & navigates to student
+    modeState.intValue = 4
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_followup_konseling_${activeSession.id}").assertIsDisplayed().performClick()
+    assertEquals(student.id, openedFromFollowUpId)
+
+    // 6. History & Audit Logs sheet: displays audit log card
+    modeState.intValue = 5
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_konseling_log_${logEntry.id}").assertIsDisplayed()
+
+    // 7. Guide dialog: displays ethics pledge
+    modeState.intValue = 6
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dialog_konseling_guide").assertIsDisplayed()
   }
 }
 

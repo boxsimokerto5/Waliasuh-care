@@ -78,6 +78,7 @@ object TabunganHelper {
 
     const val LOG_INPUT_IN = "INPUT_IN"
     const val LOG_INPUT_OUT = "INPUT_OUT"
+    const val LOG_EDIT = "EDIT"
     const val LOG_CANCEL = "CANCEL"
     const val LOG_DELETE = "DELETE"
 
@@ -102,6 +103,28 @@ object TabunganHelper {
         return false
     }
 
+    fun matchesStudentIdOrNis(
+        tx: TabunganTransaction,
+        studentId: Long,
+        studentNis: String = ""
+    ): Boolean {
+        if (studentId > 0L && tx.studentId == studentId) return true
+        val cleanNis = studentNis.trim()
+        if (cleanNis.isNotBlank() && tx.studentNis.isNotBlank() &&
+            tx.studentNis.trim().equals(cleanNis, ignoreCase = true)
+        ) {
+            return true
+        }
+        return false
+    }
+
+    fun resolveHolderKey(tx: TabunganTransaction): String {
+        val cleanNis = tx.studentNis.trim().uppercase()
+        if (cleanNis.isNotBlank()) return "nis:$cleanNis"
+        if (tx.studentId > 0L) return "id:${tx.studentId}"
+        return "name:${tx.studentName.trim().lowercase()}"
+    }
+
     fun computeSummaryForStudent(
         transactions: List<TabunganTransaction>,
         student: ChildStudent
@@ -124,10 +147,11 @@ object TabunganHelper {
 
     fun computeSummaryByStudentId(
         transactions: List<TabunganTransaction>,
-        studentId: Long
+        studentId: Long,
+        studentNis: String = ""
     ): TabunganStudentSummary {
         val matching = transactions
-            .filter { it.studentId == studentId }
+            .filter { matchesStudentIdOrNis(it, studentId, studentNis) }
             .sortedWith(compareByDescending<TabunganTransaction> { it.transactionDate }.thenByDescending { it.createdAt })
         val active = matching.filter { isActive(it.status) }
         val totalIn = active.filter { isIncome(it.transactionType) }.sumOf { it.amount }
@@ -142,12 +166,19 @@ object TabunganHelper {
         )
     }
 
+    fun computeRawNetBalance(transactions: List<TabunganTransaction>): Long {
+        val active = transactions.filter { isActive(it.status) }
+        val totalIn = active.filter { isIncome(it.transactionType) }.sumOf { it.amount }
+        val totalOut = active.filter { !isIncome(it.transactionType) }.sumOf { it.amount }
+        return totalIn - totalOut
+    }
+
     fun computeAggregateTotals(transactions: List<TabunganTransaction>): TabunganAggregateTotals {
         val active = transactions.filter { isActive(it.status) }
         val totalIn = active.filter { isIncome(it.transactionType) }.sumOf { it.amount }
         val totalOut = active.filter { !isIncome(it.transactionType) }.sumOf { it.amount }
         val holders = active
-            .groupBy { it.studentId }
+            .groupBy { resolveHolderKey(it) }
             .count { (_, list) ->
                 val inSum = list.filter { isIncome(it.transactionType) }.sumOf { it.amount }
                 val outSum = list.filter { !isIncome(it.transactionType) }.sumOf { it.amount }
@@ -159,6 +190,82 @@ object TabunganHelper {
             totalOut = totalOut,
             activeCount = active.size,
             holdersCount = holders
+        )
+    }
+
+    fun buildSummaryStudents(
+        myFosterStudents: List<ChildStudent>,
+        allStudents: List<ChildStudent>,
+        transactions: List<TabunganTransaction>
+    ): List<ChildStudent> {
+        val result = linkedMapOf<String, ChildStudent>()
+        fun studentKey(st: ChildStudent): String {
+            val cleanNis = st.nis.trim().uppercase()
+            return if (cleanNis.isNotBlank()) "nis:$cleanNis" else "id:${st.id}"
+        }
+        myFosterStudents.forEach { st -> result[studentKey(st)] = st }
+        transactions.forEach { tx ->
+            val key = resolveHolderKey(tx)
+            if (!result.containsKey(key) && result.values.none { matchesStudent(tx, it) }) {
+                val matched = allStudents.firstOrNull { matchesStudent(tx, it) }
+                    ?: ChildStudent(
+                        id = tx.studentId,
+                        name = tx.studentName,
+                        nis = tx.studentNis,
+                        gender = "L",
+                        age = 12,
+                        dormitory = tx.studentDorm,
+                        classGrade = tx.studentClass,
+                        assignedWaliUsername = tx.ownerWaliUsername,
+                        assignedWaliName = tx.ownerWaliName,
+                        schoolId = tx.schoolId
+                    )
+                result[studentKey(matched)] = matched
+            }
+        }
+        return result.values.sortedBy { it.name.lowercase() }
+    }
+
+    fun resolveStudentByIdOrFallback(
+        studentId: Long,
+        myFosterStudents: List<ChildStudent>,
+        allStudents: List<ChildStudent>,
+        transactions: List<TabunganTransaction>,
+        logs: List<TabunganLog>
+    ): ChildStudent? {
+        myFosterStudents.firstOrNull { it.id == studentId }?.let { return it }
+        allStudents.firstOrNull { it.id == studentId }?.let { return it }
+
+        val sampleTx = transactions.firstOrNull { it.studentId == studentId }
+        if (sampleTx != null) {
+            myFosterStudents.firstOrNull { matchesStudent(sampleTx, it) }?.let { return it }
+            allStudents.firstOrNull { matchesStudent(sampleTx, it) }?.let { return it }
+            return ChildStudent(
+                id = sampleTx.studentId,
+                name = sampleTx.studentName,
+                nis = sampleTx.studentNis,
+                gender = "L",
+                age = 12,
+                dormitory = sampleTx.studentDorm,
+                classGrade = sampleTx.studentClass,
+                assignedWaliUsername = sampleTx.ownerWaliUsername,
+                assignedWaliName = sampleTx.ownerWaliName,
+                schoolId = sampleTx.schoolId
+            )
+        }
+
+        val sampleLog = logs.firstOrNull { it.studentId == studentId } ?: return null
+        return ChildStudent(
+            id = sampleLog.studentId,
+            name = sampleLog.studentName,
+            nis = "",
+            gender = "L",
+            age = 12,
+            dormitory = "",
+            classGrade = sampleLog.studentClass,
+            assignedWaliUsername = sampleLog.ownerWaliUsername,
+            assignedWaliName = sampleLog.ownerWaliName,
+            schoolId = sampleLog.schoolId
         )
     }
 
@@ -217,6 +324,7 @@ object TabunganHelper {
         return when (actionType.trim().uppercase()) {
             LOG_INPUT_IN -> if (isEn) "Deposit (+)" else "Titip Masuk (+)"
             LOG_INPUT_OUT -> if (isEn) "Expense (-)" else "Pengeluaran (-)"
+            LOG_EDIT -> if (isEn) "Edited" else "Diubah"
             LOG_CANCEL -> if (isEn) "Cancelled" else "Dibatalkan"
             LOG_DELETE -> if (isEn) "Deleted" else "Dihapus"
             else -> actionType

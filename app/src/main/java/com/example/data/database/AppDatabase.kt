@@ -29,12 +29,16 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentMessageDao
+import com.example.data.dao.KonselingLogDao
+import com.example.data.dao.KonselingRecordDao
 import com.example.data.dao.TabunganLogDao
 import com.example.data.dao.TabunganTransactionDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingLog
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
@@ -60,9 +64,11 @@ import com.example.data.model.VisitSession
         ParentMessage::class,
         DeletionLog::class,
         TabunganTransaction::class,
-        TabunganLog::class
+        TabunganLog::class,
+        KonselingRecord::class,
+        KonselingLog::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -82,6 +88,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun deletionLogDao(): DeletionLogDao
     abstract fun tabunganTransactionDao(): TabunganTransactionDao
     abstract fun tabunganLogDao(): TabunganLogDao
+    abstract fun konselingRecordDao(): KonselingRecordDao
+    abstract fun konselingLogDao(): KonselingLogDao
 
     companion object {
         @Volatile
@@ -461,6 +469,60 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_22_23 = object : androidx.room.migration.Migration(22, 23) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS konseling_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        ownerWaliUsername TEXT NOT NULL DEFAULT '',
+                        ownerWaliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        isConfidential INTEGER NOT NULL DEFAULT 1,
+                        entryType TEXT NOT NULL DEFAULT 'SESI',
+                        topic TEXT NOT NULL DEFAULT 'ADAPTASI',
+                        urgencyLevel TEXT NOT NULL DEFAULT 'RINGAN',
+                        moodLevel TEXT NOT NULL DEFAULT 'NETRAL',
+                        title TEXT NOT NULL DEFAULT '',
+                        summary TEXT NOT NULL DEFAULT '',
+                        intervention TEXT NOT NULL DEFAULT '',
+                        followUpPlan TEXT NOT NULL DEFAULT '',
+                        followUpDate INTEGER,
+                        status TEXT NOT NULL DEFAULT 'DIPANTAU',
+                        sessionDate INTEGER NOT NULL DEFAULT 0,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS konseling_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        recordId INTEGER NOT NULL DEFAULT 0,
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        ownerWaliUsername TEXT NOT NULL DEFAULT '',
+                        ownerWaliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        isConfidential INTEGER NOT NULL DEFAULT 1,
+                        actionType TEXT NOT NULL DEFAULT 'INPUT_SESI',
+                        summary TEXT NOT NULL DEFAULT '',
+                        actorName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        actorUsername TEXT NOT NULL DEFAULT '',
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -483,7 +545,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_18_19,
                         MIGRATION_19_20,
                         MIGRATION_20_21,
-                        MIGRATION_21_22
+                        MIGRATION_21_22,
+                        MIGRATION_22_23
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

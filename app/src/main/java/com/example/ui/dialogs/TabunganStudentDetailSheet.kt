@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -90,6 +91,7 @@ fun TabunganStudentDetailSheet(
     waliName: String,
     schoolProfile: SchoolProfile,
     onQuickInput: (String) -> Unit,
+    onEditTransaction: (TabunganTransaction) -> Unit = {},
     onCancelTransaction: (TabunganTransaction, String) -> Unit,
     onDeleteTransaction: (TabunganTransaction) -> Unit,
     onDismiss: () -> Unit
@@ -287,12 +289,12 @@ fun TabunganStudentDetailSheet(
                 ) {
                     Button(
                         onClick = { onQuickInput(TabunganHelper.TYPE_IN) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D), contentColor = Color.White),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_tabungan_detail_add_in")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -301,12 +303,12 @@ fun TabunganStudentDetailSheet(
                     }
                     Button(
                         onClick = { onQuickInput(TabunganHelper.TYPE_OUT) },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626)),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDC2626), contentColor = Color.White),
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_tabungan_detail_add_out")
                     ) {
                         Icon(Icons.Default.Remove, contentDescription = null, modifier = Modifier.size(15.dp))
@@ -333,12 +335,12 @@ fun TabunganStudentDetailSheet(
                             }
                         },
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         modifier = Modifier
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_tabungan_student_pdf")
                     ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = Color(0xFF0F766E), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = "PDF", tint = Color(0xFF0F766E), modifier = Modifier.size(18.dp))
                     }
                     OutlinedButton(
                         onClick = {
@@ -358,12 +360,12 @@ fun TabunganStudentDetailSheet(
                             }
                         },
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                         modifier = Modifier
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_tabungan_student_wa")
                     ) {
-                        Icon(Icons.Default.Share, contentDescription = "Share WA", tint = Color(0xFF15803D), modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Share, contentDescription = "Share WA", tint = Color(0xFF15803D), modifier = Modifier.size(18.dp))
                     }
                 }
 
@@ -533,16 +535,27 @@ fun TabunganStudentDetailSheet(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
-                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                                 if (isActive) {
+                                                    TextButton(
+                                                        onClick = { onEditTransaction(tx) },
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                        modifier = Modifier
+                                                            .heightIn(min = 48.dp)
+                                                            .testTag("btn_edit_tabungan_tx_${tx.id}")
+                                                    ) {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF4338CA), modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text(if (isEn) "Edit" else "Ubah", fontSize = 11.sp, color = Color(0xFF4338CA))
+                                                    }
                                                     TextButton(
                                                         onClick = {
                                                             cancelReason = ""
                                                             txToCancel = tx
                                                         },
-                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                                         modifier = Modifier
-                                                            .heightIn(min = 36.dp)
+                                                            .heightIn(min = 48.dp)
                                                             .testTag("btn_cancel_tabungan_tx_${tx.id}")
                                                     ) {
                                                         Icon(Icons.Default.Cancel, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(14.dp))
@@ -552,9 +565,9 @@ fun TabunganStudentDetailSheet(
                                                 }
                                                 TextButton(
                                                     onClick = { txToDelete = tx },
-                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                                                     modifier = Modifier
-                                                        .heightIn(min = 36.dp)
+                                                        .heightIn(min = 48.dp)
                                                         .testTag("btn_delete_tabungan_tx_${tx.id}")
                                                 ) {
                                                     Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp))
@@ -705,6 +718,7 @@ internal fun TabunganLogCard(
     val actionColor = when (log.actionType.trim().uppercase()) {
         TabunganHelper.LOG_INPUT_IN -> Color(0xFF15803D)
         TabunganHelper.LOG_INPUT_OUT -> Color(0xFFDC2626)
+        TabunganHelper.LOG_EDIT -> Color(0xFF4338CA)
         TabunganHelper.LOG_CANCEL -> Color(0xFFB45309)
         TabunganHelper.LOG_DELETE -> Color(0xFF7F1D1D)
         else -> Color(0xFF475569)
@@ -712,6 +726,7 @@ internal fun TabunganLogCard(
     val actionBg = when (log.actionType.trim().uppercase()) {
         TabunganHelper.LOG_INPUT_IN -> Color(0xFFDCFCE7)
         TabunganHelper.LOG_INPUT_OUT -> Color(0xFFFEE2E2)
+        TabunganHelper.LOG_EDIT -> Color(0xFFE0E7FF)
         TabunganHelper.LOG_CANCEL -> Color(0xFFFEF3C7)
         TabunganHelper.LOG_DELETE -> Color(0xFFFEE2E2)
         else -> Color(0xFFF1F5F9)

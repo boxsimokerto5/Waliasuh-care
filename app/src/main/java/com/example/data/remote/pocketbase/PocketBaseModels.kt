@@ -8,6 +8,9 @@ import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingHelper
+import com.example.data.model.KonselingLog
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
@@ -1390,6 +1393,162 @@ data class PbTabunganLogDto(
                 amount = model.amount,
                 balanceBefore = model.balanceBefore,
                 balanceAfter = model.balanceAfter,
+                summary = model.summary,
+                actorName = model.actorName,
+                actorUsername = model.actorUsername,
+                createdAt = model.createdAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbKonselingRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
+    @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
+    @Json(name = "is_confidential") val isConfidential: Boolean? = null,
+    @Json(name = "entry_type") val entryType: String? = null,
+    @Json(name = "topic") val topic: String? = null,
+    @Json(name = "urgency_level") val urgencyLevel: String? = null,
+    @Json(name = "mood_level") val moodLevel: String? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "summary") val summary: String? = null,
+    @Json(name = "intervention") val intervention: String? = null,
+    @Json(name = "follow_up_plan") val followUpPlan: String? = null,
+    @Json(name = "follow_up_date") val followUpDate: Long? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "session_date") val sessionDate: Long? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): KonselingRecord {
+        val now = System.currentTimeMillis()
+        val resolvedSessionDate = sessionDate?.takeIf { it > 0L } ?: now
+        return KonselingRecord(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            studentId = studentId,
+            studentName = studentName,
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            ownerWaliUsername = ownerWaliUsername.orEmpty(),
+            ownerWaliName = ownerWaliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            isConfidential = isConfidential ?: true,
+            entryType = entryType?.trim()?.uppercase()?.ifBlank { KonselingHelper.ENTRY_SESI } ?: KonselingHelper.ENTRY_SESI,
+            topic = topic?.trim()?.uppercase()?.ifBlank { KonselingHelper.TOPIC_ADAPTASI } ?: KonselingHelper.TOPIC_ADAPTASI,
+            urgencyLevel = urgencyLevel?.trim()?.uppercase()?.ifBlank { KonselingHelper.URGENCY_RINGAN } ?: KonselingHelper.URGENCY_RINGAN,
+            moodLevel = moodLevel?.trim()?.uppercase()?.ifBlank { KonselingHelper.MOOD_NETRAL } ?: KonselingHelper.MOOD_NETRAL,
+            title = title.orEmpty(),
+            summary = summary.orEmpty(),
+            intervention = intervention.orEmpty(),
+            followUpPlan = followUpPlan.orEmpty(),
+            followUpDate = followUpDate?.takeIf { it > 0L },
+            status = status?.trim()?.uppercase()?.ifBlank { KonselingHelper.STATUS_DIPANTAU } ?: KonselingHelper.STATUS_DIPANTAU,
+            sessionDate = resolvedSessionDate,
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: resolvedSessionDate,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedSessionDate
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: KonselingRecord): PbKonselingRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "kons_rec:${model.schoolId}:${model.ownerWaliUsername}:${model.studentId}:${model.createdAt}"
+            )
+            return PbKonselingRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                ownerWaliUsername = model.ownerWaliUsername,
+                ownerWaliName = model.ownerWaliName,
+                isConfidential = model.isConfidential,
+                entryType = model.entryType,
+                topic = model.topic,
+                urgencyLevel = model.urgencyLevel,
+                moodLevel = model.moodLevel,
+                title = model.title,
+                summary = model.summary,
+                intervention = model.intervention,
+                followUpPlan = model.followUpPlan,
+                followUpDate = model.followUpDate ?: 0L,
+                status = model.status,
+                sessionDate = model.sessionDate,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbKonselingLogDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "record_id") val recordId: Long = 0L,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
+    @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
+    @Json(name = "is_confidential") val isConfidential: Boolean? = null,
+    @Json(name = "action_type") val actionType: String? = null,
+    @Json(name = "summary") val summary: String? = null,
+    @Json(name = "actor_name") val actorName: String? = null,
+    @Json(name = "actor_username") val actorUsername: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): KonselingLog {
+        val now = System.currentTimeMillis()
+        return KonselingLog(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            recordId = recordId,
+            studentId = studentId,
+            studentName = studentName,
+            studentClass = studentClass.orEmpty(),
+            ownerWaliUsername = ownerWaliUsername.orEmpty(),
+            ownerWaliName = ownerWaliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            isConfidential = isConfidential ?: true,
+            actionType = actionType?.trim()?.uppercase()?.ifBlank { KonselingHelper.LOG_INPUT_SESI } ?: KonselingHelper.LOG_INPUT_SESI,
+            summary = summary.orEmpty(),
+            actorName = actorName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            actorUsername = actorUsername.orEmpty(),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: KonselingLog): PbKonselingLogDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "kons_log:${model.schoolId}:${model.ownerWaliUsername}:${model.recordId}:${model.createdAt}"
+            )
+            return PbKonselingLogDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                recordId = model.recordId,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentClass = model.studentClass,
+                ownerWaliUsername = model.ownerWaliUsername,
+                ownerWaliName = model.ownerWaliName,
+                isConfidential = model.isConfidential,
+                actionType = model.actionType,
                 summary = model.summary,
                 actorName = model.actorName,
                 actorUsername = model.actorUsername,

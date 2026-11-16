@@ -15,6 +15,9 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingHelper
+import com.example.data.model.KonselingLog
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
@@ -99,7 +102,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.parentMessageDao(),
             db.deletionLogDao(),
             db.tabunganTransactionDao(),
-            db.tabunganLogDao()
+            db.tabunganLogDao(),
+            db.konselingRecordDao(),
+            db.konselingLogDao()
         )
     }
 
@@ -1905,11 +1910,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             allTxs.filter { tx ->
                 tx.schoolId.equals(parentLink.schoolId, ignoreCase = true) &&
-                    tx.studentId == parentLink.studentId &&
+                    TabunganHelper.matchesStudentIdOrNis(tx, parentLink.studentId, parentLink.studentNis) &&
                     TabunganHelper.isActive(tx.status)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun syncParentRelationsOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncParentRelationsOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
 
     fun syncTabunganOnlineQuietly() {
         if (isUnitTestEnvironment()) return
@@ -1941,16 +1954,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val ownerUser = student.assignedWaliUsername.trim().ifBlank { currentUser }
             val ownerName = student.assignedWaliName.trim().ifBlank { currentName }
 
-            val existingForStudent = repository.getTabunganTransactionsForStudentList(student.id, activeSchool)
+            val existingForStudent = repository.getTabunganTransactionsBySchoolList(activeSchool)
                 .filter {
-                    TabunganHelper.matchesPrivateOwner(
-                        ownerUsername = it.ownerWaliUsername,
-                        ownerName = it.ownerWaliName,
-                        currentUsername = ownerUser,
-                        currentWaliName = ownerName
-                    )
+                    TabunganHelper.matchesStudentIdOrNis(it, student.id, student.nis) &&
+                        TabunganHelper.matchesPrivateOwner(
+                            ownerUsername = it.ownerWaliUsername,
+                            ownerName = it.ownerWaliName,
+                            currentUsername = ownerUser,
+                            currentWaliName = ownerName
+                        )
                 }
-            val summaryBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, student.id)
+            val summaryBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, student.id, student.nis)
             if (cleanType == TabunganHelper.TYPE_OUT && amount > summaryBefore.balance) {
                 onResult(
                     false,
@@ -2029,6 +2043,105 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun editTabunganTransaction(
+        existingTx: TabunganTransaction,
+        transactionType: String,
+        amount: Long,
+        title: String,
+        notes: String = "",
+        transactionDate: Long = existingTx.transactionDate,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!TabunganHelper.isActive(existingTx.status)) {
+            onResult(false, if (isEn) "Cancelled transactions cannot be edited." else "Transaksi yang sudah dibatalkan tidak dapat diubah.")
+            return
+        }
+        if (amount <= 0L) {
+            onResult(false, if (isEn) "Nominal must be greater than Rp 0." else "Nominal harus lebih dari Rp 0.")
+            return
+        }
+        val cleanType = if (TabunganHelper.isIncome(transactionType)) TabunganHelper.TYPE_IN else TabunganHelper.TYPE_OUT
+        viewModelScope.launch {
+            val activeSchool = existingTx.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val currentUser = _currentUsername.value?.trim().orEmpty()
+            val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val now = System.currentTimeMillis()
+            val resolvedTitle = title.trim().ifBlank {
+                if (cleanType == TabunganHelper.TYPE_IN) "Titip Uang Saku" else "Pengeluaran Kebutuhan"
+            }
+
+            val existingForStudent = repository.getTabunganTransactionsBySchoolList(activeSchool)
+                .filter {
+                    TabunganHelper.matchesStudentIdOrNis(it, existingTx.studentId, existingTx.studentNis) &&
+                        TabunganHelper.matchesPrivateOwner(
+                            ownerUsername = it.ownerWaliUsername,
+                            ownerName = it.ownerWaliName,
+                            currentUsername = existingTx.ownerWaliUsername,
+                            currentWaliName = existingTx.ownerWaliName
+                        )
+                }
+            val balanceBefore = TabunganHelper.computeSummaryByStudentId(
+                existingForStudent,
+                existingTx.studentId,
+                existingTx.studentNis
+            ).balance
+
+            val updatedTx = existingTx.copy(
+                transactionType = cleanType,
+                amount = amount,
+                title = resolvedTitle,
+                notes = notes.trim(),
+                transactionDate = transactionDate,
+                updatedAt = now
+            )
+            val simulatedList = existingForStudent.map { if (it.id == existingTx.id) updatedTx else it }
+            val rawNetAfter = TabunganHelper.computeRawNetBalance(simulatedList)
+            if (rawNetAfter < 0L) {
+                val deficit = kotlin.math.abs(rawNetAfter)
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Edit rejected: resulting balance would be negative (-${TabunganHelper.formatRupiah(deficit)})."
+                    } else {
+                        "Perubahan ditolak: saldo ${existingTx.studentName} akan menjadi minus (-${TabunganHelper.formatRupiah(deficit)})."
+                    }
+                )
+                return@launch
+            }
+
+            repository.updateTabunganTransaction(updatedTx)
+            val logEntry = TabunganLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                transactionId = updatedTx.id,
+                studentId = updatedTx.studentId,
+                studentName = updatedTx.studentName,
+                studentClass = updatedTx.studentClass,
+                ownerWaliUsername = updatedTx.ownerWaliUsername,
+                ownerWaliName = updatedTx.ownerWaliName,
+                isPrivate = true,
+                actionType = TabunganHelper.LOG_EDIT,
+                amount = amount,
+                balanceBefore = balanceBefore,
+                balanceAfter = rawNetAfter.coerceAtLeast(0L),
+                summary = buildString {
+                    append("Edit: $resolvedTitle (${TabunganHelper.formatRupiah(existingTx.amount)} → ${TabunganHelper.formatRupiah(amount)})")
+                    if (notes.isNotBlank()) append(" • ${notes.trim()}")
+                },
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertTabunganLog(logEntry)
+            onResult(true, if (isEn) "Transaction updated & synced." else "Transaksi tabungan berhasil diperbarui.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleTabunganTransaction(getApplication(), updatedTx)
+                PocketBaseSyncManager.uploadSingleTabunganLog(getApplication(), logEntry)
+            }
+        }
+    }
+
     fun cancelTabunganTransaction(
         tx: TabunganTransaction,
         reason: String = "",
@@ -2046,16 +2159,17 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val now = System.currentTimeMillis()
             val cleanReason = reason.trim().ifBlank { "Dibatalkan oleh Wali Asuh" }
 
-            val existingForStudent = repository.getTabunganTransactionsForStudentList(tx.studentId, activeSchool)
+            val existingForStudent = repository.getTabunganTransactionsBySchoolList(activeSchool)
                 .filter {
-                    TabunganHelper.matchesPrivateOwner(
-                        ownerUsername = it.ownerWaliUsername,
-                        ownerName = it.ownerWaliName,
-                        currentUsername = tx.ownerWaliUsername,
-                        currentWaliName = tx.ownerWaliName
-                    )
+                    TabunganHelper.matchesStudentIdOrNis(it, tx.studentId, tx.studentNis) &&
+                        TabunganHelper.matchesPrivateOwner(
+                            ownerUsername = it.ownerWaliUsername,
+                            ownerName = it.ownerWaliName,
+                            currentUsername = tx.ownerWaliUsername,
+                            currentWaliName = tx.ownerWaliName
+                        )
                 }
-            val balanceBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, tx.studentId).balance
+            val balanceBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, tx.studentId, tx.studentNis).balance
             val updatedTx = tx.copy(
                 status = TabunganHelper.STATUS_CANCELLED,
                 cancelledBy = currentName,
@@ -2063,10 +2177,23 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 cancelledAt = now,
                 updatedAt = now
             )
-            repository.updateTabunganTransaction(updatedTx)
-
             val updatedList = existingForStudent.map { if (it.id == tx.id) updatedTx else it }
-            val balanceAfter = TabunganHelper.computeSummaryByStudentId(updatedList, tx.studentId).balance
+            val rawNetAfter = TabunganHelper.computeRawNetBalance(updatedList)
+            if (rawNetAfter < 0L) {
+                val deficit = kotlin.math.abs(rawNetAfter)
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Cannot cancel deposit: balance would become negative (-${TabunganHelper.formatRupiah(deficit)}). Cancel or delete related expense(s) first."
+                    } else {
+                        "Titipan tidak bisa dibatalkan karena saldo akan minus (-${TabunganHelper.formatRupiah(deficit)}). Batalkan/hapus pengeluaran terlebih dahulu."
+                    }
+                )
+                return@launch
+            }
+
+            repository.updateTabunganTransaction(updatedTx)
+            val balanceAfter = rawNetAfter.coerceAtLeast(0L)
 
             val logEntry = TabunganLog(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
@@ -2107,19 +2234,34 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
             val now = System.currentTimeMillis()
 
-            val existingForStudent = repository.getTabunganTransactionsForStudentList(tx.studentId, activeSchool)
+            val existingForStudent = repository.getTabunganTransactionsBySchoolList(activeSchool)
                 .filter {
-                    TabunganHelper.matchesPrivateOwner(
-                        ownerUsername = it.ownerWaliUsername,
-                        ownerName = it.ownerWaliName,
-                        currentUsername = tx.ownerWaliUsername,
-                        currentWaliName = tx.ownerWaliName
-                    )
+                    TabunganHelper.matchesStudentIdOrNis(it, tx.studentId, tx.studentNis) &&
+                        TabunganHelper.matchesPrivateOwner(
+                            ownerUsername = it.ownerWaliUsername,
+                            ownerName = it.ownerWaliName,
+                            currentUsername = tx.ownerWaliUsername,
+                            currentWaliName = tx.ownerWaliName
+                        )
                 }
-            val balanceBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, tx.studentId).balance
-            repository.deleteTabunganTransaction(tx)
+            val balanceBefore = TabunganHelper.computeSummaryByStudentId(existingForStudent, tx.studentId, tx.studentNis).balance
             val afterList = existingForStudent.filterNot { it.id == tx.id }
-            val balanceAfter = TabunganHelper.computeSummaryByStudentId(afterList, tx.studentId).balance
+            val rawNetAfter = TabunganHelper.computeRawNetBalance(afterList)
+            if (rawNetAfter < 0L) {
+                val deficit = kotlin.math.abs(rawNetAfter)
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Cannot delete deposit: balance would become negative (-${TabunganHelper.formatRupiah(deficit)}). Cancel or delete related expense(s) first."
+                    } else {
+                        "Titipan tidak bisa dihapus karena saldo akan minus (-${TabunganHelper.formatRupiah(deficit)}). Hapus/batalkan pengeluaran terkait terlebih dahulu."
+                    }
+                )
+                return@launch
+            }
+
+            repository.deleteTabunganTransaction(tx)
+            val balanceAfter = rawNetAfter.coerceAtLeast(0L)
 
             // Catat log privat internal Tabungan SAJA — TIDAK menerbitkan DeletionLog publik sekolah
             val logEntry = TabunganLog(
@@ -2146,6 +2288,359 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteRemoteTabunganTransaction(getApplication(), tx.id)
                 PocketBaseSyncManager.uploadSingleTabunganLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    // ==========================================
+    // KONSELING RAHASIA WALI ASUH (PRIVASI MUTLAK)
+    // HANYA dilihat & dikelola oleh Wali Asuh bersangkutan (pemilik catatan)
+    // Tidak dapat dilihat Admin Sekolah, Guru Ngaji, Wali lain, Portal Ortu, maupun lintas akun
+    // ==========================================
+    val konselingRecords: StateFlow<List<KonselingRecord>> = combine(
+        repository.allKonselingRecords,
+        _schoolProfile,
+        _currentUserRole,
+        combine(_currentUsername, _waliName) { u, w -> u to w }
+    ) { allRecs, profile, role, actorPair ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        KonselingHelper.filterPrivateRecords(
+            allRecords = allRecs,
+            schoolId = tenant,
+            role = role,
+            currentUsername = actorPair.first,
+            currentWaliName = actorPair.second
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val konselingLogs: StateFlow<List<KonselingLog>> = combine(
+        repository.allKonselingLogs,
+        _schoolProfile,
+        _currentUserRole,
+        combine(_currentUsername, _waliName) { u, w -> u to w }
+    ) { allLogs, profile, role, actorPair ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        KonselingHelper.filterPrivateLogs(
+            allLogs = allLogs,
+            schoolId = tenant,
+            role = role,
+            currentUsername = actorPair.first,
+            currentWaliName = actorPair.second
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun syncKonselingOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        if (_currentUserRole.value != UserRole.WALI) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncKonselingOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun saveKonselingRecord(
+        student: ChildStudent,
+        entryType: String,
+        topic: String,
+        urgencyLevel: String,
+        moodLevel: String,
+        title: String,
+        summary: String,
+        intervention: String = "",
+        followUpPlan: String = "",
+        followUpDate: Long? = null,
+        sessionDate: Long = System.currentTimeMillis(),
+        markCompleted: Boolean = false,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (_currentUserRole.value != UserRole.WALI) {
+            onResult(false, if (isEn) "Only the owning Wali Asuh can manage private counseling notes." else "Hanya Wali Asuh bersangkutan yang dapat mencatat konseling rahasia.")
+            return
+        }
+        val cleanSummary = summary.trim()
+        val cleanTitle = title.trim()
+        if (cleanSummary.isBlank() && cleanTitle.isBlank()) {
+            onResult(false, if (isEn) "Please fill in the counseling summary or title." else "Isi judul atau ringkasan catatan konseling terlebih dahulu.")
+            return
+        }
+        val cleanEntryType = if (KonselingHelper.isGrowthEntry(entryType)) {
+            KonselingHelper.ENTRY_PERKEMBANGAN
+        } else {
+            KonselingHelper.ENTRY_SESI
+        }
+        val resolvedTitle = cleanTitle.ifBlank {
+            KonselingHelper.formatTopicLabel(topic, isEn)
+        }
+        val resolvedStatus = if (markCompleted) KonselingHelper.STATUS_SELESAI else KonselingHelper.STATUS_DIPANTAU
+
+        viewModelScope.launch {
+            val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val currentUser = _currentUsername.value?.trim().orEmpty()
+            val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val ownerUser = currentUser.ifBlank { student.assignedWaliUsername.trim() }
+            val ownerName = currentName
+            val now = System.currentTimeMillis()
+            val recId = PocketBaseSyncManager.generateCloudSafeId()
+
+            val newRecord = KonselingRecord(
+                id = recId,
+                studentId = student.id,
+                studentName = student.name,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                ownerWaliUsername = ownerUser,
+                ownerWaliName = ownerName,
+                isConfidential = true,
+                entryType = cleanEntryType,
+                topic = topic.trim().ifBlank { KonselingHelper.TOPIC_ADAPTASI },
+                urgencyLevel = urgencyLevel.trim().ifBlank { KonselingHelper.URGENCY_RINGAN },
+                moodLevel = moodLevel.trim().ifBlank { KonselingHelper.MOOD_NETRAL },
+                title = resolvedTitle,
+                summary = cleanSummary,
+                intervention = intervention.trim(),
+                followUpPlan = followUpPlan.trim(),
+                followUpDate = followUpDate,
+                status = resolvedStatus,
+                sessionDate = sessionDate,
+                schoolId = activeSchool,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertKonselingRecord(newRecord)
+
+            val logEntry = KonselingLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                recordId = newRecord.id,
+                studentId = student.id,
+                studentName = student.name,
+                studentClass = student.classGrade,
+                ownerWaliUsername = ownerUser,
+                ownerWaliName = ownerName,
+                isConfidential = true,
+                actionType = if (cleanEntryType == KonselingHelper.ENTRY_PERKEMBANGAN) {
+                    KonselingHelper.LOG_INPUT_GROWTH
+                } else {
+                    KonselingHelper.LOG_INPUT_SESI
+                },
+                summary = buildString {
+                    append(resolvedTitle)
+                    append(" • ")
+                    append(KonselingHelper.formatTopicLabel(newRecord.topic, false))
+                },
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertKonselingLog(logEntry)
+            onResult(
+                true,
+                if (isEn) "Private counseling note saved (owner-only)." else "Catatan konseling rahasia berhasil disimpan (khusus Anda)."
+            )
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleKonselingRecord(getApplication(), newRecord)
+                PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    fun editKonselingRecord(
+        existingRecord: KonselingRecord,
+        entryType: String,
+        topic: String,
+        urgencyLevel: String,
+        moodLevel: String,
+        title: String,
+        summary: String,
+        intervention: String = "",
+        followUpPlan: String = "",
+        followUpDate: Long? = existingRecord.followUpDate,
+        sessionDate: Long = existingRecord.sessionDate,
+        markCompleted: Boolean = KonselingHelper.isCompleted(existingRecord.status),
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val currentUser = _currentUsername.value?.trim().orEmpty()
+        val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+        if (_currentUserRole.value != UserRole.WALI ||
+            !KonselingHelper.matchesOwnerOnly(
+                ownerUsername = existingRecord.ownerWaliUsername,
+                ownerName = existingRecord.ownerWaliName,
+                currentUsername = currentUser,
+                currentWaliName = currentName
+            )
+        ) {
+            onResult(false, if (isEn) "Access denied: confidential record belongs to another caregiver." else "Akses ditolak: catatan rahasia ini bukan milik akun Anda.")
+            return
+        }
+        val cleanSummary = summary.trim()
+        val cleanTitle = title.trim()
+        if (cleanSummary.isBlank() && cleanTitle.isBlank()) {
+            onResult(false, if (isEn) "Please fill in the counseling summary or title." else "Isi judul atau ringkasan catatan konseling.")
+            return
+        }
+        val cleanEntryType = if (KonselingHelper.isGrowthEntry(entryType)) {
+            KonselingHelper.ENTRY_PERKEMBANGAN
+        } else {
+            KonselingHelper.ENTRY_SESI
+        }
+        val resolvedTitle = cleanTitle.ifBlank { KonselingHelper.formatTopicLabel(topic, isEn) }
+        val resolvedStatus = if (markCompleted) KonselingHelper.STATUS_SELESAI else KonselingHelper.STATUS_DIPANTAU
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val activeSchool = existingRecord.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val updated = existingRecord.copy(
+                isConfidential = true,
+                entryType = cleanEntryType,
+                topic = topic.trim().ifBlank { KonselingHelper.TOPIC_ADAPTASI },
+                urgencyLevel = urgencyLevel.trim().ifBlank { KonselingHelper.URGENCY_RINGAN },
+                moodLevel = moodLevel.trim().ifBlank { KonselingHelper.MOOD_NETRAL },
+                title = resolvedTitle,
+                summary = cleanSummary,
+                intervention = intervention.trim(),
+                followUpPlan = followUpPlan.trim(),
+                followUpDate = followUpDate,
+                status = resolvedStatus,
+                sessionDate = sessionDate,
+                updatedAt = now
+            )
+            repository.updateKonselingRecord(updated)
+
+            val logEntry = KonselingLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                recordId = updated.id,
+                studentId = updated.studentId,
+                studentName = updated.studentName,
+                studentClass = updated.studentClass,
+                ownerWaliUsername = updated.ownerWaliUsername,
+                ownerWaliName = updated.ownerWaliName,
+                isConfidential = true,
+                actionType = KonselingHelper.LOG_EDIT,
+                summary = "Edit: $resolvedTitle",
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertKonselingLog(logEntry)
+            onResult(true, if (isEn) "Counseling note updated." else "Catatan konseling rahasia berhasil diperbarui.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleKonselingRecord(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    fun toggleKonselingStatus(
+        record: KonselingRecord,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val currentUser = _currentUsername.value?.trim().orEmpty()
+        val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+        if (_currentUserRole.value != UserRole.WALI ||
+            !KonselingHelper.matchesOwnerOnly(
+                ownerUsername = record.ownerWaliUsername,
+                ownerName = record.ownerWaliName,
+                currentUsername = currentUser,
+                currentWaliName = currentName
+            )
+        ) {
+            onResult(false, if (isEn) "Access denied." else "Akses ditolak.")
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val currentlyCompleted = KonselingHelper.isCompleted(record.status)
+            val nextStatus = if (currentlyCompleted) KonselingHelper.STATUS_DIPANTAU else KonselingHelper.STATUS_SELESAI
+            val updated = record.copy(status = nextStatus, updatedAt = now)
+            repository.updateKonselingRecord(updated)
+
+            val logEntry = KonselingLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                recordId = record.id,
+                studentId = record.studentId,
+                studentName = record.studentName,
+                studentClass = record.studentClass,
+                ownerWaliUsername = record.ownerWaliUsername,
+                ownerWaliName = record.ownerWaliName,
+                isConfidential = true,
+                actionType = if (currentlyCompleted) KonselingHelper.LOG_REOPEN else KonselingHelper.LOG_COMPLETE,
+                summary = if (currentlyCompleted) {
+                    "Pantau kembali: ${record.title}"
+                } else {
+                    "Dituntaskan / Membaik: ${record.title}"
+                },
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertKonselingLog(logEntry)
+            onResult(
+                true,
+                if (currentlyCompleted) {
+                    if (isEn) "Reopened for follow-up." else "Status diubah ke Perlu Tindak Lanjut."
+                } else {
+                    if (isEn) "Marked as resolved." else "Catatan ditandai Selesai / Membaik."
+                }
+            )
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleKonselingRecord(getApplication(), updated)
+                PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    fun deleteKonselingRecord(
+        record: KonselingRecord,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val currentUser = _currentUsername.value?.trim().orEmpty()
+        val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+        if (_currentUserRole.value != UserRole.WALI ||
+            !KonselingHelper.matchesOwnerOnly(
+                ownerUsername = record.ownerWaliUsername,
+                ownerName = record.ownerWaliName,
+                currentUsername = currentUser,
+                currentWaliName = currentName
+            )
+        ) {
+            onResult(false, if (isEn) "Access denied." else "Akses ditolak.")
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            repository.deleteKonselingRecord(record)
+
+            // Log audit PRIVAT internal konseling SAJA — TIDAK pernah mengirim DeletionLog publik sekolah
+            val logEntry = KonselingLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                recordId = record.id,
+                studentId = record.studentId,
+                studentName = record.studentName,
+                studentClass = record.studentClass,
+                ownerWaliUsername = record.ownerWaliUsername,
+                ownerWaliName = record.ownerWaliName,
+                isConfidential = true,
+                actionType = KonselingHelper.LOG_DELETE,
+                summary = "Hapus permanen: ${record.title.ifBlank { KonselingHelper.formatTopicLabel(record.topic, false) }}",
+                actorName = currentName,
+                actorUsername = currentUser,
+                schoolId = activeSchool,
+                createdAt = now
+            )
+            repository.insertKonselingLog(logEntry)
+            onResult(true, if (isEn) "Counseling note deleted privately." else "Catatan konseling dihapus (tercatat di log privat Anda).")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteKonselingRecord(getApplication(), record.id)
+                PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
             }
         }
     }
@@ -4082,6 +4577,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (registration.generatedSchoolCode.isNotBlank()) {
                 repository.deleteStudentsBySchool(registration.generatedSchoolCode)
                 repository.deleteWaliAccountsBySchool(registration.generatedSchoolCode)
+                repository.deleteTabunganTransactionsBySchool(registration.generatedSchoolCode)
+                repository.deleteTabunganLogsBySchool(registration.generatedSchoolCode)
+                repository.deleteKonselingRecordsBySchool(registration.generatedSchoolCode)
+                repository.deleteKonselingLogsBySchool(registration.generatedSchoolCode)
                 repository.deleteSchoolRegistrationsByCode(registration.generatedSchoolCode)
             }
             if (registration.id > 0L) {
@@ -4526,6 +5025,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
             // 1. Bersihkan seluruh data sekolah di Room lokal (students cascade ke medical_records)
             if (targetSchoolId.isNotBlank()) {
+                repository.deleteKonselingLogsBySchool(targetSchoolId)
+                repository.deleteKonselingRecordsBySchool(targetSchoolId)
                 repository.deleteTabunganLogsBySchool(targetSchoolId)
                 repository.deleteTabunganTransactionsBySchool(targetSchoolId)
                 repository.deleteDeletionLogsBySchool(targetSchoolId)

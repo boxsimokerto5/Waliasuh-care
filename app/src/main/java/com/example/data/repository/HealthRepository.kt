@@ -22,12 +22,16 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentMessageDao
+import com.example.data.dao.KonselingLogDao
+import com.example.data.dao.KonselingRecordDao
 import com.example.data.dao.TabunganLogDao
 import com.example.data.dao.TabunganTransactionDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingLog
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
@@ -52,7 +56,9 @@ class HealthRepository(
     private val parentMessageDao: ParentMessageDao? = null,
     private val deletionLogDao: DeletionLogDao? = null,
     private val tabunganTransactionDao: TabunganTransactionDao? = null,
-    private val tabunganLogDao: TabunganLogDao? = null
+    private val tabunganLogDao: TabunganLogDao? = null,
+    private val konselingRecordDao: KonselingRecordDao? = null,
+    private val konselingLogDao: KonselingLogDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -77,6 +83,10 @@ class HealthRepository(
         tabunganTransactionDao?.getAllTransactions() ?: emptyFlow()
     val allTabunganLogs: Flow<List<TabunganLog>> =
         tabunganLogDao?.getAllLogs() ?: emptyFlow()
+    val allKonselingRecords: Flow<List<KonselingRecord>> =
+        konselingRecordDao?.getAllRecords() ?: emptyFlow()
+    val allKonselingLogs: Flow<List<KonselingLog>> =
+        konselingLogDao?.getAllLogs() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -535,5 +545,49 @@ class HealthRepository(
 
     suspend fun deleteTabunganLogsBySchool(schoolId: String) {
         tabunganLogDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Konseling Rahasia (Hanya Wali Asuh Bersangkutan) ---
+    suspend fun insertKonselingRecord(record: KonselingRecord): Long =
+        konselingRecordDao?.insert(record) ?: 0L
+
+    suspend fun insertAllKonselingRecords(records: List<KonselingRecord>) {
+        konselingRecordDao?.insertAll(records)
+    }
+
+    suspend fun updateKonselingRecord(record: KonselingRecord) {
+        konselingRecordDao?.update(record)
+    }
+
+    suspend fun deleteKonselingRecord(record: KonselingRecord) {
+        konselingRecordDao?.delete(record)
+    }
+
+    suspend fun deleteKonselingRecordById(id: Long) {
+        konselingRecordDao?.deleteById(id)
+    }
+
+    suspend fun getKonselingRecordsBySchoolList(schoolId: String): List<KonselingRecord> =
+        konselingRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getKonselingRecordsForStudentList(studentId: Long, schoolId: String): List<KonselingRecord> =
+        konselingRecordDao?.getRecordsForStudentList(studentId, schoolId) ?: emptyList()
+
+    suspend fun deleteKonselingRecordsBySchool(schoolId: String) {
+        konselingRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertKonselingLog(log: KonselingLog): Long =
+        konselingLogDao?.insert(log) ?: 0L
+
+    suspend fun insertAllKonselingLogs(logs: List<KonselingLog>) {
+        konselingLogDao?.insertAll(logs)
+    }
+
+    suspend fun getKonselingLogsBySchoolList(schoolId: String): List<KonselingLog> =
+        konselingLogDao?.getLogsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteKonselingLogsBySchool(schoolId: String) {
+        konselingLogDao?.deleteBySchoolId(schoolId)
     }
 }

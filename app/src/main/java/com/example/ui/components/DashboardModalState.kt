@@ -8,8 +8,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 
 import com.example.data.model.ChildStudent
+import com.example.data.model.KonselingHelper
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.TabunganHelper
+import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitSession
 
 enum class DashboardCategoryHub {
@@ -20,7 +23,8 @@ enum class DashboardCategoryHub {
     PESAN,
     MENGAJI,
     ORANG_TUA,
-    TABUNGAN
+    TABUNGAN,
+    KONSELING
 }
 
 @Stable
@@ -70,10 +74,22 @@ class DashboardModalState {
     var showInputTabunganDialog by mutableStateOf(false)
     var inputTabunganDefaultType by mutableStateOf(TabunganHelper.TYPE_IN)
     var inputTabunganTargetStudent by mutableStateOf<ChildStudent?>(null)
+    var tabunganTxToEdit by mutableStateOf<TabunganTransaction?>(null)
     var showTabunganStudentListSheet by mutableStateOf(false)
     var showTabunganHistoryLogsSheet by mutableStateOf(false)
     var tabunganHistoryInitialTab by mutableStateOf(0)
     var tabunganStudentForDetail by mutableStateOf<ChildStudent?>(null)
+
+    // Modul Konseling Rahasia Wali Asuh (Hanya dilihat Wali Asuh bersangkutan)
+    var showInputKonselingDialog by mutableStateOf(false)
+    var inputKonselingDefaultEntryType by mutableStateOf(KonselingHelper.ENTRY_SESI)
+    var inputKonselingTargetStudent by mutableStateOf<ChildStudent?>(null)
+    var konselingRecordToEdit by mutableStateOf<KonselingRecord?>(null)
+    var konselingStudentForDetail by mutableStateOf<ChildStudent?>(null)
+    var showKonselingFollowUpSheet by mutableStateOf(false)
+    var showKonselingHistoryLogsSheet by mutableStateOf(false)
+    var konselingHistoryInitialTab by mutableStateOf(0)
+    var showKonselingGuideDialog by mutableStateOf(false)
 }
 
 @Composable

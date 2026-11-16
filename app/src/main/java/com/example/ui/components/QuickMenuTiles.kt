@@ -113,6 +113,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_tabungan,
             tileBg = Color(0xFFFEF3C7)
         )
+        DashboardIconKey.KONSELING -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Counseling" else "Konseling",
+            imageRes = R.drawable.img_menu_konseling,
+            tileBg = Color(0xFFEDE9FE)
+        )
     }
 }
 
@@ -192,6 +198,8 @@ fun QuickMenuTiles(
     myFosterStudentsCount: Int = 0,
     tabunganTotalBalance: Long = 0L,
     tabunganHoldersCount: Int = 0,
+    konselingFollowUpCount: Int = 0,
+    konselingTotalCount: Int = 0,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     iconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
@@ -332,6 +340,20 @@ fun QuickMenuTiles(
                     badgeBg = Color(0xFFD97706),
                     testTag = "category_tabungan",
                     onClick = { onOpenCategoryHub(DashboardCategoryHub.TABUNGAN) }
+                )
+            }
+            DashboardIconKey.KONSELING -> {
+                val konselingBadge = when {
+                    konselingFollowUpCount > 0 -> "$konselingFollowUpCount ${if (isEn) "Monitor" else "Pantau"}"
+                    konselingTotalCount > 0 -> "$konselingTotalCount Log"
+                    else -> if (isEn) "Private" else "Rahasia"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = konselingBadge,
+                    badgeBg = if (konselingFollowUpCount > 0) Color(0xFF7C3AED) else Color(0xFF6D28D9),
+                    testTag = "category_konseling",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.KONSELING) }
                 )
             }
         }

@@ -55,6 +55,9 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingHelper
+import com.example.data.model.KonselingLog
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
@@ -1739,6 +1742,396 @@ internal fun LazyListScope.tabunganCategoryItems(
         }
     }
 }
+
+internal fun LazyListScope.konselingCategoryItems(
+    isEn: Boolean,
+    claimedStudents: List<ChildStudent>,
+    records: List<KonselingRecord>,
+    logs: List<KonselingLog>,
+    onOpenInputKonseling: (String, ChildStudent?) -> Unit,
+    onOpenFollowUpSheet: () -> Unit,
+    onOpenStudentDetail: (ChildStudent) -> Unit,
+    onOpenHistoryLogs: (Int) -> Unit,
+    onOpenGuideDialog: () -> Unit,
+    onOpenPdfSummary: () -> Unit,
+    onOpenPilihAnakAsuh: () -> Unit
+) {
+    val agg = KonselingHelper.computeAggregateStats(records)
+    val displayedStudents = claimedStudents
+        .distinctBy { it.id }
+        .sortedBy { it.name.lowercase() }
+
+    // 1. Deklarasi Kerahasiaan Mutlak (HANYA dilihat Wali Asuh bersangkutan)
+    item(key = "hub_konseling_privacy") {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_konseling_privacy_declaration"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)),
+            border = BorderStroke(1.dp, Color(0xFFDDD6FE))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFEDE9FE)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Lock,
+                        contentDescription = if (isEn) "Confidential Counseling" else "Kerahasiaan Konseling",
+                        tint = Color(0xFF6D28D9),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFF6D28D9)
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "CONFIDENTIAL • OWNER WALI ASUH ONLY"
+                            } else {
+                                "RAHASIA • HANYA DILIHAT WALI ASUH BERSANGKUTAN"
+                            },
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                    Text(
+                        text = if (isEn) {
+                            "Every counseling and student growth note here is strictly CONFIDENTIAL: only visible to you as the owning Foster Caregiver. School Admins, Guru Ngaji, other Wali Asuh, and Parents cannot view these notes."
+                        } else {
+                            "Catatan konseling & perkembangan anak ini bersifat RAHASIA MUTLAK: hanya dapat dilihat oleh Anda sebagai Wali Asuh bersangkutan. Admin Sekolah, Guru Ngaji, Wali Asuh lain, maupun Orang Tua tidak memiliki akses ke catatan ini."
+                        },
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = Color(0xFF4C1D95)
+                    )
+                }
+            }
+        }
+    }
+
+    // 2. Ringkasan Statistik Konseling
+    item(key = "hub_konseling_totals") {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_konseling_totals"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                HubStatTile("${agg.totalEntries}", if (isEn) "Notes" else "Total Catatan", Color(0xFFEDE9FE), Color(0xFF5B21B6), Modifier.weight(1f))
+                HubStatTile("${agg.followUpCount}", if (isEn) "Monitor" else "Perlu Pantau", Color(0xFFFEF3C7), Color(0xFFB45309), Modifier.weight(1f))
+                HubStatTile("${agg.highPriorityCount}", if (isEn) "Priority" else "Prioritas", Color(0xFFFEE2E2), Color(0xFFDC2626), Modifier.weight(1f))
+                HubStatTile("${agg.growthCount}", if (isEn) "Growth" else "Tumbuh", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
+            }
+        }
+    }
+
+    // 3. 6 Sub-Menu Ikon Konseling Lengkap
+    item(key = "hub_konseling_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Log Session" else "Catat Sesi",
+                    subtitle = if (isEn) "1-on-1 Confidential Note" else "Sesi Curhat & Bimbingan",
+                    imageRes = R.drawable.img_menu_konseling_catat,
+                    badgeText = if (isEn) "Private" else "Sesi Baru",
+                    badgeBg = Color(0xFFEDE9FE),
+                    badgeColor = Color(0xFF5B21B6),
+                    bgGradient = listOf(Color(0xFFF5F3FF), Color(0xFFEDE9FE).copy(alpha = 0.65f)),
+                    borderColor = Color(0xFFDDD6FE),
+                    onClick = { onOpenInputKonseling(KonselingHelper.ENTRY_SESI, null) },
+                    testTag = "tile_konseling_catat",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Follow-Up" else "Pantauan & Jadwal",
+                    subtitle = if (isEn) "Active Care Monitoring" else "Tindak Lanjut & Prioritas",
+                    imageRes = R.drawable.img_menu_konseling_followup,
+                    badgeText = "${agg.followUpCount} ${if (isEn) "Active" else "Pantau"}",
+                    badgeBg = if (agg.highPriorityCount > 0) Color(0xFFFEE2E2) else Color(0xFFFEF3C7),
+                    badgeColor = if (agg.highPriorityCount > 0) Color(0xFFDC2626) else Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = onOpenFollowUpSheet,
+                    testTag = "tile_konseling_followup",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Growth Note" else "Perkembangan Anak",
+                    subtitle = if (isEn) "Positive Shifts & Mood" else "Progres Positif & Apresiasi",
+                    imageRes = R.drawable.img_menu_konseling_perkembangan,
+                    badgeText = "${agg.growthCount} ${if (isEn) "Growth" else "Progres"}",
+                    badgeBg = Color(0xFFDCFCE7),
+                    badgeColor = Color(0xFF15803D),
+                    bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFA7F3D0),
+                    onClick = { onOpenInputKonseling(KonselingHelper.ENTRY_PERKEMBANGAN, null) },
+                    testTag = "tile_konseling_perkembangan",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "History & Audit" else "Riwayat & Log Audit",
+                    subtitle = if (isEn) "Full Private Timeline" else "Semua Catatan & Riwayat",
+                    imageRes = R.drawable.img_menu_konseling,
+                    badgeText = "${logs.size} Log",
+                    badgeBg = Color(0xFFE0E7FF),
+                    badgeColor = Color(0xFF4338CA),
+                    bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFC7D2FE),
+                    onClick = { onOpenHistoryLogs(0) },
+                    testTag = "tile_konseling_riwayat",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Ethics & Guide" else "Panduan & Etika",
+                    subtitle = if (isEn) "Empathetic Mentoring" else "SOP Konseling & Kerahasiaan",
+                    imageRes = R.drawable.img_menu_konseling_panduan,
+                    badgeText = if (isEn) "Guide" else "Panduan",
+                    badgeBg = Color(0xFFE0F2FE),
+                    badgeColor = Color(0xFF0369A1),
+                    bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFBAE6FD),
+                    onClick = onOpenGuideDialog,
+                    testTag = "tile_konseling_panduan",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Print Recap PDF" else "Cetak Rekap PDF",
+                    subtitle = if (isEn) "Confidential Dossier" else "Laporan Rahasia Wali Asuh",
+                    imageRes = R.drawable.img_menu_ranking_puasa,
+                    badgeText = "PDF",
+                    badgeBg = Color(0xFFCCFBF1),
+                    badgeColor = Color(0xFF0F766E),
+                    bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFF99F6E4),
+                    onClick = onOpenPdfSummary,
+                    testTag = "tile_konseling_pdf",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // 4. Daftar Anak Binaan Saya (Hanya Anak Binaan Milik Wali Asuh Ini)
+    item(key = "hub_konseling_students_hdr") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isEn) "My Foster Students (Tap for Counseling File)" else "Anak Binaan Saya (Ketuk untuk Catatan Rahasia)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (displayedStudents.isNotEmpty()) {
+                Text(
+                    text = "${displayedStudents.size} ${if (isEn) "Kids" else "Anak"}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF6D28D9)
+                )
+            }
+        }
+    }
+
+    if (displayedStudents.isEmpty()) {
+        item(key = "hub_konseling_empty_claimed") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("empty_konseling_no_claimed"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        tint = Color(0xFF6D28D9),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = if (isEn) "No Claimed Foster Students Yet" else "Belum Ada Anak Asuh Binaan Dipilih",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isEn) {
+                            "Counseling strictly lists your own claimed foster students under Parent Connect → Select Foster Kids."
+                        } else {
+                            "Menu Konseling hanya menampilkan anak asuh binaan Anda yang sudah dipilih di Hubungan Ortu → Pilih Anak Asuh."
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = onOpenPilihAnakAsuh,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6D28D9)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_konseling_open_pilih_anak")
+                    ) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) "Select Foster Students Now" else "Pilih Anak Asuh (Hubungan Ortu)",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+        }
+    } else {
+        items(displayedStudents, key = { "hub_kon_st_${it.id}" }) { student ->
+            val stStats = KonselingHelper.computeStudentStats(records, student)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenStudentDetail(student) }
+                    .testTag("card_konseling_student_${student.id}"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(
+                    1.dp,
+                    when {
+                        stStats.highPriorityCount > 0 -> Color(0xFFFCA5A5)
+                        stStats.followUpCount > 0 -> Color(0xFFDDD6FE)
+                        else -> MaterialTheme.colorScheme.outlineVariant
+                    }
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = student.name,
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${student.classGrade.ifBlank { "-" }} • ${student.dormitory.ifBlank { "-" }}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        val latest = stStats.latestRecord
+                        Text(
+                            text = if (latest != null) {
+                                "${KonselingHelper.formatTopicLabel(latest.topic, isEn)}: ${latest.title}"
+                            } else {
+                                if (isEn) "No confidential counseling notes yet" else "Belum ada catatan konseling rahasia"
+                            },
+                            fontSize = 10.5.sp,
+                            color = if (latest != null) Color(0xFF5B21B6) else MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = when {
+                                stStats.highPriorityCount > 0 -> Color(0xFFFEE2E2)
+                                stStats.followUpCount > 0 -> Color(0xFFEDE9FE)
+                                stStats.totalEntries > 0 -> Color(0xFFDCFCE7)
+                                else -> Color(0xFFF1F5F9)
+                            }
+                        ) {
+                            Text(
+                                text = when {
+                                    stStats.highPriorityCount > 0 -> "${stStats.highPriorityCount} ${if (isEn) "Priority" else "Prioritas"}"
+                                    stStats.followUpCount > 0 -> "${stStats.followUpCount} ${if (isEn) "Monitor" else "Pantau"}"
+                                    stStats.totalEntries > 0 -> "${stStats.totalEntries} ${if (isEn) "Notes" else "Catatan"}"
+                                    else -> if (isEn) "New" else "Baru"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = when {
+                                    stStats.highPriorityCount > 0 -> Color(0xFFDC2626)
+                                    stStats.followUpCount > 0 -> Color(0xFF6D28D9)
+                                    stStats.totalEntries > 0 -> Color(0xFF15803D)
+                                    else -> Color(0xFF64748B)
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        if (stStats.growthCount > 0) {
+                            Text(
+                                text = "${stStats.growthCount} ${if (isEn) "growth" else "perkembangan"}",
+                                fontSize = 9.5.sp,
+                                color = Color(0xFF15803D),
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 
 
 

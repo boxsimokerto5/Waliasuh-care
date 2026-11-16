@@ -14,6 +14,9 @@ import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingHelper
+import com.example.data.model.KonselingLog
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
@@ -1122,6 +1125,42 @@ object PocketBaseSyncManager {
             }
         }
 
+    // --- Konseling Rahasia Wali Asuh (Records & Logs) ---
+    suspend fun uploadSingleKonselingRecord(context: Context, rec: KonselingRecord) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbKonselingRecordDto.fromDomain(rec)
+                upsertSingleDto(service, "konseling_records", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleKonselingRecord ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteKonselingRecord(context: Context, recId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("konseling_records", PocketBaseIdCodec.toPbId(recId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteKonselingRecord ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleKonselingLog(context: Context, log: KonselingLog) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbKonselingLogDto.fromDomain(log)
+                upsertSingleDto(service, "konseling_logs", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleKonselingLog ke PocketBase", e)
+            }
+        }
+
     /**
      * Menghapus seluruh data satu tenant sekolah dari PocketBase saat akun sekolah dihapus permanen.
      */
@@ -1130,6 +1169,8 @@ object PocketBaseSyncManager {
             if (!PocketBaseConfig.isConfigured(context) || schoolId.isBlank()) return@withContext
             val filter = buildSchoolFilter(schoolId)
             val service = PocketBaseClient.getService(context) ?: return@withContext
+            runCatching { deleteCollectionByFilter(service, "konseling_logs", filter) }
+            runCatching { deleteCollectionByFilter(service, "konseling_records", filter) }
             runCatching { deleteCollectionByFilter(service, "tabungan_logs", filter) }
             runCatching { deleteCollectionByFilter(service, "tabungan_transactions", filter) }
             runCatching { deleteCollectionByFilter(service, "deletion_logs", filter) }
@@ -1380,6 +1421,104 @@ object PocketBaseSyncManager {
                 dto.id!! to dto
             }
             upsertBatchOrFallback(service, "tabungan_transactions", pairs)
+        }
+    }
+
+    suspend fun syncKonselingOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+
+        val logs = runCatching {
+            syncKonselingLogsMerged(service, cleanSchoolId, filter, repository)
+        }.getOrDefault(repository.getKonselingLogsBySchoolList(cleanSchoolId))
+        val deletedRecordIds = logs
+            .filter { it.actionType.equals(KonselingHelper.LOG_DELETE, ignoreCase = true) && it.recordId > 0L }
+            .map { it.recordId }
+            .toSet()
+        runCatching { syncKonselingRecordsMerged(service, cleanSchoolId, filter, repository, deletedRecordIds) }
+    }
+
+    private suspend fun syncKonselingLogsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ): List<KonselingLog> {
+        val localLogs = repository.getKonselingLogsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listKonselingLogs(page = page, perPage = 500, filter = filter)
+        }
+        val remoteLogs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return localLogs
+
+        val localById = localLogs.associateBy { it.id }
+        val remoteById = remoteLogs.associateBy { it.id }
+
+        val toInsertLocal = remoteLogs.filter { localById[it.id] == null }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllKonselingLogs(toInsertLocal)
+        }
+
+        val toPushRemote = localLogs.filter { remoteById[it.id] == null }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { log ->
+                val dto = PbKonselingLogDto.fromDomain(log)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "konseling_logs", pairs)
+        }
+        return repository.getKonselingLogsBySchoolList(cleanSchoolId)
+    }
+
+    private suspend fun syncKonselingRecordsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository,
+        deletedRecordIds: Set<Long> = emptySet()
+    ) {
+        val localAll = repository.getKonselingRecordsBySchoolList(cleanSchoolId)
+        if (deletedRecordIds.isNotEmpty()) {
+            localAll.filter { it.id in deletedRecordIds }.forEach {
+                repository.deleteKonselingRecord(it)
+            }
+        }
+        val localRecs = localAll.filter { it.id !in deletedRecordIds }
+
+        val remoteRes = fetchAllPages { page ->
+            service.listKonselingRecords(page = page, perPage = 500, filter = filter)
+        }
+        val remoteRecs = remoteRes.getOrNull()
+            ?.map { it.toDomainModel(cleanSchoolId) }
+            ?.filter { it.id !in deletedRecordIds }
+            ?: return
+
+        val localById = localRecs.associateBy { it.id }
+        val remoteById = remoteRecs.associateBy { it.id }
+
+        val toInsertLocal = remoteRecs.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllKonselingRecords(toInsertLocal)
+        }
+
+        val toPushRemote = localRecs.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { rec ->
+                val dto = PbKonselingRecordDto.fromDomain(rec)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "konseling_records", pairs)
         }
     }
 
@@ -2070,6 +2209,16 @@ object PocketBaseSyncManager {
                     .map { it.transactionId }
                     .toSet()
                 syncTabunganTransactionsMerged(service, cleanSchoolId, filter, repository, deletedTabIds)
+            }
+
+            // 11. Sinkronkan Konseling Rahasia Wali Asuh & Log Audit (konseling_logs & konseling_records)
+            runCatching {
+                val mergedKonsLogs = syncKonselingLogsMerged(service, cleanSchoolId, filter, repository)
+                val deletedKonsIds = mergedKonsLogs
+                    .filter { it.actionType.equals(KonselingHelper.LOG_DELETE, ignoreCase = true) && it.recordId > 0L }
+                    .map { it.recordId }
+                    .toSet()
+                syncKonselingRecordsMerged(service, cleanSchoolId, filter, repository, deletedKonsIds)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())

@@ -179,6 +179,23 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-created_at"
     ): Response<PbListResponse<PbTabunganLogDto>>
 
+    // --- Konseling Rahasia (Hanya Wali Asuh Bersangkutan) ---
+    @GET("api/collections/konseling_records/records")
+    suspend fun listKonselingRecords(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-session_date"
+    ): Response<PbListResponse<PbKonselingRecordDto>>
+
+    @GET("api/collections/konseling_logs/records")
+    suspend fun listKonselingLogs(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbKonselingLogDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

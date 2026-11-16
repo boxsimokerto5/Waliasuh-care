@@ -259,19 +259,50 @@ private fun WaliAsuhCareAppContent(
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val tabunganTransactions by viewModel.tabunganTransactions.collectAsStateWithLifecycle()
     val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
+    val konselingRecords by viewModel.konselingRecords.collectAsStateWithLifecycle()
+    val konselingLogs by viewModel.konselingLogs.collectAsStateWithLifecycle()
     val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val dashboardModalState = rememberDashboardModalState()
     var readyMainTabunganSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
+    var readyMainKonselingSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
 
-    LaunchedEffect(dashboardModalState.activeCategoryHub) {
-        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.TABUNGAN) {
+    LaunchedEffect(
+        dashboardModalState.activeCategoryHub,
+        dashboardModalState.showInputTabunganDialog,
+        dashboardModalState.showTabunganStudentListSheet,
+        dashboardModalState.showTabunganHistoryLogsSheet,
+        dashboardModalState.tabunganStudentForDetail
+    ) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.TABUNGAN ||
+            dashboardModalState.showInputTabunganDialog ||
+            dashboardModalState.showTabunganStudentListSheet ||
+            dashboardModalState.showTabunganHistoryLogsSheet ||
+            dashboardModalState.tabunganStudentForDetail != null
+        ) {
             viewModel.syncTabunganOnlineQuietly()
         }
     }
-    val myFosterStudents = remember(students, waliName) {
+    LaunchedEffect(
+        dashboardModalState.activeCategoryHub,
+        dashboardModalState.showInputKonselingDialog,
+        dashboardModalState.showKonselingFollowUpSheet,
+        dashboardModalState.showKonselingHistoryLogsSheet,
+        dashboardModalState.konselingStudentForDetail
+    ) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.KONSELING ||
+            dashboardModalState.showInputKonselingDialog ||
+            dashboardModalState.showKonselingFollowUpSheet ||
+            dashboardModalState.showKonselingHistoryLogsSheet ||
+            dashboardModalState.konselingStudentForDetail != null
+        ) {
+            viewModel.syncKonselingOnlineQuietly()
+        }
+    }
+    val myFosterStudents = remember(students, waliName, currentUsername) {
         students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
     }
     val myFosterStudentIds = remember(myFosterStudents) {
@@ -716,6 +747,7 @@ private fun WaliAsuhCareAppContent(
                 isAnakSuperAdmin = isAnakSuperAdmin,
                 onOpenInputTabungan = { defaultType, targetStudent ->
                     TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.tabunganTxToEdit = null
                     dashboardModalState.inputTabunganDefaultType = defaultType
                     dashboardModalState.inputTabunganTargetStudent = targetStudent
                     dashboardModalState.showInputTabunganDialog = true
@@ -735,13 +767,11 @@ private fun WaliAsuhCareAppContent(
                 },
                 onOpenTabunganPdfSummary = {
                     TopOnAdManager.onUserActionClick(context)
-                    val summaryStudents = if (myFosterStudents.isNotEmpty()) {
-                        myFosterStudents
-                    } else {
-                        students.filter { st ->
-                            tabunganTransactions.any { tx -> com.example.data.model.TabunganHelper.matchesStudent(tx, st) }
-                        }
-                    }
+                    val summaryStudents = com.example.data.model.TabunganHelper.buildSummaryStudents(
+                        myFosterStudents = myFosterStudents,
+                        allStudents = students,
+                        transactions = tabunganTransactions
+                    )
                     val pdf = com.example.util.PdfReportGenerator.generateTabunganSummaryPdf(
                         context = context,
                         students = summaryStudents,
@@ -755,6 +785,51 @@ private fun WaliAsuhCareAppContent(
                         android.widget.Toast.makeText(
                             context,
                             if (s.isEnglish) "Failed to generate savings recap PDF." else "Gagal membuat PDF rekap tabungan.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                konselingRecords = konselingRecords,
+                konselingLogs = konselingLogs,
+                onOpenInputKonseling = { defaultEntryType, targetStudent ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.konselingRecordToEdit = null
+                    dashboardModalState.inputKonselingDefaultEntryType = defaultEntryType
+                    dashboardModalState.inputKonselingTargetStudent = targetStudent
+                    dashboardModalState.showInputKonselingDialog = true
+                },
+                onOpenKonselingFollowUp = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showKonselingFollowUpSheet = true
+                },
+                onOpenKonselingStudentDetail = { student ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.konselingStudentForDetail = student
+                },
+                onOpenKonselingHistory = { initialTab ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.konselingHistoryInitialTab = initialTab
+                    dashboardModalState.showKonselingHistoryLogsSheet = true
+                },
+                onOpenKonselingGuide = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showKonselingGuideDialog = true
+                },
+                onOpenKonselingPdfSummary = {
+                    TopOnAdManager.onUserActionClick(context)
+                    val pdf = com.example.util.PdfReportGenerator.generateKonselingSummaryPdf(
+                        context = context,
+                        students = myFosterStudents,
+                        records = konselingRecords,
+                        waliName = waliName,
+                        schoolProfile = schoolProfile
+                    )
+                    if (pdf != null) {
+                        readyMainKonselingSummaryPdf = pdf
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Failed to generate confidential counseling PDF." else "Gagal membuat PDF rekap konseling rahasia.",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
@@ -792,6 +867,47 @@ private fun WaliAsuhCareAppContent(
                             pdfFile = pdfFile,
                             subject = if (s.isEnglish) "Private Savings Recap" else "Rekap Tabungan Anak Binaan",
                             text = if (s.isEnglish) "Attached is the private student savings balance recap PDF." else "Terlampir rekap saldo tabungan pribadi wali asuh."
+                        )
+                    }
+                ) {
+                    Text(if (s.isEnglish) "Share PDF" else "Bagikan")
+                }
+            }
+        )
+    }
+
+    readyMainKonselingSummaryPdf?.let { pdfFile ->
+        AlertDialog(
+            onDismissRequest = { readyMainKonselingSummaryPdf = null },
+            title = { Text(if (s.isEnglish) "Confidential Counseling PDF Ready" else "PDF Rekap Konseling Rahasia Siap") },
+            text = {
+                Text(
+                    if (s.isEnglish) {
+                        "Strictly confidential for your Wali Asuh account only. Choose to open or share carefully."
+                    } else {
+                        "Dokumen bersifat RAHASIA dan hanya untuk Wali Asuh bersangkutan. Pilih untuk membuka atau membagikan secara terbatas."
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        readyMainKonselingSummaryPdf = null
+                        com.example.util.PdfReportGenerator.openPdfFile(context, pdfFile)
+                    }
+                ) {
+                    Text(if (s.isEnglish) "Open PDF" else "Buka PDF")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        readyMainKonselingSummaryPdf = null
+                        com.example.util.PdfReportGenerator.shareFastingPdf(
+                            context = context,
+                            pdfFile = pdfFile,
+                            subject = if (s.isEnglish) "Confidential Counseling Recap" else "Rekap Konseling Rahasia Wali Asuh",
+                            text = if (s.isEnglish) "Attached is the confidential foster student counseling recap PDF." else "Terlampir rekap konseling rahasia anak binaan Wali Asuh."
                         )
                     }
                 ) {

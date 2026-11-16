@@ -26,13 +26,14 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PictureAsPdf
-import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -90,6 +91,7 @@ fun TabunganHistoryLogsSheet(
     schoolProfile: SchoolProfile,
     initialTab: Int = 0,
     onOpenStudentById: (Long) -> Unit,
+    onEditTransaction: (TabunganTransaction) -> Unit = {},
     onCancelTransaction: (TabunganTransaction, String) -> Unit,
     onDeleteTransaction: (TabunganTransaction) -> Unit,
     onDismiss: () -> Unit
@@ -226,7 +228,7 @@ fun TabunganHistoryLogsSheet(
                         shape = RoundedCornerShape(10.dp),
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                         modifier = Modifier
-                            .heightIn(min = 40.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("btn_tabungan_history_rekap_pdf")
                     ) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = null, tint = Color(0xFF0F766E), modifier = Modifier.size(15.dp))
@@ -253,14 +255,14 @@ fun TabunganHistoryLogsSheet(
                         selected = selectedTab == 0,
                         onClick = { selectedTab = 0 },
                         modifier = Modifier
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("tab_tabungan_history_tx"),
                         content = {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier.padding(vertical = 8.dp)
                             ) {
-                                Icon(Icons.Default.ReceiptLong, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Icon(Icons.AutoMirrored.Filled.ReceiptLong, contentDescription = null, modifier = Modifier.size(15.dp))
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
                                     text = if (isEn) "Transactions (${transactions.size})" else "Mutasi (${transactions.size})",
@@ -274,7 +276,7 @@ fun TabunganHistoryLogsSheet(
                         selected = selectedTab == 1,
                         onClick = { selectedTab = 1 },
                         modifier = Modifier
-                            .heightIn(min = 44.dp)
+                            .heightIn(min = 48.dp)
                             .testTag("tab_tabungan_history_logs"),
                         content = {
                             Row(
@@ -329,6 +331,7 @@ fun TabunganHistoryLogsSheet(
                         FilterChip(selected = logFilter == "ALL", onClick = { logFilter = "ALL" }, label = { Text(if (isEn) "All" else "Semua", fontSize = 11.sp) })
                         FilterChip(selected = logFilter == TabunganHelper.LOG_INPUT_IN, onClick = { logFilter = TabunganHelper.LOG_INPUT_IN }, label = { Text(if (isEn) "Deposit" else "Masuk", fontSize = 11.sp) })
                         FilterChip(selected = logFilter == TabunganHelper.LOG_INPUT_OUT, onClick = { logFilter = TabunganHelper.LOG_INPUT_OUT }, label = { Text(if (isEn) "Expense" else "Keluar", fontSize = 11.sp) })
+                        FilterChip(selected = logFilter == TabunganHelper.LOG_EDIT, onClick = { logFilter = TabunganHelper.LOG_EDIT }, label = { Text(if (isEn) "Edited" else "Ubah", fontSize = 11.sp) })
                         FilterChip(selected = logFilter == TabunganHelper.LOG_CANCEL, onClick = { logFilter = TabunganHelper.LOG_CANCEL }, label = { Text(if (isEn) "Cancelled" else "Batal", fontSize = 11.sp) })
                         FilterChip(selected = logFilter == TabunganHelper.LOG_DELETE, onClick = { logFilter = TabunganHelper.LOG_DELETE }, label = { Text(if (isEn) "Deleted" else "Hapus", fontSize = 11.sp) })
                     }
@@ -434,15 +437,26 @@ fun TabunganHistoryLogsSheet(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
-                                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                                                 if (isActive) {
+                                                    TextButton(
+                                                        onClick = { onEditTransaction(tx) },
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                        modifier = Modifier
+                                                            .heightIn(min = 48.dp)
+                                                            .testTag("btn_edit_tabungan_history_tx_${tx.id}")
+                                                    ) {
+                                                        Icon(Icons.Default.Edit, contentDescription = null, tint = Color(0xFF4338CA), modifier = Modifier.size(14.dp))
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text(if (isEn) "Edit" else "Ubah", fontSize = 11.sp, color = Color(0xFF4338CA))
+                                                    }
                                                     TextButton(
                                                         onClick = {
                                                             cancelReason = ""
                                                             txToCancel = tx
                                                         },
-                                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                        modifier = Modifier.heightIn(min = 36.dp)
+                                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                        modifier = Modifier.heightIn(min = 48.dp)
                                                     ) {
                                                         Icon(Icons.Default.Cancel, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(14.dp))
                                                         Spacer(modifier = Modifier.width(3.dp))
@@ -451,8 +465,8 @@ fun TabunganHistoryLogsSheet(
                                                 }
                                                 TextButton(
                                                     onClick = { txToDelete = tx },
-                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                                    modifier = Modifier.heightIn(min = 36.dp)
+                                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                                                    modifier = Modifier.heightIn(min = 48.dp)
                                                 ) {
                                                     Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(14.dp))
                                                     Spacer(modifier = Modifier.width(3.dp))

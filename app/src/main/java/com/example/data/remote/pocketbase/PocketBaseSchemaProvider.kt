@@ -30,7 +30,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.45.0 • 18 Koleksi Multi-Tenant + Tabungan Pribadi Wali Asuh (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.46.0 • 20 Koleksi Multi-Tenant + Konseling Rahasia Wali Asuh (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -473,6 +473,59 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("created_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_tl_school ON tabungan_logs (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "konseling_records",
+            description = "Catatan konseling & perkembangan anak binaan rahasia (hanya Wali Asuh pemilik)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("owner_wali_username", "text"),
+                PbFieldDef("owner_wali_name", "text"),
+                PbFieldDef("is_confidential", "bool"),
+                PbFieldDef("entry_type", "text"),
+                PbFieldDef("topic", "text"),
+                PbFieldDef("urgency_level", "text"),
+                PbFieldDef("mood_level", "text"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("summary", "text"),
+                PbFieldDef("intervention", "text"),
+                PbFieldDef("follow_up_plan", "text"),
+                PbFieldDef("follow_up_date", "number"),
+                PbFieldDef("status", "text"),
+                PbFieldDef("session_date", "number"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_kr_school ON konseling_records (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "konseling_logs",
+            description = "Log audit internal catatan konseling rahasia (hanya Wali Asuh bersangkutan)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("record_id", "number"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("owner_wali_username", "text"),
+                PbFieldDef("owner_wali_name", "text"),
+                PbFieldDef("is_confidential", "bool"),
+                PbFieldDef("action_type", "text"),
+                PbFieldDef("summary", "text"),
+                PbFieldDef("actor_name", "text"),
+                PbFieldDef("actor_username", "text"),
+                PbFieldDef("created_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_kl_school ON konseling_logs (school_id)")
         )
     )
 

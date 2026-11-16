@@ -107,7 +107,8 @@ fun TabunganStudentListSheet(
                         )
                     }
                 }
-            (claimedStudents + txExtraStudents + allStudents).distinctBy { it.id }
+            (claimedStudents + txExtraStudents + allStudents)
+                .distinctBy { st -> st.nis.trim().uppercase().ifBlank { "id:${st.id}" } }
         }.sortedBy { it.name.lowercase() }
     }
 
@@ -279,14 +280,15 @@ fun TabunganStudentListSheet(
                             Text(
                                 text = if (isEn) "No Claimed Foster Students" else "Belum Ada Anak Binaan dari Hubungan Ortu",
                                 fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF78350F)
                             )
                             Button(
                                 onClick = {
                                     onDismiss()
                                     onOpenPilihAnakAsuh()
                                 },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB45309)),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFB45309), contentColor = Color.White),
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .fillMaxWidth()

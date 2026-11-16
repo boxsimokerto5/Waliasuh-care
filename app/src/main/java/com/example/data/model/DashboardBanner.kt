@@ -164,6 +164,15 @@ enum class DashboardBannerFeatureTarget(
         groupId = "Tabungan",
         groupEn = "Savings"
     ),
+
+    // Konseling Rahasia
+    FEATURE_KONSELING_HUB(
+        key = "FEATURE_KONSELING_HUB",
+        labelId = "Menu Konseling Rahasia Anak",
+        labelEn = "Private Student Counseling",
+        groupId = "Konseling",
+        groupEn = "Counseling"
+    ),
     FEATURE_INPUT_MENGAJI(
         key = "FEATURE_INPUT_MENGAJI",
         labelId = "Input Setoran Mengaji",

@@ -27,6 +27,8 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.KonselingHelper
+import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
@@ -3435,5 +3437,470 @@ object PdfReportGenerator {
             e.printStackTrace()
             return null
         }
+    }
+
+    /**
+     * Membuat PDF Catatan Konseling Rahasia Per Anak (Hanya untuk Wali Asuh bersangkutan).
+     */
+    fun generateKonselingStudentPdf(
+        context: Context,
+        student: ChildStudent,
+        records: List<KonselingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var currentPage: PdfDocument.Page? = null
+
+            renderKonselingStudentPages(
+                context = context,
+                student = student,
+                records = records,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                pageWidth = pageWidth,
+                pageHeight = pageHeight,
+                startNewCanvas = { pageNum ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNum).create()
+                    val started = document.startPage(pageInfo)
+                    currentPage = started
+                    started.canvas
+                },
+                finishCurrentCanvas = {
+                    currentPage?.let { document.finishPage(it) }
+                    currentPage = null
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanName = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val file = File(outputDir, "Konseling_Rahasia_${cleanName}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    internal fun renderKonselingStudentPages(
+        context: Context,
+        student: ChildStudent,
+        records: List<KonselingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        pageWidth: Int = 595,
+        pageHeight: Int = 842,
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCurrentCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+        val dateFmt = SimpleDateFormat("d MMM yyyy", lang.locale)
+
+        var currentY = 35f
+        currentY = drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = if (isEn) "CONFIDENTIAL STUDENT COUNSELING DOSSIER" else "DOKUMEN KONSELING RAHASIA WALI ASUH"
+        )
+
+        val boxLeft = 35f
+        val boxRight = pageWidth - 35f
+        paint.color = Color.rgb(245, 243, 255)
+        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(124, 58, 237)
+        paint.strokeWidth = 1.2f
+        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9.2f
+        paint.color = Color.rgb(91, 33, 182)
+        canvas.drawText(
+            if (isEn) {
+                "CONFIDENTIAL • STRICTLY VISIBLE ONLY TO OWNING CAREGIVER ($waliName)"
+            } else {
+                "RAHASIA • HANYA DILIHAT OLEH WALI ASUH BERSANGKUTAN ($waliName)"
+            },
+            pageWidth / 2f,
+            currentY + 22f,
+            paint
+        )
+        currentY += 44f
+        paint.textAlign = Paint.Align.LEFT
+
+        val studentRecs = records
+            .filter { KonselingHelper.matchesStudent(it, student) }
+            .sortedWith(compareByDescending<KonselingRecord> { it.sessionDate }.thenByDescending { it.createdAt })
+        val stats = KonselingHelper.computeStudentStats(studentRecs, student)
+
+        val infoTop = currentY
+        val infoH = 66f
+        paint.color = Color.rgb(248, 250, 252)
+        canvas.drawRoundRect(RectF(boxLeft, infoTop, boxRight, infoTop + infoH), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(203, 213, 225)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(RectF(boxLeft, infoTop, boxRight, infoTop + infoH), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 10.5f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText("${student.name} (NIS: ${student.nis.ifBlank { "-" }})", boxLeft + 10f, infoTop + 19f, paint)
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.5f
+        paint.color = Color.rgb(71, 85, 105)
+        canvas.drawText(
+            "${if (isEn) "Class" else "Kelas"}: ${student.classGrade.ifBlank { "-" }}  |  Asrama: ${student.dormitory.ifBlank { "-" }}  |  Wali Asuh: $waliName",
+            boxLeft + 10f,
+            infoTop + 35f,
+            paint
+        )
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8.8f
+        paint.color = Color.rgb(91, 33, 182)
+        canvas.drawText(
+            if (isEn) {
+                "Total: ${stats.totalEntries}  •  Sessions: ${stats.sessionsCount}  •  Growth: ${stats.growthCount}  •  Follow-Up: ${stats.followUpCount}  •  Resolved: ${stats.completedCount}"
+            } else {
+                "Total: ${stats.totalEntries}  •  Sesi: ${stats.sessionsCount}  •  Perkembangan: ${stats.growthCount}  •  Pantau: ${stats.followUpCount}  •  Selesai: ${stats.completedCount}"
+            },
+            boxLeft + 10f,
+            infoTop + 53f,
+            paint
+        )
+        currentY = infoTop + infoH + 12f
+
+        if (studentRecs.isEmpty()) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) "No confidential counseling entries recorded yet." else "Belum ada catatan konseling rahasia.",
+                boxLeft + 8f,
+                currentY + 14f,
+                paint
+            )
+            currentY += 32f
+        } else {
+            studentRecs.forEachIndexed { idx, rec ->
+                val cardH = 82f
+                if (currentY + cardH > pageHeight - 130f) {
+                    finishCurrentCanvas()
+                    pageNumber++
+                    canvas = startNewCanvas(pageNumber)
+                    currentY = 40f
+                }
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(250, 245, 255)
+                canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + cardH), 6f, 6f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(221, 214, 254)
+                paint.strokeWidth = 0.9f
+                canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + cardH), 6f, 6f, paint)
+                paint.style = Paint.Style.FILL
+
+                val typeLabel = if (KonselingHelper.isGrowthEntry(rec.entryType)) {
+                    if (isEn) "GROWTH" else "PERKEMBANGAN"
+                } else {
+                    if (isEn) "SESSION" else "SESI KONSELING"
+                }
+                val statusLabel = KonselingHelper.formatStatusLabel(rec.status, isEn)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 9.2f
+                paint.color = Color.rgb(76, 29, 149)
+                val headerText = "${idx + 1}. [$typeLabel] ${rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) }}"
+                canvas.drawText(
+                    TextUtils.ellipsize(headerText, TextPaint(paint), 365f, TextUtils.TruncateAt.END).toString(),
+                    boxLeft + 8f,
+                    currentY + 16f,
+                    paint
+                )
+                paint.textAlign = Paint.Align.RIGHT
+                paint.textSize = 8f
+                paint.color = if (KonselingHelper.isCompleted(rec.status)) Color.rgb(21, 128, 61) else Color.rgb(180, 83, 9)
+                canvas.drawText("${dateFmt.format(Date(rec.sessionDate))} • $statusLabel", boxRight - 8f, currentY + 16f, paint)
+                paint.textAlign = Paint.Align.LEFT
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8f
+                paint.color = Color.rgb(71, 85, 105)
+                val metaLine = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)}  |  Mood: ${KonselingHelper.formatMoodLabel(rec.moodLevel, isEn)}  |  Prioritas: ${KonselingHelper.formatUrgencyLabel(rec.urgencyLevel, isEn)}"
+                canvas.drawText(metaLine, boxLeft + 8f, currentY + 30f, paint)
+
+                paint.color = Color.rgb(15, 23, 42)
+                val summaryLine = "${if (isEn) "Summary" else "Ringkasan"}: ${rec.summary.ifBlank { "-" }}"
+                canvas.drawText(
+                    TextUtils.ellipsize(summaryLine, TextPaint(paint), boxRight - boxLeft - 18f, TextUtils.TruncateAt.END).toString(),
+                    boxLeft + 8f,
+                    currentY + 45f,
+                    paint
+                )
+                val actionLine = "${if (isEn) "Action" else "Pendampingan"}: ${rec.intervention.ifBlank { "-" }}"
+                canvas.drawText(
+                    TextUtils.ellipsize(actionLine, TextPaint(paint), boxRight - boxLeft - 18f, TextUtils.TruncateAt.END).toString(),
+                    boxLeft + 8f,
+                    currentY + 58f,
+                    paint
+                )
+                val fuDateText = rec.followUpDate?.let { " (${dateFmt.format(Date(it))})" } ?: ""
+                val fuLine = "${if (isEn) "Follow-Up" else "Tindak Lanjut"}$fuDateText: ${rec.followUpPlan.ifBlank { "-" }}"
+                paint.color = Color.rgb(91, 33, 182)
+                canvas.drawText(
+                    TextUtils.ellipsize(fuLine, TextPaint(paint), boxRight - boxLeft - 18f, TextUtils.TruncateAt.END).toString(),
+                    boxLeft + 8f,
+                    currentY + 71f,
+                    paint
+                )
+                currentY += cardH + 7f
+            }
+        }
+
+        if (currentY > pageHeight - 140f) {
+            finishCurrentCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 40f
+        }
+        drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCurrentCanvas()
+    }
+
+    /**
+     * Membuat PDF Rekap Konseling Rahasia Seluruh Anak Binaan Wali Asuh Bersangkutan.
+     */
+    fun generateKonselingSummaryPdf(
+        context: Context,
+        students: List<ChildStudent>,
+        records: List<KonselingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var currentPage: PdfDocument.Page? = null
+
+            renderKonselingSummaryPages(
+                context = context,
+                students = students,
+                records = records,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                pageWidth = pageWidth,
+                pageHeight = pageHeight,
+                startNewCanvas = { pageNum ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNum).create()
+                    val started = document.startPage(pageInfo)
+                    currentPage = started
+                    started.canvas
+                },
+                finishCurrentCanvas = {
+                    currentPage?.let { document.finishPage(it) }
+                    currentPage = null
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+            val file = File(outputDir, "Rekap_Konseling_Rahasia_${dateSlug}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            return file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            return null
+        }
+    }
+
+    internal fun renderKonselingSummaryPages(
+        context: Context,
+        students: List<ChildStudent>,
+        records: List<KonselingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        pageWidth: Int = 595,
+        pageHeight: Int = 842,
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCurrentCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+        val dateFmt = SimpleDateFormat("d MMM yyyy", lang.locale)
+
+        var currentY = 35f
+        currentY = drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = if (isEn) "CONFIDENTIAL COUNSELING RECAP (WALI ASUH)" else "REKAP KONSELING RAHASIA WALI ASUH"
+        )
+
+        val boxLeft = 35f
+        val boxRight = pageWidth - 35f
+        paint.color = Color.rgb(245, 243, 255)
+        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(124, 58, 237)
+        paint.strokeWidth = 1.2f
+        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9.2f
+        paint.color = Color.rgb(91, 33, 182)
+        canvas.drawText(
+            if (isEn) {
+                "CONFIDENTIAL • STRICTLY FOR OWNING CAREGIVER ONLY: $waliName"
+            } else {
+                "DOKUMEN RAHASIA • HANYA DILIHAT WALI ASUH BERSANGKUTAN: $waliName"
+            },
+            pageWidth / 2f,
+            currentY + 22f,
+            paint
+        )
+        currentY += 44f
+        paint.textAlign = Paint.Align.LEFT
+
+        val agg = KonselingHelper.computeAggregateStats(records)
+        val boxTop = currentY
+        val boxH = 42f
+        paint.color = Color.rgb(248, 250, 252)
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + boxH), 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(203, 213, 225)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + boxH), 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9.2f
+        paint.color = Color.rgb(76, 29, 149)
+        canvas.drawText(
+            if (isEn) {
+                "CHILDREN: ${students.size}  •  NOTES: ${agg.totalEntries}  •  FOLLOW-UP: ${agg.followUpCount}  •  GROWTH: ${agg.growthCount}"
+            } else {
+                "ANAK: ${students.size}  •  CATATAN: ${agg.totalEntries}  •  PANTAU: ${agg.followUpCount}  •  PERKEMBANGAN: ${agg.growthCount}"
+            },
+            boxLeft + 10f,
+            boxTop + 25f,
+            paint
+        )
+        currentY = boxTop + boxH + 12f
+
+        fun drawSummaryHeader(y: Float): Float {
+            val h = 23f
+            paint.color = Color.rgb(237, 233, 254)
+            canvas.drawRect(boxLeft, y, boxRight, y + h, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(124, 58, 237)
+            paint.strokeWidth = 0.8f
+            canvas.drawRect(boxLeft, y, boxRight, y + h, paint)
+            paint.style = Paint.Style.FILL
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8f
+            paint.color = Color.rgb(76, 29, 149)
+            val tY = y + 15f
+            canvas.drawText("No", boxLeft + 6f, tY, paint)
+            canvas.drawText(if (isEn) "Date" else "Tanggal", boxLeft + 26f, tY, paint)
+            canvas.drawText(if (isEn) "Student" else "Nama Anak", boxLeft + 92f, tY, paint)
+            canvas.drawText(if (isEn) "Topic / Title" else "Topik & Judul", boxLeft + 212f, tY, paint)
+            canvas.drawText(if (isEn) "Mood" else "Kondisi", boxLeft + 365f, tY, paint)
+            canvas.drawText(if (isEn) "Status" else "Status", boxLeft + 445f, tY, paint)
+            return y + h
+        }
+
+        val sortedRecords = records.sortedWith(compareByDescending<KonselingRecord> { it.sessionDate }.thenByDescending { it.createdAt })
+        currentY = drawSummaryHeader(currentY)
+        val rowH = 22f
+        sortedRecords.forEachIndexed { idx, rec ->
+            if (currentY > pageHeight - 130f) {
+                finishCurrentCanvas()
+                pageNumber++
+                canvas = startNewCanvas(pageNumber)
+                currentY = 40f
+                currentY = drawSummaryHeader(currentY)
+            }
+            val rTop = currentY
+            paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+            canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(226, 232, 240)
+            paint.strokeWidth = 0.5f
+            canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
+            paint.style = Paint.Style.FILL
+
+            val tY = rTop + 14.5f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 7.8f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("${idx + 1}.", boxLeft + 6f, tY, paint)
+            canvas.drawText(dateFmt.format(Date(rec.sessionDate)), boxLeft + 26f, tY, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            canvas.drawText(
+                TextUtils.ellipsize(rec.studentName, TextPaint(paint), 112f, TextUtils.TruncateAt.END).toString(),
+                boxLeft + 92f,
+                tY,
+                paint
+            )
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            val topicTitle = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)}: ${rec.title}"
+            canvas.drawText(
+                TextUtils.ellipsize(topicTitle, TextPaint(paint), 146f, TextUtils.TruncateAt.END).toString(),
+                boxLeft + 212f,
+                tY,
+                paint
+            )
+            canvas.drawText(
+                TextUtils.ellipsize(KonselingHelper.formatMoodLabel(rec.moodLevel, isEn), TextPaint(paint), 74f, TextUtils.TruncateAt.END).toString(),
+                boxLeft + 365f,
+                tY,
+                paint
+            )
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.color = if (KonselingHelper.isCompleted(rec.status)) Color.rgb(21, 128, 61) else Color.rgb(180, 83, 9)
+            canvas.drawText(
+                TextUtils.ellipsize(KonselingHelper.formatStatusLabel(rec.status, isEn), TextPaint(paint), 74f, TextUtils.TruncateAt.END).toString(),
+                boxLeft + 445f,
+                tY,
+                paint
+            )
+            currentY = rTop + rowH
+        }
+        currentY += 16f
+
+        if (currentY > pageHeight - 140f) {
+            finishCurrentCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 40f
+        }
+        drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCurrentCanvas()
     }
 }

@@ -210,6 +210,18 @@ fun ParentPortalScreen(
         threadMessages.count { !it.isReadByParent && !it.senderRole.equals("PARENT", ignoreCase = true) }
     }
 
+    LaunchedEffect(Unit) {
+        viewModel.syncParentRelationsOnlineQuietly()
+        viewModel.syncTabunganOnlineQuietly()
+    }
+
+    LaunchedEffect(currentTab) {
+        if (currentTab == ParentPortalTab.TABUNGAN) {
+            viewModel.syncParentRelationsOnlineQuietly()
+            viewModel.syncTabunganOnlineQuietly()
+        }
+    }
+
     LaunchedEffect(currentTab, resolvedStudentId, threadMessages.size) {
         if (currentTab == ParentPortalTab.MESSAGES && resolvedStudentId > 0L && unreadFromWaliCount > 0) {
             viewModel.markParentMessagesAsRead(resolvedStudentId, "PARENT")
