@@ -277,9 +277,13 @@ fun CategoryHubOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.horizontalGradient(gradientColors))
-                .clickable(interactionSource = shieldInteraction, indication = null, onClick = {})
                 .testTag("category_hub_overlay_${current.name.lowercase()}")
         ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clickable(interactionSource = shieldInteraction, indication = null, onClick = {})
+            )
             Column(modifier = Modifier.fillMaxSize()) {
                 // Hero Banner ala GoFood dengan tombol X lingkaran kiri atas & badge lokasi
                 Box(
@@ -448,7 +452,7 @@ fun CategoryHubOverlay(
                 // Konten Sub-Menu + Ringkasan Live di Panel Putih Melengkung
                 Surface(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .fillMaxWidth()
                         .weight(1f),
                     shape = RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp),
                     color = MaterialTheme.colorScheme.background,

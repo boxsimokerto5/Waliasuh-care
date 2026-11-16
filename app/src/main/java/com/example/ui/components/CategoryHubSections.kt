@@ -1936,7 +1936,7 @@ internal fun LazyListScope.konselingCategoryItems(
                 CartoonMenuCard(
                     title = if (isEn) "Print Recap PDF" else "Cetak Rekap PDF",
                     subtitle = if (isEn) "Confidential Dossier" else "Laporan Rahasia Wali Asuh",
-                    imageRes = R.drawable.img_menu_ranking_puasa,
+                    imageRes = R.drawable.img_menu_konseling_pdf,
                     badgeText = "PDF",
                     badgeBg = Color(0xFFCCFBF1),
                     badgeColor = Color(0xFF0F766E),

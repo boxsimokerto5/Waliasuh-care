@@ -20,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -27,7 +28,6 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -384,7 +384,7 @@ fun InputKonselingDialog(
                                 )
                             },
                             leadingIcon = {
-                                Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, modifier = Modifier.size(16.dp))
                             },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = Color(0xFFDCFCE7),
@@ -463,6 +463,14 @@ fun InputKonselingDialog(
                                         .testTag("chip_konseling_student_${st.id}")
                                 )
                             }
+                        }
+                        if (selectedStudent == null) {
+                            Text(
+                                text = if (isEn) "Select a foster student above first." else "Pilih satu anak binaan di atas terlebih dahulu.",
+                                fontSize = 11.sp,
+                                color = Color(0xFFB45309),
+                                fontWeight = FontWeight.Medium
+                            )
                         }
                     }
 

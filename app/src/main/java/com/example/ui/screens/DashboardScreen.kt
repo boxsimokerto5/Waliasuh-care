@@ -2632,10 +2632,12 @@ fun DashboardScreen(
         val studentRecs = remember(konselingRecords, detailStudent) {
             konselingRecords.filter { KonselingHelper.matchesStudent(it, detailStudent) }
         }
-        val studentLogItems = remember(konselingLogs, detailStudent) {
+        val studentRecIds = remember(studentRecs) { studentRecs.map { it.id }.toSet() }
+        val studentLogItems = remember(konselingLogs, detailStudent, studentRecIds) {
             konselingLogs.filter {
-                it.studentId == detailStudent.id ||
-                    it.studentName.equals(detailStudent.name, ignoreCase = true)
+                (detailStudent.id > 0L && it.studentId == detailStudent.id) ||
+                    (it.recordId > 0L && it.recordId in studentRecIds) ||
+                    (it.studentId <= 0L && it.studentName.equals(detailStudent.name, ignoreCase = true))
             }
         }
         KonselingStudentDetailSheet(

@@ -25,6 +25,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -33,7 +34,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -272,7 +272,7 @@ fun KonselingStudentDetailSheet(
                             .heightIn(min = 48.dp)
                             .testTag("btn_konseling_detail_add_growth")
                     ) {
-                        Icon(Icons.Default.TrendingUp, contentDescription = null, modifier = Modifier.size(15.dp))
+                        Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(3.dp))
                         Text(if (isEn) "Growth" else "Tumbuh", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                     }

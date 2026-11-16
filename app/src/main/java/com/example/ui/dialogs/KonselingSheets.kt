@@ -27,12 +27,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -793,7 +793,7 @@ fun KonselingGuideDialog(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
-                        Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color(0xFF6D28D9), modifier = Modifier.size(22.dp))
+                        Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, tint = Color(0xFF6D28D9), modifier = Modifier.size(22.dp))
                         Text(
                             text = if (isEn) "Counseling Ethics & Guide" else "Panduan & Etika Konseling",
                             fontSize = 16.sp,
