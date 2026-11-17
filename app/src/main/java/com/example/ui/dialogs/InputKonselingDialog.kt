@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,15 +46,18 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -71,8 +77,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.KonselingHelper
@@ -81,7 +85,7 @@ import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun InputKonselingDialog(
     claimedStudents: List<ChildStudent>,
@@ -227,32 +231,47 @@ fun InputKonselingDialog(
     val accentBorder = if (isGrowth) Color(0xFFA7F3D0) else Color(0xFFDDD6FE)
     val headerThumbRes = if (isGrowth) R.drawable.img_menu_konseling_perkembangan else R.drawable.img_menu_konseling_catat
 
-    Dialog(
+    ModalBottomSheet(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = null,
+        containerColor = MaterialTheme.colorScheme.surface
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .widthIn(max = 560.dp),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, accentBorder),
-            tonalElevation = 6.dp
+                .navigationBarsPadding()
+                .imePadding(),
+            contentAlignment = Alignment.Center
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .widthIn(max = 580.dp)
                     .verticalScroll(rememberScrollState())
             ) {
-                // Header Gradient Senada Ikon Induk Konseling
-                Box(
+                // Header Gradient Senada Ikon Induk Konseling + Drag Pill di bagian atas
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(Brush.horizontalGradient(headerGradient))
-                        .padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp)
+                        .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 10.dp)
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(36.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.45f))
+                        )
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -998,6 +1017,7 @@ fun InputKonselingDialog(
                         }
                     }
                 }
+                Spacer(modifier = Modifier.height(6.dp))
             }
         }
     }

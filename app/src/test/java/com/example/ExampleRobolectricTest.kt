@@ -7,6 +7,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -6886,6 +6887,81 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_tour_skip").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertDoesNotExist()
+  }
+
+  @Test
+  fun `verify CreatePlanDialog DirectTreatmentDialog and DashboardBannerFormDialog bottom sheets save cleanly`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val student = com.example.data.model.ChildStudent(
+      id = 995001L,
+      name = "Zidane Alfarizi",
+      nis = "31999501",
+      gender = "L",
+      age = 14,
+      dormitory = "Asrama Putra",
+      classGrade = "VIII-A",
+      assignedWaliUsername = "walitest",
+      assignedWaliName = "Ustadz Uji",
+      schoolId = "SRT1-KDR"
+    )
+    val sheetMode = androidx.compose.runtime.mutableIntStateOf(0) // 0=CreatePlan, 1=DirectTreatment, 2=BannerForm
+    var savedPlanComplaint: String? = null
+    var savedDirectDiagnosis: String? = null
+    var savedBannerTitle: String? = null
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        when (sheetMode.intValue) {
+          0 -> com.example.ui.dialogs.CreatePlanDialog(
+            students = listOf(student),
+            onDismiss = {},
+            onConfirm = { _, _, complaint, _, _, _, _ -> savedPlanComplaint = complaint }
+          )
+          1 -> com.example.ui.dialogs.DirectTreatmentDialog(
+            students = listOf(student),
+            onDismiss = {},
+            onConfirm = { _, _, _, diagnosis, _, _, _, _, _, _, _, _ -> savedDirectDiagnosis = diagnosis }
+          )
+          else -> com.example.ui.dialogs.DashboardBannerFormDialog(
+            initialItem = null,
+            isUploadingImage = false,
+            onUploadImage = { _, _, _, _ -> },
+            onDismiss = {},
+            onConfirm = { savedBannerTitle = it.title }
+          )
+        }
+      }
+    }
+
+    // 1. CreatePlanDialog bottom sheet
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("select_student_search_card").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("input_complaint").performScrollTo().performTextInput("Demam 38C")
+    composeTestRule.onNodeWithTag("confirm_create_plan_button").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("Demam 38C", savedPlanComplaint)
+
+    // 2. DirectTreatmentDialog bottom sheet (Inpatient mode)
+    sheetMode.intValue = 1
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("select_student_search_direct_card").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("Keluhan Awal *").performScrollTo().performTextInput("Luka jatuh")
+    composeTestRule.onNodeWithTag("direct_diagnosis_input").performScrollTo().performTextInput("Observasi Febris")
+    composeTestRule.onNodeWithTag("direct_switch_inpatient").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("confirm_direct_treatment_button").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("Observasi Febris", savedDirectDiagnosis)
+
+    // 3. DashboardBannerFormDialog bottom sheet
+    sheetMode.intValue = 2
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("banner_title_input").performScrollTo().performTextInput("Info Imunisasi")
+    composeTestRule.onNodeWithTag("btn_confirm_banner_item").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals("Info Imunisasi", savedBannerTitle)
   }
 }
 
