@@ -7987,7 +7987,7 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertEquals("P1", com.example.data.model.WaliScheduleHelper.parseDayCodes(savedTarget.dayCodesJson)[17])
     org.junit.Assert.assertEquals(
       "Jaga RSUD SLG",
-      com.example.data.model.WaliScheduleHelper.parseDayPins(savedTarget.dayPinsJson)[17]?.firstOrNull()?.title
+      com.example.data.model.WaliScheduleHelper.parseDayPins(savedTarget.dayPinsJson)[17]?.firstOrNull()?.label
     )
 
     // 7. Login sebagai Wali biasa yang sudah dicabut (wali_aa01_1) -> canManageSchoolSchedule() FALSE
@@ -8069,6 +8069,12 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
+    // Buka Tab Wali Asuh terlebih dahulu (karena tab default AdminScreen adalah Tab Siswa)
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
+    composeTestRule.onNodeWithTag("tab_admin_wali").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
     // Pastikan kartu kuota Anak Admin (1/7 Wali) tampil, tombol toggle tampil untuk Wali Asuh, dan TIDAK tampil untuk Guru Ngaji
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_admin_anak_admin_quota"))
@@ -8078,6 +8084,19 @@ class ExampleRobolectricTest {
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_toggle_anak_admin_$waliId"))
     composeTestRule.onNodeWithTag("btn_toggle_anak_admin_$waliId").assertExists()
     composeTestRule.onNodeWithTag("btn_toggle_anak_admin_$guruId").assertDoesNotExist()
+
+    // Pindah ke Tab Jadwal -> pintasan Anak Admin Jadwal harus tampil dan membuka dialog picker
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
+    composeTestRule.onNodeWithTag("tab_admin_jadwal").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_admin_manage_anak_admin_from_jadwal"))
+    composeTestRule.onNodeWithTag("card_admin_jadwal_anak_admin_banner").assertExists()
+    composeTestRule.onNodeWithTag("btn_admin_manage_anak_admin_from_jadwal").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dialog_kelola_anak_admin").assertExists()
+    composeTestRule.onNodeWithTag("switch_picker_anak_admin_$waliId").assertExists()
   }
 
   @Test
@@ -8161,5 +8180,49 @@ class ExampleRobolectricTest {
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_jadwal_member_${entry.id}"))
     composeTestRule.onNodeWithTag("row_jadwal_member_${entry.id}").assertExists().performClick()
     org.junit.Assert.assertEquals(entry.id, editedEntryId)
+  }
+
+  @Test
+  fun `verify PenyematanTugasSheet shows interactive all-Wali editor even with 0 pins for Anak Admin`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val codes = com.example.data.model.WaliScheduleHelper.defaultShiftCodes("SRT1-KDR")
+    val unpinnedEntry = com.example.data.model.WaliScheduleEntry(
+      id = 777L,
+      schoolId = "SRT1-KDR",
+      monthKey = "2026-11",
+      waliUsername = "abisan",
+      waliName = "Abisarwan Rafif",
+      dayCodesJson = com.example.data.model.WaliScheduleHelper.serializeDayCodes(mapOf(17 to "LP", 18 to "P1")),
+      dayPinsJson = "{}"
+    )
+    var editedPair: Pair<Long, Int>? = null
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.dialogs.PenyematanTugasSheet(
+          monthKey = "2026-11",
+          selectedDay = 17,
+          entries = listOf(unpinnedEntry),
+          shiftCodes = codes,
+          schoolProfile = com.example.data.model.SchoolProfile(tenantCode = "SRT1-KDR", schoolName = "SR 1 Kediri"),
+          canManageSchedule = true,
+          onEditCell = { entry, day -> editedPair = entry.id to day },
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Meskipun 0 pin pada tgl 17, Anak Admin langsung melihat mode kelola + daftar Wali + tombol Ubah/Pin
+    composeTestRule.onNodeWithTag("badge_penyematan_manage_mode").assertExists()
+    composeTestRule.onNodeWithTag("chip_pin_mode_kelola").assertExists()
+    composeTestRule.onNodeWithTag("input_search_penyematan_wali").assertExists()
+    composeTestRule.onNodeWithTag("card_manage_pin_wali_${unpinnedEntry.id}").assertExists()
+    composeTestRule.onNodeWithTag("btn_manage_pin_wali_${unpinnedEntry.id}").performClick()
+    org.junit.Assert.assertEquals(unpinnedEntry.id to 17, editedPair)
   }
 }

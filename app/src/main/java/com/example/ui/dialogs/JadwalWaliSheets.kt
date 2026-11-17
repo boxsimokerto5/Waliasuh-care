@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Close
@@ -44,6 +45,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -1667,21 +1669,32 @@ fun PenyematanTugasSheet(
     schoolProfile: SchoolProfile,
     canManageSchedule: Boolean,
     onEditCell: (WaliScheduleEntry, Int) -> Unit,
+    onOpenRosterSetup: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     val shiftMap = remember(shiftCodes, schoolProfile.tenantCode) {
         WaliScheduleHelper.buildShiftMap(shiftCodes, schoolProfile.tenantCode)
     }
+    val maxDay = remember(monthKey) { WaliScheduleHelper.daysInMonth(monthKey) }
+    var activeDay by remember(selectedDay, maxDay) {
+        mutableIntStateOf(selectedDay.coerceIn(1, maxDay))
+    }
     var fullMonthMode by remember { mutableStateOf(false) }
+    var manageAllMode by remember(canManageSchedule) { mutableStateOf(canManageSchedule) }
     var filterCat by remember { mutableStateOf("ALL") }
+    var searchQuery by remember { mutableStateOf("") }
 
-    val pinnedRows = remember(entries, selectedDay, fullMonthMode, filterCat) {
+    val pinnedRows = remember(entries, activeDay, fullMonthMode, filterCat, searchQuery) {
+        val q = searchQuery.trim()
         buildList {
             entries.sortedBy { it.sortOrder }.forEach { entry ->
+                if (q.isNotBlank() && !entry.waliName.contains(q, ignoreCase = true) && !entry.waliUsername.contains(q, ignoreCase = true)) {
+                    return@forEach
+                }
                 val dayCodes = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)
                 val dayPins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson)
-                val targetDays = if (fullMonthMode) dayPins.keys.sorted() else listOf(selectedDay)
+                val targetDays = if (fullMonthMode) dayPins.keys.sorted() else listOf(activeDay)
                 targetDays.forEach { d ->
                     val pins = dayPins[d].orEmpty().filter { pin ->
                         filterCat == "ALL" || pin.category.equals(filterCat, ignoreCase = true)
@@ -1692,6 +1705,27 @@ fun PenyematanTugasSheet(
                 }
             }
         }
+    }
+
+    val manageableRows = remember(entries, activeDay, filterCat, searchQuery) {
+        val q = searchQuery.trim()
+        entries.sortedBy { it.sortOrder }.mapNotNull { entry ->
+            if (q.isNotBlank() && !entry.waliName.contains(q, ignoreCase = true) && !entry.waliUsername.contains(q, ignoreCase = true)) {
+                return@mapNotNull null
+            }
+            val code = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[activeDay].orEmpty()
+            val pins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson)[activeDay].orEmpty()
+            if (filterCat == WaliScheduleHelper.PIN_FASKES &&
+                pins.none { it.category.equals(WaliScheduleHelper.PIN_FASKES, ignoreCase = true) }
+            ) {
+                return@mapNotNull null
+            }
+            Triple(entry, code, pins)
+        }.sortedWith(
+            compareByDescending<Triple<WaliScheduleEntry, String, List<PinnedTaskItem>>> { it.third.isNotEmpty() }
+                .thenBy { it.first.sortOrder }
+                .thenBy { it.first.waliName.lowercase() }
+        )
     }
 
     ModalBottomSheet(
@@ -1721,7 +1755,7 @@ fun PenyematanTugasSheet(
                     )
                     Text(
                         text = if (fullMonthMode) WaliScheduleHelper.formatMonthTitle(monthKey, isEn)
-                        else WaliScheduleHelper.formatDateChipLabel(monthKey, selectedDay, isEn),
+                        else WaliScheduleHelper.formatDateChipLabel(monthKey, activeDay, isEn),
                         fontSize = 12.sp,
                         color = Color(0xFF0F766E),
                         fontWeight = FontWeight.SemiBold
@@ -1735,27 +1769,317 @@ fun PenyematanTugasSheet(
                 }
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (canManageSchedule) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = Color(0xFFEEF2FF),
+                    border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("badge_penyematan_manage_mode")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.AdminPanelSettings,
+                            contentDescription = null,
+                            tint = Color(0xFF4338CA),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (isEn) {
+                                "Management Mode active: tap any Wali Asuh below to change shifts or attach/remove hospital & extra tasks."
+                            } else {
+                                "Mode Kelola Tugas aktif: ketuk nama Wali Asuh untuk langsung mengganti shift (P1–M3/LP/L) atau menyematkan tugas RS & asrama."
+                            },
+                            fontSize = 11.sp,
+                            color = Color(0xFF312E81),
+                            lineHeight = 14.sp
+                        )
+                    }
+                }
+            }
+
+            if (!fullMonthMode) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 6.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = { activeDay = if (activeDay <= 1) maxDay else activeDay - 1 },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_pin_prev_day")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                contentDescription = if (isEn) "Previous Day" else "Hari Sebelumnya"
+                            )
+                        }
+                        Text(
+                            text = WaliScheduleHelper.formatDateChipLabel(monthKey, activeDay, isEn),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F766E)
+                        )
+                        IconButton(
+                            onClick = { activeDay = if (activeDay >= maxDay) 1 else activeDay + 1 },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_pin_next_day")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = if (isEn) "Next Day" else "Hari Berikutnya"
+                            )
+                        }
+                    }
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (canManageSchedule) {
+                    FilterChip(
+                        selected = !fullMonthMode && manageAllMode,
+                        onClick = {
+                            fullMonthMode = false
+                            manageAllMode = true
+                        },
+                        label = {
+                            Text(
+                                text = if (isEn) "Manage All (${entries.size})" else "Kelola Semua (${entries.size})",
+                                fontSize = 11.5.sp
+                            )
+                        },
+                        modifier = Modifier.testTag("chip_pin_mode_kelola")
+                    )
+                }
                 FilterChip(
-                    selected = !fullMonthMode,
-                    onClick = { fullMonthMode = false },
-                    label = { Text(if (isEn) "Selected Day" else "Tanggal Terpilih", fontSize = 11.5.sp) }
+                    selected = !fullMonthMode && (!canManageSchedule || !manageAllMode),
+                    onClick = {
+                        fullMonthMode = false
+                        manageAllMode = false
+                    },
+                    label = {
+                        Text(
+                            text = if (isEn) "Pinned Only" else "Sudah Dipin (${pinnedRows.size})",
+                            fontSize = 11.5.sp
+                        )
+                    },
+                    modifier = Modifier.testTag("chip_pin_mode_sudah_dipin")
                 )
                 FilterChip(
                     selected = fullMonthMode,
-                    onClick = { fullMonthMode = true },
-                    label = { Text(if (isEn) "Full Month" else "Satu Bulan", fontSize = 11.5.sp) }
+                    onClick = {
+                        fullMonthMode = true
+                        manageAllMode = false
+                    },
+                    label = { Text(if (isEn) "Full Month" else "Satu Bulan", fontSize = 11.5.sp) },
+                    modifier = Modifier.testTag("chip_pin_mode_sebulan")
                 )
                 FilterChip(
                     selected = filterCat == WaliScheduleHelper.PIN_FASKES,
                     onClick = {
                         filterCat = if (filterCat == WaliScheduleHelper.PIN_FASKES) "ALL" else WaliScheduleHelper.PIN_FASKES
                     },
-                    label = { Text("RS/Faskes", fontSize = 11.5.sp) }
+                    label = { Text("RS/Faskes", fontSize = 11.5.sp) },
+                    modifier = Modifier.testTag("chip_pin_mode_faskes")
                 )
             }
 
-            if (pinnedRows.isEmpty()) {
+            if (canManageSchedule && entries.isNotEmpty()) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text(if (isEn) "Search Wali Asuh..." else "Cari nama Wali Asuh...", fontSize = 12.sp) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_search_penyematan_wali")
+                )
+            }
+
+            val showInteractiveAllList = canManageSchedule && manageAllMode && !fullMonthMode
+
+            if (showInteractiveAllList) {
+                if (manageableRows.isEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = if (entries.isEmpty()) {
+                                    if (isEn) "No caregiver roster entries found for this month yet."
+                                    else "Belum ada data personel Wali Asuh di jadwal bulan ini."
+                                } else {
+                                    if (isEn) "No matching Wali Asuh for this filter."
+                                    else "Tidak ada Wali Asuh yang cocok dengan pencarian/filter."
+                                },
+                                fontSize = 13.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            if (entries.isEmpty() && onOpenRosterSetup != null) {
+                                Button(
+                                    onClick = {
+                                        onDismiss()
+                                        onOpenRosterSetup()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_pin_sync_roster")
+                                ) {
+                                    Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isEn) "Pull Wali Asuh Into Schedule" else "Tarik Daftar Wali Asuh ke Jadwal",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp)
+                            .testTag("list_penyematan_kelola_wali"),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(manageableRows, key = { it.first.id }) { (entry, code, pins) ->
+                            val normalizedCode = WaliScheduleHelper.normalizeCode(code)
+                            val shift = shiftMap[normalizedCode]
+                            val badgeColor = parseJadwalShiftColor(shift?.colorHex ?: "#64748B", Color(0xFF64748B))
+                            ElevatedCard(
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.elevatedCardColors(
+                                    containerColor = if (pins.isNotEmpty()) Color(0xFFF0FDFA) else MaterialTheme.colorScheme.surface
+                                ),
+                                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onEditCell(entry, activeDay) }
+                                    .testTag("card_manage_pin_wali_${entry.id}")
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .padding(end = 8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Text(
+                                                text = entry.waliName,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = if (normalizedCode.isBlank()) Color(0xFFE2E8F0) else badgeColor
+                                                ) {
+                                                    Text(
+                                                        text = normalizedCode.ifBlank { "-" },
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = if (normalizedCode.isBlank()) Color(0xFF475569) else Color.White,
+                                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = shift?.name ?: if (isEn) "Shift not set" else "Shift belum diatur",
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        OutlinedButton(
+                                            onClick = { onEditCell(entry, activeDay) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = BorderStroke(1.dp, Color(0xFF0F766E)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_manage_pin_wali_${entry.id}")
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Edit,
+                                                contentDescription = null,
+                                                tint = Color(0xFF0F766E),
+                                                modifier = Modifier.size(15.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = if (isEn) "Shift / Pin" else "Ubah / Pin",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF0F766E)
+                                            )
+                                        }
+                                    }
+                                    if (pins.isNotEmpty()) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            pins.forEach { pin ->
+                                                SchedulePinChip(pin = pin)
+                                            }
+                                        }
+                                    } else {
+                                        Text(
+                                            text = if (isEn) "No extra task pinned yet • Tap to change shift or pin RS/dorm task"
+                                            else "Belum ada pin tugas • Ketuk untuk ganti shift atau sematkan tugas RS/Asrama",
+                                            fontSize = 11.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if (pinnedRows.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -1772,12 +2096,19 @@ fun PenyematanTugasSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         if (canManageSchedule && entries.isNotEmpty()) {
-                            Text(
-                                text = if (isEn) "Tip: Tap any caregiver row on the Schedule Hub or Matrix to attach pins."
-                                else "Tip: Ketuk nama Wali Asuh pada daftar harian atau matriks untuk menyematkan tugas / jaga faskes.",
-                                fontSize = 11.5.sp,
-                                color = Color(0xFF0F766E)
-                            )
+                            TextButton(
+                                onClick = {
+                                    fullMonthMode = false
+                                    manageAllMode = true
+                                },
+                                modifier = Modifier.testTag("btn_pin_switch_to_manage_all")
+                            ) {
+                                Text(
+                                    text = if (isEn) "Switch to Manage All Wali Asuh" else "Buka Mode Kelola Semua Wali Asuh",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F766E)
+                                )
+                            }
                         }
                     }
                 }
@@ -1794,7 +2125,10 @@ fun PenyematanTugasSheet(
                         ElevatedCard(
                             shape = RoundedCornerShape(12.dp),
                             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp)
+                            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                            modifier = Modifier.then(
+                                if (canManageSchedule) Modifier.clickable { onEditCell(entry, day) } else Modifier
+                            )
                         ) {
                             Column(
                                 modifier = Modifier

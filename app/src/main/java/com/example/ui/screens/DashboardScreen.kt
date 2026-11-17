@@ -3198,6 +3198,12 @@ fun DashboardScreen(
                     modalState.editingScheduleCellTarget = entry to day
                 }
             },
+            onOpenRosterSetup = {
+                if (canManageSchedule) {
+                    modalState.importJadwalInitialTab = 0
+                    modalState.showImportJadwalMatriksDialog = true
+                }
+            },
             onDismiss = { modalState.showPenyematanTugasSheet = false }
         )
     }

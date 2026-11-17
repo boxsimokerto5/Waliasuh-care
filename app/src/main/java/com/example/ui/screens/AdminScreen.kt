@@ -155,6 +155,7 @@ import com.example.ui.dialogs.InputMengajiDialog
 import com.example.ui.dialogs.JadwalMatriksSheet
 import com.example.ui.dialogs.JadwalPersonalSheet
 import com.example.ui.dialogs.KartuMengajiSheet
+import com.example.ui.dialogs.KelolaAnakAdminDialog
 import com.example.ui.dialogs.ManageShiftCodesDialog
 import com.example.ui.dialogs.PenyematanTugasSheet
 import com.example.ui.dialogs.PetugasJamIniDialog
@@ -244,6 +245,7 @@ fun AdminScreen(
 
     // State untuk Kelola Akun Wali Asuh
     var showAddDialog by remember { mutableStateOf(false) }
+    var showManageAnakAdminDialog by remember { mutableStateOf(false) }
     var accountToEdit by remember { mutableStateOf<WaliAccount?>(null) }
     var accountToDelete by remember { mutableStateOf<WaliAccount?>(null) }
     var showExitConfirmDialog by remember { mutableStateOf(false) }
@@ -1358,6 +1360,7 @@ fun AdminScreen(
                                 border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .clickable { showManageAnakAdminDialog = true }
                                     .testTag("card_admin_anak_admin_quota")
                             ) {
                                 Row(
@@ -1393,6 +1396,22 @@ fun AdminScreen(
                                             fontSize = 10.5.sp,
                                             color = Color(0xFF3730A3),
                                             lineHeight = 14.sp
+                                        )
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showManageAnakAdminDialog = true },
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = BorderStroke(1.dp, Color(0xFF4338CA)),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier
+                                            .heightIn(min = 38.dp)
+                                            .testTag("btn_admin_open_anak_admin_picker")
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "Select" else "Pilih",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF4338CA)
                                         )
                                     }
                                 }
@@ -2144,6 +2163,72 @@ fun AdminScreen(
                                                     color = if (isSel) Color.White else Color(0xFF0F172A)
                                                 )
                                             }
+                                        }
+                                    }
+                                }
+
+                                // Pintasan Pengaturan Anak Admin Jadwal (Maks 7 Wali Asuh per Sekolah)
+                                val pinnedNamesPreview = schoolAccounts
+                                    .filter { it.isAnakAdminSekolah() }
+                                    .joinToString(", ") { it.name }
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFEEF2FF),
+                                    border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { showManageAnakAdminDialog = true }
+                                        .testTag("card_admin_jadwal_anak_admin_banner")
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AdminPanelSettings,
+                                            contentDescription = null,
+                                            tint = Color(0xFF4338CA),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Schedule Sub-Admins ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                                } else {
+                                                    "Anak Admin Jadwal ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali)"
+                                                },
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF312E81)
+                                            )
+                                            Text(
+                                                text = pinnedNamesPreview.ifBlank {
+                                                    if (isEn) "Tap to pin up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh to edit shifts, pins & CSVs."
+                                                    else "Ketuk untuk sematkan maks. ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh agar bisa ubah jadwal & CSV."
+                                                },
+                                                fontSize = 10.5.sp,
+                                                color = Color(0xFF4338CA),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { showManageAnakAdminDialog = true },
+                                            shape = RoundedCornerShape(8.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 40.dp)
+                                                .testTag("btn_admin_manage_anak_admin_from_jadwal")
+                                        ) {
+                                            Text(
+                                                text = if (isEn) "Pin / Set" else "Sematkan",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
                                         }
                                     }
                                 }
@@ -3311,7 +3396,24 @@ fun AdminScreen(
             onEditCell = { entry, day ->
                 editingJadwalCellTarget = entry to day
             },
+            onOpenRosterSetup = {
+                importJadwalInitialTab = 0
+                showImportJadwalMatriks = true
+            },
             onDismiss = { showPenyematanTugas = false }
+        )
+    }
+
+    if (showManageAnakAdminDialog) {
+        KelolaAnakAdminDialog(
+            schoolProfile = schoolProfile,
+            waliAccounts = schoolAccounts,
+            onToggleAnakAdmin = { targetAccount, enable ->
+                viewModel.setWaliAnakAdminStatus(targetAccount, enable) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { showManageAnakAdminDialog = false }
         )
     }
 

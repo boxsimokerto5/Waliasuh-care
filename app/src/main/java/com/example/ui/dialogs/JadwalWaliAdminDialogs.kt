@@ -32,6 +32,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Download
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
@@ -48,11 +50,13 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -61,6 +65,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -1370,6 +1375,232 @@ fun ImportJadwalMatriksDialog(
                                     .testTag("btn_import_csv_matrix")
                             ) {
                                 Text(if (isEn) "Import Schedule Matrix" else "Impor Matriks Jadwal", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun KelolaAnakAdminDialog(
+    schoolProfile: SchoolProfile,
+    waliAccounts: List<WaliAccount>,
+    onToggleAnakAdmin: (WaliAccount, Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val isEn = LocalAppStrings.current.isEnglish
+    val activeSchoolId = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
+    val eligibleAccounts = remember(waliAccounts, activeSchoolId) {
+        waliAccounts.filter { acc ->
+            (acc.schoolId.isBlank() || acc.schoolId.equals(activeSchoolId, ignoreCase = true)) &&
+                !acc.isGuruNgaji()
+        }.sortedWith(
+            compareByDescending<WaliAccount> { it.isAnakAdminSekolah() }.thenBy { it.name.lowercase() }
+        )
+    }
+    val anakAdminCount = remember(eligibleAccounts) {
+        eligibleAccounts.count { it.isAnakAdminSekolah() }
+    }
+    var searchQuery by remember { mutableStateOf("") }
+    val filteredAccounts = remember(eligibleAccounts, searchQuery) {
+        val q = searchQuery.trim()
+        if (q.isBlank()) eligibleAccounts
+        else eligibleAccounts.filter {
+            it.name.contains(q, ignoreCase = true) ||
+                it.username.contains(q, ignoreCase = true) ||
+                it.dormitory.contains(q, ignoreCase = true)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface,
+        modifier = Modifier.testTag("dialog_kelola_anak_admin")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFE0E7FF),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.AdminPanelSettings,
+                                contentDescription = null,
+                                tint = Color(0xFF4338CA),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Column {
+                        Text(
+                            text = if (isEn) "Pin Schedule Sub-Admins" else "Sematkan Fitur Anak Admin Jadwal",
+                            fontSize = 16.5.sp,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "${schoolProfile.schoolName.ifBlank { activeSchoolId }} • $anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} ${if (isEn) "Quota" else "Kuota Terpakai"}",
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF4338CA),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.testTag("btn_close_kelola_anak_admin")
+                ) {
+                    Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
+                }
+            }
+
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = Color(0xFFEEF2FF),
+                border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (isEn) {
+                        "Select up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh in this school. Pinned accounts stay on their normal Wali dashboard, with live permission to change shifts, pin RS/dorm tasks, and upload/download schedule CSVs."
+                    } else {
+                        "Pilih maksimal ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh di sekolah ini. Mereka tetap login sebagai Wali Asuh biasa, namun dapat langsung klik-ganti shift, menyematkan tugas RS/Asrama, serta upload & download CSV jadwal."
+                    },
+                    fontSize = 11.sp,
+                    color = Color(0xFF312E81),
+                    lineHeight = 15.sp,
+                    modifier = Modifier.padding(10.dp)
+                )
+            }
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text(if (isEn) "Search Wali Asuh..." else "Cari nama / asrama Wali Asuh...", fontSize = 12.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                singleLine = true,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_search_anak_admin_picker")
+            )
+
+            if (filteredAccounts.isEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = if (isEn) {
+                            "No eligible Wali Asuh accounts found for this school yet."
+                        } else {
+                            "Belum ada akun Wali Asuh terdaftar untuk sekolah ini."
+                        },
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(14.dp)
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 400.dp)
+                        .testTag("list_picker_anak_admin"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(filteredAccounts, key = { it.id }) { account ->
+                        val isPinned = account.isAnakAdminSekolah()
+                        val canEnable = isPinned || anakAdminCount < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isPinned) Color(0xFFEEF2FF) else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (isPinned) Color(0xFF818CF8) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = canEnable) {
+                                    onToggleAnakAdmin(account, !isPinned)
+                                }
+                                .testTag("row_picker_anak_admin_${account.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .padding(end = 8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Text(
+                                            text = account.name,
+                                            fontSize = 13.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        if (isPinned) {
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color(0xFF4338CA)
+                                            ) {
+                                                Text(
+                                                    text = if (isEn) "Sub-Admin" else "Anak Admin",
+                                                    fontSize = 9.5.sp,
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Text(
+                                        text = "${account.dormitory} • @${account.username}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = isPinned,
+                                    enabled = canEnable,
+                                    onCheckedChange = { checked ->
+                                        onToggleAnakAdmin(account, checked)
+                                    },
+                                    modifier = Modifier.testTag("switch_picker_anak_admin_${account.id}")
+                                )
                             }
                         }
                     }
