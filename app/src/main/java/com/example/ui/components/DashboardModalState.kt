@@ -3,6 +3,7 @@ package com.example.ui.components
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -106,6 +107,7 @@ class DashboardModalState {
     var showPenyematanTugasSheet by mutableStateOf(false)
     var showManageShiftCodesDialog by mutableStateOf(false)
     var showImportJadwalMatriksDialog by mutableStateOf(false)
+    var importJadwalInitialTab by mutableIntStateOf(0)
     var editingScheduleCellTarget by mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null)
 }
 

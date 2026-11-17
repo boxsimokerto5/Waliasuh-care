@@ -7787,4 +7787,379 @@ class ExampleRobolectricTest {
     org.junit.Assert.assertEquals(128, ekoStats.totalJamKerja)
     org.junit.Assert.assertEquals("ekowahyudi", parsedReal[2].waliUsername)
   }
+
+  @Test
+  fun `verify Anak Admin Sekolah max 7 quota per tenant, Guru Ngaji rejection, and schedule cell edit permissions`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.waliAccountDao().deleteBySchoolId("TST-AA-01")
+    db.waliAccountDao().deleteBySchoolId("TST-AA-02")
+    db.waliScheduleEntryDao().deleteBySchoolAndMonth("TST-AA-01", "2026-11")
+
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "SR Uji Anak Admin 01",
+        address = "Jl. Test 1",
+        city = "Kediri",
+        estimatedWaliCount = 15,
+        picName = "Admin AA1",
+        picEmail = "aa1@test.id",
+        picPhone = "0811111111",
+        generatedSchoolCode = "TST-AA-01",
+        generatedAdminUsername = "admin_aa01",
+        generatedAdminPassword = "Password#123",
+        status = "APPROVED"
+      )
+    )
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "SR Uji Anak Admin 02",
+        address = "Jl. Test 2",
+        city = "Malang",
+        estimatedWaliCount = 10,
+        picName = "Admin AA2",
+        picEmail = "aa2@test.id",
+        picPhone = "0822222222",
+        generatedSchoolCode = "TST-AA-02",
+        generatedAdminUsername = "admin_aa02",
+        generatedAdminPassword = "Password#123",
+        status = "APPROVED"
+      )
+    )
+
+    // Seed 8 regular Wali Asuh + 1 Guru Ngaji in TST-AA-01, and 1 Wali Asuh in TST-AA-02
+    val insertedIds = mutableListOf<Long>()
+    for (idx in 1..8) {
+      val id = db.waliAccountDao().insert(
+        com.example.data.model.WaliAccount(
+          name = "Wali Satu-$idx",
+          username = "wali_aa01_$idx",
+          password = "Pass#$idx",
+          dormitory = "Asrama Putra",
+          schoolId = "TST-AA-01",
+          role = com.example.data.model.WaliAccount.ROLE_WALI
+        )
+      )
+      insertedIds.add(id)
+    }
+    val guruNgajiId = db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        name = "Ustadz Ngaji",
+        username = "ngaji_aa01",
+        password = "Pass#Ngaji",
+        dormitory = "Masjid",
+        schoolId = "TST-AA-01",
+        role = com.example.data.model.WaliAccount.ROLE_GURU_NGAJI
+      )
+    )
+    val otherSchoolWaliId = db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        name = "Wali Sekolah Lain",
+        username = "wali_aa02_1",
+        password = "Pass#Other",
+        dormitory = "Asrama Putri",
+        schoolId = "TST-AA-02",
+        role = com.example.data.model.WaliAccount.ROLE_WALI
+      )
+    )
+
+    val vm = com.example.ui.HealthViewModel(app)
+    val adminLogin = vm.executeLogin("admin_aa01", "Password#123", rememberMe = false)
+    org.junit.Assert.assertTrue(adminLogin is com.example.ui.LoginResult.SuccessAdmin)
+
+    val allSchool1 = db.waliAccountDao().getAccountsBySchoolList("TST-AA-01")
+    // 1. Sematkan 7 Wali pertama -> semua harus sukses (quota 7/7)
+    for (idx in 0 until 7) {
+      val target = allSchool1.first { it.id == insertedIds[idx] }
+      var resOk: Boolean? = null
+      vm.setWaliAnakAdminStatus(target, true) { ok, _ -> resOk = ok }
+      for (t in 1..40) {
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        if (resOk != null) break
+        kotlinx.coroutines.delay(25)
+      }
+      org.junit.Assert.assertEquals("Expected slot ${idx + 1}/7 to succeed", true, resOk)
+    }
+
+    // 2. Sematkan Wali ke-8 -> HARUS ditolak karena kuota 7/7 penuh
+    val wali8 = db.waliAccountDao().getAccountsBySchoolList("TST-AA-01").first { it.id == insertedIds[7] }
+    var eighthOk: Boolean? = null
+    var eighthMsg = ""
+    vm.setWaliAnakAdminStatus(wali8, true) { ok, msg ->
+      eighthOk = ok
+      eighthMsg = msg
+    }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (eighthOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(false, eighthOk)
+    org.junit.Assert.assertTrue(eighthMsg.contains("7"))
+
+    // 3. Guru Ngaji tidak dapat disematkan Anak Admin
+    val guruNgaji = db.waliAccountDao().getAccountsBySchoolList("TST-AA-01").first { it.id == guruNgajiId }
+    var guruOk: Boolean? = null
+    vm.setWaliAnakAdminStatus(guruNgaji, true) { ok, _ -> guruOk = ok }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (guruOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(false, guruOk)
+
+    // 4. Tenant sekolah lain ("TST-AA-02") tetap punya kuota independen
+    val otherWali = db.waliAccountDao().getAccountsBySchoolList("TST-AA-02").first { it.id == otherSchoolWaliId }
+    var otherOk: Boolean? = null
+    vm.setWaliAnakAdminStatus(otherWali, true) { ok, _ -> otherOk = ok }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (otherOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(true, otherOk)
+
+    // 5. Cabut 1 Anak Admin di TST-AA-01 -> Wali ke-8 sekarang bisa disematkan
+    val wali1 = db.waliAccountDao().getAccountsBySchoolList("TST-AA-01").first { it.id == insertedIds[0] }
+    var unpinOk: Boolean? = null
+    vm.setWaliAnakAdminStatus(wali1, false) { ok, _ -> unpinOk = ok }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (unpinOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(true, unpinOk)
+
+    var retryEighthOk: Boolean? = null
+    vm.setWaliAnakAdminStatus(wali8, true) { ok, _ -> retryEighthOk = ok }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (retryEighthOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(true, retryEighthOk)
+
+    // 6. Login sebagai Wali yang disematkan (wali_aa01_8) -> tetap login sebagai Wali Asuh (SuccessWali),
+    //    tetapi isAnakAdminSekolah & canManageSchoolSchedule() TRUE serta boleh edit sel + pin tugas RSUD
+    val anakAdminLogin = vm.executeLogin("wali_aa01_8", "Pass#8", rememberMe = false)
+    org.junit.Assert.assertTrue(anakAdminLogin is com.example.ui.LoginResult.SuccessWali)
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.isAnakAdminSekolah.value) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertTrue(vm.isAnakAdminSekolah.value)
+    org.junit.Assert.assertTrue(vm.canManageSchoolSchedule())
+
+    var syncedByAnakAdmin: Boolean? = null
+    vm.syncScheduleMembersFromWaliAccounts("2026-11") { ok, _ -> syncedByAnakAdmin = ok }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (syncedByAnakAdmin != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(true, syncedByAnakAdmin)
+
+    val entriesAA1 = db.waliScheduleEntryDao().getEntriesBySchoolAndMonthList("TST-AA-01", "2026-11")
+    org.junit.Assert.assertEquals(8, entriesAA1.size) // Guru Ngaji excluded, 8 Wali (termasuk Anak Admin) ikut piket
+
+    val targetEntry = entriesAA1.first { it.waliUsername == "wali_aa01_1" }
+    var editedByAnakAdmin: Boolean? = null
+    vm.updateWaliScheduleDayCell(
+      entry = targetEntry,
+      day = 17,
+      shiftCode = "P1",
+      pinsForDay = listOf(
+        com.example.data.model.PinnedTaskItem("Jaga RSUD SLG", com.example.data.model.WaliScheduleHelper.PIN_FASKES)
+      ),
+      leaveForDay = null
+    ) { ok, _ -> editedByAnakAdmin = ok }
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (editedByAnakAdmin != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertEquals(true, editedByAnakAdmin)
+
+    val savedTarget = db.waliScheduleEntryDao().getEntriesBySchoolAndMonthList("TST-AA-01", "2026-11")
+      .first { it.id == targetEntry.id }
+    org.junit.Assert.assertEquals("P1", com.example.data.model.WaliScheduleHelper.parseDayCodes(savedTarget.dayCodesJson)[17])
+    org.junit.Assert.assertEquals(
+      "Jaga RSUD SLG",
+      com.example.data.model.WaliScheduleHelper.parseDayPins(savedTarget.dayPinsJson)[17]?.firstOrNull()?.title
+    )
+
+    // 7. Login sebagai Wali biasa yang sudah dicabut (wali_aa01_1) -> canManageSchoolSchedule() FALSE
+    val plainWaliLogin = vm.executeLogin("wali_aa01_1", "Pass#1", rememberMe = false)
+    org.junit.Assert.assertTrue(plainWaliLogin is com.example.ui.LoginResult.SuccessWali)
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (!vm.isAnakAdminSekolah.value) break
+      kotlinx.coroutines.delay(25)
+    }
+    org.junit.Assert.assertFalse(vm.isAnakAdminSekolah.value)
+    org.junit.Assert.assertFalse(vm.canManageSchoolSchedule())
+
+    var blockedEdit: Boolean? = null
+    vm.updateWaliScheduleDayCell(savedTarget, 18, "M3", emptyList(), null) { ok, _ -> blockedEdit = ok }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    org.junit.Assert.assertEquals(false, blockedEdit)
+  }
+
+  @Test
+  fun `verify AdminScreen Anak Admin quota card & toggle and CategoryHubOverlay Anak Admin CSV controls`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.waliAccountDao().deleteBySchoolId("TST-UI-AA")
+    db.schoolRegistrationDao().insert(
+      com.example.data.model.SchoolRegistration(
+        schoolName = "SR UI Anak Admin",
+        address = "Jl. UI Test",
+        city = "Kediri",
+        estimatedWaliCount = 10,
+        picName = "Admin UI",
+        picEmail = "adminui@test.id",
+        picPhone = "0812345",
+        generatedSchoolCode = "TST-UI-AA",
+        generatedAdminUsername = "admin_ui_aa",
+        generatedAdminPassword = "Password#123",
+        status = "APPROVED"
+      )
+    )
+    val waliId = db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        name = "Siti Maslukah",
+        username = "siti_ui_aa",
+        password = "Pass#123",
+        dormitory = "Asrama Putri",
+        schoolId = "TST-UI-AA",
+        role = com.example.data.model.WaliAccount.ROLE_WALI_ANAK_ADMIN
+      )
+    )
+    val guruId = db.waliAccountDao().insert(
+      com.example.data.model.WaliAccount(
+        name = "Ustadz Hasan",
+        username = "hasan_ngaji",
+        password = "Pass#456",
+        dormitory = "Masjid",
+        schoolId = "TST-UI-AA",
+        role = com.example.data.model.WaliAccount.ROLE_GURU_NGAJI
+      )
+    )
+
+    val vm = com.example.ui.HealthViewModel(app)
+    vm.executeLogin("admin_ui_aa", "Password#123", rememberMe = false)
+    for (t in 1..40) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.waliAccounts.value.any { it.id == waliId }) break
+      kotlinx.coroutines.delay(25)
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.screens.AdminScreen(viewModel = vm, onLogout = {})
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Pastikan kartu kuota Anak Admin (1/7 Wali) tampil, tombol toggle tampil untuk Wali Asuh, dan TIDAK tampil untuk Guru Ngaji
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_admin_anak_admin_quota"))
+    composeTestRule.onNodeWithTag("card_admin_anak_admin_quota").assertExists()
+
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_toggle_anak_admin_$waliId"))
+    composeTestRule.onNodeWithTag("btn_toggle_anak_admin_$waliId").assertExists()
+    composeTestRule.onNodeWithTag("btn_toggle_anak_admin_$guruId").assertDoesNotExist()
+  }
+
+  @Test
+  fun `verify CategoryHubOverlay JADWAL_WALI for Anak Admin shows badge CSV Upload Download and click-to-edit cell`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val codes = com.example.data.model.WaliScheduleHelper.defaultShiftCodes("SRT1-KDR")
+    val entry = com.example.data.model.WaliScheduleEntry(
+      id = 909L,
+      schoolId = "SRT1-KDR",
+      monthKey = "2026-11",
+      waliUsername = "sitimaslukah",
+      waliName = "Siti Maslukah",
+      dayCodesJson = com.example.data.model.WaliScheduleHelper.serializeDayCodes(mapOf(17 to "P1")),
+      dayPinsJson = com.example.data.model.WaliScheduleHelper.serializeDayPins(
+        mapOf(17 to listOf(com.example.data.model.PinnedTaskItem("Jaga Asrama SD")))
+      )
+    )
+    var editedEntryId: Long? = null
+    var uploadCsvClicked = false
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.components.CategoryHubOverlay(
+          category = com.example.ui.components.DashboardCategoryHub.JADWAL_WALI,
+          schoolProfile = com.example.data.model.SchoolProfile(tenantCode = "SRT1-KDR", schoolName = "SR 1 Kediri"),
+          activePlans = emptyList(),
+          inpatientCount = 0,
+          fastingSessions = emptyList(),
+          fastingRecords = emptyList(),
+          activeHaidRecords = emptyList(),
+          suciRecords = emptyList(),
+          shiftMessages = emptyList(),
+          onDismiss = {},
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onOpenCreatePlan = {},
+          onOpenDirectTreatment = {},
+          onOpenFaskesInfo = {},
+          onOpenInputPuasa = {},
+          onOpenDaftarPuasa = {},
+          onOpenChecklistPuasa = {},
+          onOpenRankingPuasa = {},
+          onOpenInputHaid = {},
+          onOpenDaftarHaid = {},
+          onOpenDaftarSuci = {},
+          onOpenFiqihHaid = {},
+          onOpenShiftMessages = {},
+          onOpenCreateShiftMessage = {},
+          onOpenShiftHistory = {},
+          jadwalMonthKey = "2026-11",
+          jadwalSelectedDay = 17,
+          shiftCodes = codes,
+          scheduleEntries = listOf(entry),
+          canManageSchedule = true,
+          isAnakAdminSekolah = true,
+          currentUsername = "ekowahyudi",
+          currentWaliName = "Eko Wahyudi",
+          onEditScheduleCell = { e, _ -> editedEntryId = e.id },
+          onOpenUploadJadwalCsv = { uploadCsvClicked = true }
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Kontrol Anak Admin Jadwal: badge mode, Kelola Shift, Matriks/Tabel, Download CSV, Upload CSV
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("badge_anak_admin_jadwal_mode"))
+    composeTestRule.onNodeWithTag("badge_anak_admin_jadwal_mode").assertExists()
+    composeTestRule.onNodeWithTag("btn_jadwal_admin_shift_codes").assertExists()
+    composeTestRule.onNodeWithTag("btn_jadwal_admin_import").assertExists()
+    composeTestRule.onNodeWithTag("btn_jadwal_hub_download_csv").assertExists()
+    composeTestRule.onNodeWithTag("btn_jadwal_hub_upload_csv").assertExists().performClick()
+    org.junit.Assert.assertTrue(uploadCsvClicked)
+
+    // Klik langsung baris wali pada roster harian -> memicu dialog edit shift & pin tugas
+    composeTestRule.onNodeWithTag("list_category_hub_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_jadwal_member_${entry.id}"))
+    composeTestRule.onNodeWithTag("row_jadwal_member_${entry.id}").assertExists().performClick()
+    org.junit.Assert.assertEquals(entry.id, editedEntryId)
+  }
 }

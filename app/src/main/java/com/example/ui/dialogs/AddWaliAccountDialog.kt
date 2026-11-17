@@ -3,6 +3,9 @@ package com.example.ui.dialogs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,10 +56,12 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.PasswordGenerator
 import com.example.util.i18n.LocalAppStrings
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun AddWaliAccountDialog(
     schoolName: String = "",
+    anakAdminCount: Int = 0,
+    maxAnakAdmin: Int = WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL,
     onDismiss: () -> Unit,
     onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String, role: String) -> Unit
 ) {
@@ -180,9 +185,11 @@ fun AddWaliAccountDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Row(
+                    val quotaFull = anakAdminCount >= maxAnakAdmin
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilterChip(
                             selected = selectedRole == WaliAccount.ROLE_WALI,
@@ -194,8 +201,27 @@ fun AddWaliAccountDialog(
                                 )
                             },
                             modifier = Modifier
-                                .height(32.dp)
+                                .heightIn(min = 36.dp)
                                 .testTag("chip_add_role_wali")
+                        )
+                        FilterChip(
+                            selected = selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN,
+                            enabled = !quotaFull || selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN,
+                            onClick = {
+                                if (!quotaFull) {
+                                    selectedRole = WaliAccount.ROLE_WALI_ANAK_ADMIN
+                                }
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Wali + Schedule Sub-Admin ($anakAdminCount/$maxAnakAdmin)"
+                                    else "Wali + Anak Admin Jadwal ($anakAdminCount/$maxAnakAdmin)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("chip_add_role_anak_admin")
                         )
                         FilterChip(
                             selected = selectedRole == WaliAccount.ROLE_GURU_NGAJI,
@@ -210,8 +236,31 @@ fun AddWaliAccountDialog(
                                 )
                             },
                             modifier = Modifier
-                                .height(32.dp)
+                                .heightIn(min = 36.dp)
                                 .testTag("chip_add_role_guru_ngaji")
+                        )
+                    }
+                    if (selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN) {
+                        Text(
+                            text = if (isEn) {
+                                "Pinned with Schedule Sub-Admin access: can tap directly in the app to change shifts, pin extra tasks (hospital/dormitory), and upload/download schedule CSVs."
+                            } else {
+                                "Disematkan fitur Anak Admin Sekolah: bisa langsung klik di aplikasi untuk ubah shift, sematkan tugas tambahan (RS/Asrama/dll.), serta upload & download template CSV jadwal."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF0369A1),
+                            lineHeight = 14.sp
+                        )
+                    } else if (quotaFull) {
+                        Text(
+                            text = if (isEn) {
+                                "Schedule Sub-Admin quota reached ($anakAdminCount/$maxAnakAdmin). Unpin one first to assign another."
+                            } else {
+                                "Kuota Anak Admin Jadwal penuh ($anakAdminCount/$maxAnakAdmin). Cabut salah satu terlebih dahulu untuk menyematkan akun baru."
+                            },
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            lineHeight = 14.sp
                         )
                     }
                     if (selectedRole == WaliAccount.ROLE_GURU_NGAJI) {

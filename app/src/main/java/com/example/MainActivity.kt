@@ -267,8 +267,13 @@ private fun WaliAsuhCareAppContent(
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
+    val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
-    val canManageMainSchedule = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.SUPERADMIN || isAnakSuperAdmin
+    val isAnakAdminSekolah by viewModel.isAnakAdminSekolah.collectAsStateWithLifecycle()
+    val canManageMainSchedule = currentUserRole == UserRole.ADMIN ||
+        currentUserRole == UserRole.SUPERADMIN ||
+        isAnakSuperAdmin ||
+        isAnakAdminSekolah
     val dashboardModalState = rememberDashboardModalState()
     var readyMainTabunganSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
     var readyMainKonselingSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
@@ -865,6 +870,8 @@ private fun WaliAsuhCareAppContent(
                 shiftCodes = schoolShiftCodes,
                 scheduleEntries = schoolScheduleEntries,
                 canManageSchedule = canManageMainSchedule,
+                isAnakAdminSekolah = isAnakAdminSekolah,
+                scheduleWaliAccounts = waliAccounts,
                 currentUsername = currentUsername,
                 currentWaliName = waliName,
                 onChangeJadwalMonth = { newMonth ->
@@ -917,6 +924,20 @@ private fun WaliAsuhCareAppContent(
                 onOpenImportJadwalMatriks = {
                     TopOnAdManager.onUserActionClick(context)
                     if (canManageMainSchedule) {
+                        dashboardModalState.importJadwalInitialTab = 0
+                        dashboardModalState.showImportJadwalMatriksDialog = true
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Only school admin can manage the roster." else "Hanya admin sekolah yang dapat mengatur jadwal.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onOpenUploadJadwalCsv = {
+                    TopOnAdManager.onUserActionClick(context)
+                    if (canManageMainSchedule) {
+                        dashboardModalState.importJadwalInitialTab = 2
                         dashboardModalState.showImportJadwalMatriksDialog = true
                     } else {
                         android.widget.Toast.makeText(

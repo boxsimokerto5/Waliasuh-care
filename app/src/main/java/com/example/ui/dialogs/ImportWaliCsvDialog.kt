@@ -138,13 +138,12 @@ fun ImportWaliCsvDialog(
                 val customUser = tokens.getOrNull(3)
                 val customPass = tokens.getOrNull(4)
                 val rawRole = tokens.getOrNull(5).orEmpty().trim()
-                val parsedRole = if (
+                val parsedRole = when {
                     rawRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) ||
-                    rawRole.contains("ngaji", ignoreCase = true)
-                ) {
-                    WaliAccount.ROLE_GURU_NGAJI
-                } else {
-                    WaliAccount.ROLE_WALI
+                        rawRole.contains("ngaji", ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
+                    rawRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) ||
+                        rawRole.contains("anak admin", ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
+                    else -> WaliAccount.ROLE_WALI
                 }
 
                 val username = if (!customUser.isNullOrBlank()) {

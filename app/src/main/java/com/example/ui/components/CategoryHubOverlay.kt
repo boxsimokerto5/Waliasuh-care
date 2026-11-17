@@ -153,6 +153,8 @@ fun CategoryHubOverlay(
     shiftCodes: List<WaliShiftCode> = emptyList(),
     scheduleEntries: List<WaliScheduleEntry> = emptyList(),
     canManageSchedule: Boolean = false,
+    isAnakAdminSekolah: Boolean = false,
+    scheduleWaliAccounts: List<com.example.data.model.WaliAccount> = emptyList(),
     currentUsername: String? = null,
     currentWaliName: String = "",
     onChangeJadwalMonth: (String) -> Unit = {},
@@ -165,6 +167,7 @@ fun CategoryHubOverlay(
     onOpenPinTugasJadwal: () -> Unit = {},
     onOpenManageShiftCodes: () -> Unit = {},
     onOpenImportJadwalMatriks: () -> Unit = {},
+    onOpenUploadJadwalCsv: () -> Unit = onOpenImportJadwalMatriks,
     onEditScheduleCell: (WaliScheduleEntry, Int) -> Unit = { _, _ -> },
     onShareJadwalWhatsapp: () -> Unit = {},
     onExportJadwalMatriksPdf: () -> Unit = {}
@@ -624,6 +627,8 @@ fun CategoryHubOverlay(
                                     shiftCodes = shiftCodes,
                                     monthEntries = scheduleEntries.filter { it.monthKey == jadwalMonthKey },
                                     canManageSchedule = canManageSchedule,
+                                    isAnakAdminSekolah = isAnakAdminSekolah,
+                                    scheduleWaliAccounts = scheduleWaliAccounts,
                                     currentUsername = currentUsername,
                                     currentWaliName = currentWaliName,
                                     searchQuery = jadwalSearchQuery,
@@ -640,6 +645,7 @@ fun CategoryHubOverlay(
                                     onOpenPinTugas = onOpenPinTugasJadwal,
                                     onOpenManageShiftCodes = onOpenManageShiftCodes,
                                     onOpenImportMatriks = onOpenImportJadwalMatriks,
+                                    onOpenUploadCsv = onOpenUploadJadwalCsv,
                                     onEditCell = onEditScheduleCell,
                                     onShareDailyWhatsapp = onShareJadwalWhatsapp,
                                     onExportMatriksPdf = onExportJadwalMatriksPdf

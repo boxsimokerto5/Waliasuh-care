@@ -3,6 +3,8 @@ package com.example.ui.components
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,12 +35,14 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightsStay
@@ -50,6 +54,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
@@ -2181,6 +2186,8 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
     shiftCodes: List<WaliShiftCode>,
     monthEntries: List<WaliScheduleEntry>,
     canManageSchedule: Boolean,
+    isAnakAdminSekolah: Boolean = false,
+    scheduleWaliAccounts: List<com.example.data.model.WaliAccount> = emptyList(),
     currentUsername: String?,
     currentWaliName: String,
     searchQuery: String,
@@ -2197,6 +2204,7 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
     onOpenPinTugas: () -> Unit,
     onOpenManageShiftCodes: () -> Unit,
     onOpenImportMatriks: () -> Unit,
+    onOpenUploadCsv: () -> Unit = onOpenImportMatriks,
     onEditCell: (WaliScheduleEntry, Int) -> Unit,
     onShareDailyWhatsapp: () -> Unit,
     onExportMatriksPdf: () -> Unit
@@ -2639,6 +2647,41 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
             }
 
             if (canManageSchedule) {
+                val context = LocalContext.current
+                val downloadCsvLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.CreateDocument("text/csv")
+                ) { uri: Uri? ->
+                    if (uri != null) {
+                        try {
+                            val csvContent = WaliScheduleHelper.buildScheduleTemplateCsv(
+                                monthKey = monthKey,
+                                existingEntries = monthEntries,
+                                waliAccounts = scheduleWaliAccounts,
+                                includeExistingShifts = true
+                            )
+                            context.contentResolver.openOutputStream(uri)?.use { os ->
+                                os.write("\uFEFF$csvContent".toByteArray(Charsets.UTF_8))
+                            }
+                            Toast.makeText(
+                                context,
+                                if (isEn) {
+                                    "Schedule CSV template downloaded (${WaliScheduleHelper.formatMonthTitle(monthKey, true)})!"
+                                } else {
+                                    "Template CSV jadwal berhasil diunduh (${WaliScheduleHelper.formatMonthTitle(monthKey, false)})!"
+                                },
+                                Toast.LENGTH_LONG
+                            ).show()
+                        } catch (e: Exception) {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Failed to download CSV template: ${e.message}"
+                                else "Gagal mengunduh template CSV: ${e.message}",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                }
+
                 Surface(
                     shape = RoundedCornerShape(12.dp),
                     color = Color(0xFFF0FDFA),
@@ -2647,37 +2690,110 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                         .fillMaxWidth()
                         .testTag("card_jadwal_admin_controls")
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 10.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        OutlinedButton(
-                            onClick = onOpenManageShiftCodes,
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_jadwal_admin_shift_codes")
-                        ) {
-                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (isEn) "Shift Codes" else "Atur Kode Shift", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        if (isAnakAdminSekolah) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.testTag("badge_anak_admin_jadwal_mode")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AdminPanelSettings,
+                                    contentDescription = null,
+                                    tint = Color(0xFF4338CA),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "Schedule Sub-Admin Active • Tap any row/cell to edit shifts & tasks, or use CSV"
+                                    } else {
+                                        "Mode Anak Admin Jadwal • Klik wali untuk ubah shift/pin tugas, atau kelola CSV"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF312E81)
+                                )
+                            }
                         }
-                        Button(
-                            onClick = onOpenImportMatriks,
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_jadwal_admin_import")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(15.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (isEn) "Members / CSV" else "Anggota / CSV", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            OutlinedButton(
+                                onClick = onOpenManageShiftCodes,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_jadwal_admin_shift_codes")
+                            ) {
+                                Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (isEn) "Shift Codes" else "Atur Kode Shift", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Button(
+                                onClick = onOpenImportMatriks,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_jadwal_admin_import")
+                            ) {
+                                Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (isEn) "Members / Pattern" else "Anggota / Pola", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    val safeCode = schoolProfile.tenantCode.ifBlank { "SRT1" }
+                                        .replace(Regex("[^A-Za-z0-9_-]"), "_")
+                                    downloadCsvLauncher.launch("Template_Jadwal_Wali_${safeCode}_${monthKey}.csv")
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_jadwal_hub_download_csv")
+                            ) {
+                                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0F766E))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isEn) "Download CSV" else "Template CSV",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F766E)
+                                )
+                            }
+                            Button(
+                                onClick = onOpenUploadCsv,
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_jadwal_hub_upload_csv")
+                            ) {
+                                Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isEn) "Upload CSV" else "Upload CSV",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }

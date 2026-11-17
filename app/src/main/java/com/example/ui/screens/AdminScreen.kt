@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -397,6 +398,7 @@ fun AdminScreen(
                 account.roleLabel(isEn).contains(searchQuery, ignoreCase = true)
         val matchDorm = when (selectedFilterDormitory) {
             "Semua" -> true
+            "Anak Admin" -> account.isAnakAdminSekolah()
             "Guru Ngaji" -> account.isGuruNgaji()
             else -> account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
         }
@@ -405,6 +407,7 @@ fun AdminScreen(
 
     val putraCount = schoolAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
     val putriCount = schoolAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
+    val anakAdminCount = schoolAccounts.count { it.isAnakAdminSekolah() }
 
     val filteredStudents = schoolStudents.filter { student ->
         val matchSearch = studentSearchQuery.isBlank() ||
@@ -1348,6 +1351,52 @@ fun AdminScreen(
                                     }
                                 }
                             }
+
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFEEF2FF),
+                                border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("card_admin_anak_admin_quota")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AdminPanelSettings,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4338CA),
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Schedule Sub-Admin Feature ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                            } else {
+                                                "Fitur Anak Admin Jadwal ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali)"
+                                            },
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF312E81)
+                                        )
+                                        Text(
+                                            text = if (isEn) {
+                                                "Pin up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh in this school to directly change shifts, pin hospital/extra tasks, & upload/download CSVs inside the app."
+                                            } else {
+                                                "Sematkan ke maks. ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh agar dapat klik-edit shift, pin tugas (RS/Asrama), serta upload & download CSV langsung di aplikasi."
+                                            },
+                                            fontSize = 10.5.sp,
+                                            color = Color(0xFF3730A3),
+                                            lineHeight = 14.sp
+                                        )
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1377,9 +1426,10 @@ fun AdminScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            listOf("Semua", "Putra", "Putri", "Guru Ngaji").forEach { dormFilter ->
+                            listOf("Semua", "Putra", "Putri", "Anak Admin", "Guru Ngaji").forEach { dormFilter ->
                                 val chipLabel = when (dormFilter) {
                                     "Semua" -> if (isEn) "All" else "Semua"
+                                    "Anak Admin" -> if (isEn) "Sub-Admin ($anakAdminCount)" else "Anak Admin ($anakAdminCount)"
                                     "Guru Ngaji" -> if (isEn) "Mengaji Teacher" else "Guru Ngaji"
                                     else -> dormFilter
                                 }
@@ -1473,6 +1523,12 @@ fun AdminScreen(
                                 }
                             },
                             onEdit = { accountToEdit = account },
+                            anakAdminCount = anakAdminCount,
+                            onToggleAnakAdmin = { enable ->
+                                viewModel.setWaliAnakAdminStatus(account, enable) { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
+                            },
                             onResetPassword = {
                                 viewModel.resetWaliPassword(account) { newPass ->
                                     Toast.makeText(
@@ -2526,16 +2582,28 @@ fun AdminScreen(
     if (showAddDialog) {
         AddWaliAccountDialog(
             schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+            anakAdminCount = anakAdminCount,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, username, dormitory, phone, password, role ->
-                viewModel.addWaliAccount(name, username, dormitory, phone, password, role) {
-                    Toast.makeText(
-                        context,
-                        if (isEn) "Access card for $name created!" else "Kartu akun untuk $name berhasil dibuat!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                showAddDialog = false
+                viewModel.addWaliAccount(
+                    name = name,
+                    username = username,
+                    dormitory = dormitory,
+                    phone = phone,
+                    customPassword = password,
+                    role = role,
+                    onError = { errMsg ->
+                        Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
+                    },
+                    onComplete = {
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Access card for $name created!" else "Kartu akun untuk $name berhasil dibuat!",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        showAddDialog = false
+                    }
+                )
             }
         )
     }
@@ -2761,16 +2829,23 @@ fun AdminScreen(
     accountToEdit?.let { account ->
         EditWaliAccountDialog(
             account = account,
+            anakAdminCount = anakAdminCount,
             onDismiss = { accountToEdit = null },
             onConfirm = { updated ->
-                viewModel.updateWaliAccount(updated) {
-                    Toast.makeText(
-                        context,
-                        if (isEn) "Account ${updated.name} updated!" else "Akun ${updated.name} berhasil diperbarui!",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                }
-                accountToEdit = null
+                viewModel.updateWaliAccount(
+                    account = updated,
+                    onError = { errMsg ->
+                        Toast.makeText(context, errMsg, Toast.LENGTH_LONG).show()
+                    },
+                    onComplete = {
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Account ${updated.name} updated!" else "Akun ${updated.name} berhasil diperbarui!",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                        accountToEdit = null
+                    }
+                )
             }
         )
     }
@@ -3400,6 +3475,8 @@ fun WaliAccountCardItem(
     onCopy: (text: String, label: String) -> Unit,
     onShareWhatsApp: () -> Unit,
     onEdit: () -> Unit,
+    anakAdminCount: Int = 0,
+    onToggleAnakAdmin: (Boolean) -> Unit = {},
     onResetPassword: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -3408,14 +3485,17 @@ fun WaliAccountCardItem(
     var passwordVisible by remember { mutableStateOf(false) }
 
     val isGuruNgaji = account.isGuruNgaji()
+    val isAnakAdmin = account.isAnakAdminSekolah()
     val isPutri = account.dormitory.contains("Putri", ignoreCase = true)
     val dormAccentColor = when {
         isGuruNgaji -> Color(0xFF047857)
+        isAnakAdmin -> Color(0xFF4338CA)
         isPutri -> Color(0xFFBE185D)
         else -> Color(0xFF0369A1)
     }
     val dormBgColor = when {
         isGuruNgaji -> Color(0xFFECFDF5)
+        isAnakAdmin -> Color(0xFFEEF2FF)
         isPutri -> Color(0xFFFDF2F8)
         else -> Color(0xFFF0F9FF)
     }
@@ -3454,6 +3534,8 @@ fun WaliAccountCardItem(
                             text = when {
                                 isGuruNgaji && isEn -> "MENGAJI TEACHER ACCESS CARD"
                                 isGuruNgaji -> "KARTU AKSES GURU NGAJI"
+                                isAnakAdmin && isEn -> "WALI ASUH • SCHEDULE SUB-ADMIN"
+                                isAnakAdmin -> "WALI ASUH • ANAK ADMIN JADWAL"
                                 isEn -> "WALI ASUH ACCESS CARD"
                                 else -> "KARTU AKSES WALI ASUH"
                             },
@@ -3478,7 +3560,11 @@ fun WaliAccountCardItem(
                             .padding(horizontal = 7.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = if (isGuruNgaji) account.roleLabel(isEn) else account.dormitory,
+                            text = when {
+                                isGuruNgaji -> account.roleLabel(isEn)
+                                isAnakAdmin -> if (isEn) "★ Sub-Admin" else "★ Anak Admin"
+                                else -> account.dormitory
+                            },
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -3657,6 +3743,46 @@ fun WaliAccountCardItem(
                             fontSize = 9.5.sp,
                             fontWeight = FontWeight.Medium,
                             color = dormAccentColor.copy(alpha = 0.85f)
+                        )
+                    }
+                }
+
+                // Tombol Penyematan Fitur Anak Admin Jadwal (Maks 7 Wali Asuh per Sekolah)
+                if (!isGuruNgaji) {
+                    val canPinMore = isAnakAdmin || anakAdminCount < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL
+                    OutlinedButton(
+                        onClick = { onToggleAnakAdmin(!isAnakAdmin) },
+                        enabled = canPinMore,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isAnakAdmin) Color(0xFF4338CA) else Color(0xFF94A3B8)
+                        ),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = if (isAnakAdmin) Color(0xFFEEF2FF) else Color.Transparent,
+                            contentColor = if (isAnakAdmin) Color(0xFF312E81) else Color(0xFF334155)
+                        ),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_toggle_anak_admin_${account.id}")
+                    ) {
+                        Icon(
+                            imageVector = if (isAnakAdmin) Icons.Default.AdminPanelSettings else Icons.Default.PushPin,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when {
+                                isAnakAdmin && isEn -> "Unpin Schedule Sub-Admin ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                isAnakAdmin -> "Anak Admin Jadwal Aktif • Ketuk untuk Cabut ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                isEn -> "Pin as Schedule Sub-Admin ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                else -> "Sematkan Anak Admin Jadwal ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }

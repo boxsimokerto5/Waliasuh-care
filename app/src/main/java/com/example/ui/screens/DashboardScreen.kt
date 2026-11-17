@@ -229,6 +229,7 @@ fun DashboardScreen(
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
+    val isAnakAdminSekolah by viewModel.isAnakAdminSekolah.collectAsStateWithLifecycle()
     val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
     val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
     val dashboardBannerConfig by viewModel.dashboardBannerConfig.collectAsStateWithLifecycle()
@@ -236,7 +237,7 @@ fun DashboardScreen(
     val isUploadingBannerImage by viewModel.isUploadingBannerImage.collectAsStateWithLifecycle()
     val showDashboardTour by viewModel.showDashboardTour.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
-    val canManageSchedule = isAdminUser || isAnakSuperAdmin
+    val canManageSchedule = isAdminUser || isAnakSuperAdmin || isAnakAdminSekolah
 
     LaunchedEffect(Unit) {
         viewModel.syncDashboardIconLayoutNow()
@@ -1472,6 +1473,8 @@ fun DashboardScreen(
                 shiftCodes = schoolShiftCodes,
                 scheduleEntries = schoolScheduleEntries,
                 canManageSchedule = canManageSchedule,
+                isAnakAdminSekolah = isAnakAdminSekolah,
+                scheduleWaliAccounts = waliAccounts,
                 currentUsername = currentUsername,
                 currentWaliName = waliName,
                 onChangeJadwalMonth = { newMonth ->
@@ -1506,6 +1509,19 @@ fun DashboardScreen(
                 },
                 onOpenImportJadwalMatriks = {
                     if (canManageSchedule) {
+                        modalState.importJadwalInitialTab = 0
+                        modalState.showImportJadwalMatriksDialog = true
+                    } else {
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Only school admin can manage the roster." else "Hanya admin sekolah yang dapat mengatur jadwal.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onOpenUploadJadwalCsv = {
+                    if (canManageSchedule) {
+                        modalState.importJadwalInitialTab = 2
                         modalState.showImportJadwalMatriksDialog = true
                     } else {
                         Toast.makeText(
@@ -3089,7 +3105,10 @@ fun DashboardScreen(
                 modalState.showJadwalPersonalSheet = true
             },
             onOpenImportDialog = if (canManageSchedule) {
-                { modalState.showImportJadwalMatriksDialog = true }
+                {
+                    modalState.importJadwalInitialTab = 0
+                    modalState.showImportJadwalMatriksDialog = true
+                }
             } else null,
             onDismiss = { modalState.showJadwalMatriksSheet = false }
         )
@@ -3206,6 +3225,7 @@ fun DashboardScreen(
                 },
                 onOpenPatternEditor = {
                     modalState.editingScheduleCellTarget = null
+                    modalState.importJadwalInitialTab = 1
                     modalState.showImportJadwalMatriksDialog = true
                 },
                 onDismiss = { modalState.editingScheduleCellTarget = null }
@@ -3253,6 +3273,8 @@ fun DashboardScreen(
                 entries = jadwalMonthEntries,
                 shiftCodes = schoolShiftCodes,
                 schoolProfile = schoolProfile,
+                waliAccounts = waliAccounts,
+                initialTab = modalState.importJadwalInitialTab,
                 onSyncWaliAccounts = {
                     viewModel.syncScheduleMembersFromWaliAccounts(modalState.jadwalSelectedMonthKey) { _, msg ->
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()

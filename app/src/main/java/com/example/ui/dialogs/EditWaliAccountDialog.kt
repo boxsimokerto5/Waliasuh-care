@@ -3,6 +3,9 @@ package com.example.ui.dialogs
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,10 +56,12 @@ import com.example.ui.theme.WaliPrimary
 import com.example.util.PasswordGenerator
 import com.example.util.i18n.LocalAppStrings
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditWaliAccountDialog(
     account: WaliAccount,
+    anakAdminCount: Int = 0,
+    maxAnakAdmin: Int = WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL,
     onDismiss: () -> Unit,
     onConfirm: (updatedAccount: WaliAccount) -> Unit
 ) {
@@ -179,9 +184,12 @@ fun EditWaliAccountDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Row(
+                    val wasAlreadyAnakAdmin = account.isAnakAdminSekolah()
+                    val quotaBlocked = !wasAlreadyAnakAdmin && anakAdminCount >= maxAnakAdmin
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         FilterChip(
                             selected = selectedRole.equals(WaliAccount.ROLE_WALI, ignoreCase = true),
@@ -193,8 +201,27 @@ fun EditWaliAccountDialog(
                                 )
                             },
                             modifier = Modifier
-                                .height(32.dp)
+                                .heightIn(min = 36.dp)
                                 .testTag("chip_edit_role_wali")
+                        )
+                        FilterChip(
+                            selected = selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true),
+                            enabled = !quotaBlocked || selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true),
+                            onClick = {
+                                if (!quotaBlocked) {
+                                    selectedRole = WaliAccount.ROLE_WALI_ANAK_ADMIN
+                                }
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Wali + Schedule Sub-Admin ($anakAdminCount/$maxAnakAdmin)"
+                                    else "Wali + Anak Admin Jadwal ($anakAdminCount/$maxAnakAdmin)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("chip_edit_role_anak_admin")
                         )
                         FilterChip(
                             selected = selectedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true),
@@ -206,8 +233,31 @@ fun EditWaliAccountDialog(
                                 )
                             },
                             modifier = Modifier
-                                .height(32.dp)
+                                .heightIn(min = 36.dp)
                                 .testTag("chip_edit_role_guru_ngaji")
+                        )
+                    }
+                    if (selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true)) {
+                        Text(
+                            text = if (isEn) {
+                                "This Wali Asuh can tap schedule cells directly in the app to change shifts, pin extra tasks (hospital/dormitory), and upload/download CSVs."
+                            } else {
+                                "Wali Asuh ini bisa langsung klik jadwal di aplikasi untuk ubah shift, sematkan tugas tambahan (RS/Asrama/dll.), serta upload & download template CSV."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF0369A1),
+                            lineHeight = 14.sp
+                        )
+                    } else if (quotaBlocked) {
+                        Text(
+                            text = if (isEn) {
+                                "Quota full ($anakAdminCount/$maxAnakAdmin). Unpin another Wali Asuh first."
+                            } else {
+                                "Kuota Anak Admin penuh ($anakAdminCount/$maxAnakAdmin). Cabut sematan akun lain dulu."
+                            },
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.error,
+                            lineHeight = 14.sp
                         )
                     }
                 }
