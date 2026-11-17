@@ -15,6 +15,10 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.InfoPentingComment
+import com.example.data.model.InfoPentingHelper
+import com.example.data.model.InfoPentingPost
+import com.example.data.model.InfoPentingReaction
 import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
@@ -41,6 +45,7 @@ import com.example.data.model.LeaveDayInfo
 import com.example.data.model.PinnedTaskItem
 import com.example.data.remote.pocketbase.PbSchoolProfileDto
 import com.example.data.remote.pocketbase.PocketBaseConfig
+import com.example.data.remote.pocketbase.PocketBaseIdCodec
 import com.example.data.remote.pocketbase.PocketBaseSyncManager
 import com.example.data.repository.HealthRepository
 import com.example.util.DateUtils
@@ -111,7 +116,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.konselingRecordDao(),
             db.konselingLogDao(),
             db.waliShiftCodeDao(),
-            db.waliScheduleEntryDao()
+            db.waliScheduleEntryDao(),
+            db.infoPentingPostDao(),
+            db.infoPentingReactionDao(),
+            db.infoPentingCommentDao()
         )
     }
 
@@ -5768,6 +5776,348 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteRemoteShiftMessage(getApplication(), message.id)
             }
+        }
+    }
+
+    // --- Channel Info-Info Penting (Global Lintas Semua Sekolah) ---
+
+    val infoPentingPosts: StateFlow<List<InfoPentingPost>> = repository.allInfoPentingPosts
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val infoPentingReactions: StateFlow<List<InfoPentingReaction>> = repository.allInfoPentingReactions
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val infoPentingComments: StateFlow<List<InfoPentingComment>> = repository.allInfoPentingComments
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _lastInfoPentingReadAt = MutableStateFlow(
+        notifPrefs.getLong("info_penting_last_read_at", 0L)
+    )
+
+    val unreadInfoPentingCount: StateFlow<Int> = combine(
+        infoPentingPosts,
+        _lastInfoPentingReadAt
+    ) { posts, lastReadAt ->
+        InfoPentingHelper.countUnreadPosts(posts, lastReadAt)
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, 0)
+
+    private val _isPublishingInfoPenting = MutableStateFlow(false)
+    val isPublishingInfoPenting: StateFlow<Boolean> = _isPublishingInfoPenting.asStateFlow()
+
+    fun currentInfoPentingUserKey(): String {
+        val profile = _schoolProfile.value
+        val schoolId = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        val role = _currentUserRole.value
+        val fallbackName = when (role) {
+            UserRole.ADMIN -> profile.adminName.ifBlank { "Admin Sekolah" }
+            UserRole.SUPERADMIN -> "Superadmin Pusat"
+            else -> _waliName.value
+        }
+        return InfoPentingHelper.buildUserKey(
+            schoolId = schoolId,
+            username = _currentUsername.value,
+            fallbackName = fallbackName,
+            roleTag = role.name
+        )
+    }
+
+    fun markInfoPentingRead() {
+        val latestCreated = infoPentingPosts.value.maxOfOrNull { it.createdAt } ?: System.currentTimeMillis()
+        val markAt = maxOf(System.currentTimeMillis(), latestCreated)
+        _lastInfoPentingReadAt.value = markAt
+        notifPrefs.edit().putLong("info_penting_last_read_at", markAt).apply()
+    }
+
+    fun syncInfoPentingChannelNow() {
+        if (isUnitTestEnvironment()) return
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncInfoPentingChannelQuietly(getApplication(), repository)
+        }
+    }
+
+    fun publishInfoPentingPost(
+        title: String,
+        content: String,
+        category: String,
+        mediaType: String,
+        selectedMediaUri: Uri? = null,
+        mediaName: String = "",
+        externalLink: String = "",
+        isPinned: Boolean = false,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (!isAnakSuperAdmin.value) {
+            onResult(
+                false,
+                if (isEn) "Only anaksuperadmin can publish to Important Info Channel."
+                else "Hanya anaksuperadmin yang diizinkan memposting di Info-Info Penting."
+            )
+            return
+        }
+        val cleanTitle = title.trim()
+        val cleanContent = content.trim()
+        val cleanLink = InfoPentingHelper.normalizeExternalLink(externalLink)
+        if (cleanTitle.isBlank() && cleanContent.isBlank() && selectedMediaUri == null && cleanLink.isBlank()) {
+            onResult(
+                false,
+                if (isEn) "Please write a message or attach media/link first."
+                else "Isi pesan atau lampirkan foto/video/dokumen/tautan terlebih dahulu."
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            _isPublishingInfoPenting.value = true
+            try {
+                val now = System.currentTimeMillis()
+                val newPostId = PocketBaseSyncManager.generateCloudSafeId()
+                var resolvedMediaType = mediaType.uppercase().ifBlank { InfoPentingHelper.MEDIA_NONE }
+                var resolvedPrimaryUrl = ""
+                var resolvedFallbackUrl = ""
+                var pbRecId = ""
+                var pbColId = ""
+                var pbFilename = ""
+                var resolvedMediaName = mediaName.trim()
+                var resolvedSize = 0L
+
+                if (selectedMediaUri != null) {
+                    if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        val uploadRes = PocketBaseSyncManager.uploadInfoPentingMediaToCloud(
+                            context = getApplication(),
+                            mediaUri = selectedMediaUri,
+                            postId = newPostId,
+                            title = cleanTitle.ifBlank { cleanContent.take(60) },
+                            preferredMediaType = resolvedMediaType
+                        )
+                        if (uploadRes.isSuccess) {
+                            val uploaded = uploadRes.getOrThrow()
+                            pbRecId = uploaded.pbRecordId
+                            pbColId = uploaded.pbCollectionId
+                            pbFilename = uploaded.pbFilename
+                            resolvedPrimaryUrl = uploaded.cdnUrl
+                            resolvedFallbackUrl = uploaded.fallbackApiFileUrl
+                            resolvedMediaType = uploaded.mediaType
+                            resolvedMediaName = uploaded.fileName.ifBlank { resolvedMediaName }
+                            resolvedSize = uploaded.fileSizeBytes
+                        } else {
+                            val errMsg = uploadRes.exceptionOrNull()?.message
+                                ?: if (isEn) "Media upload failed." else "Gagal mengunggah lampiran ke server."
+                            onResult(false, errMsg)
+                            return@launch
+                        }
+                    } else {
+                        resolvedPrimaryUrl = selectedMediaUri.toString()
+                        resolvedMediaType = InfoPentingHelper.inferMediaType(
+                            listOf(resolvedPrimaryUrl, resolvedMediaName),
+                            explicitType = resolvedMediaType
+                        )
+                    }
+                } else if (cleanLink.isNotBlank() && resolvedMediaType == InfoPentingHelper.MEDIA_NONE) {
+                    resolvedMediaType = InfoPentingHelper.MEDIA_LINK
+                }
+
+                val post = InfoPentingPost(
+                    id = newPostId,
+                    schoolId = InfoPentingHelper.GLOBAL_SCHOOL_ID,
+                    title = cleanTitle,
+                    content = cleanContent,
+                    category = category.uppercase().ifBlank { InfoPentingHelper.CATEGORY_PENGUMUMAN },
+                    mediaType = resolvedMediaType,
+                    mediaUrl = resolvedPrimaryUrl,
+                    fallbackMediaUrl = resolvedFallbackUrl,
+                    pbRecordId = pbRecId,
+                    pbCollectionId = pbColId,
+                    pbFilename = pbFilename,
+                    mediaName = resolvedMediaName,
+                    mediaSizeBytes = resolvedSize,
+                    externalLink = cleanLink,
+                    authorDisplayName = InfoPentingHelper.PUBLIC_AUTHOR_NAME,
+                    authorSchoolName = "",
+                    isPinned = isPinned,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                repository.insertInfoPentingPost(post)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadSingleInfoPentingPost(getApplication(), post)
+                }
+                onResult(
+                    true,
+                    if (isEn) "Important info posted globally as Superadmin!"
+                    else "Info Penting berhasil diposting ke seluruh sekolah sebagai Superadmin!"
+                )
+            } catch (e: Exception) {
+                onResult(
+                    false,
+                    e.message ?: if (isEn) "Failed to publish post." else "Gagal memposting info."
+                )
+            } finally {
+                _isPublishingInfoPenting.value = false
+            }
+        }
+    }
+
+    fun togglePinInfoPentingPost(post: InfoPentingPost, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (!isAnakSuperAdmin.value) {
+            onResult(false, if (isEn) "Not authorized." else "Hanya anaksuperadmin yang dapat menyematkan info.")
+            return
+        }
+        viewModelScope.launch {
+            val updated = post.copy(
+                isPinned = !post.isPinned,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateInfoPentingPost(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleInfoPentingPost(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (updated.isPinned) {
+                    if (isEn) "Post pinned to top." else "Postingan disematkan di paling atas."
+                } else {
+                    if (isEn) "Post unpinned." else "Sematkan postingan dilepas."
+                }
+            )
+        }
+    }
+
+    fun deleteInfoPentingPost(post: InfoPentingPost, onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (!InfoPentingHelper.canDeletePost(post, isAnakSuperAdmin.value)) {
+            onResult(false, if (isEn) "Only anaksuperadmin can delete channel posts." else "Hanya anaksuperadmin yang dapat menghapus postingan saluran.")
+            return
+        }
+        viewModelScope.launch {
+            val deletedPost = post.copy(
+                isDeleted = true,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateInfoPentingPost(deletedPost)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleInfoPentingPost(getApplication(), deletedPost)
+            }
+            onResult(true, if (isEn) "Post deleted." else "Postingan dihapus.")
+        }
+    }
+
+    fun toggleInfoPentingReaction(post: InfoPentingPost, targetType: String) {
+        val normalizedTarget = targetType.trim().uppercase()
+        if (normalizedTarget != InfoPentingHelper.REACTION_LIKE &&
+            normalizedTarget != InfoPentingHelper.REACTION_DISLIKE
+        ) return
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val userKey = currentInfoPentingUserKey()
+            val profile = _schoolProfile.value
+            val existing = repository.getInfoPentingReactionByPostAndUser(post.id, userKey)
+            val nextReactionType = if (existing?.reactionType.equals(normalizedTarget, ignoreCase = true)) {
+                InfoPentingHelper.REACTION_NONE
+            } else {
+                normalizedTarget
+            }
+            val reactionId = existing?.id ?: PocketBaseIdCodec.stablePositiveHash("info_react:${post.id}:$userKey")
+            val displayUserName = InfoPentingHelper.resolveCommentAuthorDisplay(
+                rawAuthorName = when (_currentUserRole.value) {
+                    UserRole.ADMIN -> profile.adminName.ifBlank { "Admin Sekolah" }
+                    UserRole.SUPERADMIN -> "Superadmin"
+                    else -> _waliName.value
+                },
+                username = _currentUsername.value
+            )
+            val updated = InfoPentingReaction(
+                id = reactionId,
+                schoolId = InfoPentingHelper.GLOBAL_SCHOOL_ID,
+                postId = post.id,
+                userKey = userKey,
+                userName = displayUserName,
+                userSchoolId = profile.tenantCode.ifBlank { "SRT1-KDR" },
+                reactionType = nextReactionType,
+                createdAt = existing?.createdAt ?: now,
+                updatedAt = now
+            )
+            repository.insertInfoPentingReaction(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleInfoPentingReaction(getApplication(), updated)
+            }
+        }
+    }
+
+    fun addInfoPentingComment(
+        post: InfoPentingPost,
+        content: String,
+        replyToComment: InfoPentingComment? = null,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) {
+            onResult(false, if (isEn) "Comment cannot be empty." else "Komentar tidak boleh kosong.")
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val profile = _schoolProfile.value
+            val schoolId = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            val schoolLabel = if (isAnakSuperAdmin.value) {
+                ""
+            } else {
+                profile.shortName.ifBlank { profile.schoolName }.ifBlank { schoolId }
+            }
+            val authorDisplay = InfoPentingHelper.resolveCommentAuthorDisplay(
+                rawAuthorName = when (_currentUserRole.value) {
+                    UserRole.ADMIN -> profile.adminName.ifBlank { "Admin Sekolah" }
+                    UserRole.SUPERADMIN -> "Superadmin"
+                    else -> _waliName.value
+                },
+                username = _currentUsername.value
+            )
+            val comment = InfoPentingComment(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                schoolId = InfoPentingHelper.GLOBAL_SCHOOL_ID,
+                postId = post.id,
+                parentCommentId = replyToComment?.id ?: 0L,
+                replyToAuthorName = replyToComment?.authorName.orEmpty(),
+                authorKey = currentInfoPentingUserKey(),
+                authorName = authorDisplay,
+                authorSchoolId = schoolId,
+                authorSchoolName = schoolLabel,
+                content = cleanContent,
+                isDeleted = false,
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertInfoPentingComment(comment)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleInfoPentingComment(getApplication(), comment)
+            }
+            onResult(true, if (isEn) "Comment sent!" else "Komentar terkirim!")
+        }
+    }
+
+    fun deleteOwnInfoPentingComment(
+        comment: InfoPentingComment,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val currentKey = currentInfoPentingUserKey()
+        if (!InfoPentingHelper.canDeleteComment(comment, currentKey)) {
+            onResult(false, if (isEn) "You can only delete your own comments." else "Anda hanya dapat menghapus komentar Anda sendiri.")
+            return
+        }
+        viewModelScope.launch {
+            val deleted = comment.copy(
+                isDeleted = true,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateInfoPentingComment(deleted)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleInfoPentingComment(getApplication(), deleted)
+            }
+            onResult(true, if (isEn) "Comment deleted." else "Komentar dihapus.")
         }
     }
 }

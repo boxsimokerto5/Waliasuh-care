@@ -329,6 +329,13 @@ enum class DashboardBannerFeatureTarget(
         labelEn = "Profile & Settings Screen",
         groupId = "Data & Navigasi",
         groupEn = "Data & Navigation"
+    ),
+    FEATURE_INFO_PENTING(
+        key = "FEATURE_INFO_PENTING",
+        labelId = "Saluran Info-Info Penting (Global)",
+        labelEn = "Important Info Channel (Global)",
+        groupId = "Data & Navigasi",
+        groupEn = "Data & Navigation"
     );
 
     fun label(isEn: Boolean): String = if (isEn) labelEn else labelId

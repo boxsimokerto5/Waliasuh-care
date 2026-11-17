@@ -16,6 +16,10 @@ import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.InfoPentingComment
+import com.example.data.model.InfoPentingHelper
+import com.example.data.model.InfoPentingPost
+import com.example.data.model.InfoPentingReaction
 import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
@@ -30,6 +34,7 @@ import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.UploadedBannerMedia
+import com.example.data.model.UploadedInfoPentingMedia
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
@@ -2547,6 +2552,13 @@ object PocketBaseSyncManager {
                 syncWaliScheduleEntriesMerged(service, cleanSchoolId, filter, repository)
             }
 
+            // 13. Sinkronkan Channel Info-Info Penting Global (lintas semua sekolah)
+            runCatching {
+                syncInfoPentingPostsMerged(service, repository, PocketBaseConfig.getBaseUrl(context))
+                syncInfoPentingReactionsMerged(service, repository)
+                syncInfoPentingCommentsMerged(service, repository)
+            }
+
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
             Result.success(
                 if (isEn) {
@@ -2558,6 +2570,366 @@ object PocketBaseSyncManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error syncAllSchoolData", e)
             Result.failure(e)
+        }
+    }
+
+    // --- Channel Info-Info Penting (Global Lintas Semua Sekolah) ---
+
+    suspend fun uploadInfoPentingMediaToCloud(
+        context: Context,
+        mediaUri: Uri,
+        postId: Long,
+        title: String,
+        preferredMediaType: String
+    ): Result<UploadedInfoPentingMedia> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+
+        val now = System.currentTimeMillis()
+        val mimeHint = context.contentResolver.getType(mediaUri).orEmpty().lowercase()
+        val (displayName, queriedSize) = queryUriMeta(context, mediaUri)
+        val cleanDisplayName = displayName.orEmpty().trim().ifBlank { "lampiran_$now" }
+        val extHint = cleanDisplayName.substringAfterLast('.', "").lowercase()
+        val header = peekMagicBytes(context, mediaUri)
+        val isGifMagic = header.size >= 4 &&
+            header[0] == 'G'.code.toByte() &&
+            header[1] == 'I'.code.toByte() &&
+            header[2] == 'F'.code.toByte() &&
+            header[3] == '8'.code.toByte()
+        val isMp4Magic = header.size >= 8 &&
+            header[4] == 'f'.code.toByte() &&
+            header[5] == 't'.code.toByte() &&
+            header[6] == 'y'.code.toByte() &&
+            header[7] == 'p'.code.toByte()
+        val isWebmMagic = header.size >= 4 &&
+            header[0] == 0x1A.toByte() &&
+            header[1] == 0x45.toByte() &&
+            header[2] == 0xDF.toByte() &&
+            header[3] == 0xA3.toByte()
+
+        val inferredType = when {
+            preferredMediaType.equals(InfoPentingHelper.MEDIA_VIDEO, ignoreCase = true) ||
+                mimeHint.startsWith("video/") ||
+                extHint in listOf("mp4", "webm", "mov", "m4v", "mkv", "3gp") ||
+                isMp4Magic || isWebmMagic -> InfoPentingHelper.MEDIA_VIDEO
+            mimeHint == "image/gif" || extHint == "gif" || isGifMagic -> InfoPentingHelper.MEDIA_GIF
+            preferredMediaType.equals(InfoPentingHelper.MEDIA_DOCUMENT, ignoreCase = true) ||
+                mimeHint.startsWith("application/") ||
+                mimeHint.startsWith("text/") ||
+                extHint in listOf("pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "csv", "zip", "rar") ->
+                InfoPentingHelper.MEDIA_DOCUMENT
+            else -> InfoPentingHelper.MEDIA_IMAGE
+        }
+
+        val maxUploadBytes = 50L * 1024L * 1024L
+        if (queriedSize > maxUploadBytes) {
+            return@withContext Result.failure(
+                Exception(
+                    if (isEn) "Maximum file size is 50 MB."
+                    else "Ukuran file maksimal 50 MB."
+                )
+            )
+        }
+
+        val resolvedFilename: String
+        val resolvedMime: String
+        val requestBody: okhttp3.RequestBody
+
+        when (inferredType) {
+            InfoPentingHelper.MEDIA_VIDEO -> {
+                val isWebm = mimeHint.contains("webm") || extHint == "webm" || isWebmMagic
+                val isMov = mimeHint.contains("quicktime") || extHint == "mov"
+                val ext = when {
+                    isWebm -> "webm"
+                    isMov -> "mov"
+                    else -> "mp4"
+                }
+                resolvedMime = when {
+                    isWebm -> "video/webm"
+                    isMov -> "video/quicktime"
+                    else -> "video/mp4"
+                }
+                resolvedFilename = "info_video_${now}.$ext"
+                requestBody = buildContentStreamRequestBody(
+                    context = context,
+                    uri = mediaUri,
+                    mediaType = resolvedMime.toMediaType(),
+                    knownLength = queriedSize
+                )
+            }
+            InfoPentingHelper.MEDIA_DOCUMENT -> {
+                resolvedMime = mimeHint.ifBlank {
+                    when (extHint) {
+                        "pdf" -> "application/pdf"
+                        "doc" -> "application/msword"
+                        "docx" -> "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        "xls" -> "application/vnd.ms-excel"
+                        "xlsx" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "ppt" -> "application/vnd.ms-powerpoint"
+                        "pptx" -> "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                        "csv" -> "text/csv"
+                        "txt" -> "text/plain"
+                        "zip" -> "application/zip"
+                        else -> "application/octet-stream"
+                    }
+                }
+                val safeExt = extHint.ifBlank { "pdf" }
+                resolvedFilename = "info_doc_${now}.$safeExt"
+                requestBody = buildContentStreamRequestBody(
+                    context = context,
+                    uri = mediaUri,
+                    mediaType = resolvedMime.toMediaType(),
+                    knownLength = queriedSize
+                )
+            }
+            InfoPentingHelper.MEDIA_GIF -> {
+                val rawBytes = readUriBytesLimited(context, mediaUri, 15L * 1024L * 1024L)
+                    ?: return@withContext Result.failure(
+                        Exception(if (isEn) "Unable to read GIF or exceeds 15 MB." else "Gagal membaca GIF atau ukuran melebihi 15 MB.")
+                    )
+                resolvedMime = "image/gif"
+                resolvedFilename = "info_gif_${now}.gif"
+                requestBody = rawBytes.toRequestBody(resolvedMime.toMediaType())
+            }
+            else -> {
+                val compressed = compressBannerImageBytes(context, mediaUri)
+                    ?: return@withContext Result.failure(
+                        Exception(if (isEn) "Unable to read selected image." else "Gagal membaca foto yang dipilih.")
+                    )
+                resolvedMime = "image/jpeg"
+                resolvedFilename = "info_img_${now}.jpg"
+                requestBody = compressed.toRequestBody(resolvedMime.toMediaType())
+            }
+        }
+
+        val pbId = PocketBaseIdCodec.toPbId(postId)
+        val multipartBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("id", pbId)
+            .addFormDataPart("local_id", postId.toString())
+            .addFormDataPart("school_id", InfoPentingHelper.GLOBAL_SCHOOL_ID)
+            .addFormDataPart("title", title.ifBlank { "Info Penting" })
+            .addFormDataPart("media_type", inferredType)
+            .addFormDataPart("media_name", cleanDisplayName)
+            .addFormDataPart("media_size_bytes", queriedSize.coerceAtLeast(0L).toString())
+            .addFormDataPart("author_display_name", InfoPentingHelper.PUBLIC_AUTHOR_NAME)
+            .addFormDataPart("created_at", now.toString())
+            .addFormDataPart("updated_at", now.toString())
+            .addFormDataPart("media_file", resolvedFilename, requestBody)
+            .build()
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(150, TimeUnit.SECONDS)
+            .writeTimeout(150, TimeUnit.SECONDS)
+            .build()
+
+        val request = Request.Builder()
+            .url("$baseUrl/api/collections/important_info_posts/records")
+            .post(multipartBody)
+            .build()
+
+        return@withContext try {
+            client.newCall(request).execute().use { resp ->
+                val raw = resp.body?.string().orEmpty()
+                if (resp.code == 404) {
+                    return@withContext Result.failure(
+                        Exception(
+                            if (isEn) {
+                                "Collection 'important_info_posts' not synced on server yet."
+                            } else {
+                                "Koleksi 'important_info_posts' belum disinkronkan di server. Jalankan Sync Skema di Pengaturan PocketBase."
+                            }
+                        )
+                    )
+                }
+                if (!resp.isSuccessful) {
+                    val errMsg = parsePocketBaseUploadError(raw, resp.code, isEn)
+                    return@withContext Result.failure(
+                        Exception(if (isEn) "Failed to upload media: $errMsg" else "Gagal mengunggah media: $errMsg")
+                    )
+                }
+                val json = JSONObject(raw)
+                val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
+                val collectionId = json.optString("collectionId", "important_info_posts")
+                    .ifBlank { "important_info_posts" }
+                val uploadedFilename = when {
+                    json.has("media_file") && json.optJSONArray("media_file") != null -> {
+                        json.optJSONArray("media_file")?.optString(0, "").orEmpty()
+                    }
+                    else -> json.optString("media_file", "")
+                }.trim()
+                if (uploadedFilename.isBlank()) {
+                    return@withContext Result.failure(
+                        Exception(
+                            if (isEn) "Server did not return uploaded filename."
+                            else "Server tidak mengembalikan nama file terunggah."
+                        )
+                    )
+                }
+                val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+                val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+                Result.success(
+                    UploadedInfoPentingMedia(
+                        pbRecordId = recordId,
+                        pbCollectionId = collectionId,
+                        pbFilename = uploadedFilename,
+                        cdnUrl = cdnUrl,
+                        fallbackApiFileUrl = fallbackUrl,
+                        mediaType = inferredType,
+                        fileName = cleanDisplayName,
+                        fileSizeBytes = queriedSize.coerceAtLeast(0L)
+                    )
+                )
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadInfoPentingMediaToCloud", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadSingleInfoPentingPost(context: Context, post: InfoPentingPost): Boolean = withContext(Dispatchers.IO) {
+        val service = PocketBaseClient.getService(context) ?: return@withContext false
+        val dto = PbInfoPentingPostDto.fromDomain(post)
+        upsertSingleDto(service, "important_info_posts", dto.id!!, dto)
+    }
+
+    suspend fun uploadSingleInfoPentingReaction(context: Context, reaction: InfoPentingReaction): Boolean = withContext(Dispatchers.IO) {
+        val service = PocketBaseClient.getService(context) ?: return@withContext false
+        val dto = PbInfoPentingReactionDto.fromDomain(reaction)
+        upsertSingleDto(service, "important_info_reactions", dto.id!!, dto)
+    }
+
+    suspend fun uploadSingleInfoPentingComment(context: Context, comment: InfoPentingComment): Boolean = withContext(Dispatchers.IO) {
+        val service = PocketBaseClient.getService(context) ?: return@withContext false
+        val dto = PbInfoPentingCommentDto.fromDomain(comment)
+        upsertSingleDto(service, "important_info_comments", dto.id!!, dto)
+    }
+
+    private suspend fun syncInfoPentingPostsMerged(
+        service: PocketBaseService,
+        repository: HealthRepository,
+        pbBaseUrl: String
+    ) {
+        val localPosts = repository.getAllInfoPentingPostsIncludingDeletedList()
+        val remoteRes = fetchAllPages { page ->
+            service.listImportantInfoPosts(page = page, perPage = 500, filter = null)
+        }
+        val remotePosts = remoteRes.getOrNull()?.map { it.toDomainModel(pbBaseUrl) } ?: return
+        val localById = localPosts.associateBy { it.id }
+        val remoteById = remotePosts.associateBy { it.id }
+
+        val toInsertLocal = remotePosts.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllInfoPentingPosts(toInsertLocal)
+        }
+
+        val toPushRemote = localPosts.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { p ->
+                val dto = PbInfoPentingPostDto.fromDomain(p)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "important_info_posts", pairs)
+        }
+    }
+
+    private suspend fun syncInfoPentingReactionsMerged(
+        service: PocketBaseService,
+        repository: HealthRepository
+    ) {
+        val localReactions = repository.getAllInfoPentingReactionsList()
+        val remoteRes = fetchAllPages { page ->
+            service.listImportantInfoReactions(page = page, perPage = 500, filter = null)
+        }
+        val remoteReactions = remoteRes.getOrNull()?.map { it.toDomainModel() } ?: return
+        val localById = localReactions.associateBy { it.id }
+        val remoteById = remoteReactions.associateBy { it.id }
+
+        val toInsertLocal = remoteReactions.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllInfoPentingReactions(toInsertLocal)
+        }
+
+        val toPushRemote = localReactions.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { r ->
+                val dto = PbInfoPentingReactionDto.fromDomain(r)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "important_info_reactions", pairs)
+        }
+    }
+
+    private suspend fun syncInfoPentingCommentsMerged(
+        service: PocketBaseService,
+        repository: HealthRepository
+    ) {
+        val localComments = repository.getAllInfoPentingCommentsIncludingDeletedList()
+        val remoteRes = fetchAllPages { page ->
+            service.listImportantInfoComments(page = page, perPage = 500, filter = null)
+        }
+        val remoteComments = remoteRes.getOrNull()?.map { it.toDomainModel() } ?: return
+        val localById = localComments.associateBy { it.id }
+        val remoteById = remoteComments.associateBy { it.id }
+
+        val toInsertLocal = remoteComments.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllInfoPentingComments(toInsertLocal)
+        }
+
+        val toPushRemote = localComments.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { c ->
+                val dto = PbInfoPentingCommentDto.fromDomain(c)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "important_info_comments", pairs)
+        }
+    }
+
+    suspend fun syncInfoPentingChannelQuietly(
+        context: Context,
+        repository: HealthRepository
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.success(Unit)
+        }
+        val service = PocketBaseClient.getService(context)
+            ?: return@withContext Result.success(Unit)
+        return@withContext runCatching {
+            val baseUrl = PocketBaseConfig.getBaseUrl(context)
+            syncInfoPentingPostsMerged(service, repository, baseUrl)
+            syncInfoPentingReactionsMerged(service, repository)
+            syncInfoPentingCommentsMerged(service, repository)
         }
     }
 }

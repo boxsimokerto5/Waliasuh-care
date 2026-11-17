@@ -2,12 +2,17 @@ package com.example.data.remote.pocketbase
 
 import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardBannerConfig
+import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DashboardIconLayoutConfig
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.InfoPentingComment
+import com.example.data.model.InfoPentingHelper
+import com.example.data.model.InfoPentingPost
+import com.example.data.model.InfoPentingReaction
 import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
@@ -1695,6 +1700,218 @@ data class PbWaliScheduleEntryDto(
                 dayPinsJson = model.dayPinsJson,
                 dayLeaveJson = model.dayLeaveJson,
                 updatedBy = model.updatedBy,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbInfoPentingPostDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "content") val content: String? = null,
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "media_type") val mediaType: String? = null,
+    @Json(name = "media_url") val mediaUrl: String? = null,
+    @Json(name = "fallback_media_url") val fallbackMediaUrl: String? = null,
+    @Json(name = "pb_record_id") val pbRecordId: String? = null,
+    @Json(name = "pb_collection_id") val pbCollectionId: String? = null,
+    @Json(name = "pb_filename") val pbFilename: String? = null,
+    @Json(name = "media_name") val mediaName: String? = null,
+    @Json(name = "media_size_bytes") val mediaSizeBytes: Long? = null,
+    @Json(name = "external_link") val externalLink: String? = null,
+    @Json(name = "author_display_name") val authorDisplayName: String? = null,
+    @Json(name = "author_school_name") val authorSchoolName: String? = null,
+    @Json(name = "is_pinned") val isPinned: Boolean? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(pbBaseUrl: String = DashboardBannerItem.DEFAULT_POCKETBASE_BASE_URL): InfoPentingPost {
+        val now = System.currentTimeMillis()
+        val recId = pbRecordId.orEmpty().trim()
+        val colId = pbCollectionId.orEmpty().trim().ifBlank { "important_info_posts" }
+        val file = pbFilename.orEmpty().trim()
+        val resolvedPrimary = mediaUrl?.takeIf { it.isNotBlank() } ?: run {
+            if (recId.isNotBlank() && file.isNotBlank()) {
+                DashboardBannerItem.buildR2CdnUrl(colId, recId, file)
+            } else {
+                ""
+            }
+        }
+        val resolvedFallback = fallbackMediaUrl?.takeIf { it.isNotBlank() } ?: run {
+            if (recId.isNotBlank() && file.isNotBlank()) {
+                DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, file)
+            } else {
+                ""
+            }
+        }
+        return InfoPentingPost(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: InfoPentingHelper.GLOBAL_SCHOOL_ID,
+            title = title.orEmpty().trim(),
+            content = content.orEmpty().trim(),
+            category = category?.trim()?.uppercase()?.ifBlank { InfoPentingHelper.CATEGORY_PENGUMUMAN }
+                ?: InfoPentingHelper.CATEGORY_PENGUMUMAN,
+            mediaType = mediaType?.trim()?.uppercase()?.ifBlank { InfoPentingHelper.MEDIA_NONE }
+                ?: InfoPentingHelper.MEDIA_NONE,
+            mediaUrl = resolvedPrimary,
+            fallbackMediaUrl = resolvedFallback,
+            pbRecordId = recId,
+            pbCollectionId = if (recId.isNotBlank()) colId else "",
+            pbFilename = file,
+            mediaName = mediaName.orEmpty().trim(),
+            mediaSizeBytes = mediaSizeBytes ?: 0L,
+            externalLink = externalLink.orEmpty().trim(),
+            authorDisplayName = InfoPentingHelper.resolvePublicAuthor(authorDisplayName),
+            authorSchoolName = authorSchoolName.orEmpty().trim(),
+            isPinned = isPinned ?: false,
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: InfoPentingPost): PbInfoPentingPostDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "info_post:${model.createdAt}:${model.title}"
+            )
+            return PbInfoPentingPostDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = InfoPentingHelper.GLOBAL_SCHOOL_ID,
+                title = model.title,
+                content = model.content,
+                category = model.category,
+                mediaType = model.mediaType,
+                mediaUrl = model.mediaUrl,
+                fallbackMediaUrl = model.fallbackMediaUrl,
+                pbRecordId = model.pbRecordId,
+                pbCollectionId = model.pbCollectionId,
+                pbFilename = model.pbFilename,
+                mediaName = model.mediaName,
+                mediaSizeBytes = model.mediaSizeBytes,
+                externalLink = model.externalLink,
+                authorDisplayName = InfoPentingHelper.PUBLIC_AUTHOR_NAME,
+                authorSchoolName = model.authorSchoolName,
+                isPinned = model.isPinned,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbInfoPentingReactionDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "post_id") val postId: Long = 0L,
+    @Json(name = "user_key") val userKey: String = "",
+    @Json(name = "user_name") val userName: String? = null,
+    @Json(name = "user_school_id") val userSchoolId: String? = null,
+    @Json(name = "reaction_type") val reactionType: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(): InfoPentingReaction {
+        val now = System.currentTimeMillis()
+        return InfoPentingReaction(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: InfoPentingHelper.GLOBAL_SCHOOL_ID,
+            postId = postId,
+            userKey = userKey.trim(),
+            userName = userName.orEmpty().trim(),
+            userSchoolId = userSchoolId.orEmpty().trim(),
+            reactionType = reactionType?.trim()?.uppercase()?.ifBlank { InfoPentingHelper.REACTION_NONE }
+                ?: InfoPentingHelper.REACTION_NONE,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: InfoPentingReaction): PbInfoPentingReactionDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "info_react:${model.postId}:${model.userKey}"
+            )
+            return PbInfoPentingReactionDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = InfoPentingHelper.GLOBAL_SCHOOL_ID,
+                postId = model.postId,
+                userKey = model.userKey,
+                userName = model.userName,
+                userSchoolId = model.userSchoolId,
+                reactionType = model.reactionType,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbInfoPentingCommentDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "post_id") val postId: Long = 0L,
+    @Json(name = "parent_comment_id") val parentCommentId: Long? = null,
+    @Json(name = "reply_to_author_name") val replyToAuthorName: String? = null,
+    @Json(name = "author_key") val authorKey: String = "",
+    @Json(name = "author_name") val authorName: String? = null,
+    @Json(name = "author_school_id") val authorSchoolId: String? = null,
+    @Json(name = "author_school_name") val authorSchoolName: String? = null,
+    @Json(name = "content") val content: String = "",
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(): InfoPentingComment {
+        val now = System.currentTimeMillis()
+        return InfoPentingComment(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: InfoPentingHelper.GLOBAL_SCHOOL_ID,
+            postId = postId,
+            parentCommentId = parentCommentId ?: 0L,
+            replyToAuthorName = replyToAuthorName.orEmpty().trim(),
+            authorKey = authorKey.trim(),
+            authorName = InfoPentingHelper.resolveCommentAuthorDisplay(authorName, null),
+            authorSchoolId = authorSchoolId.orEmpty().trim(),
+            authorSchoolName = authorSchoolName.orEmpty().trim(),
+            content = content,
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: InfoPentingComment): PbInfoPentingCommentDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "info_comment:${model.postId}:${model.authorKey}:${model.createdAt}"
+            )
+            return PbInfoPentingCommentDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = InfoPentingHelper.GLOBAL_SCHOOL_ID,
+                postId = model.postId,
+                parentCommentId = model.parentCommentId,
+                replyToAuthorName = model.replyToAuthorName,
+                authorKey = model.authorKey,
+                authorName = model.authorName,
+                authorSchoolId = model.authorSchoolId,
+                authorSchoolName = model.authorSchoolName,
+                content = model.content,
+                isDeleted = model.isDeleted,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

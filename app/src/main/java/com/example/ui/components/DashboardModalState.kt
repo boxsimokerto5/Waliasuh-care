@@ -109,6 +109,10 @@ class DashboardModalState {
     var showImportJadwalMatriksDialog by mutableStateOf(false)
     var importJadwalInitialTab by mutableIntStateOf(0)
     var editingScheduleCellTarget by mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null)
+
+    // Saluran Info-Info Penting (Global Lintas Sekolah)
+    var showInfoPentingSheet by mutableStateOf(false)
+    var showCreateInfoPentingDialog by mutableStateOf(false)
 }
 
 @Composable

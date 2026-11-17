@@ -652,7 +652,10 @@ class ExampleRobolectricTest {
       "konseling_records",
       "konseling_logs",
       "wali_shift_codes",
-      "wali_schedule_entries"
+      "wali_schedule_entries",
+      "important_info_posts",
+      "important_info_reactions",
+      "important_info_comments"
     )
     expectedCollections.forEach { col ->
       org.junit.Assert.assertTrue(
@@ -661,7 +664,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(22, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(25, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -8224,5 +8227,248 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("card_manage_pin_wali_${unpinnedEntry.id}").assertExists()
     composeTestRule.onNodeWithTag("btn_manage_pin_wali_${unpinnedEntry.id}").performClick()
     org.junit.Assert.assertEquals(unpinnedEntry.id to 17, editedPair)
+  }
+
+  @Test
+  fun `verify InfoPentingHelper enforces Superadmin public author, multi-school global scope, reactions, threaded replies, and self-only delete`() {
+    // 1. Point 1: penulis selalu tampil "Superadmin" dan tidak pernah membocorkan "anaksuperadmin"
+    assertEquals("Superadmin", com.example.data.model.InfoPentingHelper.resolvePublicAuthor("anaksuperadmin"))
+    assertEquals("Superadmin", com.example.data.model.InfoPentingHelper.resolvePublicAuthor(""))
+    assertEquals("Superadmin", com.example.data.model.InfoPentingHelper.resolvePublicAuthor("Eko Wahyudi"))
+    assertEquals("Superadmin", com.example.data.model.InfoPentingHelper.resolveCommentAuthorDisplay("anaksuperadmin", "anaksuperadmin"))
+    assertEquals("Budi Wali", com.example.data.model.InfoPentingHelper.resolveCommentAuthorDisplay("Budi Wali", "budi"))
+
+    // 2. Point 2: Global school scope & urutan pinned terbaru dulu
+    val posts = listOf(
+      com.example.data.model.InfoPentingPost(
+        id = 1L,
+        schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
+        title = "Pengumuman Biasa",
+        content = "Halo semua wali asuh",
+        isPinned = false,
+        createdAt = 2000L
+      ),
+      com.example.data.model.InfoPentingPost(
+        id = 2L,
+        schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
+        title = "Surat Edaran Penting",
+        content = "Mohon dibaca lintas sekolah",
+        isPinned = true,
+        createdAt = 1000L
+      ),
+      com.example.data.model.InfoPentingPost(
+        id = 3L,
+        schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
+        title = "Terhapus",
+        content = "Hidden",
+        isDeleted = true,
+        createdAt = 5000L
+      )
+    )
+    val visible = com.example.data.model.InfoPentingHelper.filterPosts(
+      posts = posts,
+      selectedCategory = com.example.data.model.InfoPentingHelper.CATEGORY_SEMUA,
+      searchQuery = ""
+    )
+    assertEquals(listOf(2L, 1L), visible.map { it.id })
+    assertEquals("__GLOBAL__", visible.first().schoolId)
+
+    // Point 1 authorization helper
+    org.junit.Assert.assertTrue(com.example.data.model.InfoPentingHelper.canDeletePost(posts[0], isAnakSuperAdmin = true))
+    org.junit.Assert.assertFalse(com.example.data.model.InfoPentingHelper.canDeletePost(posts[0], isAnakSuperAdmin = false))
+
+    // 3. Point 4: Reaksi Suka & Tidak Suka lintas sekolah
+    val userA = "SRT1-KDR:budi"
+    val userB = "SRT2-MLG:ani"
+    val reactions = listOf(
+      com.example.data.model.InfoPentingReaction(id = 10L, postId = 1L, userKey = userA, reactionType = com.example.data.model.InfoPentingHelper.REACTION_LIKE),
+      com.example.data.model.InfoPentingReaction(id = 11L, postId = 1L, userKey = userB, reactionType = com.example.data.model.InfoPentingHelper.REACTION_DISLIKE),
+      com.example.data.model.InfoPentingReaction(id = 12L, postId = 1L, userKey = "SRT3:citra", reactionType = com.example.data.model.InfoPentingHelper.REACTION_NONE)
+    )
+    val summary = com.example.data.model.InfoPentingHelper.summarizeReactions(reactions, postId = 1L, currentUserKey = userA)
+    assertEquals(1, summary.likeCount)
+    assertEquals(1, summary.dislikeCount)
+    assertEquals(com.example.data.model.InfoPentingHelper.REACTION_LIKE, summary.myReaction)
+
+    // 4. Point 4: Thread balasan komentar & hapus hanya komentar milik sendiri
+    val cRoot = com.example.data.model.InfoPentingComment(
+      id = 100L,
+      postId = 1L,
+      parentCommentId = 0L,
+      authorKey = userA,
+      authorName = "Budi",
+      content = "Siap laksanakan!",
+      createdAt = 1000L
+    )
+    val cReply = com.example.data.model.InfoPentingComment(
+      id = 101L,
+      postId = 1L,
+      parentCommentId = 100L,
+      replyToAuthorName = "Budi",
+      authorKey = userB,
+      authorName = "Ani",
+      content = "Setuju Pak Budi",
+      createdAt = 1500L
+    )
+    val threads = com.example.data.model.InfoPentingHelper.buildCommentThreads(listOf(cReply, cRoot), postId = 1L)
+    assertEquals(1, threads.size)
+    assertEquals(100L, threads[0].root.id)
+    assertEquals(1, threads[0].replies.size)
+    assertEquals(101L, threads[0].replies[0].id)
+
+    org.junit.Assert.assertTrue(com.example.data.model.InfoPentingHelper.canDeleteComment(cRoot, userA))
+    org.junit.Assert.assertFalse(com.example.data.model.InfoPentingHelper.canDeleteComment(cRoot, userB))
+    org.junit.Assert.assertTrue(com.example.data.model.InfoPentingHelper.canDeleteComment(cReply, userB))
+  }
+
+  @Test
+  fun `verify InfoPentingFeedSheet hides create FAB for regular Wali, renders video player card, reactions, replies, and self-only delete`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val myKey = "SRT2-MLG:wali_siti"
+    val videoPost = com.example.data.model.InfoPentingPost(
+      id = 501L,
+      schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
+      title = "Sosialisasi SOP Kesehatan",
+      content = "Silakan tonton video panduan terbaru lintas sekolah.",
+      category = com.example.data.model.InfoPentingHelper.CATEGORY_SOP,
+      mediaType = com.example.data.model.InfoPentingHelper.MEDIA_VIDEO,
+      mediaUrl = "https://example.org/panduan.mp4",
+      mediaName = "panduan.mp4",
+      authorDisplayName = "anaksuperadmin",
+      isPinned = true,
+      createdAt = System.currentTimeMillis()
+    )
+    val ownComment = com.example.data.model.InfoPentingComment(
+      id = 901L,
+      postId = 501L,
+      parentCommentId = 0L,
+      authorKey = myKey,
+      authorName = "Ustadzah Siti",
+      authorSchoolId = "SRT2-MLG",
+      authorSchoolName = "SR 2 Malang",
+      content = "Terima kasih infonya!",
+      createdAt = 1000L
+    )
+    val otherComment = com.example.data.model.InfoPentingComment(
+      id = 902L,
+      postId = 501L,
+      parentCommentId = 0L,
+      authorKey = "SRT1-KDR:budi",
+      authorName = "Ustadz Budi",
+      authorSchoolId = "SRT1-KDR",
+      authorSchoolName = "SR 1 Kediri",
+      content = "Mohon izin bertanya.",
+      createdAt = 1200L
+    )
+    var reactionClicked: String? = null
+    var sentReplyTuple: Triple<Long, String, Long?>? = null
+    var deletedCommentId: Long? = null
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.dialogs.InfoPentingFeedSheet(
+          posts = listOf(videoPost),
+          reactions = emptyList(),
+          comments = listOf(ownComment, otherComment),
+          currentUserKey = myKey,
+          isAnakSuperAdmin = false,
+          onOpenCreatePost = {},
+          onRefreshSync = {},
+          onTogglePinPost = {},
+          onDeletePost = {},
+          onToggleReaction = { _, type -> reactionClicked = type },
+          onSendComment = { p, txt, replyTo -> sentReplyTuple = Triple(p.id, txt, replyTo?.id) },
+          onDeleteOwnComment = { c -> deletedCommentId = c.id },
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Wali biasa tidak boleh melihat FAB buat postingan, tapi melihat penulis "Superadmin" (bukan "anaksuperadmin") & pemutar video
+    composeTestRule.onNodeWithTag("sheet_info_penting").assertExists()
+    composeTestRule.onNodeWithTag("fab_create_info_post").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("btn_pin_post_501").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("btn_delete_post_501").assertDoesNotExist()
+    composeTestRule.onNodeWithText("Superadmin", substring = false).assertExists()
+    composeTestRule.onNodeWithText("anaksuperadmin", substring = true).assertDoesNotExist()
+    composeTestRule.onNodeWithTag("info_video_player_card_501").assertExists()
+
+    // Like & Buka Komentar
+    composeTestRule.onNodeWithTag("btn_like_post_501").performClick()
+    assertEquals(com.example.data.model.InfoPentingHelper.REACTION_LIKE, reactionClicked)
+
+    composeTestRule.onNodeWithTag("btn_open_comments_501").performClick()
+    composeTestRule.waitForIdle()
+
+    // Tombol hapus hanya muncul di komentar milik sendiri (901), bukan komentar orang lain (902)
+    composeTestRule.onNodeWithTag("sheet_info_comments").assertExists()
+    composeTestRule.onNodeWithTag("btn_delete_comment_901").assertExists()
+    composeTestRule.onNodeWithTag("btn_delete_comment_902").assertDoesNotExist()
+
+    // Balas komentar orang lain (902)
+    composeTestRule.onNodeWithTag("btn_reply_comment_902").performClick()
+    composeTestRule.onNodeWithTag("input_info_comment").performTextInput("Siap dibantu Pak Budi")
+    composeTestRule.onNodeWithTag("btn_send_info_comment").performClick()
+    assertEquals(Triple(501L, "Siap dibantu Pak Budi", 902L), sentReplyTuple)
+
+    // Hapus komentar sendiri (901)
+    composeTestRule.onNodeWithTag("btn_delete_comment_901").performClick()
+    assertEquals(901L, deletedCommentId)
+  }
+
+  @Test
+  fun `verify InfoPentingFeedSheet shows create FAB and post moderation controls exclusively for anaksuperadmin`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val post = com.example.data.model.InfoPentingPost(
+      id = 601L,
+      schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
+      title = "Dokumen Juknis Nasional",
+      content = "Silakan unduh lampiran.",
+      mediaType = com.example.data.model.InfoPentingHelper.MEDIA_DOCUMENT,
+      mediaUrl = "https://example.org/juknis.pdf",
+      mediaName = "juknis.pdf",
+      externalLink = "https://sekolah.rakyat.id",
+      authorDisplayName = "Superadmin",
+      createdAt = System.currentTimeMillis()
+    )
+    var openedCreate = false
+    var toggledPin = false
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.dialogs.InfoPentingFeedSheet(
+          posts = listOf(post),
+          reactions = emptyList(),
+          comments = emptyList(),
+          currentUserKey = "SRT1-KDR:anaksuperadmin",
+          isAnakSuperAdmin = true,
+          onOpenCreatePost = { openedCreate = true },
+          onRefreshSync = {},
+          onTogglePinPost = { toggledPin = true },
+          onDeletePost = {},
+          onToggleReaction = { _, _ -> },
+          onSendComment = { _, _, _ -> },
+          onDeleteOwnComment = {},
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("fab_create_info_post").assertExists().performClick()
+    org.junit.Assert.assertTrue(openedCreate)
+
+    composeTestRule.onNodeWithTag("btn_pin_post_601").assertExists().performClick()
+    org.junit.Assert.assertTrue(toggledPin)
+    composeTestRule.onNodeWithTag("btn_delete_post_601").assertExists()
   }
 }

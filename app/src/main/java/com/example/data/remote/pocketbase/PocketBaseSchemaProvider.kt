@@ -32,7 +32,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.46.0 • 20 Koleksi Multi-Tenant + Konseling Rahasia Wali Asuh (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.47.0 • 25 Koleksi Multi-Tenant + Channel Info-Info Penting Global (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -588,6 +588,96 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_wse_school ON wali_schedule_entries (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "important_info_posts",
+            description = "Channel Info-Info Penting Global (teks, foto/GIF, video, dokumen, link) oleh anaksuperadmin tampil sebagai Superadmin",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("content", "text"),
+                PbFieldDef("category", "text"),
+                PbFieldDef("media_type", "text"),
+                PbFieldDef("media_url", "text"),
+                PbFieldDef("fallback_media_url", "text"),
+                PbFieldDef("pb_record_id", "text"),
+                PbFieldDef("pb_collection_id", "text"),
+                PbFieldDef("pb_filename", "text"),
+                PbFieldDef("media_name", "text"),
+                PbFieldDef("media_size_bytes", "number"),
+                PbFieldDef("external_link", "text"),
+                PbFieldDef("author_display_name", "text"),
+                PbFieldDef("author_school_name", "text"),
+                PbFieldDef("is_pinned", "bool"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef(
+                    name = "media_file",
+                    type = "file",
+                    fileMaxSize = 52_428_800L,
+                    fileMimeTypes = listOf(
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "image/gif",
+                        "video/mp4",
+                        "video/webm",
+                        "video/quicktime",
+                        "application/pdf",
+                        "application/msword",
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                        "application/vnd.ms-excel",
+                        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        "application/vnd.ms-powerpoint",
+                        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        "text/plain",
+                        "text/csv",
+                        "application/zip"
+                    )
+                ),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_iip_school ON important_info_posts (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "important_info_reactions",
+            description = "Reaksi Suka / Tidak Suka seluruh Wali Asuh lintas sekolah pada Channel Info-Info Penting",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("post_id", "number"),
+                PbFieldDef("user_key", "text"),
+                PbFieldDef("user_name", "text"),
+                PbFieldDef("user_school_id", "text"),
+                PbFieldDef("reaction_type", "text"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_iir_post ON important_info_reactions (post_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "important_info_comments",
+            description = "Komentar dan balasan komentar berjenjang seluruh Wali Asuh lintas sekolah pada Channel Info-Info Penting",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("post_id", "number"),
+                PbFieldDef("parent_comment_id", "number"),
+                PbFieldDef("reply_to_author_name", "text"),
+                PbFieldDef("author_key", "text"),
+                PbFieldDef("author_name", "text"),
+                PbFieldDef("author_school_id", "text"),
+                PbFieldDef("author_school_name", "text"),
+                PbFieldDef("content", "text"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_iic_post ON important_info_comments (post_id)")
         )
     )
 

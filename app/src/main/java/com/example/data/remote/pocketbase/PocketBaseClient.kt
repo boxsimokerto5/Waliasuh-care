@@ -213,6 +213,31 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "sort_order"
     ): Response<PbListResponse<PbWaliScheduleEntryDto>>
 
+    // --- Channel Info-Info Penting (Global Seluruh Sekolah) ---
+    @GET("api/collections/important_info_posts/records")
+    suspend fun listImportantInfoPosts(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbInfoPentingPostDto>>
+
+    @GET("api/collections/important_info_reactions/records")
+    suspend fun listImportantInfoReactions(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-updated_at"
+    ): Response<PbListResponse<PbInfoPentingReactionDto>>
+
+    @GET("api/collections/important_info_comments/records")
+    suspend fun listImportantInfoComments(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "created_at"
+    ): Response<PbListResponse<PbInfoPentingCommentDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

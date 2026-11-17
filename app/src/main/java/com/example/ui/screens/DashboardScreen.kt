@@ -120,6 +120,7 @@ import com.example.ui.components.tourTarget
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreateFastingSessionDialog
+import com.example.ui.dialogs.CreateInfoPentingDialog
 import com.example.ui.dialogs.CreatePlanDialog
 import com.example.ui.dialogs.CreateShiftMessageDialog
 import com.example.ui.dialogs.CreateVisitSessionDialog
@@ -136,6 +137,7 @@ import com.example.ui.dialogs.EditJadwalSelDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.ImportJadwalMatriksDialog
+import com.example.ui.dialogs.InfoPentingFeedSheet
 import com.example.ui.dialogs.InputHaidDialog
 import com.example.ui.dialogs.InputKonselingDialog
 import com.example.ui.dialogs.InputMengajiDialog
@@ -236,12 +238,24 @@ fun DashboardScreen(
     val isSavingDashboardBanner by viewModel.isSavingDashboardBanner.collectAsStateWithLifecycle()
     val isUploadingBannerImage by viewModel.isUploadingBannerImage.collectAsStateWithLifecycle()
     val showDashboardTour by viewModel.showDashboardTour.collectAsStateWithLifecycle()
+    val infoPentingPosts by viewModel.infoPentingPosts.collectAsStateWithLifecycle()
+    val infoPentingReactions by viewModel.infoPentingReactions.collectAsStateWithLifecycle()
+    val infoPentingComments by viewModel.infoPentingComments.collectAsStateWithLifecycle()
+    val unreadInfoPentingCount by viewModel.unreadInfoPentingCount.collectAsStateWithLifecycle()
+    val isPublishingInfoPenting by viewModel.isPublishingInfoPenting.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
     val canManageSchedule = isAdminUser || isAnakSuperAdmin || isAnakAdminSekolah
 
     LaunchedEffect(Unit) {
         viewModel.syncDashboardIconLayoutNow()
         viewModel.syncDashboardBannersNow()
+        viewModel.syncInfoPentingChannelNow()
+    }
+    LaunchedEffect(modalState.showInfoPentingSheet) {
+        if (modalState.showInfoPentingSheet) {
+            viewModel.syncInfoPentingChannelNow()
+            viewModel.markInfoPentingRead()
+        }
     }
     LaunchedEffect(currentUserRole) {
         if (currentUserRole == com.example.ui.UserRole.WALI) {
@@ -467,6 +481,7 @@ fun DashboardScreen(
 
                     DashboardBannerFeatureTarget.FEATURE_STUDENTS_PAGE -> onNavigateToStudents()
                     DashboardBannerFeatureTarget.FEATURE_PROFILE_PAGE -> onNavigateToProfile()
+                    DashboardBannerFeatureTarget.FEATURE_INFO_PENTING -> modalState.showInfoPentingSheet = true
                     null -> modalState.showPuskesmasInfoSheet = true
                 }
             }
@@ -1094,6 +1109,10 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 modalState.showPilihAnakAsuhSheet = true
                             },
+                            onOpenInfoPenting = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.showInfoPentingSheet = true
+                            },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,
@@ -1119,6 +1138,7 @@ fun DashboardScreen(
                             tabunganHoldersCount = tabunganTotals.holdersCount,
                             konselingFollowUpCount = konselingStats.followUpCount,
                             konselingTotalCount = konselingStats.totalEntries,
+                            unreadInfoPentingCount = unreadInfoPentingCount,
                             todayMyShiftBadge = todayMyShiftBadge,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
@@ -3073,6 +3093,48 @@ fun DashboardScreen(
         )
     }
 
+    DashboardJadwalAndInfoModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        currentUsername = currentUsername,
+        schoolProfile = schoolProfile,
+        waliAccounts = waliAccounts,
+        schoolShiftCodes = schoolShiftCodes,
+        schoolScheduleEntries = schoolScheduleEntries,
+        canManageSchedule = canManageSchedule,
+        isAnakSuperAdmin = isAnakSuperAdmin,
+        infoPentingPosts = infoPentingPosts,
+        infoPentingReactions = infoPentingReactions,
+        infoPentingComments = infoPentingComments,
+        isPublishingInfoPenting = isPublishingInfoPenting,
+        readyJadwalPdf = readyJadwalPdf,
+        onClearReadyJadwalPdf = { readyJadwalPdf = null }
+    )
+}
+
+@Composable
+private fun DashboardJadwalAndInfoModalsHost(
+    viewModel: HealthViewModel,
+    modalState: DashboardModalState,
+    waliName: String,
+    currentUsername: String?,
+    schoolProfile: com.example.data.model.SchoolProfile,
+    waliAccounts: List<com.example.data.model.WaliAccount>,
+    schoolShiftCodes: List<WaliShiftCode>,
+    schoolScheduleEntries: List<WaliScheduleEntry>,
+    canManageSchedule: Boolean,
+    isAnakSuperAdmin: Boolean,
+    infoPentingPosts: List<com.example.data.model.InfoPentingPost>,
+    infoPentingReactions: List<com.example.data.model.InfoPentingReaction>,
+    infoPentingComments: List<com.example.data.model.InfoPentingComment>,
+    isPublishingInfoPenting: Boolean,
+    readyJadwalPdf: File?,
+    onClearReadyJadwalPdf: () -> Unit
+) {
+    val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
+
     // =====================================================================
     // MODUL JADWAL KERJA WALI ASUH (DIATUR ADMIN SEKOLAH, TANPA NOTIF)
     // =====================================================================
@@ -3323,7 +3385,7 @@ fun DashboardScreen(
 
     readyJadwalPdf?.let { file ->
         AlertDialog(
-            onDismissRequest = { readyJadwalPdf = null },
+            onDismissRequest = onClearReadyJadwalPdf,
             title = { Text(if (isEn) "Duty Roster Matrix PDF Ready" else "PDF Matriks Jadwal Siap") },
             text = {
                 Text(
@@ -3334,7 +3396,7 @@ fun DashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        readyJadwalPdf = null
+                        onClearReadyJadwalPdf()
                         PdfReportGenerator.openPdfFile(context, file)
                     }
                 ) {
@@ -3344,7 +3406,7 @@ fun DashboardScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        readyJadwalPdf = null
+                        onClearReadyJadwalPdf()
                         PdfReportGenerator.shareJadwalPdf(
                             context = context,
                             pdfFile = file,
@@ -3354,6 +3416,80 @@ fun DashboardScreen(
                     }
                 ) {
                     Text(if (isEn) "Share PDF" else "Bagikan")
+                }
+            }
+        )
+    }
+
+    if (modalState.showInfoPentingSheet) {
+        InfoPentingFeedSheet(
+            posts = infoPentingPosts,
+            reactions = infoPentingReactions,
+            comments = infoPentingComments,
+            currentUserKey = viewModel.currentInfoPentingUserKey(),
+            isAnakSuperAdmin = isAnakSuperAdmin,
+            onOpenCreatePost = {
+                TopOnAdManager.onUserActionClick(context)
+                modalState.showCreateInfoPentingDialog = true
+            },
+            onRefreshSync = {
+                viewModel.syncInfoPentingChannelNow()
+            },
+            onTogglePinPost = { post ->
+                viewModel.togglePinInfoPentingPost(post) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDeletePost = { post ->
+                viewModel.deleteInfoPentingPost(post) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onToggleReaction = { post, reactionType ->
+                viewModel.toggleInfoPentingReaction(post, reactionType)
+            },
+            onSendComment = { post, commentText, replyTarget ->
+                viewModel.addInfoPentingComment(post, commentText, replyTarget) { ok, msg ->
+                    if (!ok) {
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDeleteOwnComment = { comment ->
+                viewModel.deleteOwnInfoPentingComment(comment) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = {
+                modalState.showInfoPentingSheet = false
+            }
+        )
+    }
+
+    if (modalState.showCreateInfoPentingDialog && isAnakSuperAdmin) {
+        CreateInfoPentingDialog(
+            isPublishing = isPublishingInfoPenting,
+            onPublish = { title, body, category, mediaType, uri, mediaName, link, isPinned ->
+                viewModel.publishInfoPentingPost(
+                    title = title,
+                    content = body,
+                    category = category,
+                    mediaType = mediaType,
+                    selectedMediaUri = uri,
+                    mediaName = mediaName,
+                    externalLink = link,
+                    isPinned = isPinned
+                ) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        modalState.showCreateInfoPentingDialog = false
+                        viewModel.markInfoPentingRead()
+                    }
+                }
+            },
+            onDismiss = {
+                if (!isPublishingInfoPenting) {
+                    modalState.showCreateInfoPentingDialog = false
                 }
             }
         )

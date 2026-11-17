@@ -96,6 +96,7 @@ enum class TourTargetId {
     ICON_TABUNGAN,
     ICON_KONSELING,
     ICON_JADWAL_WALI,
+    ICON_INFO_PENTING,
     TOUR_REPLAY_BUTTON
 }
 
@@ -112,6 +113,7 @@ fun DashboardIconKey.toTourTargetId(): TourTargetId = when (this) {
     DashboardIconKey.KONSELING -> TourTargetId.ICON_KONSELING
     DashboardIconKey.JADWAL_WALI -> TourTargetId.ICON_JADWAL_WALI
     DashboardIconKey.KLAIM_ANAK_ASUH -> TourTargetId.ICON_KLAIM_ANAK_ASUH
+    DashboardIconKey.INFO_PENTING -> TourTargetId.ICON_INFO_PENTING
 }
 
 data class DashboardTourStep(
@@ -325,6 +327,19 @@ fun buildDashboardTourSteps(isEn: Boolean): List<DashboardTourStep> {
             accentColor = Color(0xFF0369A1),
             iconRes = R.drawable.img_menu_jadwal,
             dashboardIconKey = DashboardIconKey.JADWAL_WALI
+        ),
+        DashboardTourStep(
+            targetId = TourTargetId.ICON_INFO_PENTING,
+            chapter = if (isEn) "Channel" else "Pengumuman",
+            title = if (isEn) "Info-Info Penting Channel" else "Channel Info-Info Penting",
+            description = if (isEn) {
+                "Read global official broadcasts (text, photos, videos, PDFs, links), react & reply in comments."
+            } else {
+                "Baca pengumuman resmi lintas sekolah (teks, foto, video, dokumen, link), suka/tidak suka & balas komentar."
+            },
+            accentColor = Color(0xFF0F766E),
+            iconRes = R.drawable.img_menu_info_penting,
+            dashboardIconKey = DashboardIconKey.INFO_PENTING
         ),
         DashboardTourStep(
             targetId = TourTargetId.TOUR_REPLAY_BUTTON,

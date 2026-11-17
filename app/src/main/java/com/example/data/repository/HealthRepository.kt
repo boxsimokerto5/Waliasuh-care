@@ -26,12 +26,18 @@ import com.example.data.dao.KonselingLogDao
 import com.example.data.dao.KonselingRecordDao
 import com.example.data.dao.TabunganLogDao
 import com.example.data.dao.TabunganTransactionDao
+import com.example.data.dao.InfoPentingCommentDao
+import com.example.data.dao.InfoPentingPostDao
+import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.InfoPentingComment
+import com.example.data.model.InfoPentingPost
+import com.example.data.model.InfoPentingReaction
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
@@ -64,7 +70,10 @@ class HealthRepository(
     private val konselingRecordDao: KonselingRecordDao? = null,
     private val konselingLogDao: KonselingLogDao? = null,
     private val waliShiftCodeDao: WaliShiftCodeDao? = null,
-    private val waliScheduleEntryDao: WaliScheduleEntryDao? = null
+    private val waliScheduleEntryDao: WaliScheduleEntryDao? = null,
+    private val infoPentingPostDao: InfoPentingPostDao? = null,
+    private val infoPentingReactionDao: InfoPentingReactionDao? = null,
+    private val infoPentingCommentDao: InfoPentingCommentDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -78,6 +87,9 @@ class HealthRepository(
     val activeHaidRecords: Flow<List<HaidRecord>> = haidRecordDao?.getActiveHaidRecords() ?: emptyFlow()
     val suciRecords: Flow<List<HaidRecord>> = haidRecordDao?.getSuciRecords() ?: emptyFlow()
     val allFastingSessions: Flow<List<FastingSession>> = fastingSessionDao?.getAllSessions() ?: emptyFlow()
+    val allInfoPentingPosts: Flow<List<InfoPentingPost>> = infoPentingPostDao?.getAllActivePosts() ?: emptyFlow()
+    val allInfoPentingReactions: Flow<List<InfoPentingReaction>> = infoPentingReactionDao?.getAllReactions() ?: emptyFlow()
+    val allInfoPentingComments: Flow<List<InfoPentingComment>> = infoPentingCommentDao?.getAllActiveComments() ?: emptyFlow()
     val allFastingRecords: Flow<List<FastingRecord>> = fastingRecordDao?.getAllRecords() ?: emptyFlow()
     val allMengajiRecords: Flow<List<MengajiRecord>> = mengajiRecordDao?.getAllRecords() ?: emptyFlow()
     val allVisitSessions: Flow<List<VisitSession>> = visitSessionDao?.getAllSessions() ?: emptyFlow()
@@ -671,4 +683,52 @@ class HealthRepository(
     suspend fun deleteWaliScheduleEntriesBySchoolAndMonth(schoolId: String, monthKey: String) {
         waliScheduleEntryDao?.deleteBySchoolAndMonth(schoolId, monthKey)
     }
+
+    // --- Channel Info-Info Penting (Global Seluruh Sekolah) ---
+    suspend fun insertInfoPentingPost(post: InfoPentingPost): Long =
+        infoPentingPostDao?.insert(post) ?: 0L
+
+    suspend fun insertAllInfoPentingPosts(posts: List<InfoPentingPost>) {
+        infoPentingPostDao?.insertAll(posts)
+    }
+
+    suspend fun updateInfoPentingPost(post: InfoPentingPost) {
+        infoPentingPostDao?.update(post)
+    }
+
+    suspend fun getInfoPentingPostById(id: Long): InfoPentingPost? =
+        infoPentingPostDao?.getPostById(id)
+
+    suspend fun getAllInfoPentingPostsIncludingDeletedList(): List<InfoPentingPost> =
+        infoPentingPostDao?.getAllPostsIncludingDeletedList() ?: emptyList()
+
+    suspend fun insertInfoPentingReaction(reaction: InfoPentingReaction): Long =
+        infoPentingReactionDao?.insert(reaction) ?: 0L
+
+    suspend fun insertAllInfoPentingReactions(reactions: List<InfoPentingReaction>) {
+        infoPentingReactionDao?.insertAll(reactions)
+    }
+
+    suspend fun getAllInfoPentingReactionsList(): List<InfoPentingReaction> =
+        infoPentingReactionDao?.getAllReactionsList() ?: emptyList()
+
+    suspend fun getInfoPentingReactionByPostAndUser(postId: Long, userKey: String): InfoPentingReaction? =
+        infoPentingReactionDao?.getByPostAndUser(postId, userKey)
+
+    suspend fun insertInfoPentingComment(comment: InfoPentingComment): Long =
+        infoPentingCommentDao?.insert(comment) ?: 0L
+
+    suspend fun insertAllInfoPentingComments(comments: List<InfoPentingComment>) {
+        infoPentingCommentDao?.insertAll(comments)
+    }
+
+    suspend fun updateInfoPentingComment(comment: InfoPentingComment) {
+        infoPentingCommentDao?.update(comment)
+    }
+
+    suspend fun getInfoPentingCommentById(id: Long): InfoPentingComment? =
+        infoPentingCommentDao?.getCommentById(id)
+
+    suspend fun getAllInfoPentingCommentsIncludingDeletedList(): List<InfoPentingComment> =
+        infoPentingCommentDao?.getAllCommentsIncludingDeletedList() ?: emptyList()
 }

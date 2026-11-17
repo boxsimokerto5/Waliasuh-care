@@ -132,6 +132,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_klaim_anak_asuh,
             tileBg = Color(0xFFE0E7FF)
         )
+        DashboardIconKey.INFO_PENTING -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Info Channel" else "Info Penting",
+            imageRes = R.drawable.img_menu_info_penting,
+            tileBg = Color(0xFFCCFBF1)
+        )
     }
 }
 
@@ -192,6 +198,7 @@ fun QuickMenuTiles(
     onOpenRankingPuasa: () -> Unit = {},
     onOpenInputMengaji: () -> Unit = {},
     onOpenPilihAnakAsuh: () -> Unit = {},
+    onOpenInfoPenting: () -> Unit = {},
     todayPlansCount: Int = 0,
     inpatientCount: Int = 0,
     studentsCount: Int = 0,
@@ -214,6 +221,7 @@ fun QuickMenuTiles(
     tabunganHoldersCount: Int = 0,
     konselingFollowUpCount: Int = 0,
     konselingTotalCount: Int = 0,
+    unreadInfoPentingCount: Int = 0,
     todayMyShiftBadge: String? = null,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
@@ -395,6 +403,21 @@ fun QuickMenuTiles(
                     badgeBg = Color(0xFF4338CA),
                     testTag = "tile_klaim_anak_asuh",
                     onClick = onOpenPilihAnakAsuh
+                )
+            }
+            DashboardIconKey.INFO_PENTING -> {
+                val infoBadge = if (unreadInfoPentingCount > 0) {
+                    if (isEn) "$unreadInfoPentingCount New" else "$unreadInfoPentingCount Baru"
+                } else {
+                    "Channel"
+                }
+                val infoBadgeBg = if (unreadInfoPentingCount > 0) Color(0xFFDC2626) else Color(0xFF0F766E)
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = infoBadge,
+                    badgeBg = infoBadgeBg,
+                    testTag = "tile_info_penting",
+                    onClick = onOpenInfoPenting
                 )
             }
         }

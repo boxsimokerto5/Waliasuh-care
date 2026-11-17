@@ -33,12 +33,18 @@ import com.example.data.dao.KonselingLogDao
 import com.example.data.dao.KonselingRecordDao
 import com.example.data.dao.TabunganLogDao
 import com.example.data.dao.TabunganTransactionDao
+import com.example.data.dao.InfoPentingCommentDao
+import com.example.data.dao.InfoPentingPostDao
+import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
+import com.example.data.model.InfoPentingComment
+import com.example.data.model.InfoPentingPost
+import com.example.data.model.InfoPentingReaction
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
@@ -72,9 +78,12 @@ import com.example.data.model.WaliShiftCode
         KonselingRecord::class,
         KonselingLog::class,
         WaliShiftCode::class,
-        WaliScheduleEntry::class
+        WaliScheduleEntry::class,
+        InfoPentingPost::class,
+        InfoPentingReaction::class,
+        InfoPentingComment::class
     ],
-    version = 25,
+    version = 26,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -98,6 +107,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun konselingLogDao(): KonselingLogDao
     abstract fun waliShiftCodeDao(): WaliShiftCodeDao
     abstract fun waliScheduleEntryDao(): WaliScheduleEntryDao
+    abstract fun infoPentingPostDao(): InfoPentingPostDao
+    abstract fun infoPentingReactionDao(): InfoPentingReactionDao
+    abstract fun infoPentingCommentDao(): InfoPentingCommentDao
 
     companion object {
         @Volatile
@@ -589,6 +601,71 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_25_26 = object : androidx.room.migration.Migration(25, 26) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS info_penting_posts (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        schoolId TEXT NOT NULL DEFAULT '__GLOBAL__',
+                        title TEXT NOT NULL DEFAULT '',
+                        content TEXT NOT NULL DEFAULT '',
+                        category TEXT NOT NULL DEFAULT 'PENGUMUMAN',
+                        mediaType TEXT NOT NULL DEFAULT 'NONE',
+                        mediaUrl TEXT NOT NULL DEFAULT '',
+                        fallbackMediaUrl TEXT NOT NULL DEFAULT '',
+                        pbRecordId TEXT NOT NULL DEFAULT '',
+                        pbCollectionId TEXT NOT NULL DEFAULT '',
+                        pbFilename TEXT NOT NULL DEFAULT '',
+                        mediaName TEXT NOT NULL DEFAULT '',
+                        mediaSizeBytes INTEGER NOT NULL DEFAULT 0,
+                        externalLink TEXT NOT NULL DEFAULT '',
+                        authorDisplayName TEXT NOT NULL DEFAULT 'Superadmin',
+                        authorSchoolName TEXT NOT NULL DEFAULT '',
+                        isPinned INTEGER NOT NULL DEFAULT 0,
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS info_penting_reactions (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        schoolId TEXT NOT NULL DEFAULT '__GLOBAL__',
+                        postId INTEGER NOT NULL DEFAULT 0,
+                        userKey TEXT NOT NULL DEFAULT '',
+                        userName TEXT NOT NULL DEFAULT '',
+                        userSchoolId TEXT NOT NULL DEFAULT '',
+                        reactionType TEXT NOT NULL DEFAULT 'NONE',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS info_penting_comments (
+                        id INTEGER NOT NULL PRIMARY KEY,
+                        schoolId TEXT NOT NULL DEFAULT '__GLOBAL__',
+                        postId INTEGER NOT NULL DEFAULT 0,
+                        parentCommentId INTEGER NOT NULL DEFAULT 0,
+                        replyToAuthorName TEXT NOT NULL DEFAULT '',
+                        authorKey TEXT NOT NULL DEFAULT '',
+                        authorName TEXT NOT NULL DEFAULT '',
+                        authorSchoolId TEXT NOT NULL DEFAULT '',
+                        authorSchoolName TEXT NOT NULL DEFAULT '',
+                        content TEXT NOT NULL DEFAULT '',
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -614,7 +691,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_21_22,
                         MIGRATION_22_23,
                         MIGRATION_23_24,
-                        MIGRATION_24_25
+                        MIGRATION_24_25,
+                        MIGRATION_25_26
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

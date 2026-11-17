@@ -129,6 +129,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.ScrollableTabRow
@@ -151,6 +152,7 @@ import com.example.ui.dialogs.EditSchoolProfileDialog
 import com.example.ui.dialogs.ImportJadwalMatriksDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
+import com.example.ui.dialogs.InfoPentingFeedSheet
 import com.example.ui.dialogs.InputMengajiDialog
 import com.example.ui.dialogs.JadwalMatriksSheet
 import com.example.ui.dialogs.JadwalPersonalSheet
@@ -200,8 +202,23 @@ fun AdminScreen(
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
+    val infoPentingPosts by viewModel.infoPentingPosts.collectAsStateWithLifecycle()
+    val infoPentingReactions by viewModel.infoPentingReactions.collectAsStateWithLifecycle()
+    val infoPentingComments by viewModel.infoPentingComments.collectAsStateWithLifecycle()
+    val unreadInfoPentingCount by viewModel.unreadInfoPentingCount.collectAsStateWithLifecycle()
+    val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
 
+    var showInfoPentingSheet by remember { mutableStateOf(false) }
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        viewModel.syncInfoPentingChannelNow()
+    }
+    LaunchedEffect(showInfoPentingSheet) {
+        if (showInfoPentingSheet) {
+            viewModel.syncInfoPentingChannelNow()
+            viewModel.markInfoPentingRead()
+        }
+    }
     var jadwalMonthKey by remember { mutableStateOf(WaliScheduleHelper.currentMonthKey()) }
     var jadwalSelectedDay by remember { mutableIntStateOf(WaliScheduleHelper.currentDayOfMonth()) }
     var showJadwalMatriksSheet by remember { mutableStateOf(false) }
@@ -572,6 +589,28 @@ fun AdminScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White
                             )
+                        }
+                    }
+                    // Tombol Info-Info Penting (Global Channel)
+                    IconButton(
+                        onClick = { showInfoPentingSheet = true },
+                        modifier = Modifier.testTag("btn_admin_info_penting")
+                    ) {
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            Icon(
+                                imageVector = Icons.Default.Campaign,
+                                contentDescription = if (isEn) "Important Info Channel" else "Channel Info-Info Penting",
+                                tint = Color.White
+                            )
+                            if (unreadInfoPentingCount > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFEF4444))
+                                        .border(1.dp, Color.White, CircleShape)
+                                )
+                            }
                         }
                     }
                     // Tombol Bagikan Rekap Seluruh Akun
@@ -3562,6 +3601,36 @@ fun AdminScreen(
                     Text(if (isEn) "Share PDF" else "Bagikan")
                 }
             }
+        )
+    }
+
+    if (showInfoPentingSheet) {
+        InfoPentingFeedSheet(
+            posts = infoPentingPosts,
+            reactions = infoPentingReactions,
+            comments = infoPentingComments,
+            currentUserKey = viewModel.currentInfoPentingUserKey(),
+            isAnakSuperAdmin = isAnakSuperAdmin,
+            onOpenCreatePost = {},
+            onRefreshSync = { viewModel.syncInfoPentingChannelNow() },
+            onTogglePinPost = {},
+            onDeletePost = {},
+            onToggleReaction = { post, reactionType ->
+                viewModel.toggleInfoPentingReaction(post, reactionType)
+            },
+            onSendComment = { post, commentText, replyTarget ->
+                viewModel.addInfoPentingComment(post, commentText, replyTarget) { ok, msg ->
+                    if (!ok) {
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onDeleteOwnComment = { comment ->
+                viewModel.deleteOwnInfoPentingComment(comment) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { showInfoPentingSheet = false }
         )
     }
 }
