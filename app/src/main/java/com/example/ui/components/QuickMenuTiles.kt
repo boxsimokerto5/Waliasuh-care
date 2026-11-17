@@ -120,6 +120,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_konseling,
             tileBg = Color(0xFFEDE9FE)
         )
+        DashboardIconKey.JADWAL_WALI -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Duty Roster" else "Jadwal",
+            imageRes = R.drawable.img_menu_jadwal,
+            tileBg = Color(0xFFE0F2FE)
+        )
         DashboardIconKey.KLAIM_ANAK_ASUH -> DashboardIconUiMeta(
             key = key,
             title = if (isEn) "Claim Foster" else "Klaim Anak Asuh",
@@ -208,6 +214,7 @@ fun QuickMenuTiles(
     tabunganHoldersCount: Int = 0,
     konselingFollowUpCount: Int = 0,
     konselingTotalCount: Int = 0,
+    todayMyShiftBadge: String? = null,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
     iconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
@@ -364,6 +371,16 @@ fun QuickMenuTiles(
                     badgeBg = if (konselingFollowUpCount > 0) Color(0xFF7C3AED) else Color(0xFF6D28D9),
                     testTag = "category_konseling",
                     onClick = { onOpenCategoryHub(DashboardCategoryHub.KONSELING) }
+                )
+            }
+            DashboardIconKey.JADWAL_WALI -> {
+                val jadwalBadge = todayMyShiftBadge?.takeIf { it.isNotBlank() } ?: "Shift"
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = jadwalBadge,
+                    badgeBg = Color(0xFF0369A1),
+                    testTag = "category_jadwal_wali",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.JADWAL_WALI) }
                 )
             }
             DashboardIconKey.KLAIM_ANAK_ASUH -> {

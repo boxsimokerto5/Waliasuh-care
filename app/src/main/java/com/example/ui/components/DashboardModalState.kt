@@ -14,6 +14,8 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
 
 enum class DashboardCategoryHub {
     BEROBAT,
@@ -24,7 +26,8 @@ enum class DashboardCategoryHub {
     MENGAJI,
     ORANG_TUA,
     TABUNGAN,
-    KONSELING
+    KONSELING,
+    JADWAL_WALI
 }
 
 @Stable
@@ -90,6 +93,20 @@ class DashboardModalState {
     var showKonselingHistoryLogsSheet by mutableStateOf(false)
     var konselingHistoryInitialTab by mutableStateOf(0)
     var showKonselingGuideDialog by mutableStateOf(false)
+
+    // Modul Jadwal Kerja Wali Asuh (Tanpa notifikasi, dikelola Admin Sekolah)
+    var jadwalSelectedMonthKey by mutableStateOf(WaliScheduleHelper.currentMonthKey())
+    var jadwalSelectedDay by mutableStateOf(WaliScheduleHelper.currentDayOfMonth())
+    var showJadwalMatriksSheet by mutableStateOf(false)
+    var showJadwalPersonalSheet by mutableStateOf(false)
+    var jadwalPersonalTargetEntry by mutableStateOf<WaliScheduleEntry?>(null)
+    var showPetugasJamIniDialog by mutableStateOf(false)
+    var showRekapIzinJadwalSheet by mutableStateOf(false)
+    var showDaftarKodeSopSheet by mutableStateOf(false)
+    var showPenyematanTugasSheet by mutableStateOf(false)
+    var showManageShiftCodesDialog by mutableStateOf(false)
+    var showImportJadwalMatriksDialog by mutableStateOf(false)
+    var editingScheduleCellTarget by mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null)
 }
 
 @Composable

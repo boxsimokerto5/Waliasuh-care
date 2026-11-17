@@ -1,11 +1,17 @@
 package com.example.ui.components
 
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,33 +22,58 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Coffee
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.filled.WbTwilight
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,11 +89,14 @@ import com.example.data.model.HaidRecord
 import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
+import com.example.data.model.LeaveDayInfo
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentMessage
+import com.example.data.model.PinnedTaskItem
+import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
@@ -70,6 +104,12 @@ import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
+import com.example.data.model.WaliShiftCode
+import com.example.ui.dialogs.SchedulePinChip
+import com.example.ui.dialogs.openJadwalExternalUrl
+import com.example.ui.dialogs.parseJadwalShiftColor
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 
@@ -2132,6 +2172,894 @@ internal fun LazyListScope.konselingCategoryItems(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
+internal fun LazyListScope.jadwalWaliCategoryItems(
+    isEn: Boolean,
+    schoolProfile: SchoolProfile,
+    monthKey: String,
+    selectedDay: Int,
+    shiftCodes: List<WaliShiftCode>,
+    monthEntries: List<WaliScheduleEntry>,
+    canManageSchedule: Boolean,
+    currentUsername: String?,
+    currentWaliName: String,
+    searchQuery: String,
+    selectedGroup: String,
+    onSearchChange: (String) -> Unit,
+    onGroupChange: (String) -> Unit,
+    onChangeMonth: (String) -> Unit,
+    onChangeDay: (Int) -> Unit,
+    onOpenMatriks: () -> Unit,
+    onOpenPersonal: (WaliScheduleEntry) -> Unit,
+    onOpenPetugasJamIni: () -> Unit,
+    onOpenRekapIzin: () -> Unit,
+    onOpenKodeSop: () -> Unit,
+    onOpenPinTugas: () -> Unit,
+    onOpenManageShiftCodes: () -> Unit,
+    onOpenImportMatriks: () -> Unit,
+    onEditCell: (WaliScheduleEntry, Int) -> Unit,
+    onShareDailyWhatsapp: () -> Unit,
+    onExportMatriksPdf: () -> Unit
+) {
+    val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
+    val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, schoolProfile.tenantCode)
+    val daysInMonth = WaliScheduleHelper.daysInMonth(monthKey)
+    val safeDay = selectedDay.coerceIn(1, daysInMonth)
 
+    val leavePeersToday = monthEntries.sortedBy { it.sortOrder }.mapNotNull { entry ->
+        val info = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[safeDay] ?: return@mapNotNull null
+        entry to info
+    }
+    val myEntry = monthEntries.firstOrNull { WaliScheduleHelper.matchesWaliEntry(it, currentUsername, currentWaliName) }
+    val dayPinsTotal = monthEntries.sumOf { WaliScheduleHelper.parseDayPins(it.dayPinsJson)[safeDay]?.size ?: 0 }
+    val currentHour = WaliScheduleHelper.currentHourOfDay()
+    val activeNowCount = monthEntries.count { entry ->
+        val code = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[safeDay]?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
+        val def = shiftMap[code] ?: return@count false
+        WaliScheduleHelper.isShiftActiveAtHour(def, currentHour)
+    }
 
+    // 1. Rekan Izin Strip + Link Drive + Rekap Izin (match reference layout)
+    if (leavePeersToday.isNotEmpty()) {
+        item(key = "jadwal_leave_peers_banner") {
+            val context = LocalContext.current
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFFFFF1F2),
+                border = BorderStroke(1.dp, Color(0xFFFECDD3)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_jadwal_rekan_izin")
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = Color(0xFFE11D48),
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = if (isEn) {
+                                "Colleagues on Leave (${leavePeersToday.size}):"
+                            } else {
+                                "Rekan Izin Hari Ini (${leavePeersToday.size}):"
+                            },
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF9F1239)
+                        )
+                    }
+                    leavePeersToday.forEach { (peerEntry, leaveInfo) ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, Color(0xFFFEE2E2))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = peerEntry.waliName,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    Surface(shape = RoundedCornerShape(6.dp), color = Color(0xFFFEE2E2)) {
+                                        Text(
+                                            text = leaveInfo.status,
+                                            fontSize = 9.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFFB91C1C),
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                if (leaveInfo.driveUrl.isNotBlank()) {
+                                    Button(
+                                        onClick = { openJadwalExternalUrl(context, leaveInfo.driveUrl, isEn) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        modifier = Modifier
+                                            .heightIn(min = 36.dp)
+                                            .testTag("btn_buka_link_drive_${peerEntry.id}")
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(if (isEn) "Open Drive" else "Buka Link Drive", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Button(
+                        onClick = onOpenRekapIzin,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE11D48)),
+                        shape = RoundedCornerShape(20.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .heightIn(min = 40.dp)
+                            .testTag("btn_rekap_izin_jadwal")
+                    ) {
+                        Icon(Icons.Default.Description, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(if (isEn) "Leave Recap" else "Rekap Izin", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 
+    // 2. Penugasan Personal Hero Card (Tanpa tombol Alarm / Notifikasi — sesuai instruksi Point 4)
+    item(key = "jadwal_personal_hero") {
+        val myCodes = rememberLikeMap(myEntry?.dayCodesJson)
+        val myPins = myEntry?.let { WaliScheduleHelper.parseDayPins(it.dayPinsJson)[safeDay].orEmpty() }.orEmpty()
+        val myCode = myCodes[safeDay]?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
+        val myShift = shiftMap[myCode]
+        val nextDay = if (safeDay < daysInMonth) safeDay + 1 else null
+        val tomorrowCode = nextDay?.let { myCodes[it]?.let { raw -> WaliScheduleHelper.normalizeCode(raw) } }.orEmpty()
+        val tomorrowShift = shiftMap[tomorrowCode]
+
+        Card(
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+            elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_jadwal_personal_hero")
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF0F766E),
+                                Color(0xFF0369A1),
+                                Color(0xFF312E81)
+                            )
+                        )
+                    )
+                    .padding(14.dp)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White.copy(alpha = 0.16f)
+                    ) {
+                        Text(
+                            text = if (myEntry != null) {
+                                if (isEn) "Assignment: ${myEntry.waliName}" else "Penugasan Wali Asuh: ${myEntry.waliName}"
+                            } else {
+                                if (isEn) "School Roster Monitor • ${schoolProfile.shortName}" else "Pemantauan Jadwal • ${schoolProfile.shortName}"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                        )
+                    }
+
+                    if (myEntry != null) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = when {
+                                    myShift != null -> "${myShift.name} (${myShift.code})"
+                                    myCode.isNotBlank() -> myCode
+                                    else -> if (isEn) "Unassigned on Day $safeDay" else "Belum Ada Jadwal Tgl $safeDay"
+                                },
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (myCode.isNotBlank()) {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = parseJadwalShiftColor(myShift?.colorHex ?: "#7C3AED")
+                                ) {
+                                    Text(
+                                        text = "${if (isEn) "Code" else "Kode"}: $myCode",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (myPins.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                myPins.forEach { pin ->
+                                    SchedulePinChip(pin = pin)
+                                }
+                            }
+                        }
+
+                        if (myShift?.sopNotes?.isNotBlank() == true) {
+                            Text(
+                                text = myShift.sopNotes,
+                                fontSize = 12.sp,
+                                lineHeight = 16.5.sp,
+                                color = Color.White.copy(alpha = 0.92f)
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            if (myShift != null && myShift.timeRange.isNotBlank() && myShift.timeRange != "-") {
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.Black.copy(alpha = 0.25f)
+                                ) {
+                                    Text(
+                                        text = "⏱ ${if (isEn) "Hours" else "Jam"}: ${myShift.timeRange} (${myShift.workHours} ${if (isEn) "Hrs" else "Jam"})",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFDE047),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (nextDay != null && tomorrowCode.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color.Black.copy(alpha = 0.22f)
+                            ) {
+                                Text(
+                                    text = "📅 ${if (isEn) "Tomorrow (Day $nextDay)" else "Besok (Tgl $nextDay)"}: ${tomorrowShift?.name ?: tomorrowCode} ($tomorrowCode)",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color.White.copy(alpha = 0.95f),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    } else {
+                        Text(
+                            text = if (isEn) {
+                                "$activeNowCount caregivers active now (${String.format("%02d:00", currentHour)} WIB) • ${monthEntries.size} listed"
+                            } else {
+                                "$activeNowCount petugas aktif jam ini (${String.format("%02d:00", currentHour)} WIB) • ${monthEntries.size} personel terdaftar"
+                            },
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onOpenPetugasJamIni,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White.copy(alpha = 0.22f),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_jadwal_petugas_jam_ini")
+                        ) {
+                            Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(if (isEn) "On Duty Now" else "Petugas Jam Ini", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        if (myEntry != null) {
+                            Button(
+                                onClick = { onOpenPersonal(myEntry) },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White.copy(alpha = 0.22f),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_jadwal_personal_hero")
+                            ) {
+                                Text(if (isEn) "My Schedule" else "Jadwal Personal →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        } else {
+                            Button(
+                                onClick = onOpenMatriks,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color.White.copy(alpha = 0.22f),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                            ) {
+                                Text(if (isEn) "View Matrix →" else "Matriks Bulan →", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. 2x2 Quick Hub Menu Cards (Matriks Bulanan, Pin Tugas, Petugas Jam Ini, Kode & SOP)
+    item(key = "jadwal_hub_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Monthly Matrix" else "Matriks Bulanan",
+                    subtitle = WaliScheduleHelper.formatMonthTitle(monthKey, isEn),
+                    imageRes = R.drawable.img_jadwal_matriks,
+                    badgeText = "${monthEntries.size} ${if (isEn) "Staff" else "Org"}",
+                    badgeBg = Color(0xFFCCFBF1),
+                    badgeColor = Color(0xFF0F766E),
+                    bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.55f)),
+                    borderColor = Color(0xFF99F6E4),
+                    onClick = onOpenMatriks,
+                    testTag = "card_jadwal_matriks",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Task Pins" else "Penyematan Tugas",
+                    subtitle = if (isEn) "Tasks & Facilities" else "Pin Tugas & Faskes",
+                    imageRes = R.drawable.img_menu_pesan_shift,
+                    badgeText = "$dayPinsTotal Pin",
+                    badgeBg = Color(0xFFE0E7FF),
+                    badgeColor = Color(0xFF3730A3),
+                    bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.55f)),
+                    borderColor = Color(0xFFC7D2FE),
+                    onClick = onOpenPinTugas,
+                    testTag = "card_jadwal_pin_tugas",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "On Duty Hour" else "Petugas Jam Ini",
+                    subtitle = String.format("%02d:00 WIB", currentHour),
+                    imageRes = R.drawable.img_menu_jadwal,
+                    badgeText = "$activeNowCount ${if (isEn) "Active" else "Aktif"}",
+                    badgeBg = Color(0xFFE0F2FE),
+                    badgeColor = Color(0xFF0369A1),
+                    bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.55f)),
+                    borderColor = Color(0xFFBAE6FD),
+                    onClick = onOpenPetugasJamIni,
+                    testTag = "card_jadwal_jam_ini",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Shift Codes & SOP" else "Kode & SOP Shift",
+                    subtitle = if (isEn) "Rules per Shift" else "Aturan & Zona Tugas",
+                    imageRes = R.drawable.img_menu_kunjungan,
+                    badgeText = "${effectiveCodes.size} Kode",
+                    badgeBg = Color(0xFFFEF3C7),
+                    badgeColor = Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.55f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = onOpenKodeSop,
+                    testTag = "card_jadwal_kode_sop",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // 4. Share WA + Export PDF + Admin Controls (Admin Sekolah only for mutations)
+    item(key = "jadwal_actions_and_admin_bar") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onShareDailyWhatsapp,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_jadwal_share_wa")
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isEn) "Share Roster WA" else "Bagikan WA", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                }
+                Button(
+                    onClick = onExportMatriksPdf,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_jadwal_export_pdf")
+                ) {
+                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(if (isEn) "Matrix PDF" else "Cetak PDF Resmi", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            if (canManageSchedule) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF0FDFA),
+                    border = BorderStroke(1.dp, Color(0xFF99F6E4)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_jadwal_admin_controls")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = onOpenManageShiftCodes,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_jadwal_admin_shift_codes")
+                        ) {
+                            Icon(Icons.Default.Settings, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isEn) "Shift Codes" else "Atur Kode Shift", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = onOpenImportMatriks,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_jadwal_admin_import")
+                        ) {
+                            Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(if (isEn) "Members / CSV" else "Anggota / CSV", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. Date Switcher + Filter Chips + Search Bar
+    item(key = "jadwal_date_and_filter_controls") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            if (safeDay > 1) {
+                                onChangeDay(safeDay - 1)
+                            } else {
+                                val prevMonth = WaliScheduleHelper.shiftMonth(monthKey, -1)
+                                onChangeMonth(prevMonth)
+                                onChangeDay(WaliScheduleHelper.daysInMonth(prevMonth))
+                            }
+                        },
+                        modifier = Modifier.testTag("btn_jadwal_prev_day")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                            contentDescription = if (isEn) "Previous Day" else "Hari Sebelumnya"
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = WaliScheduleHelper.formatDateChipLabel(monthKey, safeDay, isEn),
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF0F766E),
+                            modifier = Modifier.testTag("text_jadwal_selected_date")
+                        )
+                        Text(
+                            text = if (canManageSchedule) {
+                                if (isEn) "Tap any person to edit shift & pins" else "Ketuk nama wali untuk atur shift & pin tugas"
+                            } else {
+                                if (isEn) "Tap any person for monthly schedule" else "Ketuk nama wali untuk lihat jadwal personal"
+                            },
+                            fontSize = 10.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = {
+                            if (safeDay < daysInMonth) {
+                                onChangeDay(safeDay + 1)
+                            } else {
+                                val nextMonth = WaliScheduleHelper.shiftMonth(monthKey, 1)
+                                onChangeMonth(nextMonth)
+                                onChangeDay(1)
+                            }
+                        },
+                        modifier = Modifier.testTag("btn_jadwal_next_day")
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = if (isEn) "Next Day" else "Hari Berikutnya"
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchChange,
+                placeholder = { Text(if (isEn) "Search caregiver or pinned task..." else "Cari nama Wali Asuh atau tugas pin...", fontSize = 12.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("input_jadwal_hub_search")
+            )
+
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                val filterChips = listOf(
+                    "ALL" to if (isEn) "All" else "Semua",
+                    WaliScheduleHelper.GROUP_PAGI to if (isEn) "Morning" else "Pagi",
+                    WaliScheduleHelper.GROUP_SORE to if (isEn) "Afternoon" else "Sore",
+                    WaliScheduleHelper.GROUP_MALAM to if (isEn) "Night" else "Malam",
+                    WaliScheduleHelper.GROUP_LEPAS to if (isEn) "Off / Rest" else "Lepas & Libur",
+                    WaliScheduleHelper.GROUP_IZIN to if (isEn) "Leave" else "Izin & Cuti"
+                )
+                items(filterChips) { (key, lbl) ->
+                    FilterChip(
+                        selected = selectedGroup == key,
+                        onClick = { onGroupChange(key) },
+                        label = { Text(lbl, fontSize = 11.5.sp) }
+                    )
+                }
+            }
+        }
+    }
+
+    // 6. Daily Roster Grouped Cards (Jaga Pagi, Jaga Sore, Jaga Malam, Lepas & Libur, Izin & Cuti)
+    if (monthEntries.isEmpty()) {
+        item(key = "jadwal_empty_state") {
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = if (isEn) {
+                            "No roster created for ${WaliScheduleHelper.formatMonthTitle(monthKey, true)} yet."
+                        } else {
+                            "Jadwal Wali Asuh bulan ${WaliScheduleHelper.formatMonthTitle(monthKey, false)} belum dibuat oleh Admin Sekolah."
+                        },
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (canManageSchedule) {
+                        Button(
+                            onClick = onOpenImportMatriks,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) {
+                            Text(if (isEn) "Setup / Sync Wali Accounts" else "Atur / Sinkron Akun Wali")
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        val q = searchQuery.trim().lowercase()
+        val groupSpecs = listOf(
+            Triple(WaliScheduleHelper.GROUP_PAGI, if (isEn) "Morning Shift (P1-P5)" else "Jaga Pagi (P1-P5)", "07:00 - 15:00/16:00 (P4 s.d 20:00)"),
+            Triple(WaliScheduleHelper.GROUP_SORE, if (isEn) "Afternoon Shift (S)" else "Jaga Sore (S)", "15:00 - 23:00"),
+            Triple(WaliScheduleHelper.GROUP_MALAM, if (isEn) "Night Shift (M)" else "Jaga Malam (M)", "15:00 - 07:00 (Pagi)"),
+            Triple(WaliScheduleHelper.GROUP_LEPAS, if (isEn) "Post-Night & Off (LP/L)" else "Lepas & Libur", if (isEn) "Rest / Off" else "Istirahat / Off"),
+            Triple(WaliScheduleHelper.GROUP_IZIN, if (isEn) "Leave & Sick (IZIN/C)" else "Izin & Cuti", if (isEn) "Official Leave" else "Izin / Sakit / Cuti")
+        )
+
+        groupSpecs.forEach { (grpKey, grpTitle, grpTime) ->
+            if (selectedGroup == "ALL" || selectedGroup == grpKey) {
+                val matchedMembers = monthEntries.sortedBy { it.sortOrder }.mapNotNull { entry ->
+                    val code = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[safeDay]?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
+                    val resolvedGrp = if (code.isBlank()) "" else WaliScheduleHelper.resolveShiftGroup(code, shiftMap)
+                    if (resolvedGrp != grpKey) return@mapNotNull null
+                    val pins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson)[safeDay].orEmpty()
+                    val leave = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[safeDay]
+                    val matchesSearch = q.isBlank() ||
+                        entry.waliName.lowercase().contains(q) ||
+                        code.lowercase().contains(q) ||
+                        pins.any { it.label.lowercase().contains(q) } ||
+                        (shiftMap[code]?.zoneLabel?.lowercase()?.contains(q) == true)
+                    if (!matchesSearch) return@mapNotNull null
+                    Triple(entry, code, pins to leave)
+                }
+
+                if (matchedMembers.isNotEmpty()) {
+                    item(key = "jadwal_group_$grpKey") {
+                        DailyRosterGroupCard(
+                            groupKey = grpKey,
+                            title = grpTitle,
+                            timeSubtitle = grpTime,
+                            members = matchedMembers,
+                            shiftMap = shiftMap,
+                            canManageSchedule = canManageSchedule,
+                            isEn = isEn,
+                            onMemberClick = { entry ->
+                                if (canManageSchedule) onEditCell(entry, safeDay)
+                                else onOpenPersonal(entry)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun rememberLikeMap(dayCodesJson: String?): Map<Int, String> =
+    WaliScheduleHelper.parseDayCodes(dayCodesJson)
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DailyRosterGroupCard(
+    groupKey: String,
+    title: String,
+    timeSubtitle: String,
+    members: List<Triple<WaliScheduleEntry, String, Pair<List<PinnedTaskItem>, LeaveDayInfo?>>>,
+    shiftMap: Map<String, WaliShiftCode>,
+    canManageSchedule: Boolean,
+    isEn: Boolean,
+    onMemberClick: (WaliScheduleEntry) -> Unit
+) {
+    val context = LocalContext.current
+    val (accent, borderColor, iconVector) = when (groupKey) {
+        WaliScheduleHelper.GROUP_PAGI -> Triple(Color(0xFF0284C7), Color(0xFFBAE6FD), Icons.Default.WbSunny)
+        WaliScheduleHelper.GROUP_SORE -> Triple(Color(0xFFD97706), Color(0xFFFDE68A), Icons.Default.WbTwilight)
+        WaliScheduleHelper.GROUP_MALAM -> Triple(Color(0xFF6D28D9), Color(0xFFDDD6FE), Icons.Default.NightsStay)
+        WaliScheduleHelper.GROUP_LEPAS -> Triple(Color(0xFF0F766E), Color(0xFF99F6E4), Icons.Default.Coffee)
+        else -> Triple(Color(0xFFBE123C), Color(0xFFFECDD3), Icons.Default.WarningAmber)
+    }
+
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .testTag("card_jadwal_group_$groupKey")
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = accent.copy(alpha = 0.14f),
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(iconVector, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                        }
+                    }
+                    Column {
+                        Text(title, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
+                        Text(timeSubtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = accent.copy(alpha = 0.12f)
+                ) {
+                    Text(
+                        text = "${members.size} Org",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = accent,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                members.forEach { (entry, code, pinsAndLeave) ->
+                    val (pins, leave) = pinsAndLeave
+                    val shift = shiftMap[code]
+                    val codeColor = parseJadwalShiftColor(shift?.colorHex ?: "#64748B", accent)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onMemberClick(entry) }
+                            .testTag("row_jadwal_member_${entry.id}")
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text(
+                                        text = entry.waliName,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
+                                    )
+                                    val zone = shift?.zoneLabel.orEmpty()
+                                    if (zone.isNotBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = accent.copy(alpha = 0.1f)
+                                        ) {
+                                            Text(
+                                                text = "($zone)",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = accent,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    if (canManageSchedule) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = if (isEn) "Edit" else "Atur",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    }
+                                    Surface(shape = RoundedCornerShape(7.dp), color = codeColor) {
+                                        Text(
+                                            text = code,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (pins.isNotEmpty() || leave != null) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    pins.forEach { pin ->
+                                        SchedulePinChip(pin = pin)
+                                    }
+                                    if (leave != null && leave.driveUrl.isNotBlank()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFDCFCE7),
+                                            border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                                            modifier = Modifier.clickable {
+                                                openJadwalExternalUrl(context, leave.driveUrl, isEn)
+                                            }
+                                        ) {
+                                            Text(
+                                                text = "📄 Drive ${leave.status}",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF166534),
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

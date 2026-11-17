@@ -4347,6 +4347,7 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.BEROBAT,
       com.example.data.model.DashboardIconKey.TABUNGAN,
       com.example.data.model.DashboardIconKey.KONSELING,
+      com.example.data.model.DashboardIconKey.JADWAL_WALI,
       com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH
     )
     var saveOk = false
@@ -4395,6 +4396,7 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.PESAN,
       com.example.data.model.DashboardIconKey.TABUNGAN,
       com.example.data.model.DashboardIconKey.KONSELING,
+      com.example.data.model.DashboardIconKey.JADWAL_WALI,
       com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH
     )
     vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
@@ -6855,25 +6857,25 @@ class ExampleRobolectricTest {
 
     composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertIsDisplayed()
     composeTestRule.onNodeWithTag("card_tour_tooltip").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 13")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 14")
 
     // Lanjut ke langkah 2: Klaim Anak Asuh (Fondasi)
     composeTestRule.onNodeWithTag("btn_tour_next").performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 13")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 14")
     composeTestRule.onNodeWithTag("text_tour_title").assertTextEquals("Klaim Anak Asuh (Mulai Sini!)")
 
     // Kembali ke langkah 1
     composeTestRule.onNodeWithTag("btn_tour_prev").performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 13")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 14")
 
-    // Jelajahi seluruh 13 langkah fitur (termasuk Tabungan & Konseling) sampai selesai
-    repeat(12) {
+    // Jelajahi seluruh 14 langkah fitur (termasuk Tabungan, Konseling & Jadwal) sampai selesai
+    repeat(13) {
       composeTestRule.onNodeWithTag("btn_tour_next").performClick()
       composeTestRule.waitForIdle()
     }
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("13 / 13")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("14 / 14")
     composeTestRule.onNodeWithTag("btn_tour_next").performClick()
     composeTestRule.waitForIdle()
 
@@ -7343,5 +7345,294 @@ class ExampleRobolectricTest {
       "Expected friendly Indonesian toast when Google Speech Activity is unavailable, got: $latestToast",
       latestToast?.contains("Suara ke Teks Google belum tersedia") == true
     )
+  }
+
+  @Test
+  fun `verify WaliScheduleHelper stats breakdown CSV parsing and active hour logic`() {
+    val shiftCodes = com.example.data.model.WaliScheduleHelper.defaultShiftCodes("SRT1-KDR")
+    val shiftMap = com.example.data.model.WaliScheduleHelper.buildShiftMap(shiftCodes, "SRT1-KDR")
+
+    // Shift malam M3 (23..07) aktif saat jam 23 dan jam 02, tidak aktif jam 10
+    val m3 = shiftMap["M3"]!!
+    org.junit.Assert.assertTrue(com.example.data.model.WaliScheduleHelper.isShiftActiveAtHour(m3, 23))
+    org.junit.Assert.assertTrue(com.example.data.model.WaliScheduleHelper.isShiftActiveAtHour(m3, 2))
+    org.junit.Assert.assertFalse(com.example.data.model.WaliScheduleHelper.isShiftActiveAtHour(m3, 10))
+
+    // Parse CSV matrix 2 baris
+    val csv = """
+      Kode,Nama,1,2,3,4,5
+      EW,Eko Wahyudi,P1,S3A,M3,LP,L
+      SM,Siti Maslukah,P2,S1A,IZIN,P1,L
+    """.trimIndent()
+    val parsed = com.example.data.model.WaliScheduleHelper.parseMatrixCsv(
+      rawText = csv,
+      monthKey = "2026-11",
+      schoolId = "SRT1-KDR"
+    )
+    org.junit.Assert.assertEquals(2, parsed.size)
+    val eko = parsed[0]
+    val ekoStats = com.example.data.model.WaliScheduleHelper.computeRowStats(eko, 5, shiftMap)
+    org.junit.Assert.assertEquals(1, ekoStats.pagiCount)
+    org.junit.Assert.assertEquals(1, ekoStats.soreCount)
+    org.junit.Assert.assertEquals(1, ekoStats.malamCount)
+    org.junit.Assert.assertEquals(1, ekoStats.lpCount)
+    org.junit.Assert.assertEquals(1, ekoStats.offCount)
+    org.junit.Assert.assertEquals(24, ekoStats.totalWorkHours) // P1(8)+S3A(8)+M3(8)
+
+    val breakdownDay1 = com.example.data.model.WaliScheduleHelper.computeDayBreakdown(parsed, 1, shiftMap)
+    org.junit.Assert.assertEquals(2, breakdownDay1.pagiTotal)
+    org.junit.Assert.assertEquals(1, breakdownDay1.p1Count)
+    org.junit.Assert.assertEquals(1, breakdownDay1.p2Count)
+  }
+
+  @Test
+  fun `verify HealthViewModel Jadwal Wali Asuh admin-only permissions and school tenant isolation`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val db = com.example.data.local.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+
+    // 1. Login sebagai Admin Sekolah SRT1-KDR
+    val adminReg = com.example.data.model.SchoolRegistration(
+      schoolName = "SR Terintegrasi 1 Kediri",
+      schoolCode = "SRT1-KDR",
+      adminName = "Admin Satu",
+      generatedSchoolCode = "SRT1-KDR",
+      generatedAdminUsername = "admin_srt1_jadwal",
+      generatedAdminPassword = "Password#123",
+      status = "APPROVED"
+    )
+    db.schoolRegistrationDao().insert(adminReg)
+    val waliAcc = com.example.data.model.WaliAccount(
+      name = "Eko Wahyudi",
+      username = "ekowahyudi_j",
+      password = "Wali#1234",
+      dormitory = "Asrama Putra",
+      schoolId = "SRT1-KDR"
+    )
+    db.waliAccountDao().insert(waliAcc)
+
+    val adminLogin = vm.executeLogin("admin_srt1_jadwal", "Password#123", rememberMe = false)
+    org.junit.Assert.assertTrue(adminLogin is com.example.ui.LoginResult.SuccessAdmin)
+    org.junit.Assert.assertTrue(vm.canManageSchoolSchedule())
+
+    // 2. Admin menambah kode shift kustom "K1"
+    var codeSaved = false
+    vm.saveWaliShiftCode(
+      existing = null,
+      code = "K1",
+      name = "Piket Koperasi",
+      shiftGroup = com.example.data.model.WaliScheduleHelper.GROUP_PAGI,
+      zoneLabel = "Koperasi Sekolah",
+      timeRange = "07:00 - 15:00",
+      startHour = 7,
+      endHour = 15,
+      workHours = 8,
+      colorHex = "#0EA5E9",
+      sopNotes = "Standby koperasi pagi"
+    ) { ok, _ -> codeSaved = ok }
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+    Thread.sleep(150)
+    org.junit.Assert.assertTrue(codeSaved)
+    val codes = db.waliScheduleDao().getShiftCodesBySchoolList("SRT1-KDR")
+    org.junit.Assert.assertTrue(codes.any { it.code == "K1" && it.schoolId == "SRT1-KDR" })
+
+    // 3. Admin menarik anggota dari akun Wali Asuh sekolah ini & mengatur sel Tgl 17 (M3 + Pin Tugas + Izin)
+    var syncOk = false
+    vm.syncScheduleMembersFromWaliAccounts("2026-11") { ok, _ -> syncOk = ok }
+    Thread.sleep(150)
+    org.junit.Assert.assertTrue(syncOk)
+
+    val entries = db.waliScheduleDao().getEntriesBySchoolAndMonthList("SRT1-KDR", "2026-11")
+    org.junit.Assert.assertEquals(1, entries.size)
+    val ekoEntry = entries.first()
+
+    var cellUpdated = false
+    vm.updateWaliScheduleDayCell(
+      entry = ekoEntry,
+      day = 17,
+      shiftCode = "M3",
+      pinsForDay = listOf(
+        com.example.data.model.PinnedTaskItem("Jaga RS Siti Khadijah", com.example.data.model.WaliScheduleHelper.PIN_FASKES),
+        com.example.data.model.PinnedTaskItem("Jaga Asrama SMA", com.example.data.model.WaliScheduleHelper.PIN_TUGAS)
+      ),
+      leaveForDay = com.example.data.model.LeaveDayInfo(
+        status = "IZIN",
+        driveUrl = "https://drive.google.com/file/d/contoh-surat/view",
+        note = "Surat tugas luar"
+      )
+    ) { ok, _ -> cellUpdated = ok }
+    Thread.sleep(150)
+    org.junit.Assert.assertTrue(cellUpdated)
+
+    val updatedEko = db.waliScheduleDao().getEntriesBySchoolAndMonthList("SRT1-KDR", "2026-11").first()
+    org.junit.Assert.assertEquals("M3", com.example.data.model.WaliScheduleHelper.parseDayCodes(updatedEko.dayCodesJson)[17])
+    org.junit.Assert.assertEquals(2, com.example.data.model.WaliScheduleHelper.parseDayPins(updatedEko.dayPinsJson)[17]?.size)
+    org.junit.Assert.assertEquals("IZIN", com.example.data.model.WaliScheduleHelper.parseDayLeaves(updatedEko.dayLeaveJson)[17]?.status)
+
+    // 4. Login sebagai Wali Asuh biasa -> dapat melihat, tetapi TIDAK BOLEH mengubah kode shift/sel/impor
+    val waliLogin = vm.executeLogin("ekowahyudi_j", "Wali#1234", rememberMe = false)
+    org.junit.Assert.assertTrue(waliLogin is com.example.ui.LoginResult.SuccessWali)
+    org.junit.Assert.assertFalse(vm.canManageSchoolSchedule())
+
+    var blockedCodeSave = false
+    vm.saveWaliShiftCode(
+      existing = null, code = "X9", name = "Hack", shiftGroup = "PAGI",
+      zoneLabel = "", timeRange = "", startHour = 7, endHour = 15, workHours = 8,
+      colorHex = "#000000", sopNotes = ""
+    ) { ok, _ -> blockedCodeSave = !ok }
+    org.junit.Assert.assertTrue(blockedCodeSave)
+
+    var blockedCellEdit = false
+    vm.updateWaliScheduleDayCell(updatedEko, 18, "P1", emptyList(), null) { ok, _ ->
+      blockedCellEdit = !ok
+    }
+    org.junit.Assert.assertTrue(blockedCellEdit)
+
+    // 5. Isolasi sekolah: entri sekolah lain ("SRT2-MLG") tidak muncul di kueri SRT1-KDR
+    val otherSchoolCodes = db.waliScheduleDao().getShiftCodesBySchoolList("SRT2-MLG")
+    org.junit.Assert.assertTrue(otherSchoolCodes.none { it.code == "K1" })
+  }
+
+  @Test
+  fun `verify CategoryHubOverlay JADWAL_WALI shows roster pins Drive link and strictly ZERO alarm buttons`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val codes = com.example.data.model.WaliScheduleHelper.defaultShiftCodes("SRT1-KDR")
+    val ekoEntry = com.example.data.model.WaliScheduleEntry(
+      id = 101L,
+      schoolId = "SRT1-KDR",
+      monthKey = "2026-11",
+      waliUsername = "ekowahyudi",
+      waliName = "Eko Wahyudi",
+      dayCodesJson = com.example.data.model.WaliScheduleHelper.serializeDayCodes(mapOf(17 to "M3", 18 to "S3A")),
+      dayPinsJson = com.example.data.model.WaliScheduleHelper.serializeDayPins(
+        mapOf(17 to listOf(com.example.data.model.PinnedTaskItem("Jaga RS Siti Khadijah Gurah", com.example.data.model.WaliScheduleHelper.PIN_FASKES)))
+      ),
+      dayLeaveJson = com.example.data.model.WaliScheduleHelper.serializeDayLeaves(
+        mapOf(17 to com.example.data.model.LeaveDayInfo("SAKIT", "https://drive.google.com/contoh", "Istirahat"))
+      )
+    )
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.components.CategoryHubOverlay(
+          category = com.example.ui.components.DashboardCategoryHub.JADWAL_WALI,
+          schoolProfile = com.example.data.model.SchoolProfile(tenantCode = "SRT1-KDR", schoolName = "SR 1 Kediri"),
+          activePlans = emptyList(),
+          inpatientCount = 0,
+          fastingSessions = emptyList(),
+          fastingRecords = emptyList(),
+          activeHaidRecords = emptyList(),
+          suciRecords = emptyList(),
+          shiftMessages = emptyList(),
+          onDismiss = {},
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onOpenCreatePlan = {},
+          onOpenDirectTreatment = {},
+          onOpenFaskesInfo = {},
+          onOpenInputPuasa = {},
+          onOpenDaftarPuasa = {},
+          onOpenChecklistPuasa = {},
+          onOpenRankingPuasa = {},
+          onOpenInputHaid = {},
+          onOpenDaftarHaid = {},
+          onOpenDaftarSuci = {},
+          onOpenFiqihHaid = {},
+          onOpenShiftMessages = {},
+          onOpenCreateShiftMessage = {},
+          onOpenShiftHistory = {},
+          jadwalMonthKey = "2026-11",
+          jadwalSelectedDay = 17,
+          shiftCodes = codes,
+          scheduleEntries = listOf(ekoEntry),
+          canManageSchedule = false,
+          currentUsername = "ekowahyudi",
+          currentWaliName = "Eko Wahyudi"
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Pastikan ikon menu utama Jadwal tampil & jadwal personal terdeteksi
+    composeTestRule.onNodeWithTag("tile_jadwal_matriks").assertExists()
+    composeTestRule.onNodeWithTag("btn_jadwal_petugas_jam_ini").assertExists()
+    composeTestRule.onNodeWithTag("btn_jadwal_personal").assertExists()
+    composeTestRule.onNodeWithText("Malam 3 (M3)", substring = true).assertExists()
+    composeTestRule.onNodeWithText("Jaga RS Siti Khadijah Gurah", substring = true).assertExists()
+
+    // Syarat Point 4: TIDAK ADA tombol Alarm Tugas / Bunyikan / Notifikasi sama sekali!
+    composeTestRule.onNodeWithText("Alarm Tugas", substring = true).assertDoesNotExist()
+    composeTestRule.onNodeWithText("Bunyikan", substring = true).assertDoesNotExist()
+  }
+
+  @Test
+  fun `verify AdminScreen Tab 4 Jadwal displays school roster controls and Generate PDF succeeds`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val db = com.example.data.local.AppDatabase.getDatabase(app)
+    val vm = com.example.ui.HealthViewModel(app)
+
+    val adminReg = com.example.data.model.SchoolRegistration(
+      schoolName = "SR Terintegrasi 1 Kediri",
+      schoolCode = "SRT1-KDR",
+      adminName = "Admin Satu",
+      generatedSchoolCode = "SRT1-KDR",
+      generatedAdminUsername = "admin_srt1_tab4",
+      generatedAdminPassword = "Password#123",
+      status = "APPROVED"
+    )
+    db.schoolRegistrationDao().insert(adminReg)
+    vm.executeLogin("admin_srt1_tab4", "Password#123", rememberMe = false)
+
+    val entries = listOf(
+      com.example.data.model.WaliScheduleEntry(
+        id = 201L,
+        schoolId = "SRT1-KDR",
+        monthKey = com.example.data.model.WaliScheduleHelper.currentMonthKey(),
+        waliName = "Siti Maslukah",
+        dayCodesJson = com.example.data.model.WaliScheduleHelper.serializeDayCodes(
+          mapOf(1 to "P1", 2 to "S3A", 3 to "M3", 4 to "LP", 5 to "L")
+        ),
+        dayPinsJson = com.example.data.model.WaliScheduleHelper.serializeDayPins(
+          mapOf(1 to listOf(com.example.data.model.PinnedTaskItem("Jaga Asrama SD")))
+        )
+      )
+    )
+    val codes = com.example.data.model.WaliScheduleHelper.defaultShiftCodes("SRT1-KDR")
+    val pdf = com.example.util.PdfReportGenerator.generateJadwalMatriksPdf(
+      context = app,
+      monthKey = "2026-11",
+      entries = entries,
+      shiftCodes = codes,
+      waliName = "Admin Satu",
+      schoolProfile = com.example.data.model.SchoolProfile(tenantCode = "SRT1-KDR", schoolName = "SR Terintegrasi 1 Kediri")
+    )
+    org.junit.Assert.assertNotNull(pdf)
+    org.junit.Assert.assertTrue(pdf!!.exists() && pdf.length() > 1000L)
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.screens.AdminScreen(viewModel = vm, onLogout = {})
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Buka Tab Jadwal di AdminScreen
+    composeTestRule.onNodeWithTag("tab_admin_jadwal").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("btn_admin_jadwal_matriks").assertExists()
+    composeTestRule.onNodeWithTag("btn_admin_manage_shift_codes").assertExists()
+    composeTestRule.onNodeWithTag("btn_admin_export_jadwal_pdf").assertExists()
   }
 }

@@ -225,6 +225,22 @@ enum class DashboardBannerFeatureTarget(
         groupEn = "Shift Notes"
     ),
 
+    // Jadwal Wali Asuh
+    FEATURE_JADWAL_WALI_HUB(
+        key = "FEATURE_JADWAL_WALI_HUB",
+        labelId = "Jadwal Kerja Wali Asuh",
+        labelEn = "Wali Asuh Work Schedule",
+        groupId = "Jadwal Wali",
+        groupEn = "Schedule"
+    ),
+    FEATURE_JADWAL_MATRIKS(
+        key = "FEATURE_JADWAL_MATRIKS",
+        labelId = "Matriks Jadwal Bulanan & PDF",
+        labelEn = "Monthly Schedule Matrix & PDF",
+        groupId = "Jadwal Wali",
+        groupEn = "Schedule"
+    ),
+
     // Hubungan Orang Tua
     FEATURE_ORTU_HUB(
         key = "FEATURE_ORTU_HUB",

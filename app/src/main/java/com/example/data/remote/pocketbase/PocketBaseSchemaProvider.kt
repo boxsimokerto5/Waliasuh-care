@@ -542,6 +542,52 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("created_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_kl_school ON konseling_logs (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "wali_shift_codes",
+            description = "Master kode shift jadwal Wali Asuh yang dapat diatur per sekolah",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("code", "text"),
+                PbFieldDef("name", "text"),
+                PbFieldDef("shift_group", "text"),
+                PbFieldDef("zone_label", "text"),
+                PbFieldDef("time_range", "text"),
+                PbFieldDef("start_hour", "number"),
+                PbFieldDef("end_hour", "number"),
+                PbFieldDef("work_hours", "number"),
+                PbFieldDef("color_hex", "text"),
+                PbFieldDef("sop_notes", "text"),
+                PbFieldDef("sort_order", "number"),
+                PbFieldDef("is_active", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_wsc_school ON wali_shift_codes (school_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "wali_schedule_entries",
+            description = "Matriks jadwal kerja bulanan, penyematan tugas & izin Wali Asuh per sekolah",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("month_key", "text"),
+                PbFieldDef("wali_account_id", "number"),
+                PbFieldDef("wali_username", "text"),
+                PbFieldDef("wali_name", "text"),
+                PbFieldDef("wali_code", "text"),
+                PbFieldDef("sort_order", "number"),
+                PbFieldDef("day_codes_json", "text"),
+                PbFieldDef("day_pins_json", "text"),
+                PbFieldDef("day_leave_json", "text"),
+                PbFieldDef("updated_by", "text"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_wse_school ON wali_schedule_entries (school_id)")
         )
     )
 

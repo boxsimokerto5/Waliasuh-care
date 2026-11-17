@@ -196,6 +196,23 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-created_at"
     ): Response<PbListResponse<PbKonselingLogDto>>
 
+    // --- Jadwal Kerja Wali Asuh (Shift Codes & Matriks Bulanan) ---
+    @GET("api/collections/wali_shift_codes/records")
+    suspend fun listWaliShiftCodes(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "sort_order"
+    ): Response<PbListResponse<PbWaliShiftCodeDto>>
+
+    @GET("api/collections/wali_schedule_entries/records")
+    suspend fun listWaliScheduleEntries(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "sort_order"
+    ): Response<PbListResponse<PbWaliScheduleEntryDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

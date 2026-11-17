@@ -75,6 +75,9 @@ import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
+import com.example.data.model.WaliShiftCode
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 
@@ -144,9 +147,31 @@ fun CategoryHubOverlay(
     onOpenKonselingStudentDetail: (ChildStudent) -> Unit = {},
     onOpenKonselingHistory: (Int) -> Unit = {},
     onOpenKonselingGuide: () -> Unit = {},
-    onOpenKonselingPdfSummary: () -> Unit = {}
+    onOpenKonselingPdfSummary: () -> Unit = {},
+    jadwalMonthKey: String = WaliScheduleHelper.currentMonthKey(),
+    jadwalSelectedDay: Int = WaliScheduleHelper.currentDayOfMonth(),
+    shiftCodes: List<WaliShiftCode> = emptyList(),
+    scheduleEntries: List<WaliScheduleEntry> = emptyList(),
+    canManageSchedule: Boolean = false,
+    currentUsername: String? = null,
+    currentWaliName: String = "",
+    onChangeJadwalMonth: (String) -> Unit = {},
+    onChangeJadwalDay: (Int) -> Unit = {},
+    onOpenJadwalMatriks: () -> Unit = {},
+    onOpenJadwalPersonal: (WaliScheduleEntry) -> Unit = {},
+    onOpenPetugasJamIni: () -> Unit = {},
+    onOpenRekapIzinJadwal: () -> Unit = {},
+    onOpenKodeSopJadwal: () -> Unit = {},
+    onOpenPinTugasJadwal: () -> Unit = {},
+    onOpenManageShiftCodes: () -> Unit = {},
+    onOpenImportJadwalMatriks: () -> Unit = {},
+    onEditScheduleCell: (WaliScheduleEntry, Int) -> Unit = { _, _ -> },
+    onShareJadwalWhatsapp: () -> Unit = {},
+    onExportJadwalMatriksPdf: () -> Unit = {}
 ) {
     var lastCategory by remember { mutableStateOf(category) }
+    var jadwalSearchQuery by remember(category) { mutableStateOf("") }
+    var jadwalGroupFilter by remember(category) { mutableStateOf("ALL") }
     if (category != null) {
         lastCategory = category
     }
@@ -179,6 +204,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.ORANG_TUA -> listOf(Color(0xFF4338CA), Color(0xFF7C3AED))
             DashboardCategoryHub.TABUNGAN -> listOf(Color(0xFFB45309), Color(0xFF047857))
             DashboardCategoryHub.KONSELING -> listOf(Color(0xFF4C1D95), Color(0xFF6D28D9))
+            DashboardCategoryHub.JADWAL_WALI -> listOf(Color(0xFF0F766E), Color(0xFF0369A1))
         }
 
         val heroTitle = when (current) {
@@ -191,6 +217,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.ORANG_TUA -> if (isEn) "Parent Connect Center" else "Hubungan Orang Tua"
             DashboardCategoryHub.TABUNGAN -> if (isEn) "Private Student Savings" else "Tabungan Anak Asuh"
             DashboardCategoryHub.KONSELING -> if (isEn) "Confidential Counseling" else "Konseling Rahasia Anak"
+            DashboardCategoryHub.JADWAL_WALI -> if (isEn) "Wali Asuh Duty Roster" else "Jadwal Kerja Wali Asuh"
         }
 
         val heroSubtitle = when (current) {
@@ -254,6 +281,14 @@ fun CategoryHubOverlay(
                     "${agg.totalEntries} Catatan • ${agg.followUpCount} Pantau (Khusus Wali Asuh)"
                 }
             }
+            DashboardCategoryHub.JADWAL_WALI -> {
+                val monthEntriesCount = scheduleEntries.count { it.monthKey == jadwalMonthKey }
+                if (isEn) {
+                    "${WaliScheduleHelper.formatDateChipLabel(jadwalMonthKey, jadwalSelectedDay, true)} • $monthEntriesCount Staff"
+                } else {
+                    "${WaliScheduleHelper.formatDateChipLabel(jadwalMonthKey, jadwalSelectedDay, false)} • $monthEntriesCount Personel"
+                }
+            }
         }
 
         val heroImage = when (current) {
@@ -266,6 +301,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.ORANG_TUA -> R.drawable.img_menu_orang_tua
             DashboardCategoryHub.TABUNGAN -> R.drawable.img_menu_tabungan
             DashboardCategoryHub.KONSELING -> R.drawable.img_menu_konseling
+            DashboardCategoryHub.JADWAL_WALI -> R.drawable.img_menu_jadwal
         }
 
         val contextPillText = schoolProfile.shortName
@@ -373,6 +409,11 @@ fun CategoryHubOverlay(
                                 DashboardCategoryHub.ORANG_TUA -> if (isEn) "Pick Foster Students" else "Pilih Anak Asuh"
                                 DashboardCategoryHub.TABUNGAN -> if (isEn) "Add Savings Entry" else "Catat Titip Uang"
                                 DashboardCategoryHub.KONSELING -> if (isEn) "Record Counseling" else "Catat Konseling"
+                                DashboardCategoryHub.JADWAL_WALI -> if (canManageSchedule) {
+                                    if (isEn) "Setup Schedule / Matrix" else "Kelola Jadwal & Matriks"
+                                } else {
+                                    if (isEn) "Monthly Matrix" else "Matriks Jadwal Bulanan"
+                                }
                             }
                             Surface(
                                 shape = CircleShape,
@@ -392,6 +433,10 @@ fun CategoryHubOverlay(
                                             DashboardCategoryHub.ORANG_TUA -> onOpenPilihAnakAsuh()
                                             DashboardCategoryHub.TABUNGAN -> onOpenInputTabungan(TabunganHelper.TYPE_IN, null)
                                             DashboardCategoryHub.KONSELING -> onOpenInputKonseling(KonselingHelper.ENTRY_SESI, null)
+                                            DashboardCategoryHub.JADWAL_WALI -> {
+                                                if (canManageSchedule) onOpenImportJadwalMatriks()
+                                                else onOpenJadwalMatriks()
+                                            }
                                         }
                                     }
                                     .testTag("btn_quick_action_category_hub")
@@ -570,6 +615,34 @@ fun CategoryHubOverlay(
                                     onOpenGuideDialog = onOpenKonselingGuide,
                                     onOpenPdfSummary = onOpenKonselingPdfSummary,
                                     onOpenPilihAnakAsuh = onOpenPilihAnakAsuh
+                                )
+                                DashboardCategoryHub.JADWAL_WALI -> jadwalWaliCategoryItems(
+                                    isEn = isEn,
+                                    schoolProfile = schoolProfile,
+                                    monthKey = jadwalMonthKey,
+                                    selectedDay = jadwalSelectedDay,
+                                    shiftCodes = shiftCodes,
+                                    monthEntries = scheduleEntries.filter { it.monthKey == jadwalMonthKey },
+                                    canManageSchedule = canManageSchedule,
+                                    currentUsername = currentUsername,
+                                    currentWaliName = currentWaliName,
+                                    searchQuery = jadwalSearchQuery,
+                                    selectedGroup = jadwalGroupFilter,
+                                    onSearchChange = { jadwalSearchQuery = it },
+                                    onGroupChange = { jadwalGroupFilter = it },
+                                    onChangeMonth = onChangeJadwalMonth,
+                                    onChangeDay = onChangeJadwalDay,
+                                    onOpenMatriks = onOpenJadwalMatriks,
+                                    onOpenPersonal = onOpenJadwalPersonal,
+                                    onOpenPetugasJamIni = onOpenPetugasJamIni,
+                                    onOpenRekapIzin = onOpenRekapIzinJadwal,
+                                    onOpenKodeSop = onOpenKodeSopJadwal,
+                                    onOpenPinTugas = onOpenPinTugasJadwal,
+                                    onOpenManageShiftCodes = onOpenManageShiftCodes,
+                                    onOpenImportMatriks = onOpenImportJadwalMatriks,
+                                    onEditCell = onEditScheduleCell,
+                                    onShareDailyWhatsapp = onShareJadwalWhatsapp,
+                                    onExportMatriksPdf = onExportJadwalMatriksPdf
                                 )
                             }
                         }

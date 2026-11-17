@@ -261,14 +261,18 @@ private fun WaliAsuhCareAppContent(
     val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
     val konselingRecords by viewModel.konselingRecords.collectAsStateWithLifecycle()
     val konselingLogs by viewModel.konselingLogs.collectAsStateWithLifecycle()
+    val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
+    val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
     val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
+    val canManageMainSchedule = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.SUPERADMIN || isAnakSuperAdmin
     val dashboardModalState = rememberDashboardModalState()
     var readyMainTabunganSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
     var readyMainKonselingSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
+    var readyMainJadwalPdf by remember { mutableStateOf<java.io.File?>(null) }
 
     LaunchedEffect(
         dashboardModalState.activeCategoryHub,
@@ -300,6 +304,23 @@ private fun WaliAsuhCareAppContent(
             dashboardModalState.konselingStudentForDetail != null
         ) {
             viewModel.syncKonselingOnlineQuietly()
+        }
+    }
+    LaunchedEffect(
+        dashboardModalState.activeCategoryHub,
+        dashboardModalState.showJadwalMatriksSheet,
+        dashboardModalState.showDaftarKodeSopSheet,
+        dashboardModalState.showManageShiftCodesDialog,
+        dashboardModalState.showImportJadwalMatriksDialog,
+        schoolProfile.tenantCode
+    ) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.JADWAL_WALI ||
+            dashboardModalState.showJadwalMatriksSheet ||
+            dashboardModalState.showDaftarKodeSopSheet ||
+            dashboardModalState.showManageShiftCodesDialog ||
+            dashboardModalState.showImportJadwalMatriksDialog
+        ) {
+            viewModel.ensureSchoolShiftCodesSeeded(schoolProfile.tenantCode)
         }
     }
     val myFosterStudents = remember(students, waliName, currentUsername) {
@@ -838,6 +859,132 @@ private fun WaliAsuhCareAppContent(
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
+                },
+                jadwalMonthKey = dashboardModalState.jadwalSelectedMonthKey,
+                jadwalSelectedDay = dashboardModalState.jadwalSelectedDay,
+                shiftCodes = schoolShiftCodes,
+                scheduleEntries = schoolScheduleEntries,
+                canManageSchedule = canManageMainSchedule,
+                currentUsername = currentUsername,
+                currentWaliName = waliName,
+                onChangeJadwalMonth = { newMonth ->
+                    dashboardModalState.jadwalSelectedMonthKey = newMonth
+                    val maxD = com.example.data.model.WaliScheduleHelper.daysInMonth(newMonth)
+                    if (dashboardModalState.jadwalSelectedDay > maxD) {
+                        dashboardModalState.jadwalSelectedDay = maxD
+                    }
+                },
+                onChangeJadwalDay = { newDay ->
+                    dashboardModalState.jadwalSelectedDay = newDay
+                },
+                onOpenJadwalMatriks = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showJadwalMatriksSheet = true
+                },
+                onOpenJadwalPersonal = { entry ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.jadwalPersonalTargetEntry = entry
+                    dashboardModalState.showJadwalPersonalSheet = true
+                },
+                onOpenPetugasJamIni = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showPetugasJamIniDialog = true
+                },
+                onOpenRekapIzinJadwal = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showRekapIzinJadwalSheet = true
+                },
+                onOpenKodeSopJadwal = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showDaftarKodeSopSheet = true
+                },
+                onOpenPinTugasJadwal = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showPenyematanTugasSheet = true
+                },
+                onOpenManageShiftCodes = {
+                    TopOnAdManager.onUserActionClick(context)
+                    if (canManageMainSchedule) {
+                        dashboardModalState.showManageShiftCodesDialog = true
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Only school admin can edit shift codes." else "Hanya admin sekolah yang dapat mengatur daftar kode shift.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onOpenImportJadwalMatriks = {
+                    TopOnAdManager.onUserActionClick(context)
+                    if (canManageMainSchedule) {
+                        dashboardModalState.showImportJadwalMatriksDialog = true
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Only school admin can manage the roster." else "Hanya admin sekolah yang dapat mengatur jadwal.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onEditScheduleCell = { entry, day ->
+                    TopOnAdManager.onUserActionClick(context)
+                    if (canManageMainSchedule) {
+                        dashboardModalState.editingScheduleCellTarget = entry to day
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Schedule is managed by the school admin." else "Jadwal hanya dapat diubah oleh Admin Sekolah.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                },
+                onShareJadwalWhatsapp = {
+                    TopOnAdManager.onUserActionClick(context)
+                    val waText = com.example.data.model.WaliScheduleHelper.buildDailyWhatsappSummary(
+                        monthKey = dashboardModalState.jadwalSelectedMonthKey,
+                        day = dashboardModalState.jadwalSelectedDay,
+                        schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+                        entries = schoolScheduleEntries.filter { it.monthKey == dashboardModalState.jadwalSelectedMonthKey },
+                        shiftMap = com.example.data.model.WaliScheduleHelper.buildShiftMap(
+                            schoolShiftCodes,
+                            schoolProfile.tenantCode
+                        ),
+                        isEn = s.isEnglish
+                    )
+                    val sendIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(android.content.Intent.EXTRA_TEXT, waText)
+                        addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    runCatching {
+                        context.startActivity(
+                            android.content.Intent.createChooser(
+                                sendIntent,
+                                if (s.isEnglish) "Share Daily Roster" else "Bagikan Jadwal Harian"
+                            ).apply { addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK) }
+                        )
+                    }
+                },
+                onExportJadwalMatriksPdf = {
+                    TopOnAdManager.onUserActionClick(context)
+                    val monthEntries = schoolScheduleEntries.filter { it.monthKey == dashboardModalState.jadwalSelectedMonthKey }
+                    val pdf = com.example.util.PdfReportGenerator.generateJadwalMatriksPdf(
+                        context = context,
+                        monthKey = dashboardModalState.jadwalSelectedMonthKey,
+                        entries = monthEntries,
+                        shiftCodes = schoolShiftCodes,
+                        waliName = waliName,
+                        schoolProfile = schoolProfile
+                    )
+                    if (pdf != null) {
+                        readyMainJadwalPdf = pdf
+                    } else {
+                        android.widget.Toast.makeText(
+                            context,
+                            if (s.isEnglish) "Failed to generate duty roster PDF." else "Gagal membuat PDF matriks jadwal.",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
                 }
             )
         }
@@ -913,6 +1060,44 @@ private fun WaliAsuhCareAppContent(
                             pdfFile = pdfFile,
                             subject = if (s.isEnglish) "Confidential Counseling Recap" else "Rekap Konseling Rahasia Wali Asuh",
                             text = if (s.isEnglish) "Attached is the confidential foster student counseling recap PDF." else "Terlampir rekap konseling rahasia anak binaan Wali Asuh."
+                        )
+                    }
+                ) {
+                    Text(if (s.isEnglish) "Share PDF" else "Bagikan")
+                }
+            }
+        )
+    }
+
+    readyMainJadwalPdf?.let { pdfFile ->
+        AlertDialog(
+            onDismissRequest = { readyMainJadwalPdf = null },
+            title = { Text(if (s.isEnglish) "Duty Roster Matrix PDF Ready" else "PDF Matriks Jadwal Siap") },
+            text = {
+                Text(
+                    if (s.isEnglish) "Choose to open the monthly landscape duty roster PDF or share it."
+                    else "Pilih untuk membuka atau membagikan dokumen PDF matriks jadwal resmi bulanan."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        readyMainJadwalPdf = null
+                        com.example.util.PdfReportGenerator.openPdfFile(context, pdfFile)
+                    }
+                ) {
+                    Text(if (s.isEnglish) "Open PDF" else "Buka PDF")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        readyMainJadwalPdf = null
+                        com.example.util.PdfReportGenerator.shareJadwalPdf(
+                            context = context,
+                            pdfFile = pdfFile,
+                            subject = if (s.isEnglish) "Wali Asuh Duty Roster" else "Jadwal Resmi Wali Asuh",
+                            text = if (s.isEnglish) "Attached is the official monthly duty roster matrix PDF." else "Terlampir PDF matriks jadwal kerja Wali Asuh."
                         )
                     }
                 ) {

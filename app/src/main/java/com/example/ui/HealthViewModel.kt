@@ -34,6 +34,11 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
+import com.example.data.model.WaliShiftCode
+import com.example.data.model.LeaveDayInfo
+import com.example.data.model.PinnedTaskItem
 import com.example.data.remote.pocketbase.PbSchoolProfileDto
 import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.data.remote.pocketbase.PocketBaseSyncManager
@@ -104,7 +109,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.tabunganTransactionDao(),
             db.tabunganLogDao(),
             db.konselingRecordDao(),
-            db.konselingLogDao()
+            db.konselingLogDao(),
+            db.waliShiftCodeDao(),
+            db.waliScheduleEntryDao()
         )
     }
 
@@ -1269,6 +1276,30 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
             records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
         }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    // Multi-tenant isolated Jadwal Kerja Wali Asuh (per sekolah masing-masing):
+    val schoolShiftCodes: StateFlow<List<WaliShiftCode>> = combine(
+        repository.allWaliShiftCodes,
+        _schoolProfile
+    ) { codes, profile ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        val customForSchool = codes.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        if (customForSchool.isNotEmpty()) {
+            customForSchool.sortedWith(compareBy<WaliShiftCode> { it.sortOrder }.thenBy { it.code })
+        } else {
+            WaliScheduleHelper.defaultShiftCodes(tenant)
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val schoolScheduleEntries: StateFlow<List<WaliScheduleEntry>> = combine(
+        repository.allWaliScheduleEntries,
+        _schoolProfile
+    ) { entries, profile ->
+        val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        entries
+            .filter { it.schoolId.equals(tenant, ignoreCase = true) }
+            .sortedWith(compareBy<WaliScheduleEntry> { it.sortOrder }.thenBy { it.waliName.lowercase() })
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     fun createFastingSession(
@@ -2702,6 +2733,421 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.deleteRemoteKonselingRecord(getApplication(), record.id)
                 PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
+            }
+        }
+    }
+
+    // =========================================================================
+    // JADWAL KERJA WALI ASUH (DIATUR ADMIN SEKOLAH MASING-MASING — TANPA NOTIF)
+    // =========================================================================
+    fun canManageSchoolSchedule(): Boolean {
+        val role = _currentUserRole.value
+        return role == UserRole.ADMIN || role == UserRole.SUPERADMIN || isAnakSuperAdmin.value
+    }
+
+    private fun scheduleActorName(): String {
+        val profile = _schoolProfile.value
+        return when (_currentUserRole.value) {
+            UserRole.ADMIN -> profile.adminName.ifBlank { "Admin Sekolah" }
+            UserRole.SUPERADMIN -> "SuperAdmin"
+            else -> _waliName.value.ifBlank { "Admin Sekolah" }
+        }
+    }
+
+    fun ensureSchoolShiftCodesSeeded(schoolId: String = _schoolProfile.value.tenantCode) {
+        val tenant = schoolId.trim().ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            val existing = repository.getWaliShiftCodesBySchoolList(tenant)
+            if (existing.isEmpty()) {
+                val seeded = WaliScheduleHelper.defaultShiftCodes(tenant).map { sc ->
+                    sc.copy(id = PocketBaseSyncManager.generateCloudSafeId())
+                }
+                repository.insertAllWaliShiftCodes(seeded)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadWaliShiftCodes(getApplication(), seeded)
+                }
+            }
+        }
+    }
+
+    fun saveWaliShiftCode(
+        existing: WaliShiftCode?,
+        code: String,
+        name: String,
+        shiftGroup: String,
+        zoneLabel: String,
+        timeRange: String,
+        startHour: Int,
+        endHour: Int,
+        workHours: Int,
+        colorHex: String,
+        sopNotes: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can edit shift codes." else "Hanya admin sekolah yang boleh mengatur daftar kode shift.")
+            return
+        }
+        val cleanCode = code.trim().uppercase()
+        val cleanName = name.trim()
+        if (cleanCode.isBlank() || cleanName.isBlank()) {
+            onResult(false, if (isEn) "Shift code and name are required." else "Kode dan nama shift wajib diisi.")
+            return
+        }
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            var currentList = repository.getWaliShiftCodesBySchoolList(tenant)
+            if (currentList.isEmpty()) {
+                val seeded = WaliScheduleHelper.defaultShiftCodes(tenant).map {
+                    it.copy(id = PocketBaseSyncManager.generateCloudSafeId())
+                }
+                repository.insertAllWaliShiftCodes(seeded)
+                currentList = seeded
+            }
+            val now = System.currentTimeMillis()
+            val duplicate = currentList.firstOrNull {
+                it.code.equals(cleanCode, ignoreCase = true) && it.id != (existing?.id ?: -1L)
+            }
+            val targetId = when {
+                existing != null && existing.id > 0L -> existing.id
+                duplicate != null && duplicate.id > 0L -> duplicate.id
+                else -> PocketBaseSyncManager.generateCloudSafeId()
+            }
+            val model = WaliShiftCode(
+                id = targetId,
+                schoolId = tenant,
+                code = cleanCode,
+                name = cleanName,
+                shiftGroup = shiftGroup.trim().uppercase().ifBlank { WaliScheduleHelper.GROUP_PAGI },
+                zoneLabel = zoneLabel.trim(),
+                timeRange = timeRange.trim(),
+                startHour = startHour.coerceIn(0, 23),
+                endHour = endHour.coerceIn(0, 23),
+                workHours = workHours.coerceAtLeast(0),
+                colorHex = colorHex.trim().ifBlank { "#0284C7" },
+                sopNotes = sopNotes.trim(),
+                sortOrder = existing?.sortOrder ?: duplicate?.sortOrder ?: (currentList.size + 1),
+                isActive = true,
+                createdAt = existing?.createdAt ?: duplicate?.createdAt ?: now,
+                updatedAt = now
+            )
+            repository.insertWaliShiftCode(model)
+            onResult(true, if (isEn) "Shift code $cleanCode saved." else "Kode shift $cleanCode berhasil disimpan.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleWaliShiftCode(getApplication(), model)
+            }
+        }
+    }
+
+    fun deleteWaliShiftCode(
+        shiftCode: WaliShiftCode,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can delete shift codes." else "Hanya admin sekolah yang boleh menghapus kode shift.")
+            return
+        }
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val currentList = repository.getWaliShiftCodesBySchoolList(tenant)
+            if (currentList.isEmpty()) {
+                // Jika masih memakai default virtual, materialize dulu lalu hapus kode terpilih
+                val seeded = WaliScheduleHelper.defaultShiftCodes(tenant)
+                    .filterNot { it.code.equals(shiftCode.code, ignoreCase = true) }
+                    .map { it.copy(id = PocketBaseSyncManager.generateCloudSafeId()) }
+                repository.insertAllWaliShiftCodes(seeded)
+                onResult(true, if (isEn) "Shift code ${shiftCode.code} removed." else "Kode shift ${shiftCode.code} dihapus.")
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadWaliShiftCodes(getApplication(), seeded)
+                }
+            } else {
+                repository.deleteWaliShiftCode(shiftCode)
+                onResult(true, if (isEn) "Shift code ${shiftCode.code} deleted." else "Kode shift ${shiftCode.code} dihapus.")
+                if (!isUnitTestEnvironment() && shiftCode.id > 0L) {
+                    PocketBaseSyncManager.deleteRemoteWaliShiftCode(getApplication(), shiftCode.id)
+                }
+            }
+        }
+    }
+
+    fun resetSchoolShiftCodesToDefault(onResult: (Boolean, String) -> Unit = { _, _ -> }) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can reset shift codes." else "Hanya admin sekolah yang boleh mengatur kode shift.")
+            return
+        }
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val existing = repository.getWaliShiftCodesBySchoolList(tenant)
+            repository.deleteWaliShiftCodesBySchool(tenant)
+            val defaults = WaliScheduleHelper.defaultShiftCodes(tenant).map {
+                it.copy(id = PocketBaseSyncManager.generateCloudSafeId())
+            }
+            repository.insertAllWaliShiftCodes(defaults)
+            onResult(true, if (isEn) "Default official shift codes restored." else "Daftar kode shift resmi berhasil dipulihkan.")
+            if (!isUnitTestEnvironment()) {
+                existing.forEach { old ->
+                    if (old.id > 0L) PocketBaseSyncManager.deleteRemoteWaliShiftCode(getApplication(), old.id)
+                }
+                PocketBaseSyncManager.uploadWaliShiftCodes(getApplication(), defaults)
+            }
+        }
+    }
+
+    fun syncScheduleMembersFromWaliAccounts(
+        monthKey: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can manage the roster." else "Hanya admin sekolah yang boleh mengatur anggota jadwal.")
+            return
+        }
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val accounts = repository.getWaliAccountsBySchoolList(tenant)
+                .filter { !it.isGuruNgaji() }
+                .sortedBy { it.name.lowercase() }
+            if (accounts.isEmpty()) {
+                onResult(false, if (isEn) "No registered Wali Asuh accounts in this school yet." else "Belum ada akun Wali Asuh terdaftar di sekolah ini.")
+                return@launch
+            }
+            val existing = repository.getWaliScheduleEntriesBySchoolAndMonthList(tenant, monthKey)
+            val now = System.currentTimeMillis()
+            val actor = scheduleActorName()
+            val maxSort = existing.maxOfOrNull { it.sortOrder } ?: 0
+            var nextSort = maxSort + 1
+            val toInsert = mutableListOf<WaliScheduleEntry>()
+
+            accounts.forEach { acc ->
+                val alreadyExists = existing.any { entry ->
+                    (acc.username.isNotBlank() && entry.waliUsername.equals(acc.username, ignoreCase = true)) ||
+                        entry.waliName.equals(acc.name, ignoreCase = true)
+                }
+                if (!alreadyExists) {
+                    toInsert.add(
+                        WaliScheduleEntry(
+                            id = PocketBaseSyncManager.generateCloudSafeId(),
+                            schoolId = tenant,
+                            monthKey = monthKey,
+                            waliAccountId = acc.id,
+                            waliUsername = acc.username,
+                            waliName = acc.name,
+                            waliCode = acc.dormitory.take(1).uppercase(),
+                            sortOrder = nextSort++,
+                            updatedBy = actor,
+                            createdAt = now,
+                            updatedAt = now
+                        )
+                    )
+                }
+            }
+
+            if (toInsert.isEmpty()) {
+                onResult(true, if (isEn) "All Wali Asuh are already listed in $monthKey." else "Semua akun Wali Asuh sudah ada di jadwal bulan ini.")
+                return@launch
+            }
+            repository.insertAllWaliScheduleEntries(toInsert)
+            onResult(true, if (isEn) "Added ${toInsert.size} Wali Asuh to schedule." else "${toInsert.size} Wali Asuh ditambahkan ke jadwal.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadWaliScheduleEntries(getApplication(), toInsert)
+            }
+        }
+    }
+
+    fun addWaliScheduleMember(
+        monthKey: String,
+        waliName: String,
+        waliCode: String = "",
+        waliUsername: String = "",
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can add schedule members." else "Hanya admin sekolah yang boleh menambah personel jadwal.")
+            return
+        }
+        val cleanName = waliName.trim()
+        if (cleanName.isBlank()) {
+            onResult(false, if (isEn) "Caregiver name is required." else "Nama Wali Asuh wajib diisi.")
+            return
+        }
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val existing = repository.getWaliScheduleEntriesBySchoolAndMonthList(tenant, monthKey)
+            val matchedAcc = repository.getWaliAccountsBySchoolList(tenant).firstOrNull { acc ->
+                (waliUsername.isNotBlank() && acc.username.equals(waliUsername, ignoreCase = true)) ||
+                    acc.name.equals(cleanName, ignoreCase = true)
+            }
+            val now = System.currentTimeMillis()
+            val entry = WaliScheduleEntry(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                schoolId = tenant,
+                monthKey = monthKey,
+                waliAccountId = matchedAcc?.id ?: 0L,
+                waliUsername = waliUsername.trim().ifBlank { matchedAcc?.username.orEmpty() },
+                waliName = cleanName,
+                waliCode = waliCode.trim().uppercase(),
+                sortOrder = (existing.maxOfOrNull { it.sortOrder } ?: 0) + 1,
+                updatedBy = scheduleActorName(),
+                createdAt = now,
+                updatedAt = now
+            )
+            repository.insertWaliScheduleEntry(entry)
+            onResult(true, if (isEn) "$cleanName added to schedule." else "$cleanName berhasil ditambahkan ke jadwal.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleWaliScheduleEntry(getApplication(), entry)
+            }
+        }
+    }
+
+    fun deleteWaliScheduleMember(
+        entry: WaliScheduleEntry,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can remove schedule rows." else "Hanya admin sekolah yang boleh menghapus baris jadwal.")
+            return
+        }
+        viewModelScope.launch {
+            repository.deleteWaliScheduleEntry(entry)
+            onResult(true, if (isEn) "${entry.waliName} removed from month roster." else "${entry.waliName} dihapus dari jadwal bulan ini.")
+            if (!isUnitTestEnvironment() && entry.id > 0L) {
+                PocketBaseSyncManager.deleteRemoteWaliScheduleEntry(getApplication(), entry.id)
+            }
+        }
+    }
+
+    fun updateWaliScheduleDayCell(
+        entry: WaliScheduleEntry,
+        day: Int,
+        shiftCode: String,
+        pinsForDay: List<PinnedTaskItem>,
+        leaveForDay: LeaveDayInfo?,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can edit schedules or pin tasks." else "Hanya admin sekolah yang boleh mengubah jadwal, menyematkan tugas, atau input izin.")
+            return
+        }
+        val maxDay = WaliScheduleHelper.daysInMonth(entry.monthKey)
+        if (day !in 1..maxDay) {
+            onResult(false, if (isEn) "Invalid day for this month." else "Tanggal tidak valid pada bulan ini.")
+            return
+        }
+        viewModelScope.launch {
+            val dayCodes = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson).toMutableMap()
+            val cleanCode = shiftCode.trim().uppercase()
+            if (cleanCode.isBlank()) dayCodes.remove(day) else dayCodes[day] = cleanCode
+
+            val dayPins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson).toMutableMap()
+            val cleanPins = pinsForDay.filter { it.label.isNotBlank() }
+            if (cleanPins.isEmpty()) dayPins.remove(day) else dayPins[day] = cleanPins
+
+            val dayLeaves = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson).toMutableMap()
+            if (leaveForDay == null || leaveForDay.status.isBlank()) {
+                dayLeaves.remove(day)
+            } else {
+                dayLeaves[day] = leaveForDay
+            }
+
+            val updated = entry.copy(
+                dayCodesJson = WaliScheduleHelper.serializeDayCodes(dayCodes),
+                dayPinsJson = WaliScheduleHelper.serializeDayPins(dayPins),
+                dayLeaveJson = WaliScheduleHelper.serializeDayLeaves(dayLeaves),
+                updatedBy = scheduleActorName(),
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateWaliScheduleEntry(updated)
+            onResult(true, if (isEn) "Day $day updated for ${entry.waliName}." else "Jadwal Tgl $day untuk ${entry.waliName} disimpan.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleWaliScheduleEntry(getApplication(), updated)
+            }
+        }
+    }
+
+    fun applyShiftPatternToRow(
+        entry: WaliScheduleEntry,
+        startDay: Int,
+        patternCodes: List<String>,
+        repeatUntilEndOfMonth: Boolean = true,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can edit schedules." else "Hanya admin sekolah yang boleh mengubah jadwal.")
+            return
+        }
+        val cleanPattern = patternCodes.map { it.trim().uppercase() }.filter { it.isNotBlank() }
+        if (cleanPattern.isEmpty()) {
+            onResult(false, if (isEn) "Select at least one shift code." else "Pilih minimal satu kode shift untuk pola rotasi.")
+            return
+        }
+        viewModelScope.launch {
+            val maxDay = WaliScheduleHelper.daysInMonth(entry.monthKey)
+            val safeStart = startDay.coerceIn(1, maxDay)
+            val dayCodes = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson).toMutableMap()
+            if (repeatUntilEndOfMonth) {
+                var idx = 0
+                for (d in safeStart..maxDay) {
+                    dayCodes[d] = cleanPattern[idx % cleanPattern.size]
+                    idx++
+                }
+            } else {
+                cleanPattern.forEachIndexed { idx, code ->
+                    val d = safeStart + idx
+                    if (d <= maxDay) dayCodes[d] = code
+                }
+            }
+            val updated = entry.copy(
+                dayCodesJson = WaliScheduleHelper.serializeDayCodes(dayCodes),
+                updatedBy = scheduleActorName(),
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateWaliScheduleEntry(updated)
+            onResult(true, if (isEn) "Pattern applied to ${entry.waliName}." else "Pola rotasi berhasil diterapkan ke ${entry.waliName}.")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleWaliScheduleEntry(getApplication(), updated)
+            }
+        }
+    }
+
+    fun importScheduleMatrixCsv(
+        monthKey: String,
+        csvText: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        if (!canManageSchoolSchedule()) {
+            onResult(false, if (isEn) "Only school admin can import schedules." else "Hanya admin sekolah yang boleh mengimpor matriks jadwal.")
+            return
+        }
+        viewModelScope.launch {
+            val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val existing = repository.getWaliScheduleEntriesBySchoolAndMonthList(tenant, monthKey)
+            val accounts = repository.getWaliAccountsBySchoolList(tenant)
+            val parsed = WaliScheduleHelper.parseMatrixCsv(
+                rawText = csvText,
+                monthKey = monthKey,
+                schoolId = tenant,
+                existingEntries = existing,
+                waliAccounts = accounts,
+                updatedBy = scheduleActorName()
+            ).map { entry ->
+                if (entry.id > 0L) entry else entry.copy(id = PocketBaseSyncManager.generateCloudSafeId())
+            }
+            if (parsed.isEmpty()) {
+                onResult(false, if (isEn) "No valid schedule rows found in text/CSV." else "Tidak ditemukan baris jadwal valid. Pastikan format tabel memuat Nama dan kode shift harian.")
+                return@launch
+            }
+            repository.insertAllWaliScheduleEntries(parsed)
+            onResult(true, if (isEn) "Imported ${parsed.size} caregiver schedules for $monthKey!" else "Berhasil mengimpor ${parsed.size} jadwal Wali Asuh untuk $monthKey!")
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadWaliScheduleEntries(getApplication(), parsed)
             }
         }
     }

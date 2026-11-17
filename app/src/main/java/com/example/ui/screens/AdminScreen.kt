@@ -30,6 +30,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Casino
@@ -41,8 +45,12 @@ import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
@@ -61,6 +69,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -68,7 +77,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -103,7 +114,11 @@ import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.School
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
@@ -122,21 +137,37 @@ import com.example.data.model.FastingSession
 import com.example.data.model.MengajiHelper
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
 import com.example.ui.dialogs.CreateVisitSessionDialog
+import com.example.ui.dialogs.DaftarKodeSopSheet
 import com.example.ui.dialogs.DeleteAccountBottomSheet
+import com.example.ui.dialogs.EditJadwalSelDialog
 import com.example.ui.dialogs.EditSchoolProfileDialog
+import com.example.ui.dialogs.ImportJadwalMatriksDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
 import com.example.ui.dialogs.InputMengajiDialog
+import com.example.ui.dialogs.JadwalMatriksSheet
+import com.example.ui.dialogs.JadwalPersonalSheet
 import com.example.ui.dialogs.KartuMengajiSheet
+import com.example.ui.dialogs.ManageShiftCodesDialog
+import com.example.ui.dialogs.PenyematanTugasSheet
+import com.example.ui.dialogs.PetugasJamIniDialog
+import com.example.ui.dialogs.RekapIzinJadwalSheet
+import com.example.ui.dialogs.SchedulePinChip
 import com.example.ui.dialogs.StudentDetailDialog
+import com.example.ui.dialogs.openJadwalExternalUrl
+import com.example.ui.dialogs.parseJadwalShiftColor
+import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -165,8 +196,22 @@ fun AdminScreen(
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
+    val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
 
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    var jadwalMonthKey by remember { mutableStateOf(WaliScheduleHelper.currentMonthKey()) }
+    var jadwalSelectedDay by remember { mutableIntStateOf(WaliScheduleHelper.currentDayOfMonth()) }
+    var showJadwalMatriksSheet by remember { mutableStateOf(false) }
+    var jadwalPersonalTarget by remember { mutableStateOf<WaliScheduleEntry?>(null) }
+    var showPetugasJamIni by remember { mutableStateOf(false) }
+    var showRekapIzinJadwal by remember { mutableStateOf(false) }
+    var showDaftarKodeSop by remember { mutableStateOf(false) }
+    var showPenyematanTugas by remember { mutableStateOf(false) }
+    var showManageShiftCodes by remember { mutableStateOf(false) }
+    var showImportJadwalMatriks by remember { mutableStateOf(false) }
+    var editingJadwalCellTarget by remember { mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null) }
+    var readyAdminJadwalPdf by remember { mutableStateOf<File?>(null) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showImportStudentsDialog by remember { mutableStateOf(false) }
@@ -229,6 +274,26 @@ fun AdminScreen(
                     .thenByDescending { it.monthYear }
                     .thenByDescending { it.createdAt }
             )
+    }
+    val jadwalMonthEntries = remember(schoolScheduleEntries, activeSchoolCode, jadwalMonthKey) {
+        schoolScheduleEntries
+            .filter {
+                it.schoolId.equals(activeSchoolCode, ignoreCase = true) &&
+                    it.monthKey == jadwalMonthKey
+            }
+            .sortedWith(compareBy<WaliScheduleEntry> { it.sortOrder }.thenBy { it.waliName.lowercase() })
+    }
+
+    LaunchedEffect(
+        selectedAdminTab,
+        activeSchoolCode,
+        showJadwalMatriksSheet,
+        showManageShiftCodes,
+        showImportJadwalMatriks
+    ) {
+        if (selectedAdminTab == 4 || showJadwalMatriksSheet || showManageShiftCodes || showImportJadwalMatriks) {
+            viewModel.ensureSchoolShiftCodesSeeded(activeSchoolCode)
+        }
     }
 
     val exportStudentsCsvLauncher = rememberLauncherForActivityResult(
@@ -503,10 +568,11 @@ fun AdminScreen(
                         0 -> showAddStudentDialog = true
                         1 -> showAddDialog = true
                         2 -> showCreateFastingSessionDialog = true
-                        else -> {
+                        3 -> {
                             visitSessionToEdit = null
                             showCreateVisitSessionDialog = true
                         }
+                        else -> showImportJadwalMatriks = true
                     }
                 },
                 containerColor = WaliPrimary,
@@ -523,12 +589,14 @@ fun AdminScreen(
                             0 -> Icons.Default.PersonAdd
                             2 -> Icons.Default.EventNote
                             3 -> Icons.Default.CalendarMonth
+                            4 -> Icons.Default.TableChart
                             else -> Icons.Default.Add
                         },
                         contentDescription = when (selectedAdminTab) {
                             0 -> if (isEn) "Add Student" else "Tambah Siswa"
                             2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
                             3 -> if (isEn) "Create Visit Session" else "Buat Sesi Kunjungan"
+                            4 -> if (isEn) "Manage Roster" else "Atur Matriks Jadwal"
                             else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
                         },
                         modifier = Modifier.size(20.dp)
@@ -539,6 +607,7 @@ fun AdminScreen(
                             0 -> if (isEn) "Add Student" else "Tambah Siswa"
                             2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
                             3 -> if (isEn) "Create Visit Session" else "Buat Kunjungan"
+                            4 -> if (isEn) "Manage Roster" else "Atur Jadwal"
                             else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
                         },
                         fontWeight = FontWeight.Bold,
@@ -958,6 +1027,28 @@ fun AdminScreen(
                                 }
                             },
                             modifier = Modifier.testTag("tab_admin_visit")
+                        )
+                        Tab(
+                            selected = selectedAdminTab == 4,
+                            onClick = { selectedAdminTab = 4 },
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.TableChart,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isEn) "Roster (${jadwalMonthEntries.size})" else "Jadwal (${jadwalMonthEntries.size})",
+                                        fontSize = 11.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        fontWeight = if (selectedAdminTab == 4) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                }
+                            },
+                            modifier = Modifier.testTag("tab_admin_jadwal")
                         )
                     }
                 }
@@ -1561,7 +1652,7 @@ fun AdminScreen(
                         }
                     }
                 }
-                } else {
+                } else if (selectedAdminTab == 3) {
                     // ==========================================
                     // TAB 3: KELOLA SESI KUNJUNGAN & KECAMATAN PESERTA
                     // ==========================================
@@ -1831,6 +1922,509 @@ fun AdminScreen(
                                                     tint = MaterialTheme.colorScheme.error,
                                                     modifier = Modifier.size(18.dp)
                                                 )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // ==========================================
+                    // TAB 4: KELOLA JADWAL WALI ASUH & KODE SHIFT SEKOLAH
+                    // ==========================================
+                    val adminShiftMap = WaliScheduleHelper.buildShiftMap(schoolShiftCodes, activeSchoolCode)
+                    val adminDaysInMonth = WaliScheduleHelper.daysInMonth(jadwalMonthKey)
+                    val adminSafeDay = jadwalSelectedDay.coerceIn(1, adminDaysInMonth)
+                    val adminActorName = schoolProfile.adminName.ifBlank { waliName.ifBlank { "Admin Sekolah" } }
+
+                    item(key = "admin_jadwal_header") {
+                        ElevatedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                        Icon(
+                                            imageVector = Icons.Default.TableChart,
+                                            contentDescription = null,
+                                            tint = Color(0xFF0F766E),
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = if (isEn) "Wali Asuh Duty Roster" else "Jadwal Wali Asuh Sekolah",
+                                                fontSize = 14.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = if (isEn) {
+                                                    "School-only management • Shift codes, pins & matrix PDF (no alarms)"
+                                                } else {
+                                                    "Dikelola Admin Sekolah • Kode shift & pin tugas bisa disesuaikan"
+                                                },
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        IconButton(
+                                            onClick = {
+                                                jadwalMonthKey = WaliScheduleHelper.shiftMonth(jadwalMonthKey, -1)
+                                                val maxD = WaliScheduleHelper.daysInMonth(jadwalMonthKey)
+                                                if (jadwalSelectedDay > maxD) jadwalSelectedDay = maxD
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                                                contentDescription = if (isEn) "Previous Month" else "Bulan Sebelumnya",
+                                                tint = Color(0xFF0F766E)
+                                            )
+                                        }
+                                        Text(
+                                            text = WaliScheduleHelper.formatMonthTitle(jadwalMonthKey, isEn),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0F766E)
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                jadwalMonthKey = WaliScheduleHelper.shiftMonth(jadwalMonthKey, 1)
+                                                val maxD = WaliScheduleHelper.daysInMonth(jadwalMonthKey)
+                                                if (jadwalSelectedDay > maxD) jadwalSelectedDay = maxD
+                                            },
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                                contentDescription = if (isEn) "Next Month" else "Bulan Berikutnya",
+                                                tint = Color(0xFF0F766E)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                // Strip Pilih Tanggal 1..daysInMonth
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(adminDaysInMonth) { idx ->
+                                        val dayNum = idx + 1
+                                        val isSel = dayNum == adminSafeDay
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (isSel) Color(0xFF0F766E) else Color(0xFFF1F5F9),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (isSel) Color(0xFF0F766E) else Color(0xFFCBD5E1)
+                                            ),
+                                            modifier = Modifier
+                                                .widthIn(min = 48.dp)
+                                                .clickable { jadwalSelectedDay = dayNum }
+                                        ) {
+                                            Column(
+                                                horizontalAlignment = Alignment.CenterHorizontally,
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(
+                                                    text = WaliScheduleHelper.dayOfWeekShort(jadwalMonthKey, dayNum, isEn),
+                                                    fontSize = 9.5.sp,
+                                                    color = if (isSel) Color.White.copy(alpha = 0.9f) else Color(0xFF64748B)
+                                                )
+                                                Text(
+                                                    text = dayNum.toString(),
+                                                    fontSize = 12.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isSel) Color.White else Color(0xFF0F172A)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Barisan Tombol Kelola Admin
+                                @OptIn(ExperimentalLayoutApi::class)
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Button(
+                                        onClick = { showJadwalMatriksSheet = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_jadwal_matriks")
+                                    ) {
+                                        Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Full Matrix" else "Matriks Lengkap", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Button(
+                                        onClick = { showManageShiftCodes = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_manage_shift_codes")
+                                    ) {
+                                        Icon(Icons.Default.Tune, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Shift Codes" else "Kode Shift (${schoolShiftCodes.size})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showImportJadwalMatriks = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_import_jadwal")
+                                    ) {
+                                        Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0F766E))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Roster / Pattern / CSV" else "Personel / Pola / CSV", fontSize = 11.5.sp, color = Color(0xFF0F766E), fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showPenyematanTugas = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_pin_tugas")
+                                    ) {
+                                        Icon(Icons.Default.PushPin, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF4338CA))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Pinned Tasks" else "Pin Tugas", fontSize = 11.5.sp, color = Color(0xFF4338CA), fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = { showPetugasJamIni = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_petugas_jam_ini")
+                                    ) {
+                                        Icon(Icons.Default.AccessTime, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0284C7))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Active Now" else "Jam Ini", fontSize = 11.5.sp, color = Color(0xFF0284C7), fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            val pdf = PdfReportGenerator.generateJadwalMatriksPdf(
+                                                context = context,
+                                                monthKey = jadwalMonthKey,
+                                                entries = jadwalMonthEntries,
+                                                shiftCodes = schoolShiftCodes,
+                                                waliName = adminActorName,
+                                                schoolProfile = schoolProfile
+                                            )
+                                            if (pdf != null) {
+                                                readyAdminJadwalPdf = pdf
+                                            } else {
+                                                Toast.makeText(
+                                                    context,
+                                                    if (isEn) "Failed to generate duty roster PDF." else "Gagal membuat PDF matriks jadwal.",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_export_jadwal_pdf")
+                                    ) {
+                                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFFB91C1C))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Matrix PDF" else "PDF Matriks", fontSize = 11.5.sp, color = Color(0xFFB91C1C), fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            val waText = WaliScheduleHelper.buildDailyWhatsappSummary(
+                                                monthKey = jadwalMonthKey,
+                                                day = adminSafeDay,
+                                                schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+                                                entries = jadwalMonthEntries,
+                                                shiftMap = adminShiftMap,
+                                                isEn = isEn
+                                            )
+                                            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                                                type = "text/plain"
+                                                putExtra(Intent.EXTRA_TEXT, waText)
+                                                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            }
+                                            runCatching {
+                                                context.startActivity(
+                                                    Intent.createChooser(
+                                                        sendIntent,
+                                                        if (isEn) "Share Daily Roster" else "Bagikan Jadwal Harian"
+                                                    ).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                                                )
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_share_jadwal_wa")
+                                    ) {
+                                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF15803D))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text("WhatsApp", fontSize = 11.5.sp, color = Color(0xFF15803D), fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Rekan Izin Banner
+                    val adminLeavesToday = jadwalMonthEntries.mapNotNull { entry ->
+                        val leave = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[adminSafeDay]
+                        val code = WaliScheduleHelper.normalizeCode(WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[adminSafeDay].orEmpty())
+                        if (leave != null || code == "IZIN" || code == "C") entry to leave else null
+                    }
+                    if (adminLeavesToday.isNotEmpty()) {
+                        item(key = "admin_jadwal_izin_banner") {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFFFF1F2),
+                                border = BorderStroke(1.dp, Color(0xFFFDA4AF)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "Leave / Sick Today (${adminLeavesToday.size}):" else "Izin / Sakit Hari Ini (${adminLeavesToday.size}):",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFBE123C)
+                                        )
+                                        TextButton(onClick = { showRekapIzinJadwal = true }) {
+                                            Text(if (isEn) "View Recap" else "Rekap Izin", fontSize = 11.sp, color = Color(0xFFBE123C))
+                                        }
+                                    }
+                                    adminLeavesToday.forEach { (entry, leave) ->
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${entry.waliName} (${leave?.status ?: "IZIN"})",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            if (leave != null && leave.driveUrl.isNotBlank()) {
+                                                TextButton(onClick = { openJadwalExternalUrl(context, leave.driveUrl, isEn) }) {
+                                                    Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp), tint = Color(0xFF047857))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(if (isEn) "Drive" else "Buka Drive", fontSize = 11.sp, color = Color(0xFF047857))
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if (jadwalMonthEntries.isEmpty()) {
+                        item(key = "admin_jadwal_empty") {
+                            ElevatedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(20.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        text = if (isEn) {
+                                            "No roster personnel listed for ${WaliScheduleHelper.formatMonthTitle(jadwalMonthKey, true)} yet."
+                                        } else {
+                                            "Belum ada daftar personel jadwal pada ${WaliScheduleHelper.formatMonthTitle(jadwalMonthKey, false)}."
+                                        },
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Text(
+                                        text = if (isEn) {
+                                            "Pull all registered Wali Asuh accounts from this school automatically or paste a monthly CSV matrix."
+                                        } else {
+                                            "Tarik otomatis seluruh akun Wali Asuh sekolah ini atau tempel matriks CSV bulanan agar langsung terisi."
+                                        },
+                                        fontSize = 11.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Button(
+                                            onClick = {
+                                                viewModel.syncScheduleMembersFromWaliAccounts(jadwalMonthKey) { _, msg ->
+                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                            modifier = Modifier.testTag("btn_admin_sync_wali_jadwal")
+                                        ) {
+                                            Icon(Icons.Default.CloudSync, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(if (isEn) "Sync Wali Asuh" else "Tarik Akun Wali", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                        OutlinedButton(onClick = { showImportJadwalMatriks = true }) {
+                                            Text(if (isEn) "Manual / CSV" else "Manual / CSV", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        val groupSections = listOf(
+                            Triple(WaliScheduleHelper.GROUP_PAGI, if (isEn) "Morning Shift (Pagi)" else "Jaga Pagi (P1–P5)", Color(0xFF0284C7)),
+                            Triple(WaliScheduleHelper.GROUP_SORE, if (isEn) "Afternoon Shift (Sore)" else "Jaga Sore (S)", Color(0xFFD97706)),
+                            Triple(WaliScheduleHelper.GROUP_MALAM, if (isEn) "Night Shift (Malam)" else "Jaga Malam (M)", Color(0xFF7C3AED)),
+                            Triple(WaliScheduleHelper.GROUP_LEPAS, if (isEn) "Off / Leave / Holiday" else "Lepas, Libur & Izin", Color(0xFF0D9488)),
+                            Triple("UNASSIGNED", if (isEn) "Unassigned on This Day" else "Belum Diatur di Tanggal Ini", Color(0xFF64748B))
+                        )
+                        items(groupSections, key = { "admin_jadwal_group_${it.first}" }) { (groupKey, groupTitle, groupAccent) ->
+                            val matchingEntries = jadwalMonthEntries.filter { entry ->
+                                val rawCode = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[adminSafeDay].orEmpty()
+                                val norm = WaliScheduleHelper.normalizeCode(rawCode)
+                                when (groupKey) {
+                                    "UNASSIGNED" -> norm.isBlank()
+                                    WaliScheduleHelper.GROUP_LEPAS -> {
+                                        val grp = WaliScheduleHelper.resolveShiftGroup(norm, adminShiftMap)
+                                        norm.isNotBlank() && (grp == WaliScheduleHelper.GROUP_LEPAS || grp == WaliScheduleHelper.GROUP_IZIN)
+                                    }
+                                    else -> norm.isNotBlank() && WaliScheduleHelper.resolveShiftGroup(norm, adminShiftMap) == groupKey
+                                }
+                            }
+                            if (matchingEntries.isNotEmpty()) {
+                                ElevatedCard(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = groupTitle,
+                                                fontSize = 13.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = groupAccent
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = groupAccent.copy(alpha = 0.14f)
+                                            ) {
+                                                Text(
+                                                    text = if (isEn) "${matchingEntries.size} Staff" else "${matchingEntries.size} Org",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = groupAccent,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
+
+                                        matchingEntries.forEach { entry ->
+                                            val dayCodesMap = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)
+                                            val dayPinsMap = WaliScheduleHelper.parseDayPins(entry.dayPinsJson)
+                                            val code = WaliScheduleHelper.normalizeCode(dayCodesMap[adminSafeDay].orEmpty())
+                                            val shiftObj = adminShiftMap[code]
+                                            val pins = dayPinsMap[adminSafeDay].orEmpty()
+                                            val chipColor = if (shiftObj != null) parseJadwalShiftColor(shiftObj.colorHex, groupAccent) else Color(0xFF94A3B8)
+
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = Color(0xFFF8FAFC),
+                                                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable { editingJadwalCellTarget = entry to adminSafeDay }
+                                                    .testTag("admin_jadwal_row_${entry.id}")
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(10.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            Text(
+                                                                text = entry.waliName,
+                                                                fontSize = 13.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                            if (shiftObj != null) {
+                                                                Text(
+                                                                    text = listOfNotNull(
+                                                                        shiftObj.zoneLabel.takeIf { it.isNotBlank() },
+                                                                        shiftObj.timeRange.takeIf { it.isNotBlank() }
+                                                                    ).joinToString(" • "),
+                                                                    fontSize = 10.5.sp,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                                )
+                                                            }
+                                                        }
+                                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                            Surface(
+                                                                shape = RoundedCornerShape(8.dp),
+                                                                color = chipColor
+                                                            ) {
+                                                                Text(
+                                                                    text = code.ifBlank { "+" },
+                                                                    fontSize = 11.5.sp,
+                                                                    fontWeight = FontWeight.ExtraBold,
+                                                                    color = Color.White,
+                                                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                                                )
+                                                            }
+                                                            Icon(
+                                                                imageVector = Icons.Default.Edit,
+                                                                contentDescription = if (isEn) "Edit Shift Cell" else "Ubah Shift & Pin",
+                                                                tint = groupAccent,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                    if (pins.isNotEmpty()) {
+                                                        @OptIn(ExperimentalLayoutApi::class)
+                                                        FlowRow(
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                                        ) {
+                                                            pins.forEach { pin ->
+                                                                SchedulePinChip(pin = pin)
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -2465,6 +3059,242 @@ fun AdminScreen(
                         },
                         Toast.LENGTH_LONG
                     ).show()
+                }
+            }
+        )
+    }
+
+    // =========================================================================
+    // DIALOG & SHEET JADWAL KERJA WALI ASUH (KHUSUS ADMIN SEKOLAH)
+    // =========================================================================
+    if (showJadwalMatriksSheet) {
+        JadwalMatriksSheet(
+            monthKey = jadwalMonthKey,
+            entries = jadwalMonthEntries,
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            canManageSchedule = true,
+            actorName = schoolProfile.adminName.ifBlank { waliName.ifBlank { "Admin Sekolah" } },
+            onChangeMonth = { newMonth ->
+                jadwalMonthKey = newMonth
+                val maxD = WaliScheduleHelper.daysInMonth(newMonth)
+                if (jadwalSelectedDay > maxD) jadwalSelectedDay = maxD
+            },
+            onSelectCellToEdit = { entry, day ->
+                editingJadwalCellTarget = entry to day
+            },
+            onOpenPersonal = { entry ->
+                jadwalPersonalTarget = entry
+            },
+            onOpenImportDialog = { showImportJadwalMatriks = true },
+            onDismiss = { showJadwalMatriksSheet = false }
+        )
+    }
+
+    jadwalPersonalTarget?.let { rawTarget ->
+        val liveEntry = jadwalMonthEntries.firstOrNull { it.id == rawTarget.id } ?: rawTarget
+        JadwalPersonalSheet(
+            entry = liveEntry,
+            monthKey = jadwalMonthKey,
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            canManageSchedule = true,
+            onEditDay = { day ->
+                editingJadwalCellTarget = liveEntry to day
+            },
+            onDismiss = { jadwalPersonalTarget = null }
+        )
+    }
+
+    if (showPetugasJamIni) {
+        PetugasJamIniDialog(
+            monthKey = jadwalMonthKey,
+            day = jadwalSelectedDay,
+            entries = jadwalMonthEntries,
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            onDismiss = { showPetugasJamIni = false }
+        )
+    }
+
+    if (showRekapIzinJadwal) {
+        RekapIzinJadwalSheet(
+            monthKey = jadwalMonthKey,
+            entries = jadwalMonthEntries,
+            canManageSchedule = true,
+            onEditCell = { entry, day ->
+                editingJadwalCellTarget = entry to day
+            },
+            onDismiss = { showRekapIzinJadwal = false }
+        )
+    }
+
+    if (showDaftarKodeSop) {
+        DaftarKodeSopSheet(
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            canManageSchedule = true,
+            onOpenManageShiftCodes = { showManageShiftCodes = true },
+            onDismiss = { showDaftarKodeSop = false }
+        )
+    }
+
+    if (showPenyematanTugas) {
+        PenyematanTugasSheet(
+            monthKey = jadwalMonthKey,
+            selectedDay = jadwalSelectedDay,
+            entries = jadwalMonthEntries,
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            canManageSchedule = true,
+            onEditCell = { entry, day ->
+                editingJadwalCellTarget = entry to day
+            },
+            onDismiss = { showPenyematanTugas = false }
+        )
+    }
+
+    editingJadwalCellTarget?.let { (rawEntry, targetDay) ->
+        val liveEntry = jadwalMonthEntries.firstOrNull { it.id == rawEntry.id } ?: rawEntry
+        EditJadwalSelDialog(
+            entry = liveEntry,
+            day = targetDay,
+            monthKey = jadwalMonthKey,
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            onSave = { code, pins, leave ->
+                viewModel.updateWaliScheduleDayCell(
+                    entry = liveEntry,
+                    day = targetDay,
+                    shiftCode = code,
+                    pinsForDay = pins,
+                    leaveForDay = leave
+                ) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) editingJadwalCellTarget = null
+                }
+            },
+            onOpenPatternEditor = {
+                editingJadwalCellTarget = null
+                showImportJadwalMatriks = true
+            },
+            onDismiss = { editingJadwalCellTarget = null }
+        )
+    }
+
+    if (showManageShiftCodes) {
+        ManageShiftCodesDialog(
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            onSaveCode = { existing, code, name, group, zone, timeRange, startH, endH, workH, hex, sop ->
+                viewModel.saveWaliShiftCode(
+                    existing = existing,
+                    code = code,
+                    name = name,
+                    shiftGroup = group,
+                    zoneLabel = zone,
+                    timeRange = timeRange,
+                    startHour = startH,
+                    endHour = endH,
+                    workHours = workH,
+                    colorHex = hex,
+                    sopNotes = sop
+                ) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDeleteCode = { sc ->
+                viewModel.deleteWaliShiftCode(sc) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onResetDefault = {
+                viewModel.resetSchoolShiftCodesToDefault { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { showManageShiftCodes = false }
+        )
+    }
+
+    if (showImportJadwalMatriks) {
+        ImportJadwalMatriksDialog(
+            monthKey = jadwalMonthKey,
+            entries = jadwalMonthEntries,
+            shiftCodes = schoolShiftCodes,
+            schoolProfile = schoolProfile,
+            onSyncWaliAccounts = {
+                viewModel.syncScheduleMembersFromWaliAccounts(jadwalMonthKey) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onAddManualMember = { name, code ->
+                viewModel.addWaliScheduleMember(
+                    monthKey = jadwalMonthKey,
+                    waliName = name,
+                    waliCode = code
+                ) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDeleteMember = { entry ->
+                viewModel.deleteWaliScheduleMember(entry) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onApplyPattern = { entry, startDay, pattern, repeat ->
+                viewModel.applyShiftPatternToRow(
+                    entry = entry,
+                    startDay = startDay,
+                    patternCodes = pattern,
+                    repeatUntilEndOfMonth = repeat
+                ) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onImportCsv = { csv ->
+                viewModel.importScheduleMatrixCsv(jadwalMonthKey, csv) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) showImportJadwalMatriks = false
+                }
+            },
+            onDismiss = { showImportJadwalMatriks = false }
+        )
+    }
+
+    readyAdminJadwalPdf?.let { pdfFile ->
+        AlertDialog(
+            onDismissRequest = { readyAdminJadwalPdf = null },
+            title = { Text(if (isEn) "Duty Roster Matrix PDF Ready" else "PDF Matriks Jadwal Siap") },
+            text = {
+                Text(
+                    if (isEn) "Choose to open the monthly landscape duty roster PDF or share it."
+                    else "Pilih untuk membuka atau membagikan dokumen PDF matriks jadwal resmi bulanan."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        readyAdminJadwalPdf = null
+                        PdfReportGenerator.openPdfFile(context, pdfFile)
+                    }
+                ) {
+                    Text(if (isEn) "Open PDF" else "Buka PDF")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        readyAdminJadwalPdf = null
+                        PdfReportGenerator.shareJadwalPdf(
+                            context = context,
+                            pdfFile = pdfFile,
+                            subject = if (isEn) "Wali Asuh Duty Roster" else "Jadwal Resmi Wali Asuh",
+                            text = if (isEn) "Attached is the official monthly duty roster matrix PDF." else "Terlampir PDF matriks jadwal kerja Wali Asuh."
+                        )
+                    }
+                ) {
+                    Text(if (isEn) "Share PDF" else "Bagikan")
                 }
             }
         )

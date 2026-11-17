@@ -13,6 +13,7 @@ enum class DashboardIconKey(val key: String) {
     MENGAJI("MENGAJI"),
     TABUNGAN("TABUNGAN"),
     KONSELING("KONSELING"),
+    JADWAL_WALI("JADWAL_WALI"),
     KLAIM_ANAK_ASUH("KLAIM_ANAK_ASUH");
 
     companion object {

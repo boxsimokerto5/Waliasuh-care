@@ -95,6 +95,7 @@ enum class TourTargetId {
     ICON_MENGAJI,
     ICON_TABUNGAN,
     ICON_KONSELING,
+    ICON_JADWAL_WALI,
     TOUR_REPLAY_BUTTON
 }
 
@@ -109,6 +110,7 @@ fun DashboardIconKey.toTourTargetId(): TourTargetId = when (this) {
     DashboardIconKey.MENGAJI -> TourTargetId.ICON_MENGAJI
     DashboardIconKey.TABUNGAN -> TourTargetId.ICON_TABUNGAN
     DashboardIconKey.KONSELING -> TourTargetId.ICON_KONSELING
+    DashboardIconKey.JADWAL_WALI -> TourTargetId.ICON_JADWAL_WALI
     DashboardIconKey.KLAIM_ANAK_ASUH -> TourTargetId.ICON_KLAIM_ANAK_ASUH
 }
 
@@ -310,6 +312,19 @@ fun buildDashboardTourSteps(isEn: Boolean): List<DashboardTourStep> {
             accentColor = Color(0xFF6D28D9),
             iconRes = R.drawable.img_menu_konseling,
             dashboardIconKey = DashboardIconKey.KONSELING
+        ),
+        DashboardTourStep(
+            targetId = TourTargetId.ICON_JADWAL_WALI,
+            chapter = if (isEn) "Roster" else "Jadwal",
+            title = if (isEn) "Wali Asuh Duty Schedule" else "Jadwal Kerja Wali Asuh",
+            description = if (isEn) {
+                "View daily grouped shifts, pinned tasks & health facility duties, monthly matrix & official PDF export."
+            } else {
+                "Cek piket harian, pin tugas & faskes, petugas jam aktif, matriks bulanan hingga ekspor PDF resmi."
+            },
+            accentColor = Color(0xFF0369A1),
+            iconRes = R.drawable.img_menu_jadwal,
+            dashboardIconKey = DashboardIconKey.JADWAL_WALI
         ),
         DashboardTourStep(
             targetId = TourTargetId.TOUR_REPLAY_BUTTON,

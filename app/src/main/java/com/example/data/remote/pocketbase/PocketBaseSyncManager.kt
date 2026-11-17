@@ -33,6 +33,8 @@ import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliShiftCode
 import com.example.data.repository.HealthRepository
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
@@ -1328,6 +1330,83 @@ object PocketBaseSyncManager {
             }
         }
 
+    // --- Jadwal Kerja Wali Asuh (Shift Codes & Matriks Bulanan) ---
+    suspend fun uploadSingleWaliShiftCode(context: Context, code: WaliShiftCode) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbWaliShiftCodeDto.fromDomain(code)
+                upsertSingleDto(service, "wali_shift_codes", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleWaliShiftCode ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadWaliShiftCodes(context: Context, codes: List<WaliShiftCode>) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context) || codes.isEmpty()) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val pairs = codes.map { c ->
+                    val dto = PbWaliShiftCodeDto.fromDomain(c)
+                    dto.id!! to dto
+                }
+                upsertBatchOrFallback(service, "wali_shift_codes", pairs)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadWaliShiftCodes ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteWaliShiftCode(context: Context, shiftCodeId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("wali_shift_codes", PocketBaseIdCodec.toPbId(shiftCodeId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteWaliShiftCode ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleWaliScheduleEntry(context: Context, entry: WaliScheduleEntry) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbWaliScheduleEntryDto.fromDomain(entry)
+                upsertSingleDto(service, "wali_schedule_entries", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleWaliScheduleEntry ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadWaliScheduleEntries(context: Context, entries: List<WaliScheduleEntry>) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context) || entries.isEmpty()) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val pairs = entries.map { e ->
+                    val dto = PbWaliScheduleEntryDto.fromDomain(e)
+                    dto.id!! to dto
+                }
+                upsertBatchOrFallback(service, "wali_schedule_entries", pairs)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadWaliScheduleEntries ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteWaliScheduleEntry(context: Context, entryId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("wali_schedule_entries", PocketBaseIdCodec.toPbId(entryId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteWaliScheduleEntry ke PocketBase", e)
+            }
+        }
+
     /**
      * Menghapus seluruh data satu tenant sekolah dari PocketBase saat akun sekolah dihapus permanen.
      */
@@ -1336,6 +1415,8 @@ object PocketBaseSyncManager {
             if (!PocketBaseConfig.isConfigured(context) || schoolId.isBlank()) return@withContext
             val filter = buildSchoolFilter(schoolId)
             val service = PocketBaseClient.getService(context) ?: return@withContext
+            runCatching { deleteCollectionByFilter(service, "wali_schedule_entries", filter) }
+            runCatching { deleteCollectionByFilter(service, "wali_shift_codes", filter) }
             runCatching { deleteCollectionByFilter(service, "konseling_logs", filter) }
             runCatching { deleteCollectionByFilter(service, "konseling_records", filter) }
             runCatching { deleteCollectionByFilter(service, "tabungan_logs", filter) }
@@ -1686,6 +1767,78 @@ object PocketBaseSyncManager {
                 dto.id!! to dto
             }
             upsertBatchOrFallback(service, "konseling_records", pairs)
+        }
+    }
+
+    private suspend fun syncWaliShiftCodesMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localCodes = repository.getWaliShiftCodesBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listWaliShiftCodes(page = page, perPage = 500, filter = filter)
+        }
+        val remoteCodes = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+
+        val localById = localCodes.associateBy { it.id }
+        val remoteById = remoteCodes.associateBy { it.id }
+
+        val toInsertLocal = remoteCodes.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllWaliShiftCodes(toInsertLocal)
+        }
+
+        val toPushRemote = localCodes.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { c ->
+                val dto = PbWaliShiftCodeDto.fromDomain(c)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "wali_shift_codes", pairs)
+        }
+    }
+
+    private suspend fun syncWaliScheduleEntriesMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localEntries = repository.getWaliScheduleEntriesBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listWaliScheduleEntries(page = page, perPage = 500, filter = filter)
+        }
+        val remoteEntries = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+
+        val localById = localEntries.associateBy { it.id }
+        val remoteById = remoteEntries.associateBy { it.id }
+
+        val toInsertLocal = remoteEntries.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllWaliScheduleEntries(toInsertLocal)
+        }
+
+        val toPushRemote = localEntries.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { e ->
+                val dto = PbWaliScheduleEntryDto.fromDomain(e)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "wali_schedule_entries", pairs)
         }
     }
 
@@ -2386,6 +2539,12 @@ object PocketBaseSyncManager {
                     .map { it.recordId }
                     .toSet()
                 syncKonselingRecordsMerged(service, cleanSchoolId, filter, repository, deletedKonsIds)
+            }
+
+            // 12. Sinkronkan Jadwal Kerja Wali Asuh (wali_shift_codes & wali_schedule_entries)
+            runCatching {
+                syncWaliShiftCodesMerged(service, cleanSchoolId, filter, repository)
+                syncWaliScheduleEntriesMerged(service, cleanSchoolId, filter, repository)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())

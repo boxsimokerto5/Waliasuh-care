@@ -26,6 +26,8 @@ import com.example.data.dao.KonselingLogDao
 import com.example.data.dao.KonselingRecordDao
 import com.example.data.dao.TabunganLogDao
 import com.example.data.dao.TabunganTransactionDao
+import com.example.data.dao.WaliScheduleEntryDao
+import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -39,6 +41,8 @@ import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliShiftCode
 
 class HealthRepository(
     private val studentDao: ChildStudentDao,
@@ -58,7 +62,9 @@ class HealthRepository(
     private val tabunganTransactionDao: TabunganTransactionDao? = null,
     private val tabunganLogDao: TabunganLogDao? = null,
     private val konselingRecordDao: KonselingRecordDao? = null,
-    private val konselingLogDao: KonselingLogDao? = null
+    private val konselingLogDao: KonselingLogDao? = null,
+    private val waliShiftCodeDao: WaliShiftCodeDao? = null,
+    private val waliScheduleEntryDao: WaliScheduleEntryDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -87,6 +93,10 @@ class HealthRepository(
         konselingRecordDao?.getAllRecords() ?: emptyFlow()
     val allKonselingLogs: Flow<List<KonselingLog>> =
         konselingLogDao?.getAllLogs() ?: emptyFlow()
+    val allWaliShiftCodes: Flow<List<WaliShiftCode>> =
+        waliShiftCodeDao?.getAllShiftCodes() ?: emptyFlow()
+    val allWaliScheduleEntries: Flow<List<WaliScheduleEntry>> =
+        waliScheduleEntryDao?.getAllScheduleEntries() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -597,5 +607,68 @@ class HealthRepository(
 
     suspend fun deleteKonselingLogsBySchool(schoolId: String) {
         konselingLogDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Jadwal Kerja Wali Asuh (Shift Codes & Schedule Entries) ---
+    suspend fun insertWaliShiftCode(shiftCode: WaliShiftCode): Long =
+        waliShiftCodeDao?.insert(shiftCode) ?: 0L
+
+    suspend fun insertAllWaliShiftCodes(shiftCodes: List<WaliShiftCode>) {
+        waliShiftCodeDao?.insertAll(shiftCodes)
+    }
+
+    suspend fun updateWaliShiftCode(shiftCode: WaliShiftCode) {
+        waliShiftCodeDao?.update(shiftCode)
+    }
+
+    suspend fun deleteWaliShiftCode(shiftCode: WaliShiftCode) {
+        waliShiftCodeDao?.delete(shiftCode)
+    }
+
+    suspend fun deleteWaliShiftCodeById(id: Long) {
+        waliShiftCodeDao?.deleteById(id)
+    }
+
+    suspend fun getWaliShiftCodesBySchoolList(schoolId: String): List<WaliShiftCode> =
+        waliShiftCodeDao?.getShiftCodesBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteWaliShiftCodesBySchool(schoolId: String) {
+        waliShiftCodeDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertWaliScheduleEntry(entry: WaliScheduleEntry): Long =
+        waliScheduleEntryDao?.insert(entry) ?: 0L
+
+    suspend fun insertAllWaliScheduleEntries(entries: List<WaliScheduleEntry>) {
+        waliScheduleEntryDao?.insertAll(entries)
+    }
+
+    suspend fun updateWaliScheduleEntry(entry: WaliScheduleEntry) {
+        waliScheduleEntryDao?.update(entry)
+    }
+
+    suspend fun deleteWaliScheduleEntry(entry: WaliScheduleEntry) {
+        waliScheduleEntryDao?.delete(entry)
+    }
+
+    suspend fun deleteWaliScheduleEntryById(id: Long) {
+        waliScheduleEntryDao?.deleteById(id)
+    }
+
+    suspend fun getWaliScheduleEntriesBySchoolList(schoolId: String): List<WaliScheduleEntry> =
+        waliScheduleEntryDao?.getEntriesBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getWaliScheduleEntriesBySchoolAndMonthList(
+        schoolId: String,
+        monthKey: String
+    ): List<WaliScheduleEntry> =
+        waliScheduleEntryDao?.getEntriesBySchoolAndMonthList(schoolId, monthKey) ?: emptyList()
+
+    suspend fun deleteWaliScheduleEntriesBySchool(schoolId: String) {
+        waliScheduleEntryDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun deleteWaliScheduleEntriesBySchoolAndMonth(schoolId: String, monthKey: String) {
+        waliScheduleEntryDao?.deleteBySchoolAndMonth(schoolId, monthKey)
     }
 }

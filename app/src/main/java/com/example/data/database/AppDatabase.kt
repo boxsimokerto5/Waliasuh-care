@@ -33,6 +33,8 @@ import com.example.data.dao.KonselingLogDao
 import com.example.data.dao.KonselingRecordDao
 import com.example.data.dao.TabunganLogDao
 import com.example.data.dao.TabunganTransactionDao
+import com.example.data.dao.WaliScheduleEntryDao
+import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -46,6 +48,8 @@ import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliShiftCode
 
 @Database(
     entities = [
@@ -66,9 +70,11 @@ import com.example.data.model.VisitSession
         TabunganTransaction::class,
         TabunganLog::class,
         KonselingRecord::class,
-        KonselingLog::class
+        KonselingLog::class,
+        WaliShiftCode::class,
+        WaliScheduleEntry::class
     ],
-    version = 24,
+    version = 25,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -90,6 +96,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun tabunganLogDao(): TabunganLogDao
     abstract fun konselingRecordDao(): KonselingRecordDao
     abstract fun konselingLogDao(): KonselingLogDao
+    abstract fun waliShiftCodeDao(): WaliShiftCodeDao
+    abstract fun waliScheduleEntryDao(): WaliScheduleEntryDao
 
     companion object {
         @Volatile
@@ -534,6 +542,53 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_24_25 = object : androidx.room.migration.Migration(24, 25) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS wali_shift_codes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        code TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        shiftGroup TEXT NOT NULL DEFAULT 'PAGI',
+                        zoneLabel TEXT NOT NULL DEFAULT '',
+                        timeRange TEXT NOT NULL DEFAULT '',
+                        startHour INTEGER NOT NULL DEFAULT 7,
+                        endHour INTEGER NOT NULL DEFAULT 15,
+                        workHours INTEGER NOT NULL DEFAULT 8,
+                        colorHex TEXT NOT NULL DEFAULT '#0284C7',
+                        sopNotes TEXT NOT NULL DEFAULT '',
+                        sortOrder INTEGER NOT NULL DEFAULT 0,
+                        isActive INTEGER NOT NULL DEFAULT 1,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS wali_schedule_entries (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        monthKey TEXT NOT NULL,
+                        waliAccountId INTEGER NOT NULL DEFAULT 0,
+                        waliUsername TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL,
+                        waliCode TEXT NOT NULL DEFAULT '',
+                        sortOrder INTEGER NOT NULL DEFAULT 0,
+                        dayCodesJson TEXT NOT NULL DEFAULT '{}',
+                        dayPinsJson TEXT NOT NULL DEFAULT '{}',
+                        dayLeaveJson TEXT NOT NULL DEFAULT '{}',
+                        updatedBy TEXT NOT NULL DEFAULT 'Admin Sekolah',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -558,7 +613,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_20_21,
                         MIGRATION_21_22,
                         MIGRATION_22_23,
-                        MIGRATION_23_24
+                        MIGRATION_23_24,
+                        MIGRATION_24_25
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

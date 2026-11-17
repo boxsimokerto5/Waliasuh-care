@@ -38,6 +38,11 @@ import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.DayShiftBreakdown
+import com.example.data.model.PinnedTaskItem
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
+import com.example.data.model.WaliShiftCode
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
 import java.io.File
@@ -3902,5 +3907,414 @@ object PdfReportGenerator {
         }
         drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
         finishCurrentCanvas()
+    }
+
+    /**
+     * Membuat dokumen PDF resmi Matriks Jadwal Kerja Wali Asuh Bulanan (Landscape A4 842x595)
+     * lengkap dengan kop surat sekolah, sel kode shift harian berwarna, rekap jam kerja per wali,
+     * rincian kebutuhan shift harian, serta petunjuk kode shift milik sekolah.
+     */
+    fun generateJadwalMatriksPdf(
+        context: Context,
+        monthKey: String,
+        entries: List<WaliScheduleEntry>,
+        shiftCodes: List<WaliShiftCode>,
+        waliName: String = "Admin Sekolah",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        return try {
+            val document = PdfDocument()
+            val pageWidth = 842 // Landscape A4 width
+            val pageHeight = 595 // Landscape A4 height
+            var activePage: PdfDocument.Page? = null
+
+            renderJadwalMatriksPages(
+                context = context,
+                monthKey = monthKey,
+                entries = entries,
+                shiftCodes = shiftCodes,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                pageWidth = pageWidth,
+                pageHeight = pageHeight,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, num).create()
+                    val started = document.startPage(pageInfo)
+                    activePage = started
+                    started.canvas
+                },
+                finishCurrentCanvas = {
+                    activePage?.let { document.finishPage(it) }
+                    activePage = null
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "reports").apply { mkdirs() }
+            val safeMonth = monthKey.replace(Regex("[^0-9A-Za-z_-]"), "")
+            val outFile = File(outputDir, "Jadwal_Resmi_Wali_Asuh_${safeMonth}_${System.currentTimeMillis()}.pdf")
+            FileOutputStream(outFile).use { fos ->
+                document.writeTo(fos)
+            }
+            document.close()
+            outFile
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    internal fun renderJadwalMatriksPages(
+        context: Context,
+        monthKey: String,
+        entries: List<WaliScheduleEntry>,
+        shiftCodes: List<WaliShiftCode>,
+        waliName: String = "Admin Sekolah",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        pageWidth: Int = 842,
+        pageHeight: Int = 595,
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCurrentCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val daysInMonth = WaliScheduleHelper.daysInMonth(monthKey)
+        val monthTitle = WaliScheduleHelper.formatMonthTitle(monthKey, isEn).uppercase(lang.locale)
+        val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
+        val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, schoolProfile.tenantCode)
+        val sortedEntries = entries.sortedWith(compareBy<WaliScheduleEntry> { it.sortOrder }.thenBy { it.waliName.lowercase() })
+
+        val paint = Paint().apply { isAntiAlias = true }
+        val marginX = 22f
+        val tableRight = pageWidth - marginX
+        val noColW = 20f
+        val nameColW = 126f
+        val rightSummaryCols = listOf("PF", "S", "M", "LP", "OF", "P1", "P2", "P3", "P4", "JK")
+        val summaryTotalW = 154f
+        val summaryColW = (summaryTotalW - 23.5f) / 9f
+        val jkColW = 23.5f
+        val daysTotalW = (tableRight - marginX) - noColW - nameColW - summaryTotalW
+        val dayColW = daysTotalW / daysInMonth.toFloat()
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        var currentY = 30f
+
+        currentY = drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = if (isEn) "CAREGIVER DUTY ROSTER & SHIFT MANAGEMENT" else "TATA KELOLA JADWAL PIKET WALI ASUH"
+        )
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 11.5f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            if (isEn) "OFFICIAL WALI ASUH WORK SCHEDULE • $monthTitle" else "JADWAL KERJA RESMI WALI ASUH • BULAN $monthTitle",
+            pageWidth / 2f,
+            currentY + 10f,
+            paint
+        )
+        currentY += 18f
+        paint.textAlign = Paint.Align.LEFT
+
+        fun parseHexColor(hex: String, fallback: Int): Int = try {
+            Color.parseColor(hex)
+        } catch (_: Exception) {
+            fallback
+        }
+
+        fun drawMatrixHeader(y: Float): Float {
+            val h1 = 13f
+            val h2 = 10f
+            val totalH = h1 + h2
+
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(15, 118, 110)
+            canvas.drawRect(marginX, y, tableRight, y + h1, paint)
+            paint.color = Color.rgb(241, 245, 249)
+            canvas.drawRect(marginX, y + h1, tableRight, y + totalH, paint)
+
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(203, 213, 225)
+            paint.strokeWidth = 0.6f
+            canvas.drawRect(marginX, y, tableRight, y + totalH, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = 6.8f
+            paint.color = Color.WHITE
+            canvas.drawText("No", marginX + noColW / 2f, y + 9.2f, paint)
+            canvas.drawText(if (isEn) "Caregiver Name" else "Nama Wali Asuh", marginX + noColW + nameColW / 2f, y + 9.2f, paint)
+
+            val dayStartX = marginX + noColW + nameColW
+            for (d in 1..daysInMonth) {
+                val cellX = dayStartX + (d - 1) * dayColW
+                val dow = WaliScheduleHelper.dayOfWeekShort(monthKey, d, isEn)
+                val isWeekend = dow.equals("Min", true) || dow.equals("Sun", true) || dow.equals("Sab", true) || dow.equals("Sat", true)
+                if (isWeekend) {
+                    paint.color = Color.rgb(190, 18, 60)
+                    canvas.drawRect(cellX, y, cellX + dayColW, y + h1, paint)
+                }
+                paint.color = Color.WHITE
+                paint.textSize = 6.5f
+                canvas.drawText(d.toString(), cellX + dayColW / 2f, y + 9.2f, paint)
+
+                paint.color = if (isWeekend) Color.rgb(190, 18, 60) else Color.rgb(71, 85, 105)
+                paint.textSize = 5.4f
+                canvas.drawText(dow.take(2), cellX + dayColW / 2f, y + h1 + 7.4f, paint)
+            }
+
+            var sumX = dayStartX + daysTotalW
+            rightSummaryCols.forEachIndexed { idx, label ->
+                val cw = if (idx == rightSummaryCols.lastIndex) jkColW else summaryColW
+                paint.color = Color.WHITE
+                paint.textSize = 6.2f
+                canvas.drawText(label, sumX + cw / 2f, y + 9.2f, paint)
+                sumX += cw
+            }
+            paint.textAlign = Paint.Align.LEFT
+            return y + totalH
+        }
+
+        currentY = drawMatrixHeader(currentY)
+
+        val rowH = 12.2f
+        val dayStartX = marginX + noColW + nameColW
+        sortedEntries.forEachIndexed { idx, entry ->
+            if (currentY + rowH > pageHeight - 36f) {
+                finishCurrentCanvas()
+                pageNumber++
+                canvas = startNewCanvas(pageNumber)
+                currentY = 26f
+                currentY = drawMatrixHeader(currentY)
+            }
+
+            val rowTop = currentY
+            paint.style = Paint.Style.FILL
+            paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+            canvas.drawRect(marginX, rowTop, tableRight, rowTop + rowH, paint)
+
+            val dayCodes = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)
+            val dayPins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson)
+
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 6.2f
+            paint.color = Color.rgb(51, 65, 85)
+            canvas.drawText("${idx + 1}", marginX + noColW / 2f, rowTop + 8.8f, paint)
+
+            paint.textAlign = Paint.Align.LEFT
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            val displayName = if (entry.waliCode.isNotBlank()) "[${entry.waliCode}] ${entry.waliName}" else entry.waliName
+            canvas.drawText(
+                TextUtils.ellipsize(displayName, TextPaint(paint), nameColW - 6f, TextUtils.TruncateAt.END).toString(),
+                marginX + noColW + 3f,
+                rowTop + 8.8f,
+                paint
+            )
+
+            for (d in 1..daysInMonth) {
+                val cellX = dayStartX + (d - 1) * dayColW
+                val rawCode = dayCodes[d]?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
+                val pins = dayPins[d].orEmpty()
+                if (rawCode.isNotBlank()) {
+                    val shift = shiftMap[rawCode]
+                    val baseColor = parseHexColor(shift?.colorHex ?: "#64748B", Color.rgb(100, 116, 139))
+                    val tintedBg = Color.argb(
+                        34,
+                        Color.red(baseColor),
+                        Color.green(baseColor),
+                        Color.blue(baseColor)
+                    )
+                    paint.style = Paint.Style.FILL
+                    paint.color = tintedBg
+                    canvas.drawRect(cellX, rowTop, cellX + dayColW, rowTop + rowH, paint)
+
+                    paint.textAlign = Paint.Align.CENTER
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = if (rawCode.length >= 4) 4.8f else 5.8f
+                    paint.color = baseColor
+                    canvas.drawText(rawCode.take(4), cellX + dayColW / 2f, rowTop + 8.8f, paint)
+                }
+                if (pins.isNotEmpty()) {
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (pins.any { it.category == WaliScheduleHelper.PIN_FASKES }) {
+                        Color.rgb(220, 38, 38)
+                    } else {
+                        Color.rgb(15, 118, 110)
+                    }
+                    canvas.drawCircle(cellX + dayColW - 2.3f, rowTop + 2.3f, 1.5f, paint)
+                }
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(226, 232, 240)
+                paint.strokeWidth = 0.4f
+                canvas.drawRect(cellX, rowTop, cellX + dayColW, rowTop + rowH, paint)
+            }
+
+            val stats = WaliScheduleHelper.computeRowStats(entry, daysInMonth, shiftMap)
+            val statVals = listOf(
+                stats.pFull, stats.sCount, stats.mCount, stats.lpCount, stats.offCount,
+                stats.p1Count, stats.p2Count, stats.p3Count, stats.p4Count, stats.totalJamKerja
+            )
+            var sumX = dayStartX + daysTotalW
+            paint.style = Paint.Style.FILL
+            paint.textAlign = Paint.Align.CENTER
+            paint.textSize = 5.8f
+            statVals.forEachIndexed { sIdx, valInt ->
+                val cw = if (sIdx == statVals.lastIndex) jkColW else summaryColW
+                paint.typeface = Typeface.create(
+                    Typeface.DEFAULT,
+                    if (sIdx == 0 || sIdx == statVals.lastIndex) Typeface.BOLD else Typeface.NORMAL
+                )
+                paint.color = if (sIdx == statVals.lastIndex) Color.rgb(15, 118, 110) else Color.rgb(30, 41, 59)
+                canvas.drawText(valInt.toString(), sumX + cw / 2f, rowTop + 8.8f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(226, 232, 240)
+                paint.strokeWidth = 0.4f
+                canvas.drawRect(sumX, rowTop, sumX + cw, rowTop + rowH, paint)
+                paint.style = Paint.Style.FILL
+                sumX += cw
+            }
+
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(203, 213, 225)
+            paint.strokeWidth = 0.5f
+            canvas.drawRect(marginX, rowTop, marginX + noColW + nameColW, rowTop + rowH, paint)
+            paint.style = Paint.Style.FILL
+            paint.textAlign = Paint.Align.LEFT
+            currentY = rowTop + rowH
+        }
+
+        // Daily Breakdown Footer Rows (matching official November 2026 matrix sheet)
+        val breakdownRows: List<Triple<String, Boolean, (DayShiftBreakdown) -> Int>> = listOf(
+            Triple("(P1) 07:00 - 15:00", false) { it.p1 },
+            Triple("(P2) 08:00 - 16:00", false) { it.p2 },
+            Triple("(P3) 07:00 - 16:00 (Upacara)", false) { it.p3 },
+            Triple("(P4) 07:00 - 20:00 (Kunjungan)", false) { it.p4 },
+            Triple("(PAGI FULL)", true) { it.pagiFull },
+            Triple("(S) TOTAL SORE (15:00-23:00)", true) { it.totalSore },
+            Triple("(M) TOTAL MALAM (15:00-07:00)", true) { it.totalMalam },
+            Triple("CUTI / IZIN", false) { it.cuti + it.izin },
+            Triple("OFF / LIBUR + LEPAS", false) { it.offAndLepas },
+            Triple(if (isEn) "TOTAL ASSIGNED" else "JUMLAH PERSONIL", true) { it.totalAssigned }
+        )
+        val bRowH = 10.5f
+        val neededBreakdownH = breakdownRows.size * bRowH + 14f
+        if (currentY + neededBreakdownH > pageHeight - 30f) {
+            finishCurrentCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 26f
+            currentY = drawMatrixHeader(currentY)
+        } else {
+            currentY += 4f
+        }
+
+        val breakdowns = (1..daysInMonth).map { d -> WaliScheduleHelper.computeDayBreakdown(sortedEntries, d, shiftMap) }
+        breakdownRows.forEach { (label, isBold, extractor) ->
+            val rTop = currentY
+            paint.style = Paint.Style.FILL
+            paint.color = if (isBold) Color.rgb(240, 253, 250) else Color.rgb(248, 250, 252)
+            canvas.drawRect(marginX, rTop, tableRight, rTop + bRowH, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, if (isBold) Typeface.BOLD else Typeface.NORMAL)
+            paint.textSize = 5.8f
+            paint.color = if (isBold) Color.rgb(15, 118, 110) else Color.rgb(51, 65, 85)
+            canvas.drawText(label, marginX + 4f, rTop + 7.8f, paint)
+
+            paint.textAlign = Paint.Align.CENTER
+            breakdowns.forEachIndexed { idx, bd ->
+                val cellX = dayStartX + idx * dayColW
+                val count = extractor(bd)
+                paint.color = if (count > 0 && isBold) Color.rgb(15, 23, 42) else Color.rgb(100, 116, 139)
+                canvas.drawText(count.toString(), cellX + dayColW / 2f, rTop + 7.8f, paint)
+            }
+            paint.textAlign = Paint.Align.LEFT
+
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(203, 213, 225)
+            paint.strokeWidth = 0.45f
+            canvas.drawRect(marginX, rTop, tableRight, rTop + bRowH, paint)
+            paint.style = Paint.Style.FILL
+            currentY = rTop + bRowH
+        }
+
+        // Petunjuk Kode Shift (Left) + Tanda Tangan Resmi (Right)
+        currentY += 12f
+        val footerHeightNeeded = 128f
+        if (currentY + footerHeightNeeded > pageHeight - 16f) {
+            finishCurrentCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 30f
+        }
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8f
+        paint.color = Color.rgb(15, 118, 110)
+        canvas.drawText(
+            if (isEn) "SHIFT CODE DIRECTORY & SOP LEGEND:" else "PETUNJUK KODE SHIFT & PENUGASAN SEKOLAH:",
+            marginX,
+            currentY + 10f,
+            paint
+        )
+        var legendY = currentY + 21f
+        val legendMaxX = pageWidth - 250f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 6.6f
+        effectiveCodes.take(14).forEach { sc ->
+            if (legendY < pageHeight - 24f) {
+                val line = "• ${sc.code} (${sc.name} • ${sc.timeRange}): ${sc.sopNotes.ifBlank { sc.zoneLabel }}"
+                paint.color = Color.rgb(51, 65, 85)
+                canvas.drawText(
+                    TextUtils.ellipsize(line, TextPaint(paint), legendMaxX - marginX, TextUtils.TruncateAt.END).toString(),
+                    marginX,
+                    legendY,
+                    paint
+                )
+                legendY += 9f
+            }
+        }
+
+        drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCurrentCanvas()
+    }
+
+    fun shareJadwalPdf(
+        context: Context,
+        pdfFile: File,
+        subject: String,
+        text: String
+    ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val s = AppLanguageManager.getStrings(context).report
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                pdfFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    if (isEn) "Share Work Schedule PDF" else "Bagikan PDF Jadwal Wali Asuh"
+                )
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
+        }
     }
 }

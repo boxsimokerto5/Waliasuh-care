@@ -26,6 +26,9 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliScheduleEntry
+import com.example.data.model.WaliScheduleHelper
+import com.example.data.model.WaliShiftCode
 import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 import org.json.JSONArray
@@ -1559,6 +1562,141 @@ data class PbKonselingLogDto(
                 actorName = model.actorName,
                 actorUsername = model.actorUsername,
                 createdAt = model.createdAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbWaliShiftCodeDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "code") val code: String = "",
+    @Json(name = "name") val name: String = "",
+    @Json(name = "shift_group") val shiftGroup: String? = null,
+    @Json(name = "zone_label") val zoneLabel: String? = null,
+    @Json(name = "time_range") val timeRange: String? = null,
+    @Json(name = "start_hour") val startHour: Int? = null,
+    @Json(name = "end_hour") val endHour: Int? = null,
+    @Json(name = "work_hours") val workHours: Int? = null,
+    @Json(name = "color_hex") val colorHex: String? = null,
+    @Json(name = "sop_notes") val sopNotes: String? = null,
+    @Json(name = "sort_order") val sortOrder: Int? = null,
+    @Json(name = "is_active") val isActive: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): WaliShiftCode {
+        val now = System.currentTimeMillis()
+        return WaliShiftCode(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            code = code.trim().uppercase(),
+            name = name.trim(),
+            shiftGroup = shiftGroup?.trim()?.uppercase()?.ifBlank { WaliScheduleHelper.GROUP_PAGI }
+                ?: WaliScheduleHelper.GROUP_PAGI,
+            zoneLabel = zoneLabel.orEmpty(),
+            timeRange = timeRange.orEmpty(),
+            startHour = (startHour ?: 7).coerceIn(0, 23),
+            endHour = (endHour ?: 15).coerceIn(0, 23),
+            workHours = (workHours ?: 8).coerceAtLeast(0),
+            colorHex = colorHex?.takeIf { it.isNotBlank() } ?: "#0284C7",
+            sopNotes = sopNotes.orEmpty(),
+            sortOrder = sortOrder ?: 0,
+            isActive = isActive ?: true,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: WaliShiftCode): PbWaliShiftCodeDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "shift_code:${model.schoolId}:${model.code.trim().uppercase()}"
+            )
+            return PbWaliShiftCodeDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                code = model.code.trim().uppercase(),
+                name = model.name.trim(),
+                shiftGroup = model.shiftGroup.trim().uppercase(),
+                zoneLabel = model.zoneLabel,
+                timeRange = model.timeRange,
+                startHour = model.startHour,
+                endHour = model.endHour,
+                workHours = model.workHours,
+                colorHex = model.colorHex,
+                sopNotes = model.sopNotes,
+                sortOrder = model.sortOrder,
+                isActive = model.isActive,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbWaliScheduleEntryDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "month_key") val monthKey: String = "",
+    @Json(name = "wali_account_id") val waliAccountId: Long = 0L,
+    @Json(name = "wali_username") val waliUsername: String? = null,
+    @Json(name = "wali_name") val waliName: String = "",
+    @Json(name = "wali_code") val waliCode: String? = null,
+    @Json(name = "sort_order") val sortOrder: Int? = null,
+    @Json(name = "day_codes_json") val dayCodesJson: String? = null,
+    @Json(name = "day_pins_json") val dayPinsJson: String? = null,
+    @Json(name = "day_leave_json") val dayLeaveJson: String? = null,
+    @Json(name = "updated_by") val updatedBy: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): WaliScheduleEntry {
+        val now = System.currentTimeMillis()
+        return WaliScheduleEntry(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            monthKey = monthKey.ifBlank { WaliScheduleHelper.currentMonthKey(now) },
+            waliAccountId = waliAccountId,
+            waliUsername = waliUsername.orEmpty(),
+            waliName = waliName,
+            waliCode = waliCode.orEmpty(),
+            sortOrder = sortOrder ?: 0,
+            dayCodesJson = dayCodesJson?.ifBlank { "{}" } ?: "{}",
+            dayPinsJson = dayPinsJson?.ifBlank { "{}" } ?: "{}",
+            dayLeaveJson = dayLeaveJson?.ifBlank { "{}" } ?: "{}",
+            updatedBy = updatedBy?.ifBlank { "Admin Sekolah" } ?: "Admin Sekolah",
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: WaliScheduleEntry): PbWaliScheduleEntryDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "wali_sched:${model.schoolId}:${model.monthKey}:${model.waliUsername.ifBlank { model.waliName }}"
+            )
+            return PbWaliScheduleEntryDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                monthKey = model.monthKey,
+                waliAccountId = model.waliAccountId,
+                waliUsername = model.waliUsername,
+                waliName = model.waliName,
+                waliCode = model.waliCode,
+                sortOrder = model.sortOrder,
+                dayCodesJson = model.dayCodesJson,
+                dayPinsJson = model.dayPinsJson,
+                dayLeaveJson = model.dayLeaveJson,
+                updatedBy = model.updatedBy,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
             )
         }
     }
