@@ -72,7 +72,10 @@ import coil.request.ImageRequest
 import com.example.data.model.DashboardBannerActionType
 import com.example.data.model.DashboardBannerFeatureTarget
 import com.example.data.model.DashboardBannerItem
+import com.example.data.model.DashboardBannerMediaKind
 import com.example.data.model.UploadedBannerMedia
+import com.example.ui.components.BannerVideoSurface
+import com.example.ui.components.rememberBannerGifImageLoader
 import com.example.ui.theme.WaliPrimary
 import com.example.util.i18n.LocalAppStrings
 
@@ -100,6 +103,7 @@ fun DashboardBannerFormDialog(
     var pbRecordId by remember(initialItem) { mutableStateOf(initialItem?.pbRecordId.orEmpty()) }
     var pbCollectionId by remember(initialItem) { mutableStateOf(initialItem?.pbCollectionId.orEmpty()) }
     var pbFilename by remember(initialItem) { mutableStateOf(initialItem?.pbFilename.orEmpty()) }
+    var mediaType by remember(initialItem) { mutableStateOf(initialItem?.mediaType.orEmpty()) }
 
     var actionType by remember(initialItem) {
         mutableStateOf(initialItem?.actionType ?: DashboardBannerActionType.INTERNAL_FEATURE)
@@ -129,11 +133,17 @@ fun DashboardBannerFormDialog(
     var showFeaturePicker by remember { mutableStateOf(false) }
     var featureSearchQuery by remember { mutableStateOf("") }
 
+    val gifImageLoader = rememberBannerGifImageLoader(context)
+
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { pickedUri ->
         if (pickedUri != null) {
-            uploadStatusMessage = if (isEn) "Uploading to PocketBase & R2 CDN..." else "Mengunggah ke PocketBase & R2 CDN..."
+            uploadStatusMessage = if (isEn) {
+                "Uploading media (Photo / GIF / Video) to R2 CDN..."
+            } else {
+                "Mengunggah media (Foto / GIF / Video) ke PocketBase & R2 CDN..."
+            }
             uploadStatusIsError = false
             onUploadImage(pickedUri, itemId, title) { ok, msg, media ->
                 uploadStatusMessage = msg
@@ -144,6 +154,7 @@ fun DashboardBannerFormDialog(
                     pbRecordId = media.pbRecordId
                     pbCollectionId = media.pbCollectionId
                     pbFilename = media.pbFilename
+                    mediaType = media.mediaType
                     validationError = null
                 }
             }
@@ -210,9 +221,9 @@ fun DashboardBannerFormDialog(
                             )
                             Text(
                                 text = if (isEn) {
-                                    "Stored via PocketBase + Cloudflare R2 CDN"
+                                    "Supports Photo, Animated GIF & Video MP4 via R2 CDN"
                                 } else {
-                                    "Gambar disimpan di R2 Cloudflare CDN untuk muat cepat"
+                                    "Mendukung Foto, GIF Animasi & Video MP4 di R2 Cloudflare CDN"
                                 },
                                 fontSize = 10.5.sp,
                                 color = Color.White.copy(alpha = 0.85f),
@@ -249,8 +260,12 @@ fun DashboardBannerFormDialog(
                         .padding(horizontal = 14.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(9.dp)
                 ) {
-                    // Image Preview Box
+                    // Media Preview Box (Foto, GIF Animasi, atau Video MP4)
                     val previewUrl = imageUrl.trim().ifBlank { fallbackImageUrl.trim() }
+                    val previewMediaKind = DashboardBannerItem.inferMediaKind(
+                        urls = listOf(imageUrl, fallbackImageUrl, pbFilename),
+                        explicitType = mediaType
+                    )
                     if (previewUrl.isNotBlank()) {
                         Box(
                             modifier = Modifier
@@ -259,19 +274,47 @@ fun DashboardBannerFormDialog(
                                 .clip(RoundedCornerShape(12.dp))
                                 .background(MaterialTheme.colorScheme.surfaceVariant)
                         ) {
-                            AsyncImage(
-                                model = ImageRequest.Builder(context)
-                                    .data(previewUrl)
-                                    .crossfade(true)
-                                    .build(),
-                                contentDescription = if (isEn) "Banner image preview" else "Pratinjau gambar banner",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                            if (previewMediaKind == DashboardBannerMediaKind.VIDEO) {
+                                BannerVideoSurface(
+                                    primaryUrl = previewUrl,
+                                    fallbackUrl = fallbackImageUrl.trim(),
+                                    isActive = true,
+                                    isMuted = true,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(previewUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    imageLoader = gifImageLoader,
+                                    contentDescription = if (isEn) "Banner media preview" else "Pratinjau media banner",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                            if (previewMediaKind != DashboardBannerMediaKind.IMAGE) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(6.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.Black.copy(alpha = 0.65f))
+                                        .padding(horizontal = 7.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        text = if (previewMediaKind == DashboardBannerMediaKind.VIDEO) "VIDEO MP4" else "GIF",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
 
-                    // Upload from Photo Picker (R2 CDN)
+                    // Upload from Photo Picker (Foto, GIF Animasi, atau Video MP4 -> R2 CDN)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -280,7 +323,7 @@ fun DashboardBannerFormDialog(
                         Button(
                             onClick = {
                                 photoPickerLauncher.launch(
-                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
                                 )
                             },
                             enabled = !isUploadingImage,
@@ -311,8 +354,12 @@ fun DashboardBannerFormDialog(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (isEn) "Pick & Upload Image (R2)" else "Upload Gambar ke R2 CDN",
-                                    fontSize = 12.5.sp,
+                                    text = if (isEn) {
+                                        "Pick Photo / GIF / Video (R2)"
+                                    } else {
+                                        "Upload Foto / GIF / Video (R2)"
+                                    },
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
@@ -328,6 +375,7 @@ fun DashboardBannerFormDialog(
                                     pbRecordId = ""
                                     pbCollectionId = ""
                                     pbFilename = ""
+                                    mediaType = ""
                                     uploadStatusMessage = null
                                 },
                                 enabled = !isUploadingImage,
@@ -338,7 +386,7 @@ fun DashboardBannerFormDialog(
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Clear,
-                                    contentDescription = if (isEn) "Clear image" else "Hapus gambar",
+                                    contentDescription = if (isEn) "Clear media" else "Hapus media",
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -358,12 +406,13 @@ fun DashboardBannerFormDialog(
                         value = imageUrl,
                         onValueChange = {
                             imageUrl = it
+                            mediaType = DashboardBannerItem.inferMediaKind(listOf(it, pbFilename)).key
                             validationError = null
                         },
                         label = {
                             Text(
-                                if (isEn) "Image CDN URL (optional for default Faskes)"
-                                else "URL Gambar CDN R2 (opsional utk Faskes bawaan)",
+                                if (isEn) "Media CDN URL (Photo/GIF/MP4)"
+                                else "URL Media CDN R2 (Foto/GIF/MP4)",
                                 fontSize = 11.5.sp
                             )
                         },
@@ -654,6 +703,10 @@ fun DashboardBannerFormDialog(
                                         }
                                     }
                                 }
+                                val resolvedKind = DashboardBannerItem.inferMediaKind(
+                                    urls = listOf(cleanImage, fallbackImageUrl.trim(), pbFilename),
+                                    explicitType = mediaType
+                                )
                                 val savedItem = DashboardBannerItem(
                                     id = itemId,
                                     title = cleanTitle,
@@ -664,6 +717,7 @@ fun DashboardBannerFormDialog(
                                     pbRecordId = pbRecordId,
                                     pbCollectionId = pbCollectionId,
                                     pbFilename = pbFilename,
+                                    mediaType = resolvedKind.key,
                                     actionType = actionType,
                                     actionTarget = resolvedTarget,
                                     isDefaultFaskes = isFaskes,

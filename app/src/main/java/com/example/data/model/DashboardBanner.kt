@@ -325,12 +325,25 @@ enum class DashboardBannerFeatureTarget(
     }
 }
 
+enum class DashboardBannerMediaKind(val key: String) {
+    IMAGE("IMAGE"),
+    GIF("GIF"),
+    VIDEO("VIDEO");
+
+    companion object {
+        fun fromKey(raw: String?): DashboardBannerMediaKind? {
+            return entries.firstOrNull { it.key.equals(raw?.trim(), ignoreCase = true) }
+        }
+    }
+}
+
 data class UploadedBannerMedia(
     val pbRecordId: String,
     val pbCollectionId: String,
     val pbFilename: String,
     val cdnImageUrl: String,
-    val fallbackApiFileUrl: String
+    val fallbackApiFileUrl: String,
+    val mediaType: String = DashboardBannerMediaKind.IMAGE.key
 )
 
 data class DashboardBannerItem(
@@ -343,6 +356,7 @@ data class DashboardBannerItem(
     val pbRecordId: String = "",
     val pbCollectionId: String = "",
     val pbFilename: String = "",
+    val mediaType: String = "",
     val actionType: DashboardBannerActionType = DashboardBannerActionType.NONE,
     val actionTarget: String = "",
     val isDefaultFaskes: Boolean = false,
@@ -361,6 +375,13 @@ data class DashboardBannerItem(
         return buildPbApiFileUrl(pbBaseUrl, pbCollectionId, pbRecordId, pbFilename)
     }
 
+    fun resolveMediaKind(): DashboardBannerMediaKind {
+        return inferMediaKind(
+            urls = listOf(imageUrl, fallbackImageUrl, pbFilename),
+            explicitType = mediaType
+        )
+    }
+
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
         put("title", title)
@@ -371,6 +392,7 @@ data class DashboardBannerItem(
         put("pbRecordId", pbRecordId)
         put("pbCollectionId", pbCollectionId)
         put("pbFilename", pbFilename)
+        put("mediaType", mediaType)
         put("actionType", actionType.key)
         put("actionTarget", actionTarget)
         put("isDefaultFaskes", isDefaultFaskes)
@@ -382,6 +404,28 @@ data class DashboardBannerItem(
         const val DEFAULT_FASKES_BANNER_ID = "default_faskes_banner"
         const val R2_CDN_BASE_URL = "https://waliasuhcareapp.areksurabaya.my.id"
         const val DEFAULT_POCKETBASE_BASE_URL = "https://waliasuh.areksurabaya.my.id"
+        private val VIDEO_EXTENSIONS = listOf(".mp4", ".webm", ".mov", ".m4v", ".mkv", ".3gp")
+
+        fun inferMediaKind(
+            urls: List<String?>,
+            explicitType: String? = null
+        ): DashboardBannerMediaKind {
+            for (raw in urls) {
+                val clean = raw.orEmpty()
+                    .trim()
+                    .substringBefore('?')
+                    .substringBefore('#')
+                    .lowercase()
+                if (clean.isBlank()) continue
+                if (VIDEO_EXTENSIONS.any { clean.endsWith(it) }) {
+                    return DashboardBannerMediaKind.VIDEO
+                }
+                if (clean.endsWith(".gif")) {
+                    return DashboardBannerMediaKind.GIF
+                }
+            }
+            return DashboardBannerMediaKind.fromKey(explicitType) ?: DashboardBannerMediaKind.IMAGE
+        }
 
         fun buildR2CdnUrl(collectionId: String, recordId: String, filename: String): String {
             val col = collectionId.trim().trim('/')
@@ -433,6 +477,7 @@ data class DashboardBannerItem(
                 pbRecordId = obj.optString("pbRecordId", ""),
                 pbCollectionId = obj.optString("pbCollectionId", ""),
                 pbFilename = obj.optString("pbFilename", ""),
+                mediaType = obj.optString("mediaType", ""),
                 actionType = DashboardBannerActionType.fromKey(obj.optString("actionType", "NONE")),
                 actionTarget = obj.optString("actionTarget", ""),
                 isDefaultFaskes = obj.optBoolean("isDefaultFaskes", rawId == DEFAULT_FASKES_BANNER_ID),

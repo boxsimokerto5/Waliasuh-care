@@ -4,10 +4,12 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.util.Log
 import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerItem
+import com.example.data.model.DashboardBannerMediaKind
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DashboardIconLayoutConfig
 import com.example.data.model.DeletionLog
@@ -851,6 +853,85 @@ object PocketBaseSyncManager {
         }
     }
 
+    private data class ResolvedBannerUploadSpec(
+        val mediaKind: DashboardBannerMediaKind,
+        val filename: String,
+        val mimeType: String,
+        val body: okhttp3.RequestBody
+    )
+
+    private fun queryUriMeta(context: Context, uri: Uri): Pair<String?, Long> {
+        var displayName: String? = null
+        var size = -1L
+        runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIdx >= 0) displayName = cursor.getString(nameIdx)
+                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) size = cursor.getLong(sizeIdx)
+                }
+            }
+        }
+        return displayName to size
+    }
+
+    private fun peekMagicBytes(context: Context, uri: Uri): ByteArray {
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val buf = ByteArray(16)
+                val n = input.read(buf)
+                if (n > 0) buf.copyOf(n) else ByteArray(0)
+            } ?: ByteArray(0)
+        }.getOrDefault(ByteArray(0))
+    }
+
+    private fun readUriBytesLimited(context: Context, uri: Uri, maxBytes: Long): ByteArray? {
+        return runCatching {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val out = ByteArrayOutputStream()
+                val buf = ByteArray(16 * 1024)
+                var total = 0L
+                while (true) {
+                    val read = input.read(buf)
+                    if (read <= 0) break
+                    total += read
+                    if (total > maxBytes) return@use null
+                    out.write(buf, 0, read)
+                }
+                out.toByteArray()
+            }
+        }.getOrNull()
+    }
+
+    private fun buildContentStreamRequestBody(
+        context: Context,
+        uri: Uri,
+        mediaType: okhttp3.MediaType,
+        knownLength: Long
+    ): okhttp3.RequestBody = object : okhttp3.RequestBody() {
+        override fun contentType() = mediaType
+        override fun contentLength(): Long = if (knownLength > 0L) knownLength else -1L
+        override fun writeTo(sink: okio.BufferedSink) {
+            val stream = context.contentResolver.openInputStream(uri)
+                ?: throw IllegalStateException("Unable to open banner media stream.")
+            stream.use { input ->
+                val buffer = ByteArray(32 * 1024)
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read <= 0) break
+                    sink.write(buffer, 0, read)
+                }
+            }
+        }
+    }
+
     suspend fun uploadBannerImageToCloud(
         context: Context,
         imageUri: Uri,
@@ -869,13 +950,102 @@ object PocketBaseSyncManager {
                 Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
             )
         }
-        val imageBytes = compressBannerImageBytes(context, imageUri)
-            ?: return@withContext Result.failure(
-                Exception(if (isEn) "Unable to read selected image." else "Gagal membaca file gambar yang dipilih.")
-            )
 
         val now = System.currentTimeMillis()
-        val safeFilename = "banner_${now}.jpg"
+        val mimeHint = context.contentResolver.getType(imageUri).orEmpty().lowercase()
+        val (displayName, queriedSize) = queryUriMeta(context, imageUri)
+        val extHint = displayName.orEmpty().substringAfterLast('.', "").lowercase()
+        val header = peekMagicBytes(context, imageUri)
+        val isGifMagic = header.size >= 6 &&
+            header[0] == 'G'.code.toByte() &&
+            header[1] == 'I'.code.toByte() &&
+            header[2] == 'F'.code.toByte() &&
+            header[3] == '8'.code.toByte()
+        val isWebpMagic = header.size >= 12 &&
+            header[0] == 'R'.code.toByte() &&
+            header[1] == 'I'.code.toByte() &&
+            header[2] == 'F'.code.toByte() &&
+            header[3] == 'F'.code.toByte() &&
+            header[8] == 'W'.code.toByte() &&
+            header[9] == 'E'.code.toByte() &&
+            header[10] == 'B'.code.toByte() &&
+            header[11] == 'P'.code.toByte()
+        val isMp4Magic = header.size >= 8 &&
+            header[4] == 'f'.code.toByte() &&
+            header[5] == 't'.code.toByte() &&
+            header[6] == 'y'.code.toByte() &&
+            header[7] == 'p'.code.toByte()
+        val isWebmMagic = header.size >= 4 &&
+            header[0] == 0x1A.toByte() &&
+            header[1] == 0x45.toByte() &&
+            header[2] == 0xDF.toByte() &&
+            header[3] == 0xA3.toByte()
+
+        val isVideo = mimeHint.startsWith("video/") ||
+            extHint in listOf("mp4", "webm", "mov", "m4v", "mkv", "3gp") ||
+            isMp4Magic || isWebmMagic
+        val isGif = !isVideo && (mimeHint == "image/gif" || extHint == "gif" || isGifMagic)
+        val isWebp = !isVideo && !isGif && (mimeHint == "image/webp" || extHint == "webp" || isWebpMagic)
+
+        val maxVideoBytes = 20L * 1024L * 1024L
+        val maxGifBytes = 10L * 1024L * 1024L
+
+        val spec: ResolvedBannerUploadSpec = when {
+            isVideo -> {
+                if (queriedSize > maxVideoBytes) {
+                    return@withContext Result.failure(
+                        Exception(
+                            if (isEn) "Maximum banner video size is 20 MB."
+                            else "Ukuran video banner maksimal 20 MB agar pemuatan tetap ringan."
+                        )
+                    )
+                }
+                val isWebm = mimeHint.contains("webm") || extHint == "webm" || isWebmMagic
+                val videoExt = if (isWebm) "webm" else "mp4"
+                val videoMime = if (isWebm) "video/webm" else "video/mp4"
+                ResolvedBannerUploadSpec(
+                    mediaKind = DashboardBannerMediaKind.VIDEO,
+                    filename = "banner_${now}.$videoExt",
+                    mimeType = videoMime,
+                    body = buildContentStreamRequestBody(
+                        context = context,
+                        uri = imageUri,
+                        mediaType = videoMime.toMediaType(),
+                        knownLength = queriedSize
+                    )
+                )
+            }
+            isGif || isWebp -> {
+                val rawBytes = readUriBytesLimited(context, imageUri, maxGifBytes)
+                    ?: return@withContext Result.failure(
+                        Exception(
+                            if (isEn) "Unable to read GIF/WebP or file exceeds 10 MB."
+                            else "Gagal membaca GIF/WebP atau ukuran file melebihi 10 MB."
+                        )
+                    )
+                val ext = if (isGif) "gif" else "webp"
+                val mime = if (isGif) "image/gif" else "image/webp"
+                ResolvedBannerUploadSpec(
+                    mediaKind = if (isGif) DashboardBannerMediaKind.GIF else DashboardBannerMediaKind.IMAGE,
+                    filename = "banner_${now}.$ext",
+                    mimeType = mime,
+                    body = rawBytes.toRequestBody(mime.toMediaType())
+                )
+            }
+            else -> {
+                val imageBytes = compressBannerImageBytes(context, imageUri)
+                    ?: return@withContext Result.failure(
+                        Exception(if (isEn) "Unable to read selected image." else "Gagal membaca file gambar yang dipilih.")
+                    )
+                ResolvedBannerUploadSpec(
+                    mediaKind = DashboardBannerMediaKind.IMAGE,
+                    filename = "banner_${now}.jpg",
+                    mimeType = "image/jpeg",
+                    body = imageBytes.toRequestBody("image/jpeg".toMediaType())
+                )
+            }
+        }
+
         val cleanBannerId = bannerId.ifBlank { "banner_$now" }
         val localHash = PocketBaseIdCodec.stablePositiveHash("banner_media:$cleanBannerId:$now")
 
@@ -887,17 +1057,13 @@ object PocketBaseSyncManager {
             .addFormDataPart("title", title.ifBlank { "Dashboard Banner" })
             .addFormDataPart("is_enabled", "true")
             .addFormDataPart("updated_at", now.toString())
-            .addFormDataPart(
-                "image",
-                safeFilename,
-                imageBytes.toRequestBody("image/jpeg".toMediaType())
-            )
+            .addFormDataPart("image", spec.filename, spec.body)
             .build()
 
         val client = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(45, TimeUnit.SECONDS)
-            .writeTimeout(45, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
             .build()
 
         val request = Request.Builder()
@@ -912,9 +1078,9 @@ object PocketBaseSyncManager {
                     return@withContext Result.failure(
                         Exception(
                             if (isEn) {
-                                "Collection 'dashboard_banners' not synced on server yet. Run Sync Schema in SuperAdmin or paste an image URL."
+                                "Collection 'dashboard_banners' not synced on server yet. Run Sync Schema in SuperAdmin or paste a CDN URL."
                             } else {
-                                "Koleksi 'dashboard_banners' belum disinkronkan di server. Jalankan Sync Skema di menu SuperAdmin atau tempel URL gambar."
+                                "Koleksi 'dashboard_banners' belum disinkronkan di server. Jalankan Sync Skema di menu SuperAdmin atau tempel URL CDN."
                             }
                         )
                     )
@@ -924,7 +1090,7 @@ object PocketBaseSyncManager {
                     val errMsg = parsePocketBaseUploadError(raw, resp.code, isEn)
                     return@withContext Result.failure(
                         Exception(
-                            if (isEn) "Failed to upload banner image: $errMsg" else "Gagal mengunggah gambar banner: $errMsg"
+                            if (isEn) "Failed to upload banner media: $errMsg" else "Gagal mengunggah media banner: $errMsg"
                         )
                     )
                 }
@@ -940,7 +1106,7 @@ object PocketBaseSyncManager {
                 if (recordId.isBlank() || uploadedFilename.isBlank()) {
                     return@withContext Result.failure(
                         Exception(
-                            if (isEn) "PocketBase did not return uploaded image metadata." else "PocketBase tidak mengembalikan metadata gambar."
+                            if (isEn) "PocketBase did not return uploaded media metadata." else "PocketBase tidak mengembalikan metadata media."
                         )
                     )
                 }
@@ -952,7 +1118,8 @@ object PocketBaseSyncManager {
                         pbCollectionId = collectionId,
                         pbFilename = uploadedFilename,
                         cdnImageUrl = cdnUrl,
-                        fallbackApiFileUrl = fallbackUrl
+                        fallbackApiFileUrl = fallbackUrl,
+                        mediaType = spec.mediaKind.key
                     )
                 )
             }

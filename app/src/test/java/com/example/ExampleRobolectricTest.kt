@@ -6955,14 +6955,83 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     assertEquals("Observasi Febris", savedDirectDiagnosis)
 
-    // 3. DashboardBannerFormDialog bottom sheet
+    // 3. DashboardBannerFormDialog bottom sheet (GIF/Video/Image)
     sheetMode.intValue = 2
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("banner_image_url_input").performScrollTo().performTextInput("https://cdn.example.com/promo_imunisasi.gif")
     composeTestRule.onNodeWithTag("banner_title_input").performScrollTo().performTextInput("Info Imunisasi")
     composeTestRule.onNodeWithTag("btn_confirm_banner_item").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     assertEquals("Info Imunisasi", savedBannerTitle)
   }
+
+  @Test
+  fun `verify DashboardBanner auto-slide advances pages cleanly and detects GIF and Video media kinds`() {
+    val gifBanner = com.example.data.model.DashboardBannerItem(
+      id = "gif_1",
+      title = "Banner GIF Promo",
+      imageUrl = "https://waliasuhcareapp.areksurabaya.my.id/col/rec/anim.gif?v=2",
+      actionType = com.example.data.model.DashboardBannerActionType.NONE,
+      isEnabled = true,
+      sortOrder = 1
+    )
+    val videoBanner = com.example.data.model.DashboardBannerItem(
+      id = "vid_2",
+      title = "Banner Video MP4",
+      imageUrl = "https://waliasuhcareapp.areksurabaya.my.id/col/rec/intro.mp4?token=123",
+      actionType = com.example.data.model.DashboardBannerActionType.NONE,
+      isEnabled = true,
+      sortOrder = 2
+    )
+    assertEquals(com.example.data.model.DashboardBannerMediaKind.GIF, gifBanner.resolveMediaKind())
+    assertEquals(com.example.data.model.DashboardBannerMediaKind.VIDEO, videoBanner.resolveMediaKind())
+
+    val roundTrip = com.example.data.model.DashboardBannerItem.fromJson(videoBanner.toJson())
+    assertEquals(com.example.data.model.DashboardBannerMediaKind.VIDEO, roundTrip.resolveMediaKind())
+
+    val config = com.example.data.model.DashboardBannerConfig(
+      items = listOf(
+        com.example.data.model.DashboardBannerItem.defaultFaskes().copy(sortOrder = 0),
+        gifBanner,
+        videoBanner
+      ),
+      slideIntervalSeconds = 2,
+      updatedAt = 1000L
+    )
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.mainClock.autoAdvance = false
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.components.DashboardBannerCarousel(
+          config = config,
+          faskesDefaultSubtitle = "Puskesmas Wates",
+          isAnakSuperAdmin = false,
+          onBannerClick = {},
+          onManageBannersClick = {}
+        )
+      }
+    }
+
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("tile_puskesmas_info").assertIsDisplayed()
+
+    // Auto-slide after 2 seconds + animation (550ms) advances cleanly to GIF slide (was previously canceled on frame 1)
+    composeTestRule.mainClock.advanceTimeBy(2_700L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("banner_slide_gif_1").assertIsDisplayed()
+    composeTestRule.onNodeWithText("GIF").assertIsDisplayed()
+
+    // Auto-slide again advances cleanly to Video MP4 slide with mute toggle
+    composeTestRule.mainClock.advanceTimeBy(2_700L)
+    composeTestRule.mainClock.advanceTimeByFrame()
+    composeTestRule.onNodeWithTag("banner_slide_vid_2").assertIsDisplayed()
+    composeTestRule.onNodeWithText("VIDEO").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_banner_mute_vid_2").assertIsDisplayed()
+  }
 }
+
 
 

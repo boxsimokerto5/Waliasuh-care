@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material3.BottomSheetDefaults
@@ -56,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -72,7 +74,9 @@ import com.example.data.model.DashboardBannerActionType
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerFeatureTarget
 import com.example.data.model.DashboardBannerItem
+import com.example.data.model.DashboardBannerMediaKind
 import com.example.data.model.UploadedBannerMedia
+import com.example.ui.components.rememberBannerGifImageLoader
 import com.example.ui.theme.WaliPrimary
 import com.example.util.i18n.LocalAppStrings
 
@@ -88,6 +92,7 @@ fun DashboardBannerEditorSheet(
 ) {
     val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
+    val gifImageLoader = rememberBannerGifImageLoader(context)
     var draftItems by remember(currentConfig) {
         mutableStateOf(currentConfig.normalized().items)
     }
@@ -334,6 +339,7 @@ fun DashboardBannerEditorSheet(
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         val thumbUrl = item.resolvePrimaryImageUrl()
+                                        val mediaKind = item.resolveMediaKind()
                                         Box(
                                             modifier = Modifier
                                                 .size(46.dp)
@@ -341,12 +347,31 @@ fun DashboardBannerEditorSheet(
                                                 .background(MaterialTheme.colorScheme.surfaceVariant),
                                             contentAlignment = Alignment.Center
                                         ) {
-                                            if (thumbUrl.isNotBlank()) {
+                                            if (thumbUrl.isNotBlank() && mediaKind == DashboardBannerMediaKind.VIDEO) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .background(
+                                                            Brush.linearGradient(
+                                                                listOf(Color(0xFF0F766E), Color(0xFF1D4ED8))
+                                                            )
+                                                        ),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.PlayCircleFilled,
+                                                        contentDescription = displayTitle,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(22.dp)
+                                                    )
+                                                }
+                                            } else if (thumbUrl.isNotBlank()) {
                                                 AsyncImage(
                                                     model = ImageRequest.Builder(context)
                                                         .data(thumbUrl)
                                                         .crossfade(true)
                                                         .build(),
+                                                    imageLoader = gifImageLoader,
                                                     contentDescription = displayTitle,
                                                     contentScale = ContentScale.Crop,
                                                     modifier = Modifier.fillMaxSize()
@@ -365,6 +390,23 @@ fun DashboardBannerEditorSheet(
                                                     tint = WaliPrimary,
                                                     modifier = Modifier.size(20.dp)
                                                 )
+                                            }
+                                            if (mediaKind != DashboardBannerMediaKind.IMAGE && thumbUrl.isNotBlank()) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomCenter)
+                                                        .fillMaxWidth()
+                                                        .background(Color.Black.copy(alpha = 0.65f))
+                                                        .padding(vertical = 1.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = if (mediaKind == DashboardBannerMediaKind.VIDEO) "MP4" else "GIF",
+                                                        fontSize = 7.5.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = Color.White
+                                                    )
+                                                }
                                             }
                                         }
 

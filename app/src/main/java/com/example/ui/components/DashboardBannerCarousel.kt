@@ -1,11 +1,13 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,11 +26,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -52,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.ImageLoader
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
@@ -60,6 +66,7 @@ import com.example.data.model.DashboardBannerActionType
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerFeatureTarget
 import com.example.data.model.DashboardBannerItem
+import com.example.data.model.DashboardBannerMediaKind
 import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.ui.theme.WaliPrimary
 import com.example.util.i18n.LocalAppStrings
@@ -177,18 +184,25 @@ fun DashboardBannerCarousel(
             return
         }
 
+        val context = LocalContext.current
+        val gifImageLoader = rememberBannerGifImageLoader(context)
         val pagerState = rememberPagerState(
             initialPage = 0,
             pageCount = { activeItems.size }
         )
+        val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+        val activeIdsKey = remember(activeItems) { activeItems.map { it.id } }
 
-        LaunchedEffect(activeItems, intervalSeconds, pagerState.isScrollInProgress) {
+        LaunchedEffect(activeIdsKey, intervalSeconds) {
             if (activeItems.size <= 1) return@LaunchedEffect
             while (true) {
                 delay(intervalSeconds * 1000L)
-                if (!pagerState.isScrollInProgress) {
+                if (!isDragged && !pagerState.isScrollInProgress && activeItems.size > 1) {
                     val nextPage = (pagerState.currentPage + 1) % activeItems.size
-                    pagerState.animateScrollToPage(nextPage)
+                    pagerState.animateScrollToPage(
+                        page = nextPage,
+                        animationSpec = tween(durationMillis = 550)
+                    )
                 }
             }
         }
@@ -202,6 +216,8 @@ fun DashboardBannerCarousel(
             BannerSlideCard(
                 item = item,
                 faskesDefaultSubtitle = faskesDefaultSubtitle,
+                isCurrentPage = pagerState.currentPage == page,
+                imageLoader = gifImageLoader,
                 onClick = { onBannerClick(item) },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -237,6 +253,8 @@ fun DashboardBannerCarousel(
 private fun BannerSlideCard(
     item: DashboardBannerItem,
     faskesDefaultSubtitle: String,
+    isCurrentPage: Boolean,
+    imageLoader: ImageLoader,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -245,6 +263,9 @@ private fun BannerSlideCard(
     val pbBaseUrl = remember(context) { PocketBaseConfig.getBaseUrl(context) }
     val primaryUrl = item.resolvePrimaryImageUrl()
     val fallbackUrl = item.resolveFallbackImageUrl(pbBaseUrl)
+    val mediaKind = remember(item.imageUrl, item.fallbackImageUrl, item.pbFilename, item.mediaType) {
+        item.resolveMediaKind()
+    }
     val slideTag = if (item.isDefaultFaskes) "tile_puskesmas_info" else "banner_slide_${item.id}"
     val isClickable = item.actionType != DashboardBannerActionType.NONE
 
@@ -345,13 +366,14 @@ private fun BannerSlideCard(
         return
     }
 
-    // Custom Image Banner (Cloudflare R2 CDN with PocketBase API fallback)
+    // Custom Media Banner (Static Image, Animated GIF/WebP, or Looping Video MP4/WebM)
     var activeModelUrl by remember(primaryUrl, fallbackUrl) {
         mutableStateOf(primaryUrl.ifBlank { fallbackUrl })
     }
-    var imageFailedAll by remember(primaryUrl, fallbackUrl) {
+    var mediaFailedAll by remember(primaryUrl, fallbackUrl) {
         mutableStateOf(primaryUrl.isBlank() && fallbackUrl.isBlank())
     }
+    var isVideoMuted by remember(item.id) { mutableStateOf(true) }
 
     val effectiveTitle = item.title.trim()
     val effectiveSubtitle = item.subtitle.trim()
@@ -370,30 +392,42 @@ private fun BannerSlideCard(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            if (!imageFailedAll && activeModelUrl.isNotBlank()) {
-                val request = remember(activeModelUrl, context) {
-                    ImageRequest.Builder(context)
-                        .data(activeModelUrl)
-                        .crossfade(true)
-                        .diskCachePolicy(CachePolicy.ENABLED)
-                        .memoryCachePolicy(CachePolicy.ENABLED)
-                        .build()
-                }
-                AsyncImage(
-                    model = request,
-                    contentDescription = effectiveTitle.ifBlank {
-                        if (isEn) "Dashboard banner" else "Banner informasi dashboard"
-                    },
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize(),
-                    onError = {
-                        if (activeModelUrl != fallbackUrl && fallbackUrl.isNotBlank()) {
-                            activeModelUrl = fallbackUrl
-                        } else {
-                            imageFailedAll = true
-                        }
+            if (!mediaFailedAll && activeModelUrl.isNotBlank()) {
+                if (mediaKind == DashboardBannerMediaKind.VIDEO) {
+                    BannerVideoSurface(
+                        primaryUrl = primaryUrl,
+                        fallbackUrl = fallbackUrl,
+                        isActive = isCurrentPage,
+                        isMuted = isVideoMuted,
+                        modifier = Modifier.fillMaxSize(),
+                        onAllFailed = { mediaFailedAll = true }
+                    )
+                } else {
+                    val request = remember(activeModelUrl, context) {
+                        ImageRequest.Builder(context)
+                            .data(activeModelUrl)
+                            .crossfade(true)
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .memoryCachePolicy(CachePolicy.ENABLED)
+                            .build()
                     }
-                )
+                    AsyncImage(
+                        model = request,
+                        imageLoader = imageLoader,
+                        contentDescription = effectiveTitle.ifBlank {
+                            if (isEn) "Dashboard banner" else "Banner informasi dashboard"
+                        },
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                        onError = {
+                            if (activeModelUrl != fallbackUrl && fallbackUrl.isNotBlank()) {
+                                activeModelUrl = fallbackUrl
+                            } else {
+                                mediaFailedAll = true
+                            }
+                        }
+                    )
+                }
             } else {
                 Box(
                     modifier = Modifier
@@ -406,7 +440,7 @@ private fun BannerSlideCard(
                 )
             }
 
-            if (hasTextOverlay || imageFailedAll) {
+            if (hasTextOverlay || mediaFailedAll) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -421,7 +455,41 @@ private fun BannerSlideCard(
                 )
             }
 
-            if (effectiveBadge.isNotBlank() || item.actionType == DashboardBannerActionType.EXTERNAL_LINK) {
+            if (mediaKind == DashboardBannerMediaKind.VIDEO && !mediaFailedAll) {
+                IconButton(
+                    onClick = { isVideoMuted = !isVideoMuted },
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(48.dp)
+                        .testTag("btn_banner_mute_${item.id}")
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(CircleShape)
+                            .background(Color.Black.copy(alpha = 0.56f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = if (isVideoMuted) {
+                                Icons.AutoMirrored.Filled.VolumeOff
+                            } else {
+                                Icons.AutoMirrored.Filled.VolumeUp
+                            },
+                            contentDescription = if (isVideoMuted) {
+                                if (isEn) "Unmute banner video" else "Nyalakan suara video"
+                            } else {
+                                if (isEn) "Mute banner video" else "Bisukan suara video"
+                            },
+                            tint = Color.White,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+            }
+
+            val showMediaTypeChip = mediaKind != DashboardBannerMediaKind.IMAGE && !mediaFailedAll
+            if (effectiveBadge.isNotBlank() || item.actionType == DashboardBannerActionType.EXTERNAL_LINK || showMediaTypeChip) {
                 Row(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
@@ -429,6 +497,28 @@ private fun BannerSlideCard(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (showMediaTypeChip) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (mediaKind == DashboardBannerMediaKind.VIDEO) {
+                                        Color(0xFF2563EB).copy(alpha = 0.85f)
+                                    } else {
+                                        Color(0xFF7C3AED).copy(alpha = 0.85f)
+                                    }
+                                )
+                                .padding(horizontal = 6.dp, vertical = 2.5.dp)
+                        ) {
+                            Text(
+                                text = if (mediaKind == DashboardBannerMediaKind.VIDEO) "VIDEO" else "GIF",
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1
+                            )
+                        }
+                    }
                     if (effectiveBadge.isNotBlank()) {
                         Box(
                             modifier = Modifier
@@ -463,7 +553,7 @@ private fun BannerSlideCard(
                 }
             }
 
-            if (hasTextOverlay || imageFailedAll) {
+            if (hasTextOverlay || mediaFailedAll) {
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -472,7 +562,7 @@ private fun BannerSlideCard(
                     verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     val displayTitle = effectiveTitle.ifBlank {
-                        if (imageFailedAll) {
+                        if (mediaFailedAll) {
                             DashboardBannerFeatureTarget.fromKey(item.actionTarget)?.label(isEn)
                                 ?: if (isEn) "Featured Information" else "Informasi Layanan"
                         } else {

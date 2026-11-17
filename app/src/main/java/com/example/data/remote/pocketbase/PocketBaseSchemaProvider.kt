@@ -18,7 +18,9 @@ data class PocketBaseSchemaSyncResult(
 
 data class PbFieldDef(
     val name: String,
-    val type: String // "text", "number", "bool"
+    val type: String, // "text", "number", "bool", "file"
+    val fileMaxSize: Long = 10_485_760L,
+    val fileMimeTypes: List<String> = listOf("image/jpeg", "image/png", "image/webp")
 )
 
 data class PocketBaseCollectionMeta(
@@ -389,7 +391,19 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("title", "text"),
                 PbFieldDef("subtitle", "text"),
                 PbFieldDef("badge_text", "text"),
-                PbFieldDef("image", "file"),
+                PbFieldDef(
+                    name = "image",
+                    type = "file",
+                    fileMaxSize = 20_971_520L,
+                    fileMimeTypes = listOf(
+                        "image/jpeg",
+                        "image/png",
+                        "image/webp",
+                        "image/gif",
+                        "video/mp4",
+                        "video/webm"
+                    )
+                ),
                 PbFieldDef("cdn_image_url", "text"),
                 PbFieldDef("action_type", "text"),
                 PbFieldDef("action_target", "text"),
@@ -560,13 +574,11 @@ object PocketBaseSchemaProvider {
                         .put("type", field.type)
                     if (field.type == "file") {
                         obj.put("maxSelect", 1)
-                        obj.put("maxSize", 10485760)
+                        obj.put("maxSize", field.fileMaxSize)
                         obj.put(
                             "mimeTypes",
                             JSONArray().apply {
-                                put("image/jpeg")
-                                put("image/png")
-                                put("image/webp")
+                                field.fileMimeTypes.forEach { put(it) }
                             }
                         )
                     }
@@ -639,13 +651,27 @@ for col in SCHEMA:
     else:
         cur = existing_map[name]
         cur_fields = list(cur.get("fields", []))
+        target_by_name = {f["name"]: f for f in col["fields"]}
+        fields_changed = False
+        for cf in cur_fields:
+            tf = target_by_name.get(cf.get("name"))
+            if tf and cf.get("type") == "file" and tf.get("type") == "file":
+                if int(cf.get("maxSize") or 0) < int(tf.get("maxSize") or 0):
+                    cf["maxSize"] = tf["maxSize"]
+                    fields_changed = True
+                cur_mimes = list(cf.get("mimeTypes") or [])
+                for m in (tf.get("mimeTypes") or []):
+                    if m not in cur_mimes:
+                        cur_mimes.append(m)
+                        fields_changed = True
+                cf["mimeTypes"] = cur_mimes
         cur_names = {f["name"] for f in cur_fields}
         added_fields = [f for f in col["fields"] if f["name"] not in cur_names]
         cur_indexes = list(cur.get("indexes", []))
         cur_idx_names = {idx_name(ix) for ix in cur_indexes}
         added_indexes = [ix for ix in col.get("indexes", []) if idx_name(ix) not in cur_idx_names]
         rules_changed = any(cur.get(k) != "" for k in ("listRule", "viewRule", "createRule", "updateRule", "deleteRule"))
-        if not added_fields and not added_indexes and not rules_changed:
+        if not added_fields and not fields_changed and not added_indexes and not rules_changed:
             print(f"[UP-TO-DATE] {name}")
             continue
         payload = {
@@ -784,16 +810,47 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
                         logs.add("[GAGAL BARU] $name ($cCode): ${cResp.optString("message").ifBlank { cResp.toString() }}")
                     }
                 } else {
+                    val targetFieldsArr = colObj.optJSONArray("fields") ?: JSONArray()
+                    val targetByName = mutableMapOf<String, JSONObject>()
+                    for (j in 0 until targetFieldsArr.length()) {
+                        val tf = targetFieldsArr.getJSONObject(j)
+                        targetByName[tf.optString("name")] = tf
+                    }
+
                     val curFieldsArr = existing.optJSONArray("fields") ?: JSONArray()
                     val existingFieldNames = mutableSetOf<String>()
                     val mergedFields = JSONArray()
+                    var fileFieldUpdated = false
                     for (j in 0 until curFieldsArr.length()) {
                         val f = curFieldsArr.getJSONObject(j)
-                        existingFieldNames.add(f.optString("name"))
+                        val fName = f.optString("name")
+                        existingFieldNames.add(fName)
+                        val tf = targetByName[fName]
+                        if (tf != null && f.optString("type") == "file" && tf.optString("type") == "file") {
+                            val targetMax = tf.optLong("maxSize", 0L)
+                            if (f.optLong("maxSize", 0L) < targetMax) {
+                                f.put("maxSize", targetMax)
+                                fileFieldUpdated = true
+                            }
+                            val curMimes = f.optJSONArray("mimeTypes") ?: JSONArray()
+                            val curMimeSet = mutableSetOf<String>()
+                            for (mIdx in 0 until curMimes.length()) {
+                                curMimeSet.add(curMimes.optString(mIdx))
+                            }
+                            val targetMimes = tf.optJSONArray("mimeTypes") ?: JSONArray()
+                            for (mIdx in 0 until targetMimes.length()) {
+                                val tm = targetMimes.optString(mIdx)
+                                if (tm.isNotBlank() && tm !in curMimeSet) {
+                                    curMimes.put(tm)
+                                    curMimeSet.add(tm)
+                                    fileFieldUpdated = true
+                                }
+                            }
+                            f.put("mimeTypes", curMimes)
+                        }
                         mergedFields.put(f)
                     }
 
-                    val targetFieldsArr = colObj.optJSONArray("fields") ?: JSONArray()
                     val addedFieldNames = mutableListOf<String>()
                     for (j in 0 until targetFieldsArr.length()) {
                         val tf = targetFieldsArr.getJSONObject(j)
@@ -830,7 +887,7 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
                         existing.isNull(key) || existing.optString(key, "null") != ""
                     }
 
-                    if (addedFieldNames.isEmpty() && addedIdxCount == 0 && !rulesNeedUpdate) {
+                    if (addedFieldNames.isEmpty() && !fileFieldUpdated && addedIdxCount == 0 && !rulesNeedUpdate) {
                         logs.add("[UP-TO-DATE] $name")
                         continue
                     }
@@ -853,10 +910,10 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
                     )
                     if (uCode in 200..299) {
                         updatedCount++
-                        val addedDesc = if (addedFieldNames.isNotEmpty()) {
-                            "+${addedFieldNames.size} field (${addedFieldNames.joinToString(", ")})"
-                        } else {
-                            "index/rules"
+                        val addedDesc = when {
+                            addedFieldNames.isNotEmpty() -> "+${addedFieldNames.size} field (${addedFieldNames.joinToString(", ")})"
+                            fileFieldUpdated -> "mimeTypes GIF/Video +20MB"
+                            else -> "index/rules"
                         }
                         logs.add("[UPDATE $addedDesc] $name -> OK")
                     } else {

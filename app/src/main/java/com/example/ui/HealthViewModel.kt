@@ -394,20 +394,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             _isUploadingBannerImage.value = false
             if (res.isSuccess) {
                 val media = res.getOrNull()
-                onResult(
-                    true,
-                    if (isEn) {
+                val msg = when (media?.mediaType) {
+                    "VIDEO" -> if (isEn) {
+                        "Video uploaded to R2 CDN!"
+                    } else {
+                        "Video banner diunggah ke R2 CDN (${DashboardBannerItem.R2_CDN_BASE_URL})!"
+                    }
+                    "GIF" -> if (isEn) {
+                        "Animated GIF uploaded to R2 CDN!"
+                    } else {
+                        "GIF animasi diunggah ke R2 CDN (${DashboardBannerItem.R2_CDN_BASE_URL})!"
+                    }
+                    else -> if (isEn) {
                         "Image uploaded to R2 CDN!"
                     } else {
                         "Gambar diunggah ke R2 CDN (${DashboardBannerItem.R2_CDN_BASE_URL})!"
-                    },
-                    media
-                )
+                    }
+                }
+                onResult(true, msg, media)
             } else {
                 onResult(
                     false,
                     res.exceptionOrNull()?.message
-                        ?: if (isEn) "Failed to upload banner image." else "Gagal mengunggah gambar banner.",
+                        ?: if (isEn) "Failed to upload banner media." else "Gagal mengunggah media banner.",
                     null
                 )
             }
