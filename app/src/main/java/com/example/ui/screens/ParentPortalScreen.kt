@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -40,6 +43,8 @@ import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -49,11 +54,12 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.ScrollableTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -70,13 +76,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
 import com.example.data.model.HaidRecord
@@ -88,6 +97,10 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.ui.HealthViewModel
+import com.example.ui.components.ParentGreetingHeroCard
+import com.example.ui.components.ParentMenuTileSpec
+import com.example.ui.components.ParentSuperAppIconGrid
+import com.example.ui.components.ParentSwipeableHighlightsSection
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
@@ -230,30 +243,84 @@ fun ParentPortalScreen(
         }
     }
 
+    val bottomNavTabs = remember(visibleTabs) {
+        buildList {
+            add(ParentPortalTab.HOME)
+            if (ParentPortalTab.MENGAJI in visibleTabs) add(ParentPortalTab.MENGAJI)
+            if (ParentPortalTab.TABUNGAN in visibleTabs) add(ParentPortalTab.TABUNGAN)
+            if (size < 3 && ParentPortalTab.MEDICAL in visibleTabs) add(ParentPortalTab.MEDICAL)
+            if (size < 3 && ParentPortalTab.PROFILE in visibleTabs) add(ParentPortalTab.PROFILE)
+            add(ParentPortalTab.MESSAGES)
+        }.distinct()
+    }
+
+    val isSubScreen = currentTab != ParentPortalTab.HOME
+    BackHandler(enabled = isSubScreen) {
+        selectedTabIndex = 0
+    }
+
+    val currentPageTitle = when (currentTab) {
+        ParentPortalTab.HOME -> if (isEn) "Parent Care Portal" else "Portal Orang Tua"
+        else -> if (isEn) currentTab.titleEn else currentTab.titleId
+    }
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .testTag("parent_portal_screen"),
+        containerColor = Color(0xFFF6F7FB),
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color(0xFF4338CA),
+                    containerColor = Color(0xFF3730A3),
                     titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White,
                     actionIconContentColor = Color.White
                 ),
+                navigationIcon = {
+                    if (isSubScreen) {
+                        IconButton(
+                            onClick = { selectedTabIndex = 0 },
+                            modifier = Modifier.testTag("btn_parent_back_home")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = if (isEn) "Back to Home" else "Kembali ke Beranda"
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 12.dp, end = 4.dp)
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Color.White),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_sr_care),
+                                contentDescription = "Wali Asuh Care",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                            )
+                        }
+                    }
+                },
                 title = {
                     Column {
                         Text(
-                            text = if (isEn) "Parent Care Portal" else "Portal Orang Tua",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = currentPageTitle,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
                             text = schoolProfile.shortName.ifBlank { schoolProfile.schoolName },
-                            fontSize = 11.sp,
+                            fontSize = 10.5.sp,
                             color = Color.White.copy(alpha = 0.85f),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -297,6 +364,65 @@ fun ParentPortalScreen(
                     }
                 }
             )
+        },
+        bottomBar = {
+            if (currentTab != ParentPortalTab.MESSAGES) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 6.dp
+                ) {
+                    bottomNavTabs.forEach { navTab ->
+                        val isSelected = currentTab == navTab
+                        val navLabel = when (navTab) {
+                            ParentPortalTab.HOME -> if (isEn) "Home" else "Beranda"
+                            else -> if (isEn) navTab.titleEn else navTab.titleId
+                        }
+                        NavigationBarItem(
+                            selected = isSelected,
+                            onClick = {
+                                val targetIdx = visibleTabs.indexOf(navTab)
+                                if (targetIdx >= 0) selectedTabIndex = targetIdx
+                            },
+                            icon = {
+                                if (navTab == ParentPortalTab.MESSAGES && unreadFromWaliCount > 0) {
+                                    BadgedBox(
+                                        badge = {
+                                            Badge(containerColor = Color(0xFFDC2626)) {
+                                                Text(
+                                                    text = unreadFromWaliCount.toString(),
+                                                    fontSize = 9.sp,
+                                                    color = Color.White
+                                                )
+                                            }
+                                        }
+                                    ) {
+                                        Icon(navTab.icon, contentDescription = navLabel, modifier = Modifier.size(22.dp))
+                                    }
+                                } else {
+                                    Icon(navTab.icon, contentDescription = navLabel, modifier = Modifier.size(22.dp))
+                                }
+                            },
+                            label = {
+                                Text(
+                                    text = navLabel,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = Color(0xFF3730A3),
+                                selectedTextColor = Color(0xFF3730A3),
+                                indicatorColor = Color(0xFFE0E7FF),
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            ),
+                            modifier = Modifier.testTag(navTab.tag)
+                        )
+                    }
+                }
+            }
         }
     ) { innerPadding ->
         Box(
@@ -310,34 +436,6 @@ fun ParentPortalScreen(
                     .fillMaxSize()
                     .widthIn(max = 640.dp)
             ) {
-                ScrollableTabRow(
-                    selectedTabIndex = safeTabIndex,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = Color(0xFF4338CA),
-                    edgePadding = 8.dp
-                ) {
-                    visibleTabs.forEachIndexed { idx, tab ->
-                        val labelText = if (tab == ParentPortalTab.MESSAGES && unreadFromWaliCount > 0) {
-                            "${if (isEn) tab.titleEn else tab.titleId} ($unreadFromWaliCount)"
-                        } else {
-                            if (isEn) tab.titleEn else tab.titleId
-                        }
-                        Tab(
-                            selected = safeTabIndex == idx,
-                            onClick = { selectedTabIndex = idx },
-                            text = {
-                                Text(
-                                    text = labelText,
-                                    fontSize = 12.sp,
-                                    fontWeight = if (safeTabIndex == idx) FontWeight.Bold else FontWeight.Medium
-                                )
-                            },
-                            icon = { Icon(tab.icon, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            modifier = Modifier.testTag(tab.tag)
-                        )
-                    }
-                }
-
                 val sortedTabungan = remember(tabunganRecords) {
                     tabunganRecords.sortedWith(
                         compareByDescending<TabunganTransaction> { it.transactionDate }
@@ -353,12 +451,13 @@ fun ParentPortalScreen(
                         student = student,
                         link = activeLink,
                         isFemaleStudent = isFemaleStudent,
-                        mengajiCount = studentMengaji.size,
-                        medicalCount = studentMedical.size,
-                        fastingCount = studentFasting.size,
+                        mengajiRecords = studentMengaji,
+                        medicalRecords = studentMedical,
+                        fastingRecords = studentFasting,
                         haidRecords = studentHaid,
+                        tabunganTransactions = sortedTabungan,
                         tabunganBalance = tabunganTotals.totalBalance,
-                        tabunganCount = sortedTabungan.size,
+                        messages = threadMessages,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
@@ -400,224 +499,186 @@ private fun ParentOverviewContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
     isFemaleStudent: Boolean,
-    mengajiCount: Int,
-    medicalCount: Int,
-    fastingCount: Int,
+    mengajiRecords: List<MengajiRecord>,
+    medicalRecords: List<MedicalRecord>,
+    fastingRecords: List<FastingRecord>,
     haidRecords: List<HaidRecord>,
+    tabunganTransactions: List<TabunganTransaction>,
     tabunganBalance: Long,
-    tabunganCount: Int,
+    messages: List<ParentMessage>,
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit
 ) {
-    val isEn = LocalAppStrings.current.isEnglish
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val lang = s.language
+
+    val menuTiles = remember(
+        link,
+        isFemaleStudent,
+        mengajiRecords.size,
+        medicalRecords.size,
+        fastingRecords.size,
+        haidRecords,
+        tabunganTransactions.size,
+        unreadMessageCount,
+        isEn
     ) {
-        item {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 3.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Brush.horizontalGradient(listOf(Color(0xFF4338CA), Color(0xFF6D28D9))))
-                        .padding(16.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        StudentAvatar(
-                            name = student?.name ?: link?.studentName ?: "Ananda",
-                            gender = student?.gender ?: "L",
-                            size = 54.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = student?.name ?: link?.studentName.orEmpty().ifBlank { "-" },
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = Color.White
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "Class ${student?.classGrade ?: link?.studentClass ?: "-"} • ${student?.dormitory ?: link?.studentDorm ?: "-"}"
-                                } else {
-                                    "Kelas ${student?.classGrade ?: link?.studentClass ?: "-"} • ${student?.dormitory ?: link?.studentDorm ?: "-"}"
-                                },
-                                fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.9f)
-                            )
-                            if (!student?.nis.isNullOrBlank()) {
-                                Text(
-                                    text = "NIS/NISN: ${student?.nis}",
-                                    fontSize = 11.sp,
-                                    color = Color.White.copy(alpha = 0.8f)
-                                )
-                            }
-                        }
-                    }
-                }
+        buildList {
+            if (link?.canViewProfile == true) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "profile",
+                        title = if (isEn) "Child Profile" else "Profil Anak",
+                        imageRes = R.drawable.img_menu_anak_asuh,
+                        accentColor = Color(0xFF4338CA),
+                        softBg = Color(0xFFEEF2FF),
+                        testTag = "card_parent_summary_profile",
+                        onClick = { onOpenTab(ParentPortalTab.PROFILE) }
+                    )
+                )
             }
-        }
-
-        item {
-            val waliName = student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
-                ?: link?.assignedWaliName.orEmpty()
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(Color(0xFFE0E7FF)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(Icons.Default.Person, contentDescription = null, tint = Color(0xFF4338CA))
-                    }
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = waliName.ifBlank { if (isEn) "Not assigned yet" else "Belum ditentukan" },
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFF4338CA),
-                        modifier = Modifier
-                            .clickable { onOpenTab(ParentPortalTab.MESSAGES) }
-                            .testTag("btn_overview_open_chat")
-                    ) {
-                        Text(
-                            text = if (unreadMessageCount > 0) {
-                                if (isEn) "Chat ($unreadMessageCount)" else "Pesan ($unreadMessageCount)"
-                            } else {
-                                if (isEn) "Message" else "Kirim Pesan"
-                            },
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
-                        )
-                    }
-                }
+            if (link?.canViewMengaji == true) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "mengaji",
+                        title = "Mengaji",
+                        imageRes = R.drawable.img_menu_mengaji,
+                        accentColor = Color(0xFF047857),
+                        softBg = Color(0xFFECFDF5),
+                        badgeText = if (mengajiRecords.isNotEmpty()) "${mengajiRecords.size}" else null,
+                        badgeColor = Color(0xFF059669),
+                        testTag = "card_parent_summary_mengaji",
+                        onClick = { onOpenTab(ParentPortalTab.MENGAJI) }
+                    )
+                )
             }
-        }
-
-        item {
-            Text(
-                text = if (isEn) "Accessible Reports" else "Laporan Yang Dibuka Untuk Anda",
-                fontSize = 13.5.sp,
-                fontWeight = FontWeight.Bold
+            if (link?.canViewMedical == true) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "medical",
+                        title = if (isEn) "Health" else "Kesehatan",
+                        imageRes = R.drawable.img_menu_rekam_medis,
+                        accentColor = Color(0xFF0284C7),
+                        softBg = Color(0xFFF0F9FF),
+                        badgeText = if (medicalRecords.isNotEmpty()) "${medicalRecords.size}" else null,
+                        badgeColor = Color(0xFF0284C7),
+                        testTag = "card_parent_summary_medical",
+                        onClick = { onOpenTab(ParentPortalTab.MEDICAL) }
+                    )
+                )
+            }
+            if (link?.canViewFasting == true) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "fasting",
+                        title = if (isEn) "Fasting" else "Puasa",
+                        imageRes = R.drawable.img_menu_input_puasa,
+                        accentColor = Color(0xFF0F766E),
+                        softBg = Color(0xFFF0FDFA),
+                        badgeText = if (fastingRecords.isNotEmpty()) "${fastingRecords.size}" else null,
+                        badgeColor = Color(0xFF0F766E),
+                        testTag = "card_parent_summary_fasting",
+                        onClick = { onOpenTab(ParentPortalTab.FASTING) }
+                    )
+                )
+            }
+            if (isFemaleStudent && link?.canViewHaid == true) {
+                val activeHaid = haidRecords.firstOrNull { it.isActive }
+                add(
+                    ParentMenuTileSpec(
+                        id = "haid",
+                        title = if (isEn) "Haid Cycle" else "Haid & Suci",
+                        imageRes = R.drawable.img_menu_daftar_haid,
+                        accentColor = Color(0xFFDB2777),
+                        softBg = Color(0xFFFDF2F8),
+                        badgeText = if (activeHaid != null) "H-${activeHaid.durationDays}" else if (haidRecords.isNotEmpty()) "${haidRecords.size}" else null,
+                        badgeColor = Color(0xFFDB2777),
+                        testTag = "card_parent_summary_haid",
+                        onClick = { onOpenTab(ParentPortalTab.HAID) }
+                    )
+                )
+            }
+            if (link?.canViewTabungan == true) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "tabungan",
+                        title = if (isEn) "Savings" else "Tabungan",
+                        imageRes = R.drawable.img_menu_tabungan,
+                        accentColor = Color(0xFFD97706),
+                        softBg = Color(0xFFFFFBEB),
+                        badgeText = if (tabunganTransactions.isNotEmpty()) "${tabunganTransactions.size}" else null,
+                        badgeColor = Color(0xFFD97706),
+                        testTag = "card_parent_summary_tabungan",
+                        onClick = { onOpenTab(ParentPortalTab.TABUNGAN) }
+                    )
+                )
+            }
+            add(
+                ParentMenuTileSpec(
+                    id = "messages",
+                    title = if (isEn) "Chat Wali" else "Pesan Wali",
+                    imageRes = R.drawable.img_menu_orang_tua,
+                    accentColor = Color(0xFF4F46E5),
+                    softBg = Color(0xFFEEF2FF),
+                    badgeText = if (unreadMessageCount > 0) "$unreadMessageCount" else null,
+                    badgeColor = Color(0xFFDC2626),
+                    testTag = "card_parent_summary_messages",
+                    onClick = { onOpenTab(ParentPortalTab.MESSAGES) }
+                )
             )
         }
+    }
 
-        if (link?.canViewProfile == true) {
-            item {
-                PortalModuleSummaryCard(
-                    title = if (isEn) "Child Profile & Biodata" else "Profil & Biodata Anak",
-                    subtitle = if (isEn) {
-                        "Class ${student?.classGrade ?: link.studentClass} • Room ${student?.roomNumber?.ifBlank { "-" } ?: "-"}"
-                    } else {
-                        "Kelas ${student?.classGrade ?: link.studentClass} • Kamar ${student?.roomNumber?.ifBlank { "-" } ?: "-"}"
-                    },
-                    accentColor = Color(0xFF4338CA),
-                    icon = Icons.Default.Badge,
-                    onClick = { onOpenTab(ParentPortalTab.PROFILE) },
-                    testTag = "card_parent_summary_profile"
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                ParentGreetingHeroCard(
+                    student = student,
+                    link = link,
+                    unreadMessageCount = unreadMessageCount,
+                    isEn = isEn,
+                    onOpenChat = { onOpenTab(ParentPortalTab.MESSAGES) },
+                    onOpenProfile = if (link?.canViewProfile == true) {
+                        { onOpenTab(ParentPortalTab.PROFILE) }
+                    } else null
                 )
             }
         }
-        if (link?.canViewMengaji == true) {
-            item {
-                PortalModuleSummaryCard(
-                    title = if (isEn) "Mengaji History" else "Riwayat Mengaji",
-                    subtitle = if (isEn) "$mengajiCount records available" else "$mengajiCount catatan setoran mengaji",
-                    accentColor = Color(0xFF047857),
-                    icon = Icons.AutoMirrored.Filled.MenuBook,
-                    onClick = { onOpenTab(ParentPortalTab.MENGAJI) },
-                    testTag = "card_parent_summary_mengaji"
+
+        item {
+            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                ParentSuperAppIconGrid(
+                    tiles = menuTiles,
+                    isEn = isEn
                 )
             }
         }
-        if (link?.canViewMedical == true) {
-            item {
-                PortalModuleSummaryCard(
-                    title = if (isEn) "Medical History" else "Riwayat Sakit & Perawatan",
-                    subtitle = if (isEn) "$medicalCount health records" else "$medicalCount catatan kesehatan",
-                    accentColor = Color(0xFF0284C7),
-                    icon = Icons.Default.LocalHospital,
-                    onClick = { onOpenTab(ParentPortalTab.MEDICAL) },
-                    testTag = "card_parent_summary_medical"
-                )
-            }
-        }
-        if (link?.canViewFasting == true) {
-            item {
-                PortalModuleSummaryCard(
-                    title = if (isEn) "Fasting History" else "Riwayat Puasa",
-                    subtitle = if (isEn) "$fastingCount fasting sessions" else "$fastingCount catatan sahur & berbuka",
-                    accentColor = Color(0xFF0F766E),
-                    icon = Icons.Default.NightlightRound,
-                    onClick = { onOpenTab(ParentPortalTab.FASTING) },
-                    testTag = "card_parent_summary_fasting"
-                )
-            }
-        }
-        if (isFemaleStudent && link?.canViewHaid == true) {
-            val activeHaid = haidRecords.firstOrNull { it.isActive }
-            val haidSubtitle = if (activeHaid != null) {
-                if (isEn) "Active Haid Day ${activeHaid.durationDays} • ${haidRecords.size} records"
-                else "Sedang Haid Hari ke-${activeHaid.durationDays} • ${haidRecords.size} catatan"
-            } else {
-                if (isEn) "${haidRecords.size} haid & suci cycle records"
-                else "${haidRecords.size} catatan siklus haid & masa suci"
-            }
-            item {
-                PortalModuleSummaryCard(
-                    title = if (isEn) "Haid Cycle History" else "Riwayat Haid & Masa Suci",
-                    subtitle = haidSubtitle,
-                    accentColor = Color(0xFFDB2777),
-                    icon = Icons.Default.Favorite,
-                    onClick = { onOpenTab(ParentPortalTab.HAID) },
-                    testTag = "card_parent_summary_haid"
-                )
-            }
-        }
-        if (link?.canViewTabungan == true) {
-            item {
-                PortalModuleSummaryCard(
-                    title = if (isEn) "Child Savings Ledger" else "Tabungan Titipan Anak",
-                    subtitle = if (isEn) {
-                        "Balance: ${TabunganHelper.formatRupiah(tabunganBalance)} ($tabunganCount entries)"
-                    } else {
-                        "Saldo: ${TabunganHelper.formatRupiah(tabunganBalance)} ($tabunganCount mutasi)"
-                    },
-                    accentColor = Color(0xFFD97706),
-                    icon = Icons.Default.AccountBalanceWallet,
-                    onClick = { onOpenTab(ParentPortalTab.TABUNGAN) },
-                    testTag = "card_parent_summary_tabungan"
-                )
-            }
+
+        item {
+            ParentSwipeableHighlightsSection(
+                link = link,
+                isFemaleStudent = isFemaleStudent,
+                mengajiRecords = mengajiRecords,
+                medicalRecords = medicalRecords,
+                fastingRecords = fastingRecords,
+                haidRecords = haidRecords,
+                tabunganTransactions = tabunganTransactions,
+                tabunganBalance = tabunganBalance,
+                messages = messages,
+                isEn = isEn,
+                lang = lang,
+                onOpenMengaji = { onOpenTab(ParentPortalTab.MENGAJI) },
+                onOpenTabungan = { onOpenTab(ParentPortalTab.TABUNGAN) },
+                onOpenMedical = { onOpenTab(ParentPortalTab.MEDICAL) },
+                onOpenFasting = { onOpenTab(ParentPortalTab.FASTING) },
+                onOpenHaid = { onOpenTab(ParentPortalTab.HAID) },
+                onOpenMessages = { onOpenTab(ParentPortalTab.MESSAGES) }
+            )
         }
     }
 }
