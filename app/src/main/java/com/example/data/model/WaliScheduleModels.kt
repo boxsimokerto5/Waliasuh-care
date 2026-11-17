@@ -790,9 +790,124 @@ object WaliScheduleHelper {
         )
     }
 
+    private fun splitDelimitedLine(line: String, delimiter: Char): List<String> {
+        if (delimiter == '\t' && !line.contains('"')) {
+            return line.split('\t').map { it.trim() }
+        }
+        val tokens = mutableListOf<String>()
+        val sb = StringBuilder()
+        var inQuotes = false
+        var i = 0
+        while (i < line.length) {
+            val c = line[i]
+            if (c == '"') {
+                if (inQuotes && i + 1 < line.length && line[i + 1] == '"') {
+                    sb.append('"')
+                    i++
+                } else {
+                    inQuotes = !inQuotes
+                }
+            } else if (c == delimiter && !inQuotes) {
+                tokens.add(sb.toString().trim())
+                sb.clear()
+            } else {
+                sb.append(c)
+            }
+            i++
+        }
+        tokens.add(sb.toString().trim())
+        return tokens
+    }
+
+    private fun escapeCsvCell(value: String): String {
+        val clean = value.replace("\r", " ").replace("\n", " ").trim()
+        return if (clean.contains(',') || clean.contains('"') || clean.contains(';')) {
+            "\"${clean.replace("\"", "\"\"")}\""
+        } else {
+            clean
+        }
+    }
+
     /**
-     * Parse tabel CSV / TSV Matriks (tempel dari Excel / Google Sheets):
+     * Membuat template CSV matriks bulanan berformat `No,Nama,1,2,...,<maxDay>`
+     * yang otomatis memuat daftar Wali Asuh di sekolah aktif (dan kode shift yang sudah tersimpan jika ada).
+     */
+    fun buildScheduleTemplateCsv(
+        monthKey: String,
+        existingEntries: List<WaliScheduleEntry> = emptyList(),
+        waliAccounts: List<WaliAccount> = emptyList(),
+        includeExistingShifts: Boolean = true
+    ): String {
+        val maxDay = daysInMonth(monthKey)
+        val sb = StringBuilder()
+        val headerCols = mutableListOf("No", "Nama")
+        for (d in 1..maxDay) {
+            headerCols.add(d.toString())
+        }
+        sb.appendLine(headerCols.joinToString(","))
+
+        val sortedExisting = existingEntries
+            .sortedWith(compareBy<WaliScheduleEntry> { it.sortOrder }.thenBy { it.waliName.lowercase() })
+
+        val seenKeys = mutableSetOf<String>()
+        data class TemplateRow(val name: String, val dayMap: Map<Int, String>)
+
+        val rows = mutableListOf<TemplateRow>()
+        sortedExisting.forEach { entry ->
+            val key = entry.waliUsername.trim().lowercase().ifBlank { entry.waliName.trim().lowercase() }
+            if (key.isNotBlank()) seenKeys.add(key)
+            seenKeys.add(entry.waliName.trim().lowercase())
+            val days = if (includeExistingShifts) parseDayCodes(entry.dayCodesJson) else emptyMap()
+            rows.add(TemplateRow(entry.waliName.trim(), days))
+        }
+
+        waliAccounts
+            .filter { !it.isGuruNgaji() && it.name.isNotBlank() }
+            .sortedBy { it.name.lowercase() }
+            .forEach { acc ->
+                val userKey = acc.username.trim().lowercase()
+                val nameKey = acc.name.trim().lowercase()
+                if (nameKey !in seenKeys && (userKey.isBlank() || userKey !in seenKeys)) {
+                    seenKeys.add(nameKey)
+                    if (userKey.isNotBlank()) seenKeys.add(userKey)
+                    rows.add(TemplateRow(acc.name.trim(), emptyMap()))
+                }
+            }
+
+        if (rows.isEmpty()) {
+            val sample1 = listOf("P1", "S3A", "M3", "LP", "L")
+            val sample2 = listOf("S2A", "S2A", "M3", "LP", "L")
+            rows.add(
+                TemplateRow(
+                    "Contoh Wali Asuh 1",
+                    (1..maxDay).associateWith { d -> sample1[(d - 1) % sample1.size] }
+                )
+            )
+            rows.add(
+                TemplateRow(
+                    "Contoh Wali Asuh 2",
+                    (1..maxDay).associateWith { d -> sample2[(d - 1) % sample2.size] }
+                )
+            )
+        }
+
+        rows.forEachIndexed { index, row ->
+            val cols = mutableListOf(
+                (index + 1).toString(),
+                escapeCsvCell(row.name)
+            )
+            for (d in 1..maxDay) {
+                cols.add(row.dayMap[d]?.let { normalizeCode(it) }.orEmpty())
+            }
+            sb.appendLine(cols.joinToString(","))
+        }
+        return sb.toString().trimEnd()
+    }
+
+    /**
+     * Parse tabel CSV / TSV Matriks (tempel dari Excel / Google Sheets atau unggah file `.csv`):
      * Format baris yang didukung:
+     * - Dengan kolom No:         No, Nama, 1, 2, ..., 30 (termasuk kolom rekap kanan seperti JK (Jam))
      * - Dengan kolom No & Kode:  No, Kode, Nama Wali, 1, 2, ..., 30
      * - Atau langsung Nama Wali: Nama Wali, 1, 2, ..., 30
      * Separator otomatis mendeteksi Tab (`\t`), titik koma (`;`), atau koma (`,`).
@@ -801,11 +916,14 @@ object WaliScheduleHelper {
         rawText: String,
         monthKey: String,
         schoolId: String,
-        existingEntries: List<WaliScheduleEntry>,
+        existingEntries: List<WaliScheduleEntry> = emptyList(),
         waliAccounts: List<WaliAccount> = emptyList(),
         updatedBy: String = "Admin Sekolah"
     ): List<WaliScheduleEntry> {
-        val lines = rawText.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
+        val cleanedRaw = rawText
+            .removePrefix("\uFEFF")
+            .removePrefix("ï»¿")
+        val lines = cleanedRaw.lines().map { it.trimEnd() }.filter { it.isNotBlank() }
         if (lines.isEmpty()) return emptyList()
         val maxDay = daysInMonth(monthKey)
         val firstLine = lines.first()
@@ -816,7 +934,9 @@ object WaliScheduleHelper {
         }
 
         val parsedRows = lines.map { line ->
-            line.split(delimiter).map { cell -> cell.trim().removeSurrounding("\"") }
+            splitDelimitedLine(line, delimiter).map { cell ->
+                cell.removePrefix("\uFEFF").trim().removeSurrounding("\"")
+            }
         }
 
         // Cari indeks kolom hari ke-1 pada header (jika ada header angka "1","2",...)
@@ -833,7 +953,7 @@ object WaliScheduleHelper {
                 codeCol = 1
                 nameCol = 2
             } else if (oneIndex == 2) {
-                // Bisa No, Nama -> day 1 di col 2
+                // Format standar: No, Nama -> day 1 di col 2
                 nameCol = 1
             }
             startRow = 1

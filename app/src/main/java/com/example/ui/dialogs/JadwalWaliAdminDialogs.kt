@@ -1,5 +1,9 @@
 package com.example.ui.dialogs
 
+import android.net.Uri
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.LocalHospital
@@ -37,6 +42,7 @@ import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -66,6 +72,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -77,9 +84,11 @@ import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.LeaveDayInfo
 import com.example.data.model.PinnedTaskItem
 import com.example.data.model.SchoolProfile
+import com.example.data.model.WaliAccount
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
 import com.example.data.model.WaliShiftCode
+import com.example.util.StudentCsvParser
 import com.example.util.i18n.LocalAppStrings
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -831,6 +840,8 @@ fun ImportJadwalMatriksDialog(
     entries: List<WaliScheduleEntry>,
     shiftCodes: List<WaliShiftCode>,
     schoolProfile: SchoolProfile,
+    waliAccounts: List<WaliAccount> = emptyList(),
+    initialTab: Int = 0,
     onSyncWaliAccounts: () -> Unit,
     onAddManualMember: (name: String, waliCode: String) -> Unit,
     onDeleteMember: (WaliScheduleEntry) -> Unit,
@@ -838,12 +849,13 @@ fun ImportJadwalMatriksDialog(
     onImportCsv: (csvText: String) -> Unit,
     onDismiss: () -> Unit
 ) {
+    val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
     val effectiveCodes = remember(shiftCodes, schoolProfile.tenantCode) {
         shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
             .sortedBy { it.sortOrder }
     }
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
     var manualName by remember { mutableStateOf("") }
     var manualCode by remember { mutableStateOf("") }
 
@@ -853,14 +865,88 @@ fun ImportJadwalMatriksDialog(
     val patternSequence = remember { mutableStateListOf<String>() }
 
     var csvText by remember { mutableStateOf("") }
-    val csvPreview = remember(csvText, monthKey, entries) {
+    var uploadedCsvFileName by remember { mutableStateOf<String?>(null) }
+    val templateCsvContent = remember(monthKey, entries, waliAccounts) {
+        WaliScheduleHelper.buildScheduleTemplateCsv(
+            monthKey = monthKey,
+            existingEntries = entries,
+            waliAccounts = waliAccounts,
+            includeExistingShifts = true
+        )
+    }
+    val csvPreview = remember(csvText, monthKey, entries, waliAccounts) {
         if (csvText.isBlank()) emptyList()
         else WaliScheduleHelper.parseMatrixCsv(
             rawText = csvText,
             monthKey = monthKey,
             schoolId = schoolProfile.tenantCode,
-            existingEntries = entries
+            existingEntries = entries,
+            waliAccounts = waliAccounts
         )
+    }
+
+    val createTemplateCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    val contentWithBom = "\uFEFF$templateCsvContent"
+                    os.write(contentWithBom.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(
+                    context,
+                    if (isEn) "Duty schedule CSV template downloaded!" else "Template CSV Jadwal Wali Asuh berhasil diunduh!",
+                    Toast.LENGTH_SHORT
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to download template: ${e.message}" else "Gagal mengunduh template: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    val pickScheduleCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        if (uri != null) {
+            try {
+                val rawBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                val decoded = rawBytes?.let { StudentCsvParser.decodeCsvBytes(it) }.orEmpty()
+                if (decoded.isNotBlank()) {
+                    csvText = decoded
+                    uploadedCsvFileName = uri.lastPathSegment?.substringAfterLast('/') ?: "jadwal_wali_asuh.csv"
+                    val detected = WaliScheduleHelper.parseMatrixCsv(
+                        rawText = decoded,
+                        monthKey = monthKey,
+                        schoolId = schoolProfile.tenantCode,
+                        existingEntries = entries,
+                        waliAccounts = waliAccounts
+                    )
+                    Toast.makeText(
+                        context,
+                        if (isEn) "CSV loaded: ${detected.size} caregiver schedules detected!"
+                        else "File CSV dimuat: ${detected.size} jadwal Wali Asuh terdeteksi!",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "CSV file is empty." else "File CSV kosong.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to read CSV file: ${e.message}" else "Gagal membaca file CSV: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
     }
 
     Dialog(
@@ -1149,59 +1235,142 @@ fun ImportJadwalMatriksDialog(
                     }
 
                     else -> {
-                        Text(
-                            text = if (isEn) "Paste CSV / Tab-separated matrix table from Excel or Google Sheets (Name, day 1..31):"
-                            else "Tempel tabel matriks CSV / Excel / Spreadsheet (No, Nama, Tgl 1, Tgl 2, dst.):",
-                            fontSize = 11.5.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        OutlinedTextField(
-                            value = csvText,
-                            onValueChange = { csvText = it },
-                            placeholder = {
-                                Text(
-                                    "No,Nama Wali Asuh,1,2,3,4,5\n1,Eko Wahyudi,P1,S3A,M3,LP,L",
-                                    fontSize = 11.sp
-                                )
-                            },
-                            minLines = 5,
-                            maxLines = 8,
+                        val maxDay = WaliScheduleHelper.daysInMonth(monthKey)
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("input_csv_matrix")
-                        )
-                        if (csvPreview.isNotEmpty()) {
+                                .heightIn(max = 460.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFDCFCE7),
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFFF0FDFA),
+                                border = BorderStroke(1.dp, Color(0xFF99F6E4)),
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Row(
+                                Column(
                                     modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Icon(Icons.Default.TableChart, contentDescription = null, tint = Color(0xFF166534))
                                     Text(
-                                        text = if (isEn) "${csvPreview.size} valid caregiver rows detected."
-                                        else "Terdeteksi ${csvPreview.size} baris jadwal Wali Asuh siap diimpor.",
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF166534)
+                                        text = if (isEn) {
+                                            "Quick Workflow: Download the CSV template ($maxDay days pre-filled with this school's Wali Asuh list), edit shift codes in Excel/Sheets, then upload the CSV file."
+                                        } else {
+                                            "Cara Cepat: Unduh template CSV ($maxDay hari, otomatis berisi daftar Wali Asuh sekolah ini), isi kode shift di Excel/Sheets, lalu unggah kembali file CSV-nya."
+                                        },
+                                        fontSize = 11.5.sp,
+                                        color = Color(0xFF115E59),
+                                        lineHeight = 16.sp
                                     )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Button(
+                                            onClick = {
+                                                val safeCode = schoolProfile.tenantCode.ifBlank { "SRT1" }
+                                                    .replace(Regex("[^A-Za-z0-9_-]"), "_")
+                                                createTemplateCsvLauncher.launch("Template_Jadwal_Wali_${safeCode}_${monthKey}.csv")
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_download_jadwal_csv_template")
+                                        ) {
+                                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = if (isEn) "Download CSV" else "Template CSV",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        OutlinedButton(
+                                            onClick = { pickScheduleCsvLauncher.launch("*/*") },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_upload_jadwal_csv_file")
+                                        ) {
+                                            Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0369A1))
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = if (isEn) "Upload CSV" else "Upload File CSV",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF0369A1)
+                                            )
+                                        }
+                                    }
+                                    if (!uploadedCsvFileName.isNullOrBlank()) {
+                                        Text(
+                                            text = if (isEn) "Loaded file: $uploadedCsvFileName" else "File dimuat: $uploadedCsvFileName",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF0F766E)
+                                        )
+                                    }
                                 }
                             }
-                        }
-                        Button(
-                            onClick = { onImportCsv(csvText) },
-                            enabled = csvPreview.isNotEmpty(),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_import_csv_matrix")
-                        ) {
-                            Text(if (isEn) "Import Schedule Matrix" else "Impor Matriks Jadwal", fontWeight = FontWeight.Bold)
+
+                            Text(
+                                text = if (isEn) "Or paste CSV / Tab-separated matrix table from Excel or Google Sheets (No, Nama, 1..$maxDay):"
+                                else "Atau tempel tabel matriks CSV / Excel / Spreadsheet (No, Nama, 1..$maxDay):",
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedTextField(
+                                value = csvText,
+                                onValueChange = { csvText = it },
+                                placeholder = {
+                                    Text(
+                                        "No,Nama,1,2,3,4,5\n1,Eko Wahyudi,P1,S3A,M3,LP,L",
+                                        fontSize = 11.sp
+                                    )
+                                },
+                                minLines = 4,
+                                maxLines = 7,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_csv_matrix")
+                            )
+                            if (csvPreview.isNotEmpty()) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFDCFCE7),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Icon(Icons.Default.TableChart, contentDescription = null, tint = Color(0xFF166534))
+                                        Text(
+                                            text = if (isEn) "${csvPreview.size} valid caregiver rows detected."
+                                            else "Terdeteksi ${csvPreview.size} baris jadwal Wali Asuh siap diimpor.",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF166534)
+                                        )
+                                    }
+                                }
+                            }
+                            Button(
+                                onClick = { onImportCsv(csvText) },
+                                enabled = csvPreview.isNotEmpty(),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_import_csv_matrix")
+                            ) {
+                                Text(if (isEn) "Import Schedule Matrix" else "Impor Matriks Jadwal", fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }

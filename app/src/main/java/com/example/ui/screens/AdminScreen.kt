@@ -210,6 +210,7 @@ fun AdminScreen(
     var showPenyematanTugas by remember { mutableStateOf(false) }
     var showManageShiftCodes by remember { mutableStateOf(false) }
     var showImportJadwalMatriks by remember { mutableStateOf(false) }
+    var importJadwalInitialTab by remember { mutableIntStateOf(0) }
     var editingJadwalCellTarget by remember { mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null) }
     var readyAdminJadwalPdf by remember { mutableStateOf<File?>(null) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
@@ -346,6 +347,39 @@ fun AdminScreen(
                 Toast.makeText(
                     context,
                     if (isEn) "Failed to export Wali Asuh CSV: ${e.message}" else "Gagal mengekspor CSV wali: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+    }
+
+    val downloadJadwalTemplateCsvLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("text/csv")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val csvContent = "\uFEFF" + WaliScheduleHelper.buildScheduleTemplateCsv(
+                    monthKey = jadwalMonthKey,
+                    existingEntries = jadwalMonthEntries,
+                    waliAccounts = schoolAccounts,
+                    includeExistingShifts = true
+                )
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(csvContent.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(
+                    context,
+                    if (isEn) {
+                        "Duty schedule CSV template downloaded (${WaliScheduleHelper.formatMonthTitle(jadwalMonthKey, true)})!"
+                    } else {
+                        "Template CSV jadwal berhasil diunduh (${WaliScheduleHelper.formatMonthTitle(jadwalMonthKey, false)})!"
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+            } catch (e: Exception) {
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to download schedule CSV template: ${e.message}" else "Gagal mengunduh template CSV jadwal: ${e.message}",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -626,7 +660,8 @@ fun AdminScreen(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
-                    .widthIn(max = 680.dp),
+                    .widthIn(max = 680.dp)
+                    .testTag("list_admin_content"),
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -937,7 +972,8 @@ fun AdminScreen(
                         edgePadding = 4.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp)),
+                            .clip(RoundedCornerShape(10.dp))
+                            .testTag("row_admin_tabs"),
                         containerColor = MaterialTheme.colorScheme.surface
                     ) {
                         Tab(
@@ -2085,14 +2121,43 @@ fun AdminScreen(
                                         Text(if (isEn) "Shift Codes" else "Kode Shift (${schoolShiftCodes.size})", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }
                                     OutlinedButton(
-                                        onClick = { showImportJadwalMatriks = true },
+                                        onClick = {
+                                            importJadwalInitialTab = 0
+                                            showImportJadwalMatriks = true
+                                        },
                                         shape = RoundedCornerShape(10.dp),
                                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
                                         modifier = Modifier.testTag("btn_admin_import_jadwal")
                                     ) {
                                         Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0F766E))
                                         Spacer(modifier = Modifier.width(5.dp))
-                                        Text(if (isEn) "Roster / Pattern / CSV" else "Personel / Pola / CSV", fontSize = 11.5.sp, color = Color(0xFF0F766E), fontWeight = FontWeight.Bold)
+                                        Text(if (isEn) "Roster / Pattern" else "Personel / Pola", fontSize = 11.5.sp, color = Color(0xFF0F766E), fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            val safeCode = activeSchoolCode.replace(Regex("[^A-Za-z0-9_-]"), "_")
+                                            downloadJadwalTemplateCsvLauncher.launch("Template_Jadwal_Wali_${safeCode}_${jadwalMonthKey}.csv")
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_download_jadwal_csv_template")
+                                    ) {
+                                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0F766E))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Template CSV" else "Template CSV", fontSize = 11.5.sp, color = Color(0xFF0F766E), fontWeight = FontWeight.Bold)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            importJadwalInitialTab = 2
+                                            showImportJadwalMatriks = true
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_upload_jadwal_csv")
+                                    ) {
+                                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0369A1))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Upload CSV" else "Upload CSV", fontSize = 11.5.sp, color = Color(0xFF0369A1), fontWeight = FontWeight.Bold)
                                     }
                                     OutlinedButton(
                                         onClick = { showPenyematanTugas = true },
@@ -2272,7 +2337,11 @@ fun AdminScreen(
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                     )
-                                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    @OptIn(ExperimentalLayoutApi::class)
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
                                         Button(
                                             onClick = {
                                                 viewModel.syncScheduleMembersFromWaliAccounts(jadwalMonthKey) { _, msg ->
@@ -2286,8 +2355,25 @@ fun AdminScreen(
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(if (isEn) "Sync Wali Asuh" else "Tarik Akun Wali", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                                         }
-                                        OutlinedButton(onClick = { showImportJadwalMatriks = true }) {
-                                            Text(if (isEn) "Manual / CSV" else "Manual / CSV", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                        OutlinedButton(
+                                            onClick = {
+                                                val safeCode = activeSchoolCode.replace(Regex("[^A-Za-z0-9_-]"), "_")
+                                                downloadJadwalTemplateCsvLauncher.launch("Template_Jadwal_Wali_${safeCode}_${jadwalMonthKey}.csv")
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F766E))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(if (isEn) "Template CSV" else "Template CSV", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0F766E))
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                importJadwalInitialTab = 2
+                                                showImportJadwalMatriks = true
+                                            }
+                                        ) {
+                                            Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0369A1))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(if (isEn) "Upload CSV" else "Upload CSV", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
                                         }
                                     }
                                 }
@@ -3223,6 +3309,8 @@ fun AdminScreen(
             entries = jadwalMonthEntries,
             shiftCodes = schoolShiftCodes,
             schoolProfile = schoolProfile,
+            waliAccounts = schoolAccounts,
+            initialTab = importJadwalInitialTab,
             onSyncWaliAccounts = {
                 viewModel.syncScheduleMembersFromWaliAccounts(jadwalMonthKey) { _, msg ->
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
