@@ -136,6 +136,7 @@ import com.example.ui.dialogs.DirectTreatmentDialog
 import com.example.ui.dialogs.EditJadwalSelDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
+import com.example.ui.dialogs.HarapanOrangTuaSheet
 import com.example.ui.dialogs.ImportJadwalMatriksDialog
 import com.example.ui.dialogs.InfoPentingFeedSheet
 import com.example.ui.dialogs.InputHaidDialog
@@ -222,6 +223,7 @@ fun DashboardScreen(
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
+    val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
     val tabunganTransactions by viewModel.tabunganTransactions.collectAsStateWithLifecycle()
     val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
     val konselingRecords by viewModel.konselingRecords.collectAsStateWithLifecycle()
@@ -326,6 +328,10 @@ fun DashboardScreen(
     val myFosterStudentsCount = myFosterStudents.size
     val myFosterParentMessages = remember(parentMessages, myFosterStudentIds) {
         parentMessages.filter { it.studentId in myFosterStudentIds }
+    }
+    val myFosterParentExpectations = remember(parentExpectations, myFosterStudentIds, isAdminUser) {
+        if (isAdminUser && myFosterStudentIds.isEmpty()) parentExpectations
+        else parentExpectations.filter { it.studentId in myFosterStudentIds }
     }
     val unreadParentMessagesCount = remember(myFosterParentMessages) {
         myFosterParentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
@@ -465,6 +471,7 @@ fun DashboardScreen(
                     DashboardBannerFeatureTarget.FEATURE_KARTU_AKSES_ORTU -> modalState.showKartuAksesOrtuSheet = true
                     DashboardBannerFeatureTarget.FEATURE_PILIHAN_AKSES_ORTU -> modalState.showPilihanAksesOrtuSheet = true
                     DashboardBannerFeatureTarget.FEATURE_CHAT_ORTU -> modalState.showPesanOrtuSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_HARAPAN_ORTU -> modalState.showHarapanOrtuSheet = true
 
                     DashboardBannerFeatureTarget.FEATURE_KUNJUNGAN_HUB -> modalState.activeCategoryHub = DashboardCategoryHub.KUNJUNGAN
                     DashboardBannerFeatureTarget.FEATURE_JADWAL_KUNJUNGAN -> modalState.showJadwalKunjunganSheet = true
@@ -1355,6 +1362,7 @@ fun DashboardScreen(
                 visitRecords = visitRecords,
                 parentAccessLinks = parentAccessLinks,
                 parentMessages = myFosterParentMessages,
+                parentExpectations = myFosterParentExpectations,
                 myFosterStudentsCount = myFosterStudentsCount,
                 isAdmin = isAdminUser,
                 onDismiss = { modalState.activeCategoryHub = null },
@@ -1416,6 +1424,7 @@ fun DashboardScreen(
                     modalState.selectedParentChatStudent = null
                     modalState.showPesanOrtuSheet = true
                 },
+                onOpenHarapanOrtu = { modalState.showHarapanOrtuSheet = true },
                 tabunganTransactions = tabunganTransactions,
                 tabunganLogs = tabunganLogs,
                 claimedFosterStudents = myFosterStudents,
@@ -2567,10 +2576,44 @@ fun DashboardScreen(
             onMarkRead = { stId ->
                 viewModel.markParentMessagesAsRead(stId, "WALI")
             },
+            onDeleteMessage = { msg ->
+                viewModel.deleteParentMessage(msg)
+            },
             onDismiss = {
                 modalState.showPesanOrtuSheet = false
                 modalState.selectedParentChatStudent = null
             }
+        )
+    }
+
+    // Modal Hubungan Orang Tua 5: Harapan Karakter dari Orang Tua
+    if (modalState.showHarapanOrtuSheet) {
+        LaunchedEffect(Unit) {
+            viewModel.syncParentRelationsQuietly()
+        }
+        HarapanOrangTuaSheet(
+            students = students,
+            parentExpectations = parentExpectations,
+            isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
+            isAdmin = isAdminUser,
+            onOpenPilihAnakAsuh = {
+                modalState.showHarapanOrtuSheet = false
+                modalState.showPilihAnakAsuhSheet = true
+            },
+            onMarkReadByWali = { stId ->
+                viewModel.markParentExpectationsReadByWali(stId)
+            },
+            onSaveFollowUpNote = { expectation, note ->
+                viewModel.saveWaliExpectationFollowUp(expectation, note) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onOpenChatWithStudent = { st ->
+                modalState.showHarapanOrtuSheet = false
+                modalState.selectedParentChatStudent = st
+                modalState.showPesanOrtuSheet = true
+            },
+            onDismiss = { modalState.showHarapanOrtuSheet = false }
         )
     }
 

@@ -21,6 +21,7 @@ import com.example.data.dao.MengajiRecordDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
+import com.example.data.dao.ParentExpectationDao
 import com.example.data.dao.ParentMessageDao
 import com.example.data.dao.KonselingLogDao
 import com.example.data.dao.KonselingRecordDao
@@ -42,6 +43,7 @@ import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -73,7 +75,8 @@ class HealthRepository(
     private val waliScheduleEntryDao: WaliScheduleEntryDao? = null,
     private val infoPentingPostDao: InfoPentingPostDao? = null,
     private val infoPentingReactionDao: InfoPentingReactionDao? = null,
-    private val infoPentingCommentDao: InfoPentingCommentDao? = null
+    private val infoPentingCommentDao: InfoPentingCommentDao? = null,
+    private val parentExpectationDao: ParentExpectationDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -96,6 +99,7 @@ class HealthRepository(
     val allVisitRecords: Flow<List<VisitRecord>> = visitRecordDao?.getAllRecords() ?: emptyFlow()
     val allParentAccessLinks: Flow<List<ParentAccessLink>> = parentAccessLinkDao?.getAllLinks() ?: emptyFlow()
     val allParentMessages: Flow<List<ParentMessage>> = parentMessageDao?.getAllMessages() ?: emptyFlow()
+    val allParentExpectations: Flow<List<ParentExpectation>> = parentExpectationDao?.getAllExpectations() ?: emptyFlow()
     val allDeletionLogs: Flow<List<DeletionLog>> = deletionLogDao?.getAllLogs() ?: emptyFlow()
     val allTabunganTransactions: Flow<List<TabunganTransaction>> =
         tabunganTransactionDao?.getAllTransactions() ?: emptyFlow()
@@ -512,6 +516,44 @@ class HealthRepository(
 
     suspend fun deleteParentMessagesBySchool(schoolId: String) {
         parentMessageDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun deleteParentMessage(message: ParentMessage) {
+        parentMessageDao?.delete(message)
+    }
+
+    suspend fun deleteParentMessageById(id: Long) {
+        parentMessageDao?.deleteById(id)
+    }
+
+    // --- Parent Character Expectations (Harapan Karakter Orang Tua) ---
+    suspend fun insertParentExpectation(expectation: ParentExpectation): Long =
+        parentExpectationDao?.insert(expectation) ?: 0L
+
+    suspend fun insertAllParentExpectations(expectations: List<ParentExpectation>) {
+        parentExpectationDao?.insertAll(expectations)
+    }
+
+    suspend fun updateParentExpectation(expectation: ParentExpectation) {
+        parentExpectationDao?.update(expectation)
+    }
+
+    suspend fun deleteParentExpectation(expectation: ParentExpectation) {
+        parentExpectationDao?.delete(expectation)
+    }
+
+    suspend fun getParentExpectationsBySchoolList(schoolId: String): List<ParentExpectation> =
+        parentExpectationDao?.getExpectationsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getParentExpectationsForStudentList(studentId: Long, schoolId: String): List<ParentExpectation> =
+        parentExpectationDao?.getExpectationsForStudentList(studentId, schoolId) ?: emptyList()
+
+    suspend fun markParentExpectationsReadByWali(studentId: Long, schoolId: String, updatedAt: Long) {
+        parentExpectationDao?.markReadByWali(studentId, schoolId, updatedAt)
+    }
+
+    suspend fun deleteParentExpectationsBySchool(schoolId: String) {
+        parentExpectationDao?.deleteBySchoolId(schoolId)
     }
 
     // --- Deletion Logs (Audit & Notifikasi Hapus Riwayat Mengaji/Puasa/Berobat) ---

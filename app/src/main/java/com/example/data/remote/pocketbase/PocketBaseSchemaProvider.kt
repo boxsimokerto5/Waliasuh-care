@@ -383,6 +383,33 @@ object PocketBaseSchemaProvider {
             indexes = listOf("CREATE INDEX idx_pm_school ON parent_messages (school_id)")
         ),
         PocketBaseCollectionMeta(
+            collectionName = "parent_expectations",
+            description = "Harapan karakter orang tua untuk dinasehatkan Wali Asuh kepada anak (ikhtiar bersama)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("parent_name", "text"),
+                PbFieldDef("wali_username", "text"),
+                PbFieldDef("wali_name", "text"),
+                PbFieldDef("character_focus_csv", "text"),
+                PbFieldDef("character_expectation", "text"),
+                PbFieldDef("advice_focus_notes", "text"),
+                PbFieldDef("parent_prayer_message", "text"),
+                PbFieldDef("is_read_by_wali", "bool"),
+                PbFieldDef("wali_follow_up_note", "text"),
+                PbFieldDef("wali_responded_at", "number"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_pe_school ON parent_expectations (school_id)")
+        ),
+        PocketBaseCollectionMeta(
             collectionName = "dashboard_banners",
             description = "Banner slider global dashboard (Cloudflare R2 file & CDN URL + target fitur/eksternal)",
             multiTenantField = "school_id",

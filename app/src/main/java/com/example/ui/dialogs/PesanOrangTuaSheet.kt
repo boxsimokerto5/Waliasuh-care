@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.ParentMessage
+import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
@@ -75,6 +77,7 @@ fun PesanOrangTuaSheet(
     onOpenPilihAnakAsuh: (() -> Unit)? = null,
     onSendMessage: (ChildStudent, String) -> Unit,
     onMarkRead: (Long) -> Unit,
+    onDeleteMessage: (ParentMessage) -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val s = LocalAppStrings.current
@@ -348,10 +351,37 @@ fun PesanOrangTuaSheet(
                                         StudentAvatar(name = student.name, gender = student.gender, size = 40.dp)
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {
-                                            Text(student.name, fontSize = 13.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = student.name,
+                                                    fontSize = 13.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.weight(1f)
+                                                )
+                                                if (lastMsg != null) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = DateUtils.formatTime(lastMsg.createdAt, s.language),
+                                                        fontSize = 10.5.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                            }
                                             Text(
-                                                text = lastMsg?.let { "${it.senderName}: ${it.messageContent}" }
-                                                    ?: if (isEn) "Tap to send a message to parents" else "Ketuk untuk kirim pesan ke orang tua",
+                                                text = lastMsg?.let {
+                                                    val prefix = if (it.senderRole.equals("WALI", ignoreCase = true)) {
+                                                        if (isEn) "You: " else "Anda: "
+                                                    } else {
+                                                        ""
+                                                    }
+                                                    "$prefix${it.messageContent}"
+                                                } ?: if (isEn) "Tap to send a message to parents" else "Ketuk untuk kirim pesan ke orang tua",
                                                 fontSize = 11.5.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 maxLines = 1,
@@ -434,71 +464,34 @@ fun PesanOrangTuaSheet(
                         }
                     }
 
-                    LazyColumn(
+                    val threadListState = rememberLazyListState()
+                    ParentChatMessagesList(
+                        messages = threadMessages,
+                        myRole = "WALI",
+                        isEn = isEn,
+                        lang = s.language,
+                        ownBubbleColor = Color(0xFF4F46E5),
+                        listState = threadListState,
+                        onDeleteMessage = onDeleteMessage,
+                        emptyContent = {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = if (isEn) "No messages yet. Start the conversation below." else "Belum ada pesan. Mulai percakapan di bawah.",
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f, fill = false)
-                            .heightIn(min = 200.dp, max = 380.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (threadMessages.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 32.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = if (isEn) "No messages yet. Start the conversation below." else "Belum ada pesan. Mulai percakapan di bawah.",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        } else {
-                            items(threadMessages, key = { "pmsg_${it.id}" }) { msg ->
-                                val isWaliMsg = msg.senderRole.equals("WALI", ignoreCase = true)
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = if (isWaliMsg) Arrangement.End else Arrangement.Start
-                                ) {
-                                    Surface(
-                                        shape = RoundedCornerShape(
-                                            topStart = 14.dp,
-                                            topEnd = 14.dp,
-                                            bottomStart = if (isWaliMsg) 14.dp else 4.dp,
-                                            bottomEnd = if (isWaliMsg) 4.dp else 14.dp
-                                        ),
-                                        color = if (isWaliMsg) Color(0xFF4F46E5) else MaterialTheme.colorScheme.surfaceVariant,
-                                        modifier = Modifier.widthIn(max = 280.dp)
-                                    ) {
-                                        Column(
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                                        ) {
-                                            Text(
-                                                text = msg.senderName.ifBlank { if (isWaliMsg) "Wali Asuh" else "Orang Tua" },
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = if (isWaliMsg) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = msg.messageContent,
-                                                fontSize = 13.sp,
-                                                color = if (isWaliMsg) Color.White else MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = DateUtils.formatShortDate(msg.createdAt, s.language),
-                                                fontSize = 9.5.sp,
-                                                color = if (isWaliMsg) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                            .heightIn(min = 200.dp, max = 380.dp)
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Swipe
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -62,6 +63,7 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
@@ -467,6 +469,7 @@ fun ParentSwipeableHighlightsSection(
     tabunganTransactions: List<TabunganTransaction>,
     tabunganBalance: Long,
     messages: List<ParentMessage>,
+    expectations: List<ParentExpectation> = emptyList(),
     isEn: Boolean,
     lang: AppLanguage,
     onOpenMengaji: () -> Unit,
@@ -474,7 +477,8 @@ fun ParentSwipeableHighlightsSection(
     onOpenMedical: () -> Unit,
     onOpenFasting: () -> Unit,
     onOpenHaid: () -> Unit,
-    onOpenMessages: () -> Unit
+    onOpenMessages: () -> Unit,
+    onOpenHarapan: () -> Unit = {}
 ) {
     val cards = buildList<ParentHighlightCardData> {
         if (link?.canViewMengaji == true) {
@@ -671,6 +675,42 @@ fun ParentSwipeableHighlightsSection(
                 accentColor = Color(0xFF4338CA),
                 badgeBg = Color(0xFF4F46E5),
                 onClick = onOpenMessages
+            )
+        )
+
+        val latestExpectation = expectations.firstOrNull()
+        add(
+            ParentHighlightCardData(
+                id = "hl_harapan",
+                badge = if (isEn) "Character Expectations" else "Harapan Karakter • Ikhtiar Bersama",
+                title = if (latestExpectation != null) {
+                    latestExpectation.characterExpectation.take(48)
+                } else {
+                    if (isEn) "Share Your Hopes for Your Child" else "Tuliskan Harapan Karakter Ananda"
+                },
+                mainValue = if (latestExpectation != null) {
+                    if (latestExpectation.waliFollowUpNote.isNotBlank()) {
+                        if (isEn) "Responded by Wali Asuh" else "Sudah Ditanggapi Wali Asuh"
+                    } else if (latestExpectation.isReadByWali) {
+                        if (isEn) "Read by Wali Asuh" else "Sudah Dibaca Wali Asuh"
+                    } else {
+                        if (isEn) "Sent to Wali Asuh" else "Tersimpan untuk Wali Asuh"
+                    }
+                } else {
+                    if (isEn) "3+ Years at Sekolah Rakyat" else "3 Tahun+ di Sekolah Rakyat"
+                },
+                detailLine = latestExpectation?.waliFollowUpNote?.takeIf { it.isNotBlank() }
+                    ?: if (isEn) {
+                        "Share attitude hopes so Wali Asuh can advise your child in a shared effort."
+                    } else {
+                        "Tuliskan harapan sikap anak agar dinasehatkan Wali Asuh sebagai ikhtiar bersama."
+                    },
+                footerAction = if (isEn) "Open Character Form" else "Isi / Lihat Harapan Karakter",
+                icon = Icons.Default.VolunteerActivism,
+                gradientColors = listOf(Color(0xFFECFDF5), Color(0xFFD1FAE5)),
+                accentColor = Color(0xFF047857),
+                badgeBg = Color(0xFF059669),
+                onClick = onOpenHarapan
             )
         )
     }

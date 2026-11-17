@@ -277,6 +277,13 @@ enum class DashboardBannerFeatureTarget(
         groupId = "Hubungan Ortu",
         groupEn = "Parents"
     ),
+    FEATURE_HARAPAN_ORTU(
+        key = "FEATURE_HARAPAN_ORTU",
+        labelId = "Harapan Karakter Orang Tua",
+        labelEn = "Parent Character Expectations",
+        groupId = "Hubungan Ortu",
+        groupEn = "Parents"
+    ),
 
     // Kunjungan
     FEATURE_KUNJUNGAN_HUB(

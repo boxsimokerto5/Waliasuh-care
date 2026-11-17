@@ -153,6 +153,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "created_at"
     ): Response<PbListResponse<PbParentMessageDto>>
 
+    // --- Parent Expectations (Harapan Karakter Orang Tua untuk Anak) ---
+    @GET("api/collections/parent_expectations/records")
+    suspend fun listParentExpectations(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-updated_at"
+    ): Response<PbListResponse<PbParentExpectationDto>>
+
     // --- Deletion Logs (Log Audit Hapus Riwayat) ---
     @GET("api/collections/deletion_logs/records")
     suspend fun listDeletionLogs(

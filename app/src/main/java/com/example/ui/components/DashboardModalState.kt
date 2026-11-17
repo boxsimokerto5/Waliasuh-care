@@ -71,6 +71,7 @@ class DashboardModalState {
     var showKartuAksesOrtuSheet by mutableStateOf(false)
     var showPilihanAksesOrtuSheet by mutableStateOf(false)
     var showPesanOrtuSheet by mutableStateOf(false)
+    var showHarapanOrtuSheet by mutableStateOf(false)
     var selectedParentChatStudent by mutableStateOf<ChildStudent?>(null)
     var studentToEditParentPhone by mutableStateOf<ChildStudent?>(null)
 

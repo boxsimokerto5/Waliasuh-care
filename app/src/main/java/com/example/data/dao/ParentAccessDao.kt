@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import kotlinx.coroutines.flow.Flow
 
@@ -66,6 +67,9 @@ interface ParentMessageDao {
     @Delete
     suspend fun delete(message: ParentMessage)
 
+    @Query("DELETE FROM parent_messages WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query("UPDATE parent_messages SET isReadByWali = 1 WHERE studentId = :studentId AND schoolId = :schoolId AND isReadByWali = 0")
     suspend fun markReadByWali(studentId: Long, schoolId: String)
 
@@ -73,5 +77,35 @@ interface ParentMessageDao {
     suspend fun markReadByParent(studentId: Long, schoolId: String)
 
     @Query("DELETE FROM parent_messages WHERE schoolId = :schoolId")
+    suspend fun deleteBySchoolId(schoolId: String)
+}
+
+@Dao
+interface ParentExpectationDao {
+    @Query("SELECT * FROM parent_expectations ORDER BY updatedAt DESC")
+    fun getAllExpectations(): Flow<List<ParentExpectation>>
+
+    @Query("SELECT * FROM parent_expectations WHERE schoolId = :schoolId ORDER BY updatedAt DESC")
+    suspend fun getExpectationsBySchoolList(schoolId: String): List<ParentExpectation>
+
+    @Query("SELECT * FROM parent_expectations WHERE studentId = :studentId AND schoolId = :schoolId ORDER BY updatedAt DESC")
+    suspend fun getExpectationsForStudentList(studentId: Long, schoolId: String): List<ParentExpectation>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(expectation: ParentExpectation): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(expectations: List<ParentExpectation>)
+
+    @Update
+    suspend fun update(expectation: ParentExpectation)
+
+    @Delete
+    suspend fun delete(expectation: ParentExpectation)
+
+    @Query("UPDATE parent_expectations SET isReadByWali = 1, updatedAt = :updatedAt WHERE studentId = :studentId AND schoolId = :schoolId AND isReadByWali = 0")
+    suspend fun markReadByWali(studentId: Long, schoolId: String, updatedAt: Long)
+
+    @Query("DELETE FROM parent_expectations WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
 }

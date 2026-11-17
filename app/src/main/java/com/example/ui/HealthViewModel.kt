@@ -26,6 +26,8 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
+import com.example.data.model.ParentExpectationHelper
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
@@ -119,7 +121,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.waliScheduleEntryDao(),
             db.infoPentingPostDao(),
             db.infoPentingReactionDao(),
-            db.infoPentingCommentDao()
+            db.infoPentingCommentDao(),
+            db.parentExpectationDao()
         )
     }
 
@@ -1690,6 +1693,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val parentExpectations: StateFlow<List<ParentExpectation>> = combine(
+        repository.allParentExpectations,
+        _schoolProfile,
+        _currentUserRole
+    ) { expectations, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            expectations
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            expectations.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val activeParentAccessLink: StateFlow<ParentAccessLink?> = combine(
         parentAccessLinks,
         _currentUserRole,
@@ -3251,11 +3267,202 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun deleteParentMessage(
+        message: ParentMessage,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val activeSchool = message.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val deletionLog = DeletionLog(
+                id = PocketBaseSyncManager.generateCloudSafeId(),
+                category = DeletionLog.CATEGORY_PARENT_MESSAGE,
+                studentId = message.studentId,
+                studentName = message.studentName,
+                studentClass = "",
+                recordId = message.id,
+                deletedSummary = message.messageContent.take(60),
+                deletedBy = _waliName.value.ifBlank { message.senderName },
+                deletedByUsername = _currentUsername.value.orEmpty(),
+                schoolId = activeSchool,
+                createdAt = System.currentTimeMillis()
+            )
+            repository.insertDeletionLog(deletionLog)
+            repository.deleteParentMessageById(message.id)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), deletionLog)
+                PocketBaseSyncManager.deleteRemoteParentMessage(getApplication(), message.id)
+            }
+        }
+    }
+
     fun syncParentRelationsQuietly() {
         if (isUnitTestEnvironment()) return
         val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
         viewModelScope.launch {
             PocketBaseSyncManager.syncParentRelationsOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun saveParentExpectation(
+        student: ChildStudent,
+        focusTags: List<String>,
+        characterExpectation: String,
+        adviceFocusNotes: String = "",
+        parentPrayerMessage: String = "",
+        existingExpectation: ParentExpectation? = null,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanExpectation = characterExpectation.trim()
+        if (cleanExpectation.isBlank()) {
+            onComplete(
+                false,
+                if (isEn) {
+                    "Please write your character expectation for your child first."
+                } else {
+                    "Mohon tuliskan harapan karakter ananda terlebih dahulu."
+                }
+            )
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val existingLink = repository.getParentAccessLinkByStudentId(student.id, activeSchool)
+            val resolvedParentName = existingLink?.parentName?.ifBlank { student.motherName }
+                ?: student.motherName.ifBlank { _waliName.value.ifBlank { "Orang Tua ${student.name}" } }
+            val resolvedWaliUser = student.assignedWaliUsername.ifBlank {
+                existingLink?.assignedWaliUsername.orEmpty()
+            }
+            val resolvedWaliName = student.assignedWaliName.ifBlank {
+                existingLink?.assignedWaliName.orEmpty()
+            }
+            val item = if (existingExpectation != null) {
+                existingExpectation.copy(
+                    studentId = student.id,
+                    studentName = student.name,
+                    studentNis = student.nis,
+                    studentClass = student.classGrade,
+                    studentDorm = student.dormitory,
+                    parentName = resolvedParentName,
+                    waliUsername = resolvedWaliUser,
+                    waliName = resolvedWaliName,
+                    characterFocusCsv = ParentExpectationHelper.formatFocusCsv(focusTags),
+                    characterExpectation = cleanExpectation,
+                    adviceFocusNotes = adviceFocusNotes.trim(),
+                    parentPrayerMessage = parentPrayerMessage.trim(),
+                    isReadByWali = false,
+                    schoolId = activeSchool,
+                    updatedAt = now
+                )
+            } else {
+                ParentExpectation(
+                    id = PocketBaseSyncManager.generateCloudSafeId(),
+                    studentId = student.id,
+                    studentName = student.name,
+                    studentNis = student.nis,
+                    studentClass = student.classGrade,
+                    studentDorm = student.dormitory,
+                    parentName = resolvedParentName,
+                    waliUsername = resolvedWaliUser,
+                    waliName = resolvedWaliName,
+                    characterFocusCsv = ParentExpectationHelper.formatFocusCsv(focusTags),
+                    characterExpectation = cleanExpectation,
+                    adviceFocusNotes = adviceFocusNotes.trim(),
+                    parentPrayerMessage = parentPrayerMessage.trim(),
+                    isReadByWali = false,
+                    waliFollowUpNote = "",
+                    waliRespondedAt = 0L,
+                    schoolId = activeSchool,
+                    createdAt = now,
+                    updatedAt = now
+                )
+            }
+            repository.insertParentExpectation(item)
+            onComplete(
+                true,
+                if (isEn) {
+                    "Character expectations saved! Wali Asuh will review and nurture this together."
+                } else {
+                    "Harapan karakter tersimpan! Wali Asuh akan membacanya untuk ikhtiar bersama."
+                }
+            )
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentExpectation(getApplication(), item)
+            }
+        }
+    }
+
+    fun deleteParentExpectation(
+        expectation: ParentExpectation,
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            repository.deleteParentExpectation(expectation)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteParentExpectation(getApplication(), expectation.id)
+            }
+        }
+    }
+
+    fun markParentExpectationsReadByWali(studentId: Long) {
+        if (studentId <= 0L) return
+        viewModelScope.launch {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val now = System.currentTimeMillis()
+            val unreadItems = repository.getParentExpectationsForStudentList(studentId, activeSchool)
+                .filter { !it.isReadByWali }
+            if (unreadItems.isEmpty()) return@launch
+            repository.markParentExpectationsReadByWali(studentId, activeSchool, now)
+            if (!isUnitTestEnvironment()) {
+                unreadItems.forEach { item ->
+                    PocketBaseSyncManager.uploadSingleParentExpectation(
+                        getApplication(),
+                        item.copy(isReadByWali = true, updatedAt = now)
+                    )
+                }
+            }
+        }
+    }
+
+    fun saveWaliExpectationFollowUp(
+        expectation: ParentExpectation,
+        followUpNote: String,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanNote = followUpNote.trim()
+        if (cleanNote.isBlank()) {
+            onComplete(
+                false,
+                if (isEn) "Please enter a brief advice/mentoring note first." else "Mohon isi catatan nasehat / ikhtiar terlebih dahulu."
+            )
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val updated = expectation.copy(
+                isReadByWali = true,
+                waliFollowUpNote = cleanNote,
+                waliRespondedAt = now,
+                waliUsername = expectation.waliUsername.ifBlank { _currentUsername.value.orEmpty() },
+                waliName = expectation.waliName.ifBlank { _waliName.value.trim() },
+                updatedAt = now
+            )
+            repository.insertParentExpectation(updated)
+            onComplete(
+                true,
+                if (isEn) {
+                    "Caregiver mentoring note saved & shared with parent."
+                } else {
+                    "Catatan nasehat Wali Asuh tersimpan & dapat dilihat orang tua."
+                }
+            )
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentExpectation(getApplication(), updated)
+            }
         }
     }
 
@@ -3733,10 +3940,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         _currentUserRole
     ) { logs, profile, role ->
         val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+        val auditOnly = logs.filter { !it.category.equals(DeletionLog.CATEGORY_PARENT_MESSAGE, ignoreCase = true) }
         val filtered = if (role == UserRole.SUPERADMIN) {
-            logs
+            auditOnly
         } else {
-            logs.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+            auditOnly.filter { it.schoolId.equals(tenant, ignoreCase = true) }
         }
         filtered.sortedByDescending { it.createdAt }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
@@ -3890,6 +4098,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
         val peerLogs = newLogs.filter { log ->
             log.id > 0L &&
+                !log.category.equals(DeletionLog.CATEGORY_PARENT_MESSAGE, ignoreCase = true) &&
                 log.id !in alreadyPushed &&
                 !isDeletionLogByCurrentUser(log)
         }
@@ -5686,6 +5895,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteTabunganLogsBySchool(targetSchoolId)
                 repository.deleteTabunganTransactionsBySchool(targetSchoolId)
                 repository.deleteDeletionLogsBySchool(targetSchoolId)
+                repository.deleteParentExpectationsBySchool(targetSchoolId)
                 repository.deleteParentMessagesBySchool(targetSchoolId)
                 repository.deleteParentAccessLinksBySchool(targetSchoolId)
                 repository.deleteFastingRecordsBySchool(targetSchoolId)

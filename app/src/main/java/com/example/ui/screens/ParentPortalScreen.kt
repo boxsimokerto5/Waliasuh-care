@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -93,6 +94,7 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
@@ -102,6 +104,7 @@ import com.example.ui.components.ParentMenuTileSpec
 import com.example.ui.components.ParentSuperAppIconGrid
 import com.example.ui.components.ParentSwipeableHighlightsSection
 import com.example.ui.components.StatusBadge
+import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
@@ -121,6 +124,7 @@ private enum class ParentPortalTab(
     FASTING("Puasa", "Fasting", Icons.Default.NightlightRound, "parent_tab_fasting"),
     HAID("Riwayat Haid", "Haid Cycle", Icons.Default.Favorite, "parent_tab_haid"),
     TABUNGAN("Tabungan", "Savings", Icons.Default.AccountBalanceWallet, "parent_tab_tabungan"),
+    HARAPAN("Harapan", "Hopes", Icons.Default.VolunteerActivism, "parent_tab_harapan"),
     MESSAGES("Pesan", "Messages", Icons.Default.ChatBubbleOutline, "parent_tab_messages")
 }
 
@@ -143,6 +147,7 @@ fun ParentPortalScreen(
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val tabunganRecords by viewModel.parentTabunganTransactions.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
+    val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
@@ -188,6 +193,7 @@ fun ParentPortalScreen(
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
             if (isFemaleStudent && activeLink?.canViewHaid == true) add(ParentPortalTab.HAID)
             if (activeLink?.canViewTabungan == true) add(ParentPortalTab.TABUNGAN)
+            add(ParentPortalTab.HARAPAN)
             add(ParentPortalTab.MESSAGES)
         }
     }
@@ -221,6 +227,9 @@ fun ParentPortalScreen(
     val threadMessages = remember(parentMessages, resolvedStudentId) {
         parentMessages.filter { it.studentId == resolvedStudentId }.sortedBy { it.createdAt }
     }
+    val studentExpectations = remember(parentExpectations, resolvedStudentId) {
+        parentExpectations.filter { it.studentId == resolvedStudentId }.sortedByDescending { it.updatedAt }
+    }
     val unreadFromWaliCount = remember(threadMessages) {
         threadMessages.count { !it.isReadByParent && !it.senderRole.equals("PARENT", ignoreCase = true) }
     }
@@ -250,6 +259,7 @@ fun ParentPortalScreen(
             if (ParentPortalTab.TABUNGAN in visibleTabs) add(ParentPortalTab.TABUNGAN)
             if (size < 3 && ParentPortalTab.MEDICAL in visibleTabs) add(ParentPortalTab.MEDICAL)
             if (size < 3 && ParentPortalTab.PROFILE in visibleTabs) add(ParentPortalTab.PROFILE)
+            if (ParentPortalTab.HARAPAN in visibleTabs) add(ParentPortalTab.HARAPAN)
             add(ParentPortalTab.MESSAGES)
         }.distinct()
     }
@@ -458,6 +468,7 @@ fun ParentPortalScreen(
                         tabunganTransactions = sortedTabungan,
                         tabunganBalance = tabunganTotals.totalBalance,
                         messages = threadMessages,
+                        expectations = studentExpectations,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
@@ -477,6 +488,32 @@ fun ParentPortalScreen(
                         waliName = student?.assignedWaliName?.ifBlank { activeLink?.assignedWaliName.orEmpty() }
                             ?: activeLink?.assignedWaliName.orEmpty()
                     )
+                    ParentPortalTab.HARAPAN -> ParentHarapanContent(
+                        student = student,
+                        expectations = studentExpectations,
+                        onSaveExpectation = { focusTags, charExp, adviceNotes, prayerMsg, existing ->
+                            val target = student ?: return@ParentHarapanContent
+                            viewModel.saveParentExpectation(
+                                student = target,
+                                focusTags = focusTags,
+                                characterExpectation = charExp,
+                                adviceFocusNotes = adviceNotes,
+                                parentPrayerMessage = prayerMsg,
+                                existingExpectation = existing
+                            ) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onDeleteExpectation = { exp ->
+                            viewModel.deleteParentExpectation(exp) {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Expectation deleted." else "Harapan karakter dihapus.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
+                    )
                     ParentPortalTab.MESSAGES -> ParentChatContent(
                         student = student,
                         link = activeLink,
@@ -486,6 +523,9 @@ fun ParentPortalScreen(
                             if (target != null) {
                                 viewModel.sendParentMessage(target, msgText, "PARENT")
                             }
+                        },
+                        onDeleteMessage = { msg ->
+                            viewModel.deleteParentMessage(msg)
                         }
                     )
                 }
@@ -506,6 +546,7 @@ private fun ParentOverviewContent(
     tabunganTransactions: List<TabunganTransaction>,
     tabunganBalance: Long,
     messages: List<ParentMessage>,
+    expectations: List<ParentExpectation>,
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit
 ) {
@@ -521,6 +562,7 @@ private fun ParentOverviewContent(
         fastingRecords.size,
         haidRecords,
         tabunganTransactions.size,
+        expectations.size,
         unreadMessageCount,
         isEn
     ) {
@@ -616,6 +658,19 @@ private fun ParentOverviewContent(
             }
             add(
                 ParentMenuTileSpec(
+                    id = "harapan",
+                    title = if (isEn) "Character Hopes" else "Harapan Karakter",
+                    imageRes = R.drawable.img_menu_konseling,
+                    accentColor = Color(0xFF047857),
+                    softBg = Color(0xFFECFDF5),
+                    badgeText = if (expectations.isNotEmpty()) "${expectations.size}" else null,
+                    badgeColor = Color(0xFF059669),
+                    testTag = "card_parent_summary_harapan",
+                    onClick = { onOpenTab(ParentPortalTab.HARAPAN) }
+                )
+            )
+            add(
+                ParentMenuTileSpec(
                     id = "messages",
                     title = if (isEn) "Chat Wali" else "Pesan Wali",
                     imageRes = R.drawable.img_menu_orang_tua,
@@ -670,6 +725,7 @@ private fun ParentOverviewContent(
                 tabunganTransactions = tabunganTransactions,
                 tabunganBalance = tabunganBalance,
                 messages = messages,
+                expectations = expectations,
                 isEn = isEn,
                 lang = lang,
                 onOpenMengaji = { onOpenTab(ParentPortalTab.MENGAJI) },
@@ -677,7 +733,8 @@ private fun ParentOverviewContent(
                 onOpenMedical = { onOpenTab(ParentPortalTab.MEDICAL) },
                 onOpenFasting = { onOpenTab(ParentPortalTab.FASTING) },
                 onOpenHaid = { onOpenTab(ParentPortalTab.HAID) },
-                onOpenMessages = { onOpenTab(ParentPortalTab.MESSAGES) }
+                onOpenMessages = { onOpenTab(ParentPortalTab.MESSAGES) },
+                onOpenHarapan = { onOpenTab(ParentPortalTab.HARAPAN) }
             )
         }
     }
@@ -1230,18 +1287,13 @@ private fun ParentChatContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
     messages: List<ParentMessage>,
-    onSend: (String) -> Unit
+    onSend: (String) -> Unit,
+    onDeleteMessage: (ParentMessage) -> Unit
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     var draft by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
-
-    LaunchedEffect(messages.size) {
-        if (messages.isNotEmpty()) {
-            listState.animateScrollToItem(messages.lastIndex)
-        }
-    }
 
     Column(
         modifier = Modifier.fillMaxSize()
@@ -1265,65 +1317,24 @@ private fun ParentChatContent(
             )
         }
 
-        LazyColumn(
-            state = listState,
+        ParentChatMessagesList(
+            messages = messages,
+            myRole = "PARENT",
+            isEn = isEn,
+            lang = s.language,
+            ownBubbleColor = Color(0xFF4338CA),
+            listState = listState,
+            onDeleteMessage = onDeleteMessage,
+            emptyContent = {
+                ParentEmptyNotice(
+                    if (isEn) "No messages yet. Write a message to your child's caregiver below."
+                    else "Belum ada pesan. Tulis pesan untuk wali asuh ananda di bawah."
+                )
+            },
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f),
-            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            if (messages.isEmpty()) {
-                item {
-                    ParentEmptyNotice(
-                        if (isEn) "No messages yet. Write a message to your child's caregiver below."
-                        else "Belum ada pesan. Tulis pesan untuk wali asuh ananda di bawah."
-                    )
-                }
-            } else {
-                items(messages, key = { "ppmsg_${it.id}" }) { msg ->
-                    val isParent = msg.senderRole.equals("PARENT", ignoreCase = true)
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = if (isParent) Arrangement.End else Arrangement.Start
-                    ) {
-                        Surface(
-                            shape = RoundedCornerShape(
-                                topStart = 14.dp,
-                                topEnd = 14.dp,
-                                bottomStart = if (isParent) 14.dp else 4.dp,
-                                bottomEnd = if (isParent) 4.dp else 14.dp
-                            ),
-                            color = if (isParent) Color(0xFF4338CA) else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier.widthIn(max = 280.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    text = msg.senderName.ifBlank { if (isParent) "Orang Tua" else "Wali Asuh" },
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (isParent) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    text = msg.messageContent,
-                                    fontSize = 13.sp,
-                                    lineHeight = 17.5.sp,
-                                    color = if (isParent) Color.White else MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = DateUtils.formatShortDate(msg.createdAt, s.language),
-                                    fontSize = 9.5.sp,
-                                    color = if (isParent) Color.White.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                .weight(1f)
+        )
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 

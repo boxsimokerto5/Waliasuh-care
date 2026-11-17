@@ -20,6 +20,7 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
@@ -1197,6 +1198,86 @@ data class PbParentMessageDto(
                 isReadByWali = model.isReadByWali,
                 isReadByParent = model.isReadByParent,
                 createdAt = model.createdAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbParentExpectationDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "parent_name") val parentName: String? = null,
+    @Json(name = "wali_username") val waliUsername: String? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "character_focus_csv") val characterFocusCsv: String? = null,
+    @Json(name = "character_expectation") val characterExpectation: String = "",
+    @Json(name = "advice_focus_notes") val adviceFocusNotes: String? = null,
+    @Json(name = "parent_prayer_message") val parentPrayerMessage: String? = null,
+    @Json(name = "is_read_by_wali") val isReadByWali: Boolean? = null,
+    @Json(name = "wali_follow_up_note") val waliFollowUpNote: String? = null,
+    @Json(name = "wali_responded_at") val waliRespondedAt: Long? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ParentExpectation {
+        val now = System.currentTimeMillis()
+        val resolvedCreated = createdAt?.takeIf { it > 0L } ?: now
+        return ParentExpectation(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            studentId = studentId,
+            studentName = studentName.orEmpty(),
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            parentName = parentName.orEmpty(),
+            waliUsername = waliUsername.orEmpty(),
+            waliName = waliName.orEmpty(),
+            characterFocusCsv = characterFocusCsv.orEmpty(),
+            characterExpectation = characterExpectation,
+            adviceFocusNotes = adviceFocusNotes.orEmpty(),
+            parentPrayerMessage = parentPrayerMessage.orEmpty(),
+            isReadByWali = isReadByWali ?: false,
+            waliFollowUpNote = waliFollowUpNote.orEmpty(),
+            waliRespondedAt = waliRespondedAt ?: 0L,
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            createdAt = resolvedCreated,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: ParentExpectation): PbParentExpectationDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "parent_exp:${model.schoolId}:${model.studentId}:${model.createdAt}"
+            )
+            return PbParentExpectationDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                parentName = model.parentName,
+                waliUsername = model.waliUsername,
+                waliName = model.waliName,
+                characterFocusCsv = model.characterFocusCsv,
+                characterExpectation = model.characterExpectation,
+                adviceFocusNotes = model.adviceFocusNotes,
+                parentPrayerMessage = model.parentPrayerMessage,
+                isReadByWali = model.isReadByWali,
+                waliFollowUpNote = model.waliFollowUpNote,
+                waliRespondedAt = model.waliRespondedAt,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
             )
         }
     }

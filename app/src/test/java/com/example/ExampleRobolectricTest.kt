@@ -624,7 +624,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(22, jsonSchema.length())
+    assertEquals(26, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -645,6 +645,7 @@ class ExampleRobolectricTest {
       "visit_records",
       "parent_access_links",
       "parent_messages",
+      "parent_expectations",
       "dashboard_banners",
       "deletion_logs",
       "tabungan_transactions",
@@ -664,7 +665,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(25, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(26, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -8470,5 +8471,536 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_pin_post_601").assertExists().performClick()
     org.junit.Assert.assertTrue(toggledPin)
     composeTestRule.onNodeWithTag("btn_delete_post_601").assertExists()
+  }
+
+  @Test
+  fun `verify ParentExpectation PocketBase DTO roundtrip, Room CRUD, and ViewModel multi-tenant flow`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    // 1. PocketBase DTO roundtrip
+    val sample = com.example.data.model.ParentExpectation(
+      id = 88101L,
+      studentId = 9501L,
+      studentName = "Bima Pratama",
+      studentNis = "410099",
+      studentClass = "X-2",
+      studentDorm = "Asrama Putra",
+      parentName = "Ibu Sari",
+      waliUsername = "walibima",
+      waliName = "Ust. Hasan",
+      characterFocusCsv = com.example.data.model.ParentExpectationHelper.formatFocusCsv(
+        listOf("Kejujuran & Amanah", "Kemandirian")
+      ),
+      characterExpectation = "Semoga ananda semakin jujur dan mandiri dalam ibadah maupun keseharian.",
+      adviceFocusNotes = "Mohon diingatkan untuk merapikan tempat tidur sebelum subuh.",
+      parentPrayerMessage = "Doa ibu selalu menyertai ananda di Sekolah Rakyat.",
+      isReadByWali = false,
+      waliFollowUpNote = "",
+      waliRespondedAt = 0L,
+      schoolId = "SRT1-KDR",
+      createdAt = 1710000000000L,
+      updatedAt = 1710000000000L
+    )
+    val pbDto = com.example.data.remote.pocketbase.PbParentExpectationDto.fromDomain(sample)
+    val restored = pbDto.toDomainModel()
+    assertEquals(sample.id, restored.id)
+    assertEquals(sample.studentName, restored.studentName)
+    assertEquals(sample.characterExpectation, restored.characterExpectation)
+    assertEquals(sample.adviceFocusNotes, restored.adviceFocusNotes)
+    assertEquals(listOf("Kejujuran & Amanah", "Kemandirian"), com.example.data.model.ParentExpectationHelper.parseFocusList(restored.characterFocusCsv))
+
+    // 2. Google Voice-to-Text helper verification (no RECORD_AUDIO permission required)
+    val voiceIntent = com.example.ui.dialogs.buildGoogleSpeechToTextIntent("Ucapkan harapan...", "id-ID")
+    assertEquals(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH, voiceIntent.action)
+    assertEquals("id-ID", voiceIntent.getStringExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE))
+    assertEquals("Rajin sholat", com.example.ui.dialogs.appendVoiceTranscript("", "Rajin sholat"))
+    assertEquals(
+      "Rajin sholat dan jujur",
+      com.example.ui.dialogs.appendVoiceTranscript("Rajin sholat", "dan jujur")
+    )
+
+    // 3. ViewModel save, read, follow-up, and tenant isolation
+    val student = com.example.data.model.ChildStudent(
+      id = 9501L,
+      name = "Bima Pratama",
+      nis = "410099",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "X-2",
+      allergies = "-",
+      bloodType = "O",
+      emergencyContact = "08123456789",
+      motherName = "Ibu Sari",
+      assignedWaliUsername = "walibima",
+      assignedWaliName = "Ust. Hasan",
+      schoolId = "SRT1-KDR"
+    )
+    val otherSchoolExp = sample.copy(id = 88102L, studentId = 9599L, schoolId = "SRT-OTHER")
+    db.childStudentDao().insert(student)
+    db.parentExpectationDao().insert(otherSchoolExp)
+
+    var savedOk = false
+    vm.saveParentExpectation(
+      student = student,
+      focusTags = listOf("Kejujuran & Amanah", "Disiplin & Tanggung Jawab"),
+      characterExpectation = "Ingin ananda jujur dan bertanggung jawab.",
+      adviceFocusNotes = "Dinasehati agar tidak menunda tugas.",
+      parentPrayerMessage = "Semangat terus ya Nak."
+    ) { ok, _ -> savedOk = ok }
+
+    var loops = 0
+    while (loops < 30 && vm.parentExpectations.value.none { it.studentId == 9501L }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertTrue(savedOk)
+    org.junit.Assert.assertTrue(vm.parentExpectations.value.none { it.schoolId == "SRT-OTHER" })
+
+    val inserted = vm.parentExpectations.value.first { it.studentId == 9501L }
+    org.junit.Assert.assertFalse(inserted.isReadByWali)
+
+    vm.markParentExpectationsReadByWali(9501L)
+    loops = 0
+    while (loops < 30 && vm.parentExpectations.value.first { it.id == inserted.id }.isReadByWali.not()) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertTrue(vm.parentExpectations.value.first { it.id == inserted.id }.isReadByWali)
+
+    var followUpOk = false
+    vm.saveWaliExpectationFollowUp(
+      expectation = vm.parentExpectations.value.first { it.id == inserted.id },
+      followUpNote = "Alhamdulillah sudah kami nasehatkan secara pribadi setelah sholat Maghrib."
+    ) { ok, _ -> followUpOk = ok }
+    loops = 0
+    while (loops < 30 && vm.parentExpectations.value.first { it.id == inserted.id }.waliFollowUpNote.isBlank()) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertTrue(followUpOk)
+    org.junit.Assert.assertTrue(
+      vm.parentExpectations.value.first { it.id == inserted.id }.waliFollowUpNote.contains("Maghrib")
+    )
+
+    vm.deleteParentExpectation(vm.parentExpectations.value.first { it.id == inserted.id })
+    loops = 0
+    while (loops < 30 && vm.parentExpectations.value.any { it.id == inserted.id }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertTrue(vm.parentExpectations.value.none { it.id == inserted.id })
+  }
+
+  @Test
+  fun `verify ParentPortalScreen Harapan Karakter form, voice icon, and Wali Asuh Hubungan Ortu HarapanOrangTuaSheet`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+
+    val student = com.example.data.model.ChildStudent(
+      id = 9601L,
+      name = "Aisyah Humaira",
+      nis = "420011",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-A",
+      allergies = "-",
+      bloodType = "A",
+      emergencyContact = "08111222333",
+      motherName = "Ibu Fatimah",
+      assignedWaliUsername = "ustzah_lina",
+      assignedWaliName = "Ustadzah Lina",
+      schoolId = "SRT1-KDR"
+    )
+    val parentLink = com.example.data.model.ParentAccessLink(
+      id = 9602L,
+      studentId = 9601L,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      parentName = "Ibu Fatimah",
+      parentPhone = "08111222333",
+      username = "ortu_aisyah_9601",
+      password = "OrtuPass99!",
+      assignedWaliUsername = "ustzah_lina",
+      assignedWaliName = "Ustadzah Lina",
+      canViewMengaji = true,
+      canViewMedical = true,
+      canViewFasting = true,
+      canViewHaid = true,
+      canViewProfile = true,
+      canViewTabungan = true,
+      schoolId = "SRT1-KDR"
+    )
+    db.childStudentDao().insert(student)
+    db.parentAccessLinkDao().insert(parentLink)
+
+    val loginRes = vm.executeLogin("ortu_aisyah_9601", "OrtuPass99!", rememberMe = false)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+
+    var loops = 0
+    while (loops < 30 && vm.activeParentAccessLink.value == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.ParentPortalScreen(viewModel = vm, onLogout = {})
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Buka menu Harapan Karakter dari halaman Beranda Orang Tua
+    composeTestRule.onNodeWithTag("card_parent_summary_harapan").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("parent_harapan_content").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_harapan_guidance").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Selama 3 tahun atau lebih", substring = true).assertExists()
+    composeTestRule.onNodeWithText("Sekolah Rakyat", substring = true).assertExists()
+    composeTestRule.onNodeWithText("ikhtiar bersama", substring = true).assertExists()
+    composeTestRule.onNodeWithTag("btn_voice_parent_harapan_karakter").assertExists()
+
+    composeTestRule.onNodeWithTag("chip_harapan_focus_Kejujuran & Amanah").performClick()
+    composeTestRule.onNodeWithTag("input_parent_harapan_karakter")
+      .performTextInput("Semoga Aisyah selalu jujur, rendah hati, dan semangat menuntut ilmu.")
+    composeTestRule.onNodeWithTag("input_parent_harapan_nasehat")
+      .performTextInput("Mohon dinasehati agar lebih berani berbicara dengan sopan.")
+    composeTestRule.onNodeWithTag("input_parent_harapan_doa")
+      .performTextInput("Semoga Allah mudahkan segala urusan ananda.")
+    composeTestRule.onNodeWithTag("btn_save_parent_harapan").performScrollTo().performClick()
+
+    loops = 0
+    while (loops < 30 && vm.parentExpectations.value.none { it.studentId == 9601L }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    composeTestRule.waitForIdle()
+    val savedExp = vm.parentExpectations.value.first { it.studentId == 9601L }
+    composeTestRule.onNodeWithTag("card_parent_harapan_item_${savedExp.id}").assertExists()
+
+    // Verifikasi tampilan di sisi Wali Asuh: CategoryHubOverlay (ORANG_TUA) + HarapanOrangTuaSheet
+    var openedHarapanSheet = false
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.components.CategoryHubOverlay(
+          category = com.example.ui.components.DashboardCategoryHub.ORANG_TUA,
+          schoolProfile = com.example.data.model.SchoolProfile(),
+          activePlans = emptyList(),
+          inpatientCount = 0,
+          fastingSessions = emptyList(),
+          fastingRecords = emptyList(),
+          activeHaidRecords = emptyList(),
+          suciRecords = emptyList(),
+          shiftMessages = emptyList(),
+          students = listOf(student),
+          parentAccessLinks = listOf(parentLink),
+          parentMessages = emptyList(),
+          parentExpectations = listOf(savedExp),
+          myFosterStudentsCount = 1,
+          onDismiss = {},
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onOpenCreatePlan = {},
+          onOpenDirectTreatment = {},
+          onOpenFaskesInfo = {},
+          onOpenInputPuasa = {},
+          onOpenDaftarPuasa = {},
+          onOpenChecklistPuasa = {},
+          onOpenRankingPuasa = {},
+          onOpenInputHaid = {},
+          onOpenDaftarHaid = {},
+          onOpenDaftarSuci = {},
+          onOpenFiqihHaid = {},
+          onOpenShiftMessages = {},
+          onOpenCreateShiftMessage = {},
+          onOpenShiftHistory = {},
+          onOpenHarapanOrtu = { openedHarapanSheet = true }
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("tile_harapan_ortu").performScrollTo().assertIsDisplayed().performClick()
+    org.junit.Assert.assertTrue(openedHarapanSheet)
+
+    var savedWaliNotePair: Pair<Long, String>? = null
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.HarapanOrangTuaSheet(
+          students = listOf(student),
+          parentExpectations = listOf(savedExp),
+          isStudentClaimedByCurrentWali = { it.id == 9601L },
+          isAdmin = false,
+          onMarkReadByWali = {},
+          onSaveFollowUpNote = { exp, note -> savedWaliNotePair = exp.id to note },
+          onOpenChatWithStudent = {},
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("sheet_harapan_ortu").assertExists()
+    composeTestRule.onNodeWithTag("card_harapan_student_9601").assertExists()
+    composeTestRule.onNodeWithText("Semoga Aisyah selalu jujur", substring = true).assertExists()
+
+    composeTestRule.onNodeWithTag("btn_toggle_reply_harapan_${savedExp.id}").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_voice_wali_harapan_note_${savedExp.id}").assertExists()
+    composeTestRule.onNodeWithTag("input_wali_harapan_note_${savedExp.id}")
+      .performTextInput("Siap Bunda, ananda sudah kami ajak diskusi lembut dan beri motivasi.")
+    composeTestRule.onNodeWithTag("btn_save_wali_harapan_note_${savedExp.id}").performClick()
+    assertEquals(
+      savedExp.id to "Siap Bunda, ananda sudah kami ajak diskusi lembut dan beri motivasi.",
+      savedWaliNotePair
+    )
+  }
+
+  @Test
+  fun `verify DateUtils formatChatDateChip and formatTime for WhatsApp style date dividers`() {
+    val now = System.currentTimeMillis()
+    val yesterday = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, -1)
+    }.timeInMillis
+    val older = java.util.Calendar.getInstance().apply {
+      set(2024, java.util.Calendar.JANUARY, 15, 9, 30, 0)
+      set(java.util.Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
+    assertEquals(
+      "Hari Ini",
+      com.example.util.DateUtils.formatChatDateChip(now, com.example.util.i18n.AppLanguage.INDONESIAN)
+    )
+    assertEquals(
+      "Today",
+      com.example.util.DateUtils.formatChatDateChip(now, com.example.util.i18n.AppLanguage.ENGLISH)
+    )
+    assertEquals(
+      "Kemarin",
+      com.example.util.DateUtils.formatChatDateChip(yesterday, com.example.util.i18n.AppLanguage.INDONESIAN)
+    )
+    assertEquals(
+      "Yesterday",
+      com.example.util.DateUtils.formatChatDateChip(yesterday, com.example.util.i18n.AppLanguage.ENGLISH)
+    )
+    assertEquals(
+      com.example.util.DateUtils.formatShortDate(older, com.example.util.i18n.AppLanguage.INDONESIAN),
+      com.example.util.DateUtils.formatChatDateChip(older, com.example.util.i18n.AppLanguage.INDONESIAN)
+    )
+    val timeStr = com.example.util.DateUtils.formatTime(older, com.example.util.i18n.AppLanguage.INDONESIAN)
+    assertEquals("09:30", timeStr)
+  }
+
+  @Test
+  fun `verify ParentChatMessagesList hides sender name, renders centered date dividers and time, and deletes own messages`() {
+    val yesterdayTs = java.util.Calendar.getInstance().apply {
+      add(java.util.Calendar.DAY_OF_YEAR, -1)
+      set(java.util.Calendar.HOUR_OF_DAY, 8)
+      set(java.util.Calendar.MINUTE, 15)
+    }.timeInMillis
+    val todayTs = java.util.Calendar.getInstance().apply {
+      set(java.util.Calendar.HOUR_OF_DAY, 14)
+      set(java.util.Calendar.MINUTE, 42)
+    }.timeInMillis
+
+    val msgWaliYesterday = com.example.data.model.ParentMessage(
+      id = 7001L,
+      studentId = 9701L,
+      studentName = "Budi Santoso",
+      parentName = "Ibu Fatimah",
+      waliUsername = "eko_wali",
+      waliName = "Eko Wahyudi",
+      senderRole = "WALI",
+      senderName = "Eko Wahyudi",
+      messageContent = "enggih, ananda sehat dan aktif belajar",
+      isReadByWali = true,
+      isReadByParent = true,
+      schoolId = "SRT1-KDR",
+      createdAt = yesterdayTs
+    )
+    val msgParentToday = com.example.data.model.ParentMessage(
+      id = 7002L,
+      studentId = 9701L,
+      studentName = "Budi Santoso",
+      parentName = "Ibu Fatimah",
+      waliUsername = "eko_wali",
+      waliName = "Eko Wahyudi",
+      senderRole = "PARENT",
+      senderName = "Ibu Fatimah",
+      messageContent = "Alhamdulillah, terima kasih informasinya Pak",
+      isReadByWali = false,
+      isReadByParent = true,
+      schoolId = "SRT1-KDR",
+      createdAt = todayTs
+    )
+
+    val deletedIds = mutableListOf<Long>()
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.components.ParentChatMessagesList(
+          messages = listOf(msgWaliYesterday, msgParentToday),
+          myRole = "PARENT",
+          isEn = false,
+          lang = com.example.util.i18n.AppLanguage.INDONESIAN,
+          emptyContent = {},
+          onDeleteMessage = { deletedIds.add(it.id) }
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Sender names MUST NOT be shown inside chat bubbles
+    composeTestRule.onAllNodesWithText("Eko Wahyudi").assertCountEquals(0)
+    composeTestRule.onAllNodesWithText("Ibu Fatimah").assertCountEquals(0)
+
+    // Message content & HH:mm times MUST be displayed
+    composeTestRule.onNodeWithText("enggih, ananda sehat dan aktif belajar").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Alhamdulillah, terima kasih informasinya Pak").assertIsDisplayed()
+    composeTestRule.onNodeWithText(
+      com.example.util.DateUtils.formatTime(yesterdayTs, com.example.util.i18n.AppLanguage.INDONESIAN)
+    ).assertIsDisplayed()
+    composeTestRule.onNodeWithText(
+      com.example.util.DateUtils.formatTime(todayTs, com.example.util.i18n.AppLanguage.INDONESIAN)
+    ).assertIsDisplayed()
+
+    // Centered WhatsApp-style date divider pills for each day
+    val yKey = com.example.util.DateUtils.formatChatDayKey(yesterdayTs)
+    val tKey = com.example.util.DateUtils.formatChatDayKey(todayTs)
+    composeTestRule.onNodeWithTag("chat_date_divider_$yKey").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Kemarin").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("chat_date_divider_$tKey").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Hari Ini").assertIsDisplayed()
+
+    // Delete button appears ONLY for own ("PARENT") message, not peer ("WALI") message
+    composeTestRule.onNodeWithTag("btn_delete_chat_msg_7001").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("btn_delete_chat_msg_7002").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("dialog_delete_chat_msg").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_confirm_delete_chat_msg").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(listOf(7002L), deletedIds)
+  }
+
+  @Test
+  fun `verify PesanOrangTuaSheet hides sender name inside bubbles and deletes Wali message cleanly`(): Unit = kotlinx.coroutines.runBlocking {
+    val student = com.example.data.model.ChildStudent(
+      id = 9801L,
+      name = "Rizky Pratama",
+      nis = "33009801",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-C",
+      motherName = "Ibu Kartika",
+      assignedWaliUsername = "ust_budi",
+      assignedWaliName = "Ust. Budi",
+      schoolId = "SRT1-KDR"
+    )
+    val nowTs = System.currentTimeMillis()
+    val waliMsg = com.example.data.model.ParentMessage(
+      id = 8001L,
+      studentId = 9801L,
+      studentName = student.name,
+      parentName = "Ibu Kartika",
+      waliUsername = "ust_budi",
+      waliName = "Ust. Budi",
+      senderRole = "WALI",
+      senderName = "Ust. Budi",
+      messageContent = "Selamat pagi Ibu, ananda sudah sarapan",
+      isReadByWali = true,
+      isReadByParent = false,
+      schoolId = "SRT1-KDR",
+      createdAt = nowTs
+    )
+    val deletedFromSheet = mutableListOf<Long>()
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.PesanOrangTuaSheet(
+          students = listOf(student),
+          parentMessages = listOf(waliMsg),
+          isStudentClaimedByCurrentWali = { it.id == 9801L },
+          isAdmin = false,
+          initialSelectedStudent = student,
+          onSendMessage = { _, _ -> },
+          onMarkRead = {},
+          onDeleteMessage = { deletedFromSheet.add(it.id) },
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Sender name must NOT be inside bubble, while message content + "Hari Ini" pill + delete button ARE shown
+    composeTestRule.onAllNodesWithText("Ust. Budi").assertCountEquals(0)
+    composeTestRule.onNodeWithText("Selamat pagi Ibu, ananda sudah sarapan").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Hari Ini").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_delete_chat_msg_8001").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_confirm_delete_chat_msg").performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(listOf(8001L), deletedFromSheet)
+
+    // Verify ViewModel.deleteParentMessage removes local row and creates silent CATEGORY_PARENT_MESSAGE tombstone
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    db.childStudentDao().insert(student)
+
+    vm.sendParentMessage(student, "Pesan uji coba batal kirim", "WALI")
+    var loops = 0
+    while (loops < 30 && vm.parentMessages.value.none { it.studentId == 9801L }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    val insertedMsg = vm.parentMessages.value.first { it.studentId == 9801L }
+
+    vm.deleteParentMessage(insertedMsg)
+    loops = 0
+    while (loops < 30 && vm.parentMessages.value.any { it.id == insertedMsg.id }) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertTrue(vm.parentMessages.value.none { it.id == insertedMsg.id })
+    val storedLogs = db.deletionLogDao().getBySchoolSnapshot("SRT1-KDR")
+    org.junit.Assert.assertTrue(
+      storedLogs.any {
+        it.category == com.example.data.model.DeletionLog.CATEGORY_PARENT_MESSAGE &&
+          it.recordId == insertedMsg.id
+      }
+    )
+    // Must not pollute user-facing audit log feed
+    org.junit.Assert.assertTrue(
+      vm.deletionLogs.value.none {
+        it.category == com.example.data.model.DeletionLog.CATEGORY_PARENT_MESSAGE
+      }
+    )
   }
 }

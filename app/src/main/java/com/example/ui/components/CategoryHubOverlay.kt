@@ -67,6 +67,7 @@ import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
@@ -98,6 +99,7 @@ fun CategoryHubOverlay(
     visitRecords: List<VisitRecord> = emptyList(),
     parentAccessLinks: List<ParentAccessLink> = emptyList(),
     parentMessages: List<ParentMessage> = emptyList(),
+    parentExpectations: List<ParentExpectation> = emptyList(),
     myFosterStudentsCount: Int = 0,
     isAdmin: Boolean = false,
     onDismiss: () -> Unit,
@@ -131,6 +133,7 @@ fun CategoryHubOverlay(
     onOpenKartuAksesOrtu: () -> Unit = {},
     onOpenPilihanAksesOrtu: () -> Unit = {},
     onOpenPesanOrtu: () -> Unit = {},
+    onOpenHarapanOrtu: () -> Unit = {},
     tabunganTransactions: List<TabunganTransaction> = emptyList(),
     tabunganLogs: List<TabunganLog> = emptyList(),
     claimedFosterStudents: List<ChildStudent> = emptyList(),
@@ -262,10 +265,11 @@ fun CategoryHubOverlay(
             }
             DashboardCategoryHub.ORANG_TUA -> {
                 val unreadCount = parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
+                val expCount = parentExpectations.size
                 if (isEn) {
-                    "$myFosterStudentsCount foster kids • ${parentAccessLinks.size} access cards • $unreadCount unread"
+                    "$myFosterStudentsCount foster kids • $expCount hopes • $unreadCount unread"
                 } else {
-                    "$myFosterStudentsCount anak asuh • ${parentAccessLinks.size} kartu akses • $unreadCount pesan baru"
+                    "$myFosterStudentsCount anak asuh • $expCount harapan • $unreadCount pesan baru"
                 }
             }
             DashboardCategoryHub.TABUNGAN -> {
@@ -585,11 +589,13 @@ fun CategoryHubOverlay(
                                     students = students,
                                     parentAccessLinks = parentAccessLinks,
                                     parentMessages = parentMessages,
+                                    parentExpectations = parentExpectations,
                                     myFosterStudentsCount = myFosterStudentsCount,
                                     onOpenPilihAnakAsuh = onOpenPilihAnakAsuh,
                                     onOpenKartuAksesOrtu = onOpenKartuAksesOrtu,
                                     onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu,
-                                    onOpenPesanOrtu = onOpenPesanOrtu
+                                    onOpenPesanOrtu = onOpenPesanOrtu,
+                                    onOpenHarapanOrtu = onOpenHarapanOrtu
                                 )
                                 DashboardCategoryHub.TABUNGAN -> tabunganCategoryItems(
                                     isEn = isEn,

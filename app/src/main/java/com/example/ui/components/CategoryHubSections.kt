@@ -101,6 +101,7 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.PinnedTaskItem
 import com.example.data.model.SchoolProfile
@@ -1196,13 +1197,16 @@ internal fun LazyListScope.orangTuaCategoryItems(
     students: List<ChildStudent>,
     parentAccessLinks: List<ParentAccessLink>,
     parentMessages: List<ParentMessage>,
+    parentExpectations: List<ParentExpectation> = emptyList(),
     myFosterStudentsCount: Int,
     onOpenPilihAnakAsuh: () -> Unit,
     onOpenKartuAksesOrtu: () -> Unit,
     onOpenPilihanAksesOrtu: () -> Unit,
-    onOpenPesanOrtu: () -> Unit
+    onOpenPesanOrtu: () -> Unit,
+    onOpenHarapanOrtu: () -> Unit = {}
 ) {
     val unreadParentCount = parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
+    val unreadExpectationCount = parentExpectations.count { !it.isReadByWali }
     val cardsCount = parentAccessLinks.size
     val unclaimedCount = students.count { it.assignedWaliUsername.isBlank() && it.assignedWaliName.isBlank() }
 
@@ -1278,6 +1282,29 @@ internal fun LazyListScope.orangTuaCategoryItems(
                     modifier = Modifier.weight(1f)
                 )
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Parent Hopes" else "Harapan Orang Tua",
+                    subtitle = if (isEn) "Character Expectations & Shared Advice" else "Harapan Karakter & Ikhtiar Nasehat",
+                    imageRes = R.drawable.img_menu_konseling,
+                    badgeText = when {
+                        unreadExpectationCount > 0 -> "$unreadExpectationCount ${if (isEn) "New" else "Baru"}"
+                        parentExpectations.isNotEmpty() -> "${parentExpectations.size} ${if (isEn) "Notes" else "Catatan"}"
+                        else -> if (isEn) "Shared" else "Ikhtiar"
+                    },
+                    badgeBg = if (unreadExpectationCount > 0) Color(0xFFFEE2E2) else Color(0xFFD1FAE5),
+                    badgeColor = if (unreadExpectationCount > 0) Color(0xFFDC2626) else Color(0xFF047857),
+                    bgGradient = listOf(Color(0xFFECFDF5), Color(0xFFD1FAE5).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFA7F3D0),
+                    onClick = onOpenHarapanOrtu,
+                    testTag = "tile_harapan_ortu",
+                    modifier = Modifier.weight(1f)
+                )
+                Spacer(modifier = Modifier.weight(1f))
+            }
         }
     }
 
@@ -1296,8 +1323,8 @@ internal fun LazyListScope.orangTuaCategoryItems(
             ) {
                 HubStatTile("$myFosterStudentsCount", if (isEn) "My Foster" else "Binaan Saya", Color(0xFFE0E7FF), Color(0xFF4338CA), Modifier.weight(1f))
                 HubStatTile("$cardsCount", if (isEn) "Cards Active" else "Kartu Akses", Color(0xFFEDE9FE), Color(0xFF6D28D9), Modifier.weight(1f))
-                HubStatTile("$unclaimedCount", if (isEn) "Unassigned" else "Belum Wali", Color(0xFFFEF3C7), Color(0xFFB45309), Modifier.weight(1f))
-                HubStatTile("$unreadParentCount", if (isEn) "Unread" else "Chat Baru", Color(0xFFFEE2E2), Color(0xFFDC2626), Modifier.weight(1f))
+                HubStatTile("${parentExpectations.size}", if (isEn) "Hopes" else "Harapan", Color(0xFFD1FAE5), Color(0xFF047857), Modifier.weight(1f))
+                HubStatTile("${unreadParentCount + unreadExpectationCount}", if (isEn) "Unread" else "Baru", Color(0xFFFEE2E2), Color(0xFFDC2626), Modifier.weight(1f))
             }
         }
     }

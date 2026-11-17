@@ -46,6 +46,29 @@ object DateUtils {
                 cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
     }
 
+    fun isYesterday(timestamp: Long): Boolean {
+        val cal1 = Calendar.getInstance().apply { timeInMillis = timestamp }
+        val cal2 = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+        return cal1.get(Calendar.YEAR) == cal2.get(Calendar.YEAR) &&
+                cal1.get(Calendar.DAY_OF_YEAR) == cal2.get(Calendar.DAY_OF_YEAR)
+    }
+
+    fun formatChatDayKey(timestamp: Long): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(timestamp))
+    }
+
+    fun formatChatDateChip(
+        timestamp: Long,
+        language: AppLanguage = AppLanguageManager.currentLanguage
+    ): String {
+        val isEn = language == AppLanguage.ENGLISH
+        return when {
+            isToday(timestamp) -> if (isEn) "Today" else "Hari Ini"
+            isYesterday(timestamp) -> if (isEn) "Yesterday" else "Kemarin"
+            else -> formatShortDate(timestamp, language)
+        }
+    }
+
     fun isTomorrow(timestamp: Long): Boolean {
         val cal1 = Calendar.getInstance().apply { timeInMillis = timestamp }
         val cal2 = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, 1) }

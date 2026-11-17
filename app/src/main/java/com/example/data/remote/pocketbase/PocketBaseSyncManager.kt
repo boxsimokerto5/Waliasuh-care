@@ -26,6 +26,7 @@ import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
@@ -1251,6 +1252,40 @@ object PocketBaseSyncManager {
             }
         }
 
+    suspend fun deleteRemoteParentMessage(context: Context, messageId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("parent_messages", PocketBaseIdCodec.toPbId(messageId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteParentMessage ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleParentExpectation(context: Context, expectation: ParentExpectation) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbParentExpectationDto.fromDomain(expectation)
+                upsertSingleDto(service, "parent_expectations", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleParentExpectation ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteParentExpectation(context: Context, expectationId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("parent_expectations", PocketBaseIdCodec.toPbId(expectationId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteParentExpectation ke PocketBase", e)
+            }
+        }
+
     suspend fun uploadSingleDeletionLog(context: Context, log: DeletionLog) =
         withContext(Dispatchers.IO) {
             if (!PocketBaseConfig.isConfigured(context)) return@withContext
@@ -1427,6 +1462,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "tabungan_logs", filter) }
             runCatching { deleteCollectionByFilter(service, "tabungan_transactions", filter) }
             runCatching { deleteCollectionByFilter(service, "deletion_logs", filter) }
+            runCatching { deleteCollectionByFilter(service, "parent_expectations", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
@@ -1575,8 +1611,17 @@ object PocketBaseSyncManager {
         val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
         val filter = buildSchoolFilter(cleanSchoolId)
 
+        val mergedDeletionLogs = runCatching {
+            syncDeletionLogsMerged(service, cleanSchoolId, filter, repository, null)
+        }.getOrDefault(repository.getDeletionLogsBySchoolList(cleanSchoolId))
+        val deletedParentMsgIds = mergedDeletionLogs
+            .filter { it.category == DeletionLog.CATEGORY_PARENT_MESSAGE && it.recordId > 0L }
+            .map { it.recordId }
+            .toSet()
+
         runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository) }
-        runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds) }
+        runCatching { syncParentExpectationsMerged(service, cleanSchoolId, filter, repository) }
     }
 
     suspend fun syncTabunganOnlineQuietly(
@@ -1887,18 +1932,26 @@ object PocketBaseSyncManager {
         service: PocketBaseService,
         cleanSchoolId: String,
         filter: String,
-        repository: HealthRepository
+        repository: HealthRepository,
+        deletedMessageIds: Set<Long> = emptySet()
     ) {
         val localMsgs = repository.getParentMessagesBySchoolList(cleanSchoolId)
+        val localDeleted = localMsgs.filter { it.id in deletedMessageIds }
+        localDeleted.forEach { msg ->
+            repository.deleteParentMessageById(msg.id)
+        }
+        val activeLocalMsgs = localMsgs.filter { it.id !in deletedMessageIds }
+
         val remoteRes = fetchAllPages { page ->
             service.listParentMessages(page = page, perPage = 500, filter = filter)
         }
         val remoteMsgs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+        val activeRemoteMsgs = remoteMsgs.filter { it.id !in deletedMessageIds }
 
-        val localById = localMsgs.associateBy { it.id }
-        val remoteById = remoteMsgs.associateBy { it.id }
+        val localById = activeLocalMsgs.associateBy { it.id }
+        val remoteById = activeRemoteMsgs.associateBy { it.id }
 
-        val mergedReadRemote = remoteMsgs.map { rem ->
+        val mergedReadRemote = activeRemoteMsgs.map { rem ->
             val loc = localById[rem.id]
             if (loc != null) {
                 rem.copy(
@@ -1915,7 +1968,7 @@ object PocketBaseSyncManager {
             repository.insertAllParentMessages(toInsertLocal)
         }
 
-        val toPushRemote = localMsgs.filter { loc ->
+        val toPushRemote = activeLocalMsgs.filter { loc ->
             val rem = remoteById[loc.id]
             rem == null ||
                 (loc.isReadByWali && !rem.isReadByWali) ||
@@ -1927,6 +1980,74 @@ object PocketBaseSyncManager {
                 dto.id!! to dto
             }
             upsertBatchOrFallback(service, "parent_messages", pairs)
+        }
+    }
+
+    private suspend fun syncParentExpectationsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localExpectations = repository.getParentExpectationsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listParentExpectations(page = page, perPage = 500, filter = filter)
+        }
+        val remoteExpectations = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+
+        val localById = localExpectations.associateBy { it.id }
+        val remoteById = remoteExpectations.associateBy { it.id }
+
+        val mergedForLocal = remoteExpectations.map { rem ->
+            val loc = localById[rem.id]
+            if (loc == null) {
+                rem
+            } else if (rem.updatedAt >= loc.updatedAt) {
+                rem.copy(
+                    isReadByWali = rem.isReadByWali || loc.isReadByWali,
+                    waliFollowUpNote = rem.waliFollowUpNote.ifBlank { loc.waliFollowUpNote },
+                    waliRespondedAt = maxOf(rem.waliRespondedAt, loc.waliRespondedAt)
+                )
+            } else {
+                loc.copy(
+                    isReadByWali = loc.isReadByWali || rem.isReadByWali,
+                    waliFollowUpNote = loc.waliFollowUpNote.ifBlank { rem.waliFollowUpNote },
+                    waliRespondedAt = maxOf(loc.waliRespondedAt, rem.waliRespondedAt)
+                )
+            }
+        }
+        val toInsertLocal = mergedForLocal.filter { merged ->
+            val loc = localById[merged.id]
+            loc == null || loc != merged
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllParentExpectations(toInsertLocal)
+        }
+
+        val toPushRemote = localExpectations.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null ||
+                loc.updatedAt > rem.updatedAt ||
+                (loc.isReadByWali && !rem.isReadByWali) ||
+                (loc.waliFollowUpNote.isNotBlank() && rem.waliFollowUpNote.isBlank())
+        }.map { loc ->
+            val rem = remoteById[loc.id]
+            if (rem != null && loc.updatedAt < rem.updatedAt) {
+                rem.copy(
+                    isReadByWali = rem.isReadByWali || loc.isReadByWali,
+                    waliFollowUpNote = rem.waliFollowUpNote.ifBlank { loc.waliFollowUpNote },
+                    waliRespondedAt = maxOf(rem.waliRespondedAt, loc.waliRespondedAt)
+                )
+            } else {
+                loc
+            }
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { exp ->
+                val dto = PbParentExpectationDto.fromDomain(exp)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "parent_expectations", pairs)
         }
     }
 
@@ -2518,12 +2639,19 @@ object PocketBaseSyncManager {
                 syncVisitRecordsMerged(service, cleanSchoolId, filter, repository)
             }
 
-            // 9. Sinkronkan Kartu Akses & Pesan Orang Tua (parent_access_links & parent_messages)
+            // 9. Sinkronkan Kartu Akses, Pesan & Harapan Karakter Orang Tua
+            val deletedParentMsgIds = mergedDeletionLogs
+                .filter { it.category == DeletionLog.CATEGORY_PARENT_MESSAGE && it.recordId > 0L }
+                .map { it.recordId }
+                .toSet()
             runCatching {
                 syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository)
             }
             runCatching {
-                syncParentMessagesMerged(service, cleanSchoolId, filter, repository)
+                syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds)
+            }
+            runCatching {
+                syncParentExpectationsMerged(service, cleanSchoolId, filter, repository)
             }
 
             // 10. Sinkronkan Tabungan Pribadi Wali Asuh & Log Audit (tabungan_logs & tabungan_transactions)

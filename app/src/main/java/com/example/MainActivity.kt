@@ -257,6 +257,7 @@ private fun WaliAsuhCareAppContent(
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
+    val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
     val tabunganTransactions by viewModel.tabunganTransactions.collectAsStateWithLifecycle()
     val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
     val konselingRecords by viewModel.konselingRecords.collectAsStateWithLifecycle()
@@ -337,6 +338,11 @@ private fun WaliAsuhCareAppContent(
     val myFosterStudentsCount = myFosterStudents.size
     val myFosterParentMessages = remember(parentMessages, myFosterStudentIds) {
         parentMessages.filter { it.studentId in myFosterStudentIds }
+    }
+    val myFosterParentExpectations = remember(parentExpectations, myFosterStudentIds, currentUserRole) {
+        val isAdminRole = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.SUPERADMIN
+        if (isAdminRole && myFosterStudentIds.isEmpty()) parentExpectations
+        else parentExpectations.filter { it.studentId in myFosterStudentIds }
     }
     val inpatientCount = remember(allRecords) {
         allRecords.count { it.isInpatient && it.status != "CANCELLED" }
@@ -639,6 +645,7 @@ private fun WaliAsuhCareAppContent(
                 visitRecords = visitRecords,
                 parentAccessLinks = parentAccessLinks,
                 parentMessages = myFosterParentMessages,
+                parentExpectations = myFosterParentExpectations,
                 myFosterStudentsCount = myFosterStudentsCount,
                 isAdmin = (currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN),
                 onDismiss = { dashboardModalState.activeCategoryHub = null },
@@ -771,6 +778,10 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.selectedParentChatStudent = null
                     dashboardModalState.showPesanOrtuSheet = true
+                },
+                onOpenHarapanOrtu = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showHarapanOrtuSheet = true
                 },
                 tabunganTransactions = tabunganTransactions,
                 tabunganLogs = tabunganLogs,

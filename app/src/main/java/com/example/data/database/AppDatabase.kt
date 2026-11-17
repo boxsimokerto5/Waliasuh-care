@@ -28,6 +28,7 @@ import com.example.data.dao.MengajiRecordDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
+import com.example.data.dao.ParentExpectationDao
 import com.example.data.dao.ParentMessageDao
 import com.example.data.dao.KonselingLogDao
 import com.example.data.dao.KonselingRecordDao
@@ -49,6 +50,7 @@ import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
+import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -72,6 +74,7 @@ import com.example.data.model.WaliShiftCode
         VisitRecord::class,
         ParentAccessLink::class,
         ParentMessage::class,
+        ParentExpectation::class,
         DeletionLog::class,
         TabunganTransaction::class,
         TabunganLog::class,
@@ -83,7 +86,7 @@ import com.example.data.model.WaliShiftCode
         InfoPentingReaction::class,
         InfoPentingComment::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -100,6 +103,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun visitRecordDao(): VisitRecordDao
     abstract fun parentAccessLinkDao(): ParentAccessLinkDao
     abstract fun parentMessageDao(): ParentMessageDao
+    abstract fun parentExpectationDao(): ParentExpectationDao
     abstract fun deletionLogDao(): DeletionLogDao
     abstract fun tabunganTransactionDao(): TabunganTransactionDao
     abstract fun tabunganLogDao(): TabunganLogDao
@@ -666,6 +670,36 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_26_27 = object : androidx.room.migration.Migration(26, 27) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS parent_expectations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        studentId INTEGER NOT NULL,
+                        studentName TEXT NOT NULL DEFAULT '',
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        parentName TEXT NOT NULL DEFAULT '',
+                        waliUsername TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL DEFAULT '',
+                        characterFocusCsv TEXT NOT NULL DEFAULT '',
+                        characterExpectation TEXT NOT NULL DEFAULT '',
+                        adviceFocusNotes TEXT NOT NULL DEFAULT '',
+                        parentPrayerMessage TEXT NOT NULL DEFAULT '',
+                        isReadByWali INTEGER NOT NULL DEFAULT 0,
+                        waliFollowUpNote TEXT NOT NULL DEFAULT '',
+                        waliRespondedAt INTEGER NOT NULL DEFAULT 0,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -692,7 +726,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_22_23,
                         MIGRATION_23_24,
                         MIGRATION_24_25,
-                        MIGRATION_25_26
+                        MIGRATION_25_26,
+                        MIGRATION_26_27
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
