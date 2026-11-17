@@ -69,6 +69,8 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
+import com.example.ui.components.FastingSessionDropdown
+import com.example.ui.components.sortedNewestFirst
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
@@ -89,10 +91,10 @@ fun InputPuasaDialog(
     val isEn = appStrings.isEnglish
     val lang = appStrings.language
     val activeSessions = remember(sessions) {
-        sessions.filter { it.isActive }.sortedByDescending { it.sessionDate }
+        sessions.filter { it.isActive }.sortedNewestFirst()
     }
     val availableSessions = remember(sessions, activeSessions) {
-        if (activeSessions.isNotEmpty()) activeSessions else sessions.sortedByDescending { it.sessionDate }
+        if (activeSessions.isNotEmpty()) activeSessions else sessions.sortedNewestFirst()
     }
 
     var selectedSessionId by remember(availableSessions) {
@@ -325,69 +327,44 @@ fun InputPuasaDialog(
                         }
                     }
                 } else {
-                    // Pemilih Sesi Ringkas (1 baris + tombol buat sesi baru oleh Wali Asuh)
+                    // Pemilih Sesi Dropdown (sesi terbaru selalu paling atas) + tombol buat sesi baru
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        availableSessions.forEach { session ->
-                            val selected = selectedSession?.id == session.id
-                            val dateStr = DateUtils.formatShortDate(session.sessionDate, lang)
-                            val doneSuffix = if (!session.isActive) {
-                                if (isEn) " • Done" else " • Selesai"
-                            } else ""
-                            FilterChip(
-                                selected = selected,
-                                onClick = { selectedSessionId = session.id },
-                                label = {
-                                    Text(
-                                        text = "${session.title} ($dateStr)$doneSuffix",
-                                        fontSize = 11.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarToday,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(13.dp)
-                                    )
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = tealLight,
-                                    selectedLabelColor = tealPrimary,
-                                    selectedLeadingIconColor = tealPrimary
-                                ),
-                                modifier = Modifier
-                                    .heightIn(min = 34.dp)
-                                    .testTag("chip_session_input_${session.id}")
-                            )
-                        }
+                        FastingSessionDropdown(
+                            sessions = availableSessions,
+                            selectedSession = selectedSession,
+                            accentColor = tealPrimary,
+                            accentLightColor = tealLight,
+                            isEn = isEn,
+                            lang = lang,
+                            onSelectSession = { selectedSessionId = it.id },
+                            testTagPrefix = "dropdown_session_input",
+                            modifier = Modifier.weight(1f)
+                        )
 
                         if (onCreateSession != null) {
                             OutlinedButton(
                                 onClick = { showCreateSessionDialog = true },
-                                shape = RoundedCornerShape(8.dp),
+                                shape = RoundedCornerShape(12.dp),
                                 border = BorderStroke(1.dp, tealPrimary),
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
                                 modifier = Modifier
-                                    .heightIn(min = 34.dp)
+                                    .heightIn(min = 44.dp)
                                     .testTag("btn_create_fasting_session_inline")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Add,
                                     contentDescription = if (isEn) "Create New Session" else "Buat Sesi Baru",
                                     tint = tealPrimary,
-                                    modifier = Modifier.size(14.dp)
+                                    modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = if (isEn) "New Session" else "Sesi Baru",
-                                    fontSize = 11.sp,
+                                    text = if (isEn) "New" else "Baru",
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     color = tealPrimary,
                                     maxLines = 1

@@ -66,6 +66,8 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.SchoolProfile
+import com.example.ui.components.FastingSessionDropdown
+import com.example.ui.components.sortedNewestFirst
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
@@ -86,10 +88,7 @@ fun DaftarPuasaSheet(
     val isEn = s.isEnglish
     val lang = s.language
     val sortedSessions = remember(sessions) {
-        sessions.sortedWith(
-            compareByDescending<FastingSession> { it.isActive }
-                .thenByDescending { it.sessionDate }
-        )
+        sessions.sortedNewestFirst()
     }
 
     var selectedSessionId by remember(sortedSessions) {
@@ -220,38 +219,18 @@ fun DaftarPuasaSheet(
                         )
                     }
                 } else {
-                    // Pilih Sesi Ringkas
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        sortedSessions.forEach { session ->
-                            val selected = selectedSession?.id == session.id
-                            FilterChip(
-                                selected = selected,
-                                onClick = { selectedSessionId = session.id },
-                                label = {
-                                    Text(
-                                        text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate, lang)})",
-                                        fontSize = 11.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(13.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = accentBlueLight,
-                                    selectedLabelColor = accentBlue,
-                                    selectedLeadingIconColor = accentBlue
-                                ),
-                                modifier = Modifier.heightIn(min = 34.dp)
-                            )
-                        }
-                    }
+                    // Pemilih Sesi Dropdown (sesi terbaru selalu paling atas)
+                    FastingSessionDropdown(
+                        sessions = sortedSessions,
+                        selectedSession = selectedSession,
+                        accentColor = accentBlue,
+                        accentLightColor = accentBlueLight,
+                        isEn = isEn,
+                        lang = lang,
+                        onSelectSession = { selectedSessionId = it.id },
+                        testTagPrefix = "dropdown_session_daftar",
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     // Gabungan Rekapitulasi & Filter Jenjang (1 baris interaktif - hapus chip duplikat)
                     Row(

@@ -829,38 +829,41 @@ fun InfoPentingCommentsSheet(
                 .navigationBarsPadding()
                 .imePadding()
         ) {
-            // Comments Header
+            // Comments Header (Compact)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Color(0xFF0F766E))
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = if (isEn) "Discussion & Comments" else "Komentar & Balasan",
-                        fontSize = 15.sp,
+                        fontSize = 14.5.sp,
                         fontWeight = FontWeight.ExtraBold,
-                        color = Color.White
+                        color = Color.White,
+                        lineHeight = 18.sp
                     )
                     Text(
                         text = post.title.ifBlank { post.content }.ifBlank { "Info-Info Penting" },
-                        fontSize = 11.5.sp,
+                        fontSize = 11.sp,
                         color = Color.White.copy(alpha = 0.85f),
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 14.sp
                     )
                 }
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(48.dp)
+                    modifier = Modifier.size(40.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = if (isEn) "Close" else "Tutup",
-                        tint = Color.White
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
             }
@@ -870,12 +873,12 @@ fun InfoPentingCommentsSheet(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
-                        .padding(24.dp),
+                        .padding(20.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = if (isEn) "No comments yet. Be the first to comment or reply!" else "Belum ada komentar. Mulai diskusi pertama di sini!",
-                        fontSize = 13.sp,
+                        fontSize = 12.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -884,13 +887,13 @@ fun InfoPentingCommentsSheet(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentPadding = PaddingValues(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     items(threads, key = { it.comment.id }) { thread ->
                         Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             CommentBubbleItem(
                                 comment = thread.comment,
@@ -908,7 +911,7 @@ fun InfoPentingCommentsSheet(
                                     isEn = isEn,
                                     onReply = { replyingTo = reply },
                                     onDelete = { onDeleteOwnComment(reply) },
-                                    modifier = Modifier.padding(start = 24.dp)
+                                    modifier = Modifier.padding(start = 16.dp)
                                 )
                             }
                         }
@@ -926,24 +929,24 @@ fun InfoPentingCommentsSheet(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 6.dp),
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.Reply,
                                 contentDescription = null,
                                 tint = Color(0xFF0F766E),
-                                modifier = Modifier.size(15.dp)
+                                modifier = Modifier.size(14.dp)
                             )
                             Text(
                                 text = if (isEn) "Replying to @${target.authorName}" else "Membalas @${target.authorName}",
-                                fontSize = 11.5.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF0F766E),
                                 maxLines = 1,
@@ -952,12 +955,12 @@ fun InfoPentingCommentsSheet(
                         }
                         IconButton(
                             onClick = { replyingTo = null },
-                            modifier = Modifier.size(32.dp)
+                            modifier = Modifier.size(28.dp)
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Close,
                                 contentDescription = "Cancel reply",
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
@@ -967,9 +970,9 @@ fun InfoPentingCommentsSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 OutlinedTextField(
                     value = commentDraft,
@@ -977,7 +980,7 @@ fun InfoPentingCommentsSheet(
                     placeholder = {
                         Text(
                             text = if (isEn) "Write a comment..." else "Tulis komentar...",
-                            fontSize = 13.sp
+                            fontSize = 12.5.sp
                         )
                     },
                     maxLines = 3,
@@ -1003,13 +1006,13 @@ fun InfoPentingCommentsSheet(
                     shape = CircleShape,
                     contentPadding = PaddingValues(0.dp),
                     modifier = Modifier
-                        .size(48.dp)
+                        .size(44.dp)
                         .testTag("btn_send_info_comment")
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = if (isEn) "Send Comment" else "Kirim Komentar",
-                        modifier = Modifier.size(19.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -1032,7 +1035,7 @@ private fun CommentBubbleItem(
         modifier = modifier
             .fillMaxWidth()
             .testTag("comment_item_${comment.id}"),
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(11.dp),
         color = if (isReply) Color(0xFFF8FAFC) else Color(0xFFF1F5F9),
         border = BorderStroke(
             1.dp,
@@ -1042,8 +1045,8 @@ private fun CommentBubbleItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 9.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1052,13 +1055,15 @@ private fun CommentBubbleItem(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Text(
                         text = comment.authorName.ifBlank { "Wali Asuh" },
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.ExtraBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         color = if (comment.authorName == InfoPentingHelper.PUBLIC_AUTHOR_NAME) {
                             Color(0xFF0F766E)
                         } else {
@@ -1067,24 +1072,27 @@ private fun CommentBubbleItem(
                     )
                     if (comment.authorSchoolName.isNotBlank()) {
                         Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = Color(0xFFE0F2FE)
+                            shape = RoundedCornerShape(5.dp),
+                            color = Color(0xFFE0F2FE),
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
                             Text(
                                 text = comment.authorSchoolName,
-                                fontSize = 9.5.sp,
+                                fontSize = 9.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF0369A1),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
                             )
                         }
                     }
                 }
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = timeFmt.format(Date(comment.createdAt)),
-                    fontSize = 10.sp,
+                    fontSize = 9.5.sp,
+                    maxLines = 1,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
@@ -1092,65 +1100,90 @@ private fun CommentBubbleItem(
             if (comment.replyToAuthorName.isNotBlank()) {
                 Text(
                     text = "↩ @${comment.replyToAuthorName}",
-                    fontSize = 10.5.sp,
+                    fontSize = 10.sp,
+                    lineHeight = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    color = Color(0xFF0F766E)
+                    color = Color(0xFF0F766E),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Text(
-                text = comment.content,
-                fontSize = 13.sp,
-                lineHeight = 18.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                TextButton(
-                    onClick = onReply,
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                Text(
+                    text = comment.content,
+                    fontSize = 12.5.sp,
+                    lineHeight = 16.5.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier
-                        .heightIn(min = 36.dp)
-                        .testTag("btn_reply_comment_${comment.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Reply,
-                        contentDescription = null,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (isEn) "Reply" else "Balas",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                        .weight(1f)
+                        .padding(end = 6.dp)
+                )
 
-                if (isMine) {
-                    TextButton(
-                        onClick = onDelete,
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = Color(0xFFE0F2FE).copy(alpha = 0.7f),
                         modifier = Modifier
-                            .heightIn(min = 36.dp)
-                            .testTag("btn_delete_comment_${comment.id}")
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(onClick = onReply)
+                            .testTag("btn_reply_comment_${comment.id}")
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.DeleteOutline,
-                            contentDescription = null,
-                            tint = Color(0xFFDC2626),
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isEn) "Delete" else "Hapus",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFDC2626)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Reply,
+                                contentDescription = if (isEn) "Reply" else "Balas",
+                                tint = Color(0xFF0369A1),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = if (isEn) "Reply" else "Balas",
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF0369A1)
+                            )
+                        }
+                    }
+
+                    if (isMine) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFFFEE2E2).copy(alpha = 0.8f),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(onClick = onDelete)
+                                .testTag("btn_delete_comment_${comment.id}")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DeleteOutline,
+                                    contentDescription = if (isEn) "Delete" else "Hapus",
+                                    tint = Color(0xFFDC2626),
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "Delete" else "Hapus",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFDC2626)
+                                )
+                            }
+                        }
                     }
                 }
             }

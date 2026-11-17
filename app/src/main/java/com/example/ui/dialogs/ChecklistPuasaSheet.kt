@@ -73,6 +73,8 @@ import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
 import com.example.data.model.SchoolProfile
+import com.example.ui.components.FastingSessionDropdown
+import com.example.ui.components.sortedNewestFirst
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
@@ -94,10 +96,7 @@ fun ChecklistPuasaSheet(
     val isEn = s.isEnglish
     val lang = s.language
     val sortedSessions = remember(sessions) {
-        sessions.sortedWith(
-            compareByDescending<FastingSession> { it.isActive }
-                .thenByDescending { it.sessionDate }
-        )
+        sessions.sortedNewestFirst()
     }
 
     var selectedSessionId by remember(sortedSessions) {
@@ -226,38 +225,18 @@ fun ChecklistPuasaSheet(
                         )
                     }
                 } else {
-                    // Pilih Sesi Ringkas
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        sortedSessions.forEach { session ->
-                            val selected = selectedSession?.id == session.id
-                            FilterChip(
-                                selected = selected,
-                                onClick = { selectedSessionId = session.id },
-                                label = {
-                                    Text(
-                                        text = "${session.title} (${DateUtils.formatShortDate(session.sessionDate, lang)})",
-                                        fontSize = 11.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CalendarToday, contentDescription = null, modifier = Modifier.size(13.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = amberLight,
-                                    selectedLabelColor = amberDark,
-                                    selectedLeadingIconColor = amberDark
-                                ),
-                                modifier = Modifier.heightIn(min = 34.dp)
-                            )
-                        }
-                    }
+                    // Pemilih Sesi Dropdown (sesi terbaru selalu paling atas)
+                    FastingSessionDropdown(
+                        sessions = sortedSessions,
+                        selectedSession = selectedSession,
+                        accentColor = amberDark,
+                        accentLightColor = amberLight,
+                        isEn = isEn,
+                        lang = lang,
+                        onSelectSession = { selectedSessionId = it.id },
+                        testTagPrefix = "dropdown_session_checklist",
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
                     // Kategori Tab: Sahur vs Berbuka (tetap terlihat di atas agar mudah berpindah)
                     TabRow(

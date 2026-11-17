@@ -19,9 +19,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -79,8 +82,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -110,8 +115,10 @@ fun EditJadwalSelDialog(
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     val effectiveCodes = remember(shiftCodes, schoolProfile.tenantCode) {
-        shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
-            .sortedBy { it.sortOrder }
+        shiftCodes
+            .ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
+            .sortedWith(compareBy<WaliShiftCode> { it.sortOrder }.thenBy { it.code })
+            .distinctBy { WaliScheduleHelper.normalizeCode(it.code) }
     }
     val initialCode = remember(entry.dayCodesJson, day) {
         WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[day]?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
@@ -132,342 +139,554 @@ fun EditJadwalSelDialog(
     var leaveDriveUrl by remember(entry.id, day) { mutableStateOf(initialLeave?.driveUrl.orEmpty()) }
     var leaveNote by remember(entry.id, day) { mutableStateOf(initialLeave?.note.orEmpty()) }
 
-    val schoolFaskes = remember(schoolProfile) { schoolProfile.getAllFaskes() }
+    val schoolFaskes = remember(schoolProfile) { schoolProfile.getAllFaskes().distinctBy { it.trim().lowercase() } }
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Surface(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 20.dp)
-                .testTag("dialog_edit_jadwal_sel"),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+                .systemBarsPadding()
+                .imePadding()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .widthIn(max = 560.dp)
+                    .heightIn(max = 680.dp)
+                    .testTag("dialog_edit_jadwal_sel"),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isEn) "Edit Schedule Cell" else "Atur Shift & Pin Tugas",
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            text = "${entry.waliName} • ${WaliScheduleHelper.formatDateChipLabel(monthKey, day, isEn)}",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFF0F766E)
-                        )
-                    }
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
-                    }
-                }
-
-                // 1. Shift Code Picker
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (isEn) "1. Select Shift Code" else "1. Pilih Kode Shift",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        if (onOpenPatternEditor != null) {
-                            TextButton(onClick = {
-                                onDismiss()
-                                onOpenPatternEditor()
-                            }) {
-                                Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (isEn) "Pattern" else "Pola Rotasi", fontSize = 11.5.sp)
-                            }
-                        }
-                        TextButton(
-                            onClick = { selectedCode = "" },
-                            modifier = Modifier.testTag("btn_clear_jadwal_shift")
-                        ) {
-                            Text(if (isEn) "Clear" else "Kosongkan", fontSize = 11.5.sp, color = MaterialTheme.colorScheme.error)
-                        }
-                    }
-                }
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    effectiveCodes.forEach { sc ->
-                        val color = parseJadwalShiftColor(sc.colorHex)
-                        val isSelected = selectedCode.equals(sc.code, ignoreCase = true)
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (isSelected) color else color.copy(alpha = 0.12f),
-                            border = BorderStroke(1.2.dp, color),
-                            modifier = Modifier
-                                .heightIn(min = 40.dp)
-                                .clickable { selectedCode = sc.code }
-                                .testTag("chip_pick_shift_${sc.code}")
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = sc.code,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = if (isSelected) Color.White else color
-                                )
-                                Text(
-                                    text = sc.name,
-                                    fontSize = 9.5.sp,
-                                    color = if (isSelected) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-
-                HorizontalDivider()
-
-                // 2. Pin Tugas & Jaga Faskes
-                Text(
-                    text = if (isEn) "2. Pin Task or Referral Faskes" else "2. Sematkan Tugas / Jaga Faskes",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                if (pins.isNotEmpty()) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        pins.forEachIndexed { idx, pin ->
-                            val isFaskes = pin.category.equals(WaliScheduleHelper.PIN_FASKES, ignoreCase = true)
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = if (isFaskes) Color(0xFFFEE2E2) else Color(0xFFE0E7FF),
-                                border = BorderStroke(1.dp, if (isFaskes) Color(0xFFFCA5A5) else Color(0xFFC7D2FE))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(start = 8.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Text(
-                                        text = pin.label,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = if (isFaskes) Color(0xFFB91C1C) else Color(0xFF3730A3)
-                                    )
-                                    Icon(
-                                        imageVector = Icons.Default.Close,
-                                        contentDescription = if (isEn) "Remove pin" else "Hapus pin",
-                                        tint = if (isFaskes) Color(0xFFB91C1C) else Color(0xFF3730A3),
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable { pins.removeAt(idx) }
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Text(
-                    text = if (isEn) "Quick Task Presets:" else "Preset Tugas Cepat:",
-                    fontSize = 11.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    WaliScheduleHelper.DEFAULT_PIN_PRESETS.forEach { preset ->
-                        val exists = pins.any { it.label.equals(preset, ignoreCase = true) }
-                        FilterChip(
-                            selected = exists,
-                            onClick = {
-                                if (exists) {
-                                    pins.removeAll { it.label.equals(preset, ignoreCase = true) }
-                                } else {
-                                    pins.add(PinnedTaskItem(label = preset, category = WaliScheduleHelper.PIN_TUGAS))
-                                }
-                            },
-                            leadingIcon = { Icon(Icons.Default.PushPin, contentDescription = null, modifier = Modifier.size(13.dp)) },
-                            label = { Text(preset, fontSize = 10.5.sp) }
-                        )
-                    }
-                }
-
-                if (schoolFaskes.isNotEmpty()) {
-                    Text(
-                        text = if (isEn) "School Referral Faskes Pins:" else "Pin Jaga Faskes / RS Rujukan Sekolah:",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        schoolFaskes.forEach { faskesName ->
-                            val label = "Jaga $faskesName"
-                            val exists = pins.any { it.label.equals(label, ignoreCase = true) }
-                            FilterChip(
-                                selected = exists,
-                                onClick = {
-                                    if (exists) {
-                                        pins.removeAll { it.label.equals(label, ignoreCase = true) }
-                                    } else {
-                                        pins.add(PinnedTaskItem(label = label, category = WaliScheduleHelper.PIN_FASKES))
-                                    }
-                                },
-                                leadingIcon = { Icon(Icons.Default.LocalHospital, contentDescription = null, modifier = Modifier.size(13.dp)) },
-                                label = { Text(label, fontSize = 10.5.sp) }
-                            )
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = customPinLabel,
-                        onValueChange = { customPinLabel = it },
-                        label = { Text(if (isEn) "Custom pin label" else "Tugas / Faskes Kustom", fontSize = 11.5.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("input_pin_custom_label")
-                    )
-                    Button(
-                        onClick = {
-                            val clean = customPinLabel.trim()
-                            if (clean.isNotBlank() && pins.none { it.label.equals(clean, ignoreCase = true) }) {
-                                pins.add(PinnedTaskItem(label = clean, category = customPinCategory))
-                                customPinLabel = ""
-                            }
-                        },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .heightIn(min = 48.dp)
-                            .testTag("btn_add_custom_pin")
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = if (isEn) "Add Pin" else "Tambah Pin", modifier = Modifier.size(18.dp))
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = customPinCategory == WaliScheduleHelper.PIN_TUGAS,
-                        onClick = { customPinCategory = WaliScheduleHelper.PIN_TUGAS },
-                        label = { Text(if (isEn) "General Task" else "Tugas Asrama", fontSize = 11.sp) }
-                    )
-                    FilterChip(
-                        selected = customPinCategory == WaliScheduleHelper.PIN_FASKES,
-                        onClick = { customPinCategory = WaliScheduleHelper.PIN_FASKES },
-                        label = { Text(if (isEn) "Hospital / Faskes" else "Jaga Faskes / RS", fontSize = 11.sp) }
-                    )
-                }
-
-                HorizontalDivider()
-
-                // 3. Izin / Sakit / Cuti + Google Drive Evidence Link
-                Text(
-                    text = if (isEn) "3. Leave / Sick Status & Drive Link" else "3. Keterangan Izin / Sakit / Cuti & Link Drive",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf(
-                        "" to if (isEn) "Active Duty" else "Masuk / Normal",
-                        "IZIN" to "IZIN",
-                        "SAKIT" to "SAKIT",
-                        "CUTI" to "CUTI"
-                    ).forEach { (key, lbl) ->
-                        FilterChip(
-                            selected = leaveStatus == key,
-                            onClick = { leaveStatus = key },
-                            label = { Text(lbl, fontSize = 11.sp) }
-                        )
-                    }
-                }
-
-                if (leaveStatus.isNotBlank()) {
-                    OutlinedTextField(
-                        value = leaveDriveUrl,
-                        onValueChange = { leaveDriveUrl = it },
-                        label = { Text(if (isEn) "Google Drive Letter Link (Optional)" else "Tautan Google Drive Surat (Opsional)", fontSize = 11.5.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    // Sticky Header Ringkas
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("input_leave_drive_url")
-                    )
-                    OutlinedTextField(
-                        value = leaveNote,
-                        onValueChange = { leaveNote = it },
-                        label = { Text(if (isEn) "Note / Reason" else "Catatan / Keterangan Izin", fontSize = 11.5.sp) },
-                        singleLine = true,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 48.dp)
+                            .padding(start = 14.dp, end = 6.dp, top = 8.dp, bottom = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(if (isEn) "Cancel" else "Batal")
-                    }
-                    Button(
-                        onClick = {
-                            val leave = if (leaveStatus.isBlank()) null else LeaveDayInfo(
-                                status = leaveStatus,
-                                driveUrl = leaveDriveUrl.trim(),
-                                note = leaveNote.trim()
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isEn) "Edit Schedule Cell" else "Atur Shift & Pin Tugas",
+                                fontSize = 15.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            val finalCode = selectedCode.ifBlank {
-                                if (leaveStatus == "CUTI") "C" else if (leaveStatus.isNotBlank()) "IZIN" else ""
-                            }
-                            onSave(finalCode, pins.toList(), leave)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                        shape = RoundedCornerShape(12.dp),
+                            Text(
+                                text = "${entry.waliName} • ${WaliScheduleHelper.formatDateChipLabel(monthKey, day, isEn)}",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF0F766E),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = if (isEn) "Close" else "Tutup",
+                                modifier = Modifier.size(19.dp)
+                            )
+                        }
+                    }
+                    HorizontalDivider(thickness = 0.7.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+
+                    // Body Rapat (scrollable hanya jika layar kecil / form izin terbuka)
+                    Column(
                         modifier = Modifier
-                            .weight(1.4f)
-                            .heightIn(min = 48.dp)
-                            .testTag("btn_save_jadwal_sel")
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(if (isEn) "Save Schedule" else "Simpan Perubahan", fontWeight = FontWeight.Bold)
+                        // 1. Shift Code Picker (4 Kolom Rapat & Bebas Duplikat)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isEn) "1. Shift Code" else "1. Pilih Kode Shift",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (onOpenPatternEditor != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFE0F2FE),
+                                        modifier = Modifier.clickable {
+                                            onDismiss()
+                                            onOpenPatternEditor()
+                                        }
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Repeat,
+                                                contentDescription = null,
+                                                tint = Color(0xFF0369A1),
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = if (isEn) "Pattern" else "Pola Rotasi",
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF0369A1),
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
+                                        }
+                                    }
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                                    modifier = Modifier
+                                        .clickable { selectedCode = "" }
+                                        .testTag("btn_clear_jadwal_shift")
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Clear" else "Kosongkan",
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.error,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            effectiveCodes.chunked(4).forEach { rowCodes ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    rowCodes.forEach { sc ->
+                                        val color = parseJadwalShiftColor(sc.colorHex)
+                                        val isSelected = selectedCode.equals(sc.code, ignoreCase = true)
+                                        Surface(
+                                            shape = RoundedCornerShape(9.dp),
+                                            color = if (isSelected) color else color.copy(alpha = 0.11f),
+                                            border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, color),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clickable { selectedCode = sc.code }
+                                                .testTag("chip_pick_shift_${sc.code}")
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp),
+                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            ) {
+                                                Text(
+                                                    text = sc.code,
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    color = if (isSelected) Color.White else color,
+                                                    maxLines = 1
+                                                )
+                                                Text(
+                                                    text = sc.name,
+                                                    fontSize = 8.5.sp,
+                                                    lineHeight = 10.sp,
+                                                    color = if (isSelected) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    textAlign = TextAlign.Center
+                                                )
+                                            }
+                                        }
+                                    }
+                                    repeat(4 - rowCodes.size) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+
+                        // 2. Pin Tugas & Jaga Faskes (Chip Kompak Rapat)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isEn) "2. Pin Task / Referral Faskes" else "2. Sematkan Tugas / Jaga Faskes",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (pins.isNotEmpty()) {
+                                Text(
+                                    text = "${pins.size} ${if (isEn) "pinned" else "tersemat"}",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F766E)
+                                )
+                            }
+                        }
+
+                        if (pins.isNotEmpty()) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                pins.forEachIndexed { idx, pin ->
+                                    val isFaskes = pin.category.equals(WaliScheduleHelper.PIN_FASKES, ignoreCase = true)
+                                    Surface(
+                                        shape = RoundedCornerShape(7.dp),
+                                        color = if (isFaskes) Color(0xFFFEE2E2) else Color(0xFFE0E7FF),
+                                        border = BorderStroke(0.9.dp, if (isFaskes) Color(0xFFFCA5A5) else Color(0xFFC7D2FE))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(start = 7.dp, end = 4.dp, top = 3.dp, bottom = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                        ) {
+                                            Text(
+                                                text = pin.label,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = if (isFaskes) Color(0xFFB91C1C) else Color(0xFF3730A3),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Icon(
+                                                imageVector = Icons.Default.Close,
+                                                contentDescription = if (isEn) "Remove pin" else "Hapus pin",
+                                                tint = if (isFaskes) Color(0xFFB91C1C) else Color(0xFF3730A3),
+                                                modifier = Modifier
+                                                    .size(14.dp)
+                                                    .clickable { pins.removeAt(idx) }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Preset Tugas Cepat + Faskes Sekolah (Chip Pill Rapat tanpa jarak raksasa)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            WaliScheduleHelper.DEFAULT_PIN_PRESETS.forEach { preset ->
+                                val exists = pins.any { it.label.equals(preset, ignoreCase = true) }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (exists) Color(0xFFE0E7FF) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (exists) Color(0xFF4F46E5) else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier.clickable {
+                                        if (exists) {
+                                            pins.removeAll { it.label.equals(preset, ignoreCase = true) }
+                                        } else {
+                                            pins.add(PinnedTaskItem(label = preset, category = WaliScheduleHelper.PIN_TUGAS))
+                                        }
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.PushPin,
+                                            contentDescription = null,
+                                            tint = if (exists) Color(0xFF3730A3) else Color(0xFF0284C7),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = preset,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (exists) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (exists) Color(0xFF312E81) else MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+
+                            schoolFaskes.forEach { faskesName ->
+                                val label = "Jaga $faskesName"
+                                val exists = pins.any { it.label.equals(label, ignoreCase = true) }
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (exists) Color(0xFFFEE2E2) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (exists) Color(0xFFDC2626) else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    modifier = Modifier.clickable {
+                                        if (exists) {
+                                            pins.removeAll { it.label.equals(label, ignoreCase = true) }
+                                        } else {
+                                            pins.add(PinnedTaskItem(label = label, category = WaliScheduleHelper.PIN_FASKES))
+                                        }
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.LocalHospital,
+                                            contentDescription = null,
+                                            tint = if (exists) Color(0xFFB91C1C) else Color(0xFF0369A1),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = label,
+                                            fontSize = 10.5.sp,
+                                            fontWeight = if (exists) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (exists) Color(0xFF991B1B) else MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        // Input Pin Kustom Ringkas 1 Baris + Pilihan Kategori Mini
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = customPinLabel,
+                                onValueChange = { customPinLabel = it },
+                                placeholder = {
+                                    Text(
+                                        text = if (isEn) "Custom task / faskes..." else "Tugas / Faskes kustom...",
+                                        fontSize = 11.5.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
+                                textStyle = TextStyle(fontSize = 12.sp),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("input_pin_custom_label")
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (customPinCategory == WaliScheduleHelper.PIN_FASKES) Color(0xFFFEE2E2) else Color(0xFFE0E7FF),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (customPinCategory == WaliScheduleHelper.PIN_FASKES) Color(0xFFFCA5A5) else Color(0xFFC7D2FE)
+                                ),
+                                modifier = Modifier
+                                    .heightIn(min = 44.dp)
+                                    .clickable {
+                                        customPinCategory = if (customPinCategory == WaliScheduleHelper.PIN_TUGAS) {
+                                            WaliScheduleHelper.PIN_FASKES
+                                        } else {
+                                            WaliScheduleHelper.PIN_TUGAS
+                                        }
+                                    }
+                            ) {
+                                Box(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (customPinCategory == WaliScheduleHelper.PIN_FASKES) {
+                                            if (isEn) "Faskes" else "Faskes"
+                                        } else {
+                                            if (isEn) "Task" else "Tugas"
+                                        },
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (customPinCategory == WaliScheduleHelper.PIN_FASKES) Color(0xFFB91C1C) else Color(0xFF3730A3),
+                                        maxLines = 1,
+                                        softWrap = false
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    val clean = customPinLabel.trim()
+                                    if (clean.isNotBlank() && pins.none { it.label.equals(clean, ignoreCase = true) }) {
+                                        pins.add(PinnedTaskItem(label = clean, category = customPinCategory))
+                                        customPinLabel = ""
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                modifier = Modifier
+                                    .height(44.dp)
+                                    .testTag("btn_add_custom_pin")
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = if (isEn) "Add Pin" else "Tambah Pin", modifier = Modifier.size(18.dp))
+                            }
+                        }
+
+                        HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+
+                        // 3. Izin / Sakit / Cuti (Segmented 4 Kolom Seimbang, Tidak Akan Patah Vertikal)
+                        Text(
+                            text = if (isEn) "3. Leave / Sick Status & Drive Link" else "3. Keterangan Izin / Sakit / Cuti",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            listOf(
+                                "" to if (isEn) "Normal" else "Normal",
+                                "IZIN" to "IZIN",
+                                "SAKIT" to "SAKIT",
+                                "CUTI" to "CUTI"
+                            ).forEach { (key, lbl) ->
+                                val selected = leaveStatus == key
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = if (selected) {
+                                        if (key.isEmpty()) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    },
+                                    border = BorderStroke(
+                                        if (selected) 1.3.dp else 0.9.dp,
+                                        if (selected) {
+                                            if (key.isEmpty()) Color(0xFF15803D) else Color(0xFFD97706)
+                                        } else {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        }
+                                    ),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { leaveStatus = key }
+                                        .testTag("chip_leave_status_${key.ifBlank { "NORMAL" }}")
+                                ) {
+                                    Text(
+                                        text = lbl,
+                                        fontSize = 11.sp,
+                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                        color = if (selected) {
+                                            if (key.isEmpty()) Color(0xFF166534) else Color(0xFF92400E)
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (leaveStatus.isNotBlank()) {
+                            OutlinedTextField(
+                                value = leaveDriveUrl,
+                                onValueChange = { leaveDriveUrl = it },
+                                placeholder = { Text(if (isEn) "Google Drive Letter Link (Optional)" else "Tautan Google Drive Surat (Opsional)", fontSize = 11.5.sp) },
+                                textStyle = TextStyle(fontSize = 12.sp),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_leave_drive_url")
+                            )
+                            OutlinedTextField(
+                                value = leaveNote,
+                                onValueChange = { leaveNote = it },
+                                placeholder = { Text(if (isEn) "Note / Reason" else "Catatan / Keterangan Izin", fontSize = 11.5.sp) },
+                                textStyle = TextStyle(fontSize = 12.sp),
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    // Sticky Footer (Selalu Terlihat & Aman di Atas Navigasi Sistem)
+                    HorizontalDivider(thickness = 0.7.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                        ) {
+                            Text(
+                                text = if (isEn) "Cancel" else "Batal",
+                                fontSize = 12.5.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                val leave = if (leaveStatus.isBlank()) null else LeaveDayInfo(
+                                    status = leaveStatus,
+                                    driveUrl = leaveDriveUrl.trim(),
+                                    note = leaveNote.trim()
+                                )
+                                val finalCode = selectedCode.ifBlank {
+                                    if (leaveStatus == "CUTI") "C" else if (leaveStatus.isNotBlank()) "IZIN" else ""
+                                }
+                                onSave(finalCode, pins.toList(), leave)
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                            modifier = Modifier
+                                .weight(1.4f)
+                                .height(44.dp)
+                                .testTag("btn_save_jadwal_sel")
+                        ) {
+                            Text(
+                                text = if (isEn) "Save Schedule" else "Simpan Perubahan",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        }
                     }
                 }
             }

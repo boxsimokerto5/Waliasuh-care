@@ -26,8 +26,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -2801,18 +2803,18 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
         }
     }
 
-    // 5. Date Switcher + Filter Chips + Search Bar
+    // 5. Date Switcher + Filter Chips + Search Bar (Rapat)
     item(key = "jadwal_date_and_filter_controls") {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Surface(
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(11.dp),
                 color = MaterialTheme.colorScheme.surface,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -2826,17 +2828,20 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                                 onChangeDay(WaliScheduleHelper.daysInMonth(prevMonth))
                             }
                         },
-                        modifier = Modifier.testTag("btn_jadwal_prev_day")
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("btn_jadwal_prev_day")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-                            contentDescription = if (isEn) "Previous Day" else "Hari Sebelumnya"
+                            contentDescription = if (isEn) "Previous Day" else "Hari Sebelumnya",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = WaliScheduleHelper.formatDateChipLabel(monthKey, safeDay, isEn),
-                            fontSize = 13.5.sp,
+                            fontSize = 13.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF0F766E),
                             modifier = Modifier.testTag("text_jadwal_selected_date")
@@ -2847,7 +2852,7 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                             } else {
                                 if (isEn) "Tap any person for monthly schedule" else "Ketuk nama wali untuk lihat jadwal personal"
                             },
-                            fontSize = 10.5.sp,
+                            fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
@@ -2861,11 +2866,14 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                                 onChangeDay(1)
                             }
                         },
-                        modifier = Modifier.testTag("btn_jadwal_next_day")
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("btn_jadwal_next_day")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = if (isEn) "Next Day" else "Hari Berikutnya"
+                            contentDescription = if (isEn) "Next Day" else "Hari Berikutnya",
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
@@ -2874,16 +2882,16 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = onSearchChange,
-                placeholder = { Text(if (isEn) "Search caregiver or pinned task..." else "Cari nama Wali Asuh atau tugas pin...", fontSize = 12.sp) },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                placeholder = { Text(if (isEn) "Search caregiver or pinned task..." else "Cari nama Wali Asuh atau tugas pin...", fontSize = 11.5.sp) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(17.dp)) },
                 singleLine = true,
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("input_jadwal_hub_search")
             )
 
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 val filterChips = listOf(
                     "ALL" to if (isEn) "All" else "Semua",
                     WaliScheduleHelper.GROUP_PAGI to if (isEn) "Morning" else "Pagi",
@@ -2893,11 +2901,25 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                     WaliScheduleHelper.GROUP_IZIN to if (isEn) "Leave" else "Izin & Cuti"
                 )
                 items(filterChips) { (key, lbl) ->
-                    FilterChip(
-                        selected = selectedGroup == key,
-                        onClick = { onGroupChange(key) },
-                        label = { Text(lbl, fontSize = 11.5.sp) }
-                    )
+                    val selected = selectedGroup == key
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (selected) Color(0xFF0F766E) else MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(
+                            1.dp,
+                            if (selected) Color(0xFF0F766E) else MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier.clickable { onGroupChange(key) }
+                    ) {
+                        Text(
+                            text = lbl,
+                            fontSize = 11.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                        )
+                    }
                 }
             }
         }
@@ -3003,6 +3025,7 @@ private fun DailyRosterGroupCard(
     onMemberClick: (WaliScheduleEntry) -> Unit
 ) {
     val context = LocalContext.current
+    val innerScrollState = rememberScrollState()
     val (accent, borderColor, iconVector) = when (groupKey) {
         WaliScheduleHelper.GROUP_PAGI -> Triple(Color(0xFF0284C7), Color(0xFFBAE6FD), Icons.Default.WbSunny)
         WaliScheduleHelper.GROUP_SORE -> Triple(Color(0xFFD97706), Color(0xFFFDE68A), Icons.Default.WbTwilight)
@@ -3012,76 +3035,117 @@ private fun DailyRosterGroupCard(
     }
 
     ElevatedCard(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+            .border(1.2.dp, borderColor, RoundedCornerShape(14.dp))
             .testTag("card_jadwal_group_$groupKey")
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header Strip Ringkas
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(accent.copy(alpha = 0.08f))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
                     modifier = Modifier.weight(1f)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = accent.copy(alpha = 0.14f),
-                        modifier = Modifier.size(36.dp)
+                        shape = RoundedCornerShape(8.dp),
+                        color = accent.copy(alpha = 0.16f),
+                        modifier = Modifier.size(28.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
-                            Icon(iconVector, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
+                            Icon(iconVector, contentDescription = null, tint = accent, modifier = Modifier.size(16.dp))
                         }
                     }
-                    Column {
-                        Text(title, fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.onSurface)
-                        Text(timeSubtitle, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = title,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = timeSubtitle,
+                            fontSize = 10.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = accent.copy(alpha = 0.12f)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "${members.size} Org",
-                        fontSize = 11.5.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = accent,
-                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
-                    )
+                    if (members.size > 5) {
+                        Surface(
+                            shape = RoundedCornerShape(7.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                            border = BorderStroke(0.7.dp, borderColor)
+                        ) {
+                            Text(
+                                text = if (isEn) "↕ Scroll" else "↕ Gulir",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = accent,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = accent.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "${members.size} Org",
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = accent,
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp)
+                        )
+                    }
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                members.forEach { (entry, code, pinsAndLeave) ->
-                    val (pins, leave) = pinsAndLeave
-                    val shift = shiftMap[code]
-                    val codeColor = parseJadwalShiftColor(shift?.colorHex ?: "#64748B", accent)
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onMemberClick(entry) }
-                            .testTag("row_jadwal_member_${entry.id}")
-                    ) {
+            // Frame Dalam Berbatas Tinggi dengan Scroll Mandiri untuk Daftar Nama Wali Asuh
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+                border = BorderStroke(1.dp, borderColor.copy(alpha = 0.85f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 7.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 216.dp)
+                        .verticalScroll(innerScrollState)
+                        .testTag("frame_jadwal_group_scroll_$groupKey")
+                ) {
+                    members.forEachIndexed { index, (entry, code, pinsAndLeave) ->
+                        val (pins, leave) = pinsAndLeave
+                        val shift = shiftMap[code]
+                        val codeColor = parseJadwalShiftColor(shift?.colorHex ?: "#64748B", accent)
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp)
+                                .clickable { onMemberClick(entry) }
+                                .padding(horizontal = 8.dp, vertical = 5.dp)
+                                .testTag("row_jadwal_member_${entry.id}"),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -3090,12 +3154,18 @@ private fun DailyRosterGroupCard(
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp),
                                     modifier = Modifier.weight(1f)
                                 ) {
                                     Text(
+                                        text = "${index + 1}.",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
                                         text = entry.waliName,
-                                        fontSize = 13.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface,
                                         maxLines = 1,
@@ -3105,17 +3175,17 @@ private fun DailyRosterGroupCard(
                                     val zone = shift?.zoneLabel.orEmpty()
                                     if (zone.isNotBlank()) {
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = RoundedCornerShape(6.dp),
                                             color = accent.copy(alpha = 0.1f)
                                         ) {
                                             Text(
                                                 text = "($zone)",
-                                                fontSize = 10.sp,
+                                                fontSize = 9.5.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = accent,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
                                             )
                                         }
                                     }
@@ -3129,16 +3199,16 @@ private fun DailyRosterGroupCard(
                                             imageVector = Icons.Default.Edit,
                                             contentDescription = if (isEn) "Edit" else "Atur",
                                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(14.dp)
+                                            modifier = Modifier.size(13.dp)
                                         )
                                     }
-                                    Surface(shape = RoundedCornerShape(7.dp), color = codeColor) {
+                                    Surface(shape = RoundedCornerShape(6.dp), color = codeColor) {
                                         Text(
                                             text = code,
-                                            fontSize = 11.sp,
+                                            fontSize = 10.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             color = Color.White,
-                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.5.dp)
                                         )
                                     }
                                 }
@@ -3146,32 +3216,40 @@ private fun DailyRosterGroupCard(
 
                             if (pins.isNotEmpty() || leave != null) {
                                 FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                                    modifier = Modifier.padding(start = 16.dp)
                                 ) {
                                     pins.forEach { pin ->
                                         SchedulePinChip(pin = pin)
                                     }
                                     if (leave != null && leave.driveUrl.isNotBlank()) {
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = RoundedCornerShape(6.dp),
                                             color = Color(0xFFDCFCE7),
-                                            border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                                            border = BorderStroke(0.8.dp, Color(0xFF86EFAC)),
                                             modifier = Modifier.clickable {
                                                 openJadwalExternalUrl(context, leave.driveUrl, isEn)
                                             }
                                         ) {
                                             Text(
                                                 text = "📄 Drive ${leave.status}",
-                                                fontSize = 10.5.sp,
+                                                fontSize = 9.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF166534),
-                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                             )
                                         }
                                     }
                                 }
                             }
+                        }
+                        if (index < members.lastIndex) {
+                            HorizontalDivider(
+                                thickness = 0.6.dp,
+                                color = borderColor.copy(alpha = 0.65f),
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            )
                         }
                     }
                 }

@@ -1299,7 +1299,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         _schoolProfile
     ) { codes, profile ->
         val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
-        val customForSchool = codes.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        val customForSchool = codes
+            .filter { it.schoolId.equals(tenant, ignoreCase = true) }
+            .sortedWith(compareByDescending<WaliShiftCode> { it.updatedAt }.thenBy { it.id })
+            .distinctBy { WaliScheduleHelper.normalizeCode(it.code) }
         if (customForSchool.isNotEmpty()) {
             customForSchool.sortedWith(compareBy<WaliShiftCode> { it.sortOrder }.thenBy { it.code })
         } else {
@@ -2781,11 +2784,25 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val existing = repository.getWaliShiftCodesBySchoolList(tenant)
             if (existing.isEmpty()) {
                 val seeded = WaliScheduleHelper.defaultShiftCodes(tenant).map { sc ->
-                    sc.copy(id = PocketBaseSyncManager.generateCloudSafeId())
+                    val deterministicId = PocketBaseIdCodec.stablePositiveHash(
+                        "shift_code:${tenant.uppercase()}:${WaliScheduleHelper.normalizeCode(sc.code)}"
+                    )
+                    sc.copy(id = deterministicId)
                 }
                 repository.insertAllWaliShiftCodes(seeded)
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadWaliShiftCodes(getApplication(), seeded)
+                }
+            } else {
+                // Bersihkan duplikat kode shift lama jika pernah ter-seed ganda lintas perangkat
+                val grouped = existing.groupBy { WaliScheduleHelper.normalizeCode(it.code) }
+                grouped.values.forEach { dupList ->
+                    if (dupList.size > 1) {
+                        val keep = dupList.maxWithOrNull(compareBy<WaliShiftCode> { it.updatedAt }.thenBy { it.id })
+                        dupList.filter { it.id != keep?.id }.forEach { extra ->
+                            repository.deleteWaliShiftCode(extra)
+                        }
+                    }
                 }
             }
         }

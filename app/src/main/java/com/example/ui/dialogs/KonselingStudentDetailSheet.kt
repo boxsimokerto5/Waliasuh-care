@@ -3,6 +3,7 @@ package com.example.ui.dialogs
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +18,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -123,12 +125,13 @@ fun KonselingStudentDetailSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        modifier = Modifier.statusBarsPadding(),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
         dragHandle = {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 10.dp, bottom = 2.dp),
+                    .padding(top = 8.dp, bottom = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Box(
@@ -153,11 +156,11 @@ fun KonselingStudentDetailSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
-                    .padding(horizontal = 14.dp)
-                    .padding(bottom = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                // Header
+                // Header Ringkas (Aman di Bawah Status Bar)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -166,8 +169,8 @@ fun KonselingStudentDetailSheet(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = student.name,
-                            fontSize = 16.5.sp,
-                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -175,10 +178,10 @@ fun KonselingStudentDetailSheet(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6D28D9), modifier = Modifier.size(12.dp))
+                            Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF6D28D9), modifier = Modifier.size(11.dp))
                             Text(
                                 text = "${student.classGrade.ifBlank { "-" }} • ${student.dormitory.ifBlank { "-" }} • ${if (isEn) "Owner Wali Only" else "Rahasia Wali Asuh"}",
-                                fontSize = 11.sp,
+                                fontSize = 10.5.sp,
                                 color = Color(0xFF6D28D9),
                                 fontWeight = FontWeight.SemiBold,
                                 maxLines = 1,
@@ -189,51 +192,62 @@ fun KonselingStudentDetailSheet(
                     IconButton(
                         onClick = onDismiss,
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(40.dp)
                             .testTag("btn_close_konseling_detail")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close)
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(20.dp))
                     }
                 }
 
-                // Summary Card
+                // Summary Card Rapat (Tanpa Teks Terjepit)
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("card_konseling_detail_summary"),
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(12.dp),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)),
                     border = BorderStroke(1.dp, Color(0xFFDDD6FE))
                 ) {
                     Column(
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = if (isEn) {
                                     "CONFIDENTIAL • MANAGING CAREGIVER ONLY"
                                 } else {
-                                    "RAHASIA • HANYA DILIHAT WALI ASUH BERSANGKUTAN"
+                                    "RAHASIA • KHUSUS WALI ASUH BERSANGKUTAN"
                                 },
-                                fontSize = 10.sp,
+                                fontSize = 9.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = Color(0xFF5B21B6)
+                                color = Color(0xFF5B21B6),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
-                            Text(
-                                text = "${stats.totalEntries} ${if (isEn) "notes" else "catatan"}",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF6D28D9)
-                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = Color(0xFFEDE9FE)
+                            ) {
+                                Text(
+                                    text = "${stats.totalEntries} ${if (isEn) "notes" else "catatan"}",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF5B21B6),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             DetailMiniStat("${stats.sessionsCount}", if (isEn) "Sessions" else "Sesi", Color(0xFFEDE9FE), Color(0xFF5B21B6), Modifier.weight(1f))
                             DetailMiniStat("${stats.growthCount}", if (isEn) "Growth" else "Tumbuh", Color(0xFFDCFCE7), Color(0xFF15803D), Modifier.weight(1f))
@@ -243,7 +257,7 @@ fun KonselingStudentDetailSheet(
                     }
                 }
 
-                // Quick Action Row
+                // Quick Action Row Ramping
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -252,29 +266,29 @@ fun KonselingStudentDetailSheet(
                         onClick = { onQuickInput(KonselingHelper.ENTRY_SESI) },
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6D28D9)),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 48.dp)
+                            .height(40.dp)
                             .testTag("btn_konseling_detail_add_sesi")
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text(if (isEn) "Session" else "Sesi", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Session" else "Sesi", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                     Button(
                         onClick = { onQuickInput(KonselingHelper.ENTRY_PERKEMBANGAN) },
                         shape = RoundedCornerShape(10.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF15803D)),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                         modifier = Modifier
                             .weight(1f)
-                            .heightIn(min = 48.dp)
+                            .height(40.dp)
                             .testTag("btn_konseling_detail_add_growth")
                     ) {
                         Icon(Icons.AutoMirrored.Filled.TrendingUp, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text(if (isEn) "Growth" else "Tumbuh", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        Text(if (isEn) "Growth" else "Tumbuh", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                     OutlinedButton(
                         onClick = {
@@ -296,23 +310,23 @@ fun KonselingStudentDetailSheet(
                             }
                         },
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         modifier = Modifier
-                            .heightIn(min = 48.dp)
+                            .height(40.dp)
                             .testTag("btn_konseling_detail_pdf")
                     ) {
                         Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text("PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                        Text("PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
 
-                // Filter Chips
+                // Filter Chips Kompak
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     val filters = listOf(
                         if (isEn) "All (${studentRecords.size})" else "Semua (${studentRecords.size})",
@@ -322,21 +336,38 @@ fun KonselingStudentDetailSheet(
                         if (isEn) "Audit Log (${sortedLogs.size})" else "Log Audit (${sortedLogs.size})"
                     )
                     filters.forEachIndexed { idx, label ->
-                        FilterChip(
-                            selected = selectedFilter == idx,
-                            onClick = { selectedFilter = idx },
-                            label = { Text(label, fontSize = 11.sp) },
-                            modifier = Modifier.testTag("chip_konseling_detail_filter_$idx")
-                        )
+                        val selected = selectedFilter == idx
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) Color(0xFFEDE9FE) else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (selected) Color(0xFF6D28D9) else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            modifier = Modifier
+                                .clickable { selectedFilter = idx }
+                                .testTag("chip_konseling_detail_filter_$idx")
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) Color(0xFF5B21B6) else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                 }
 
-                // Timeline / Logs List
+                // Timeline / Logs List (Memanfaatkan Ruang Tersedia Secara Maksimal)
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = 180.dp, max = 380.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .weight(1f, fill = false)
+                        .heightIn(min = 200.dp, max = 460.dp),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
                     if (selectedFilter == 4) {
                         if (sortedLogs.isEmpty()) {
@@ -412,8 +443,8 @@ fun KonselingStudentDetailSheet(
                                 )
                             ) {
                                 Column(
-                                    modifier = Modifier.padding(11.dp),
-                                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                                    modifier = Modifier.padding(9.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -437,33 +468,33 @@ fun KonselingStudentDetailSheet(
                                         }
                                         Text(
                                             text = DateUtils.formatShortDate(rec.sessionDate, lang),
-                                            fontSize = 10.5.sp,
+                                            fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 
                                     Text(
                                         text = rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) },
-                                        fontSize = 13.5.sp,
+                                        fontSize = 13.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
                                     Text(
                                         text = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)} • Mood: ${KonselingHelper.formatMoodLabel(rec.moodLevel, isEn)} • ${KonselingHelper.formatUrgencyLabel(rec.urgencyLevel, isEn)}",
-                                        fontSize = 10.5.sp,
+                                        fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                     if (rec.summary.isNotBlank()) {
                                         Text(
                                             text = rec.summary,
-                                            fontSize = 12.sp,
+                                            fontSize = 11.5.sp,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                     if (rec.intervention.isNotBlank()) {
                                         Text(
                                             text = "${if (isEn) "Support" else "Pendampingan"}: ${rec.intervention}",
-                                            fontSize = 11.5.sp,
+                                            fontSize = 11.sp,
                                             color = Color(0xFF4C1D95)
                                         )
                                     }
@@ -471,42 +502,43 @@ fun KonselingStudentDetailSheet(
                                         val fuDate = rec.followUpDate?.let { " (${DateUtils.formatShortDate(it, lang)})" } ?: ""
                                         Text(
                                             text = "${if (isEn) "Follow-Up" else "Tindak Lanjut"}$fuDate: ${rec.followUpPlan.ifBlank { "-" }}",
-                                            fontSize = 11.sp,
+                                            fontSize = 10.5.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = Color(0xFFB45309)
                                         )
                                     }
 
-                                    // Row Actions
+                                    // Row Actions Kompak
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         OutlinedButton(
                                             onClick = { onEditRecord(rec) },
                                             shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                             modifier = Modifier
-                                                .heightIn(min = 48.dp)
+                                                .height(36.dp)
                                                 .testTag("btn_edit_konseling_${rec.id}")
                                         ) {
-                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text(if (isEn) "Edit" else "Ubah", fontSize = 11.sp)
+                                            Text(if (isEn) "Edit" else "Ubah", fontSize = 11.sp, maxLines = 1)
                                         }
                                         OutlinedButton(
                                             onClick = { onToggleStatus(rec) },
                                             shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                                             modifier = Modifier
                                                 .weight(1f)
-                                                .heightIn(min = 48.dp)
+                                                .height(36.dp)
                                                 .testTag("btn_toggle_konseling_${rec.id}")
                                         ) {
                                             Icon(
                                                 imageVector = if (completed) Icons.Default.Refresh else Icons.Default.CheckCircle,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(13.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
@@ -523,13 +555,14 @@ fun KonselingStudentDetailSheet(
                                         IconButton(
                                             onClick = { recordToDelete = rec },
                                             modifier = Modifier
-                                                .size(48.dp)
+                                                .size(36.dp)
                                                 .testTag("btn_delete_konseling_${rec.id}")
                                         ) {
                                             Icon(
                                                 imageVector = Icons.Default.DeleteOutline,
                                                 contentDescription = if (isEn) "Delete Note" else "Hapus Catatan",
-                                                tint = Color(0xFFDC2626)
+                                                tint = Color(0xFFDC2626),
+                                                modifier = Modifier.size(19.dp)
                                             )
                                         }
                                     }
@@ -623,15 +656,15 @@ private fun DetailMiniStat(
 ) {
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(9.dp),
         color = bg
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(value, fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = fg, maxLines = 1)
-            Text(label, fontSize = 9.5.sp, fontWeight = FontWeight.Medium, color = fg.copy(alpha = 0.85f), maxLines = 1)
+            Text(value, fontSize = 12.5.sp, fontWeight = FontWeight.ExtraBold, color = fg, maxLines = 1)
+            Text(label, fontSize = 9.sp, fontWeight = FontWeight.Medium, color = fg.copy(alpha = 0.85f), maxLines = 1)
         }
     }
 }
