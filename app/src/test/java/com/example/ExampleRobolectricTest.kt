@@ -7226,8 +7226,122 @@ class ExampleRobolectricTest {
     assertEquals(checkInAt, after.lastCheckedInAt)
     assertEquals("Ustadzah Piket", after.lastCheckInBy)
   }
+
+  @Test
+  fun `verify InputKonselingDialog voice transcript helpers append text cleanly and build official Google RecognizerIntent`() {
+    assertEquals(
+      "Anak tampak murung setelah jam belajar.",
+      com.example.ui.dialogs.appendVoiceTranscript("", "  Anak tampak murung setelah jam belajar.  ")
+    )
+    assertEquals(
+      "Catatan awal.",
+      com.example.ui.dialogs.appendVoiceTranscript("Catatan awal.", "   ")
+    )
+    assertEquals(
+      "Catatan awal. Sudah diajak bicara santai.",
+      com.example.ui.dialogs.appendVoiceTranscript("Catatan awal.", "Sudah diajak bicara santai.")
+    )
+    assertEquals(
+      "Poin 1: Adaptasi\nPoin 2: Teman sekamar",
+      com.example.ui.dialogs.appendVoiceTranscript("Poin 1: Adaptasi\n", "Poin 2: Teman sekamar")
+    )
+    assertEquals(
+      "Kalimat pertama kalimat kedua",
+      com.example.ui.dialogs.appendVoiceTranscript("Kalimat pertama   ", "kalimat kedua")
+    )
+
+    val idIntent = com.example.ui.dialogs.buildGoogleSpeechToTextIntent(
+      promptText = "Ucapkan ringkasan curhat / observasi...",
+      languageTag = "id-ID"
+    )
+    assertEquals(android.speech.RecognizerIntent.ACTION_RECOGNIZE_SPEECH, idIntent.action)
+    assertEquals(
+      android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM,
+      idIntent.getStringExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_MODEL)
+    )
+    assertEquals("id-ID", idIntent.getStringExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE))
+    assertEquals("id-ID", idIntent.getStringExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE))
+    assertEquals(
+      "Ucapkan ringkasan curhat / observasi...",
+      idIntent.getStringExtra(android.speech.RecognizerIntent.EXTRA_PROMPT)
+    )
+    assertEquals(1, idIntent.getIntExtra(android.speech.RecognizerIntent.EXTRA_MAX_RESULTS, 0))
+    org.junit.Assert.assertNull(idIntent.`package`)
+
+    val enIntent = com.example.ui.dialogs.buildGoogleSpeechToTextIntent(
+      promptText = "Speak counseling summary...",
+      languageTag = "en-US"
+    )
+    assertEquals("en-US", enIntent.getStringExtra(android.speech.RecognizerIntent.EXTRA_LANGUAGE))
+  }
+
+  @Test
+  fun `verify InputKonselingDialog renders Google Voice mic buttons on all 4 fields and handles missing speech handler safely`() {
+    val student = com.example.data.model.ChildStudent(
+      id = 7701L,
+      name = "Sofa Lailiya",
+      nis = "10293",
+      gender = "P",
+      age = 15,
+      dormitory = "Asrama Putri 1",
+      classGrade = "X-1",
+      assignedWaliUsername = "walisofa",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = "SRT1-KDR"
+    )
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(
+        com.example.util.i18n.LocalAppStrings provides indonesianStrings
+      ) {
+        com.example.ui.dialogs.InputKonselingDialog(
+          claimedStudents = listOf(student),
+          initialStudent = student,
+          onOpenPilihAnakAsuh = {},
+          onSave = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+          onDismiss = {}
+        )
+      }
+    }
+
+    composeTestRule.waitForIdle()
+
+    // 1. Field Judul Singkat / Tema & Ringkasan Curhat / Observasi memiliki ikon mic Google Voice
+    composeTestRule.onNodeWithTag("btn_voice_konseling_title", useUnmergedTree = true)
+      .performScrollTo()
+      .assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_voice_konseling_summary", useUnmergedTree = true)
+      .performScrollTo()
+      .assertIsDisplayed()
+
+    // 2. Buka bagian opsional Pendampingan & Rencana Tindak Lanjut -> 2 ikon mic tambahan tampil
+    composeTestRule.onNodeWithTag("btn_toggle_konseling_advanced")
+      .performScrollTo()
+      .performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("btn_voice_konseling_intervention", useUnmergedTree = true)
+      .performScrollTo()
+      .assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_voice_konseling_followup", useUnmergedTree = true)
+      .performScrollTo()
+      .assertIsDisplayed()
+
+    // 3. Klik tombol mic saat perangkat uji belum memiliki handler Speech-to-Text -> Toast ramah, tidak crash
+    composeTestRule.onNodeWithTag("btn_voice_konseling_summary", useUnmergedTree = true)
+      .performScrollTo()
+      .performClick()
+    composeTestRule.waitForIdle()
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    val latestToast = org.robolectric.shadows.ShadowToast.getTextOfLatestToast()
+    org.junit.Assert.assertTrue(
+      "Expected friendly Indonesian toast when Google Speech Activity is unavailable, got: $latestToast",
+      latestToast?.contains("Suara ke Teks Google belum tersedia") == true
+    )
+  }
 }
-
-
-
-

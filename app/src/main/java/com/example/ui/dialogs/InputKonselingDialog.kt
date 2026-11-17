@@ -1,6 +1,13 @@
 package com.example.ui.dialogs
 
+import android.app.Activity
 import android.app.DatePickerDialog
+import android.content.ActivityNotFoundException
+import android.content.Intent
+import android.speech.RecognizerIntent
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -37,6 +44,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Search
@@ -84,6 +92,40 @@ import com.example.data.model.KonselingRecord
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
+
+internal enum class KonselingVoiceField {
+    TITLE,
+    SUMMARY,
+    INTERVENTION,
+    FOLLOW_UP
+}
+
+internal fun appendVoiceTranscript(
+    existingText: String,
+    spokenText: String
+): String {
+    val cleanSpoken = spokenText.trim()
+    if (cleanSpoken.isBlank()) return existingText
+    if (existingText.isBlank()) return cleanSpoken
+    return if (existingText.endsWith("\n")) {
+        existingText + cleanSpoken
+    } else {
+        existingText.trimEnd { it == ' ' } + " " + cleanSpoken
+    }
+}
+
+internal fun buildGoogleSpeechToTextIntent(
+    promptText: String,
+    languageTag: String
+): Intent {
+    return Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageTag)
+        putExtra(RecognizerIntent.EXTRA_PROMPT, promptText)
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -230,6 +272,74 @@ fun InputKonselingDialog(
     val accentSoftBg = if (isGrowth) Color(0xFFF0FDF4) else Color(0xFFF5F3FF)
     val accentBorder = if (isGrowth) Color(0xFFA7F3D0) else Color(0xFFDDD6FE)
     val headerThumbRes = if (isGrowth) R.drawable.img_menu_konseling_perkembangan else R.drawable.img_menu_konseling_catat
+
+    var activeVoiceField by remember { mutableStateOf<KonselingVoiceField?>(null) }
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val targetField = activeVoiceField
+        activeVoiceField = null
+        if (result.resultCode == Activity.RESULT_OK && targetField != null) {
+            val transcript = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (transcript.isNotBlank()) {
+                when (targetField) {
+                    KonselingVoiceField.TITLE -> {
+                        titleText = appendVoiceTranscript(titleText, transcript)
+                    }
+                    KonselingVoiceField.SUMMARY -> {
+                        summaryText = appendVoiceTranscript(summaryText, transcript)
+                    }
+                    KonselingVoiceField.INTERVENTION -> {
+                        interventionText = appendVoiceTranscript(interventionText, transcript)
+                    }
+                    KonselingVoiceField.FOLLOW_UP -> {
+                        followUpPlanText = appendVoiceTranscript(followUpPlanText, transcript)
+                    }
+                }
+            }
+        }
+    }
+
+    fun startVoiceInput(field: KonselingVoiceField) {
+        activeVoiceField = field
+        val prompt = when (field) {
+            KonselingVoiceField.TITLE -> if (isEn) "Speak session title..." else "Ucapkan judul / tema konseling..."
+            KonselingVoiceField.SUMMARY -> if (isEn) "Speak counseling summary..." else "Ucapkan ringkasan curhat / observasi..."
+            KonselingVoiceField.INTERVENTION -> if (isEn) "Speak caregiver advice / support..." else "Ucapkan pendampingan / nasehat..."
+            KonselingVoiceField.FOLLOW_UP -> if (isEn) "Speak follow-up plan..." else "Ucapkan rencana tindak lanjut..."
+        }
+        val languageTag = if (isEn) "en-US" else "id-ID"
+        val intent = buildGoogleSpeechToTextIntent(promptText = prompt, languageTag = languageTag)
+        try {
+            speechLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            activeVoiceField = null
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Google Voice-to-Text service is not available on this device."
+                } else {
+                    "Layanan Suara ke Teks Google belum tersedia di perangkat ini."
+                },
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            activeVoiceField = null
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Unable to launch Google Voice input: ${e.message ?: "Error"}"
+                } else {
+                    "Gagal membuka Suara ke Teks Google: ${e.message ?: "Error"}"
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -799,6 +909,16 @@ fun InputKonselingDialog(
                             value = titleText,
                             onValueChange = { titleText = it },
                             label = { Text(if (isEn) "Session Title / Subject" else "Judul Singkat / Tema", fontSize = 12.sp) },
+                            trailingIcon = {
+                                KonselingVoiceMicButton(
+                                    isActive = activeVoiceField == KonselingVoiceField.TITLE,
+                                    accentColor = primaryAccent,
+                                    softBg = accentSoftBg,
+                                    contentDesc = if (isEn) "Voice input for title" else "Dikte suara untuk judul",
+                                    testTag = "btn_voice_konseling_title",
+                                    onClick = { startVoiceInput(KonselingVoiceField.TITLE) }
+                                )
+                            },
                             singleLine = true,
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
@@ -810,6 +930,27 @@ fun InputKonselingDialog(
                             value = summaryText,
                             onValueChange = { summaryText = it },
                             label = { Text(if (isEn) "Observation & Conversation Summary *" else "Ringkasan Curhat / Observasi *", fontSize = 12.sp) },
+                            trailingIcon = {
+                                KonselingVoiceMicButton(
+                                    isActive = activeVoiceField == KonselingVoiceField.SUMMARY,
+                                    accentColor = primaryAccent,
+                                    softBg = accentSoftBg,
+                                    contentDesc = if (isEn) "Voice input for summary" else "Dikte suara untuk ringkasan curhat",
+                                    testTag = "btn_voice_konseling_summary",
+                                    onClick = { startVoiceInput(KonselingVoiceField.SUMMARY) }
+                                )
+                            },
+                            supportingText = {
+                                Text(
+                                    text = if (isEn) {
+                                        "Tap the microphone (Google Voice) to dictate and append notes."
+                                    } else {
+                                        "Ketuk ikon mik (Google Voice) untuk dikte & menyambung catatan."
+                                    },
+                                    fontSize = 10.sp,
+                                    color = primaryAccent
+                                )
+                            },
                             minLines = 2,
                             maxLines = 4,
                             shape = RoundedCornerShape(10.dp),
@@ -862,6 +1003,16 @@ fun InputKonselingDialog(
                                     value = interventionText,
                                     onValueChange = { interventionText = it },
                                     label = { Text(if (isEn) "Caregiver Support / Advice Given" else "Pendampingan / Nasehat yang Diberikan", fontSize = 12.sp) },
+                                    trailingIcon = {
+                                        KonselingVoiceMicButton(
+                                            isActive = activeVoiceField == KonselingVoiceField.INTERVENTION,
+                                            accentColor = primaryAccent,
+                                            softBg = accentSoftBg,
+                                            contentDesc = if (isEn) "Voice input for caregiver support" else "Dikte suara untuk pendampingan",
+                                            testTag = "btn_voice_konseling_intervention",
+                                            onClick = { startVoiceInput(KonselingVoiceField.INTERVENTION) }
+                                        )
+                                    },
                                     minLines = 2,
                                     maxLines = 3,
                                     shape = RoundedCornerShape(10.dp),
@@ -874,6 +1025,16 @@ fun InputKonselingDialog(
                                     value = followUpPlanText,
                                     onValueChange = { followUpPlanText = it },
                                     label = { Text(if (isEn) "Follow-Up Plan (Optional)" else "Rencana Tindak Lanjut (Opsional)", fontSize = 12.sp) },
+                                    trailingIcon = {
+                                        KonselingVoiceMicButton(
+                                            isActive = activeVoiceField == KonselingVoiceField.FOLLOW_UP,
+                                            accentColor = primaryAccent,
+                                            softBg = accentSoftBg,
+                                            contentDesc = if (isEn) "Voice input for follow-up plan" else "Dikte suara untuk rencana tindak lanjut",
+                                            testTag = "btn_voice_konseling_followup",
+                                            onClick = { startVoiceInput(KonselingVoiceField.FOLLOW_UP) }
+                                        )
+                                    },
                                     minLines = 1,
                                     maxLines = 3,
                                     shape = RoundedCornerShape(10.dp),
@@ -1019,6 +1180,38 @@ fun InputKonselingDialog(
                 }
                 Spacer(modifier = Modifier.height(6.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun KonselingVoiceMicButton(
+    isActive: Boolean,
+    accentColor: Color,
+    softBg: Color,
+    contentDesc: String,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(48.dp)
+            .testTag(testTag)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(if (isActive) accentColor else softBg),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Mic,
+                contentDescription = contentDesc,
+                tint = if (isActive) Color.White else accentColor,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
