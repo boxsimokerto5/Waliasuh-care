@@ -121,6 +121,8 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("symptoms", "text"),
                 PbFieldDef("notes", "text"),
                 PbFieldDef("wali_name", "text"),
+                PbFieldDef("last_checked_in_at", "number"),
+                PbFieldDef("last_check_in_by", "text"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),

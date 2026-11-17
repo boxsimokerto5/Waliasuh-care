@@ -95,6 +95,7 @@ fun InputHaidDialog(
     initialStudent: ChildStudent? = null,
     initialTissueVerified: Boolean = false,
     onSaveHaid: (HaidRecord) -> Unit,
+    onCheckInHaid: (Long) -> Unit = {},
     onCompleteHaid: (Long) -> Unit = {},
     onDismiss: () -> Unit
 ) {
@@ -108,6 +109,7 @@ fun InputHaidDialog(
     var selectedHaidDay by remember { mutableIntStateOf(1) }
     var notesInput by remember { mutableStateOf("") }
     var errorMessage by remember { mutableStateOf("") }
+    var sessionCheckInFeedback by remember { mutableStateOf<String?>(null) }
 
     var showScannerDialog by remember { mutableStateOf(false) }
     var showManualSearchDialog by remember { mutableStateOf(false) }
@@ -121,6 +123,9 @@ fun InputHaidDialog(
 
     val dateFormat = remember(appStrings.language) {
         SimpleDateFormat("EEEE, dd MMMM yyyy", appStrings.locale)
+    }
+    val timeFormat = remember(appStrings.language) {
+        SimpleDateFormat("HH:mm", appStrings.locale)
     }
 
     fun findLatestSuciRecord(student: ChildStudent): HaidRecord? {
@@ -241,7 +246,41 @@ fun InputHaidDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
+
+                sessionCheckInFeedback?.let { feedback ->
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 10.dp)
+                            .testTag("banner_checkin_haid_feedback"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                        border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = Color(0xFF059669),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = feedback,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF065F46),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
 
                 // Action Buttons: Scan Barcode or Search
                 Row(
@@ -614,6 +653,7 @@ fun InputHaidDialog(
                             }
                         }
 
+                        val nowMillis = System.currentTimeMillis()
                         val record = HaidRecord(
                             studentId = student.id,
                             studentName = student.name,
@@ -627,7 +667,9 @@ fun InputHaidDialog(
                             symptoms = "Normal",
                             notes = finalNotes.trim(),
                             waliName = waliName,
-                            schoolId = schoolId.ifBlank { "SRT1-KDR" }
+                            schoolId = schoolId.ifBlank { "SRT1-KDR" },
+                            lastCheckedInAt = nowMillis,
+                            lastCheckInBy = waliName.ifBlank { "Wali Asuh" }
                         )
 
                         onSaveHaid(record)
@@ -713,8 +755,10 @@ fun InputHaidDialog(
         )
     }
 
-    // Pop-up Informasi jika siswi yang di-scan masih tercatat HAID AKTIF di Daftar Haid
+    // Pop-up Informasi & Check-In Harian jika siswi yang di-scan masih tercatat HAID AKTIF di Daftar Haid
     pendingAlreadyActiveHaid?.let { (student, activeRec) ->
+        val alreadyCheckedToday = activeRec.isCheckedInToday
+        val checkInTimeText = activeRec.lastCheckedInAt?.let { timeFormat.format(Date(it)) }.orEmpty()
         ModalBottomSheet(
             onDismissRequest = { pendingAlreadyActiveHaid = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -731,7 +775,8 @@ fun InputHaidDialog(
                         .fillMaxWidth()
                         .widthIn(max = 540.dp)
                         .padding(horizontal = 20.dp)
-                        .padding(bottom = 28.dp),
+                        .padding(bottom = 28.dp)
+                        .testTag("sheet_active_haid_checkin"),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Row(
@@ -742,17 +787,17 @@ fun InputHaidDialog(
                             modifier = Modifier
                                 .size(42.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFFEF3C7)),
+                                .background(Color(0xFFFCE7F3)),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Warning,
+                                imageVector = if (alreadyCheckedToday) Icons.Default.VerifiedUser else Icons.Default.Warning,
                                 contentDescription = null,
-                                tint = Color(0xFFD97706),
+                                tint = if (alreadyCheckedToday) Color(0xFF059669) else Color(0xFFD97706),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
-                        Column {
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (isEn) "Student Still in Daftar Haid" else "Siswi Masih di Daftar Haid",
                                 fontSize = 16.sp,
@@ -768,16 +813,88 @@ fun InputHaidDialog(
                         }
                     }
 
+                    // Status Check-In Hari Ini
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (alreadyCheckedToday) Color(0xFFECFDF5) else Color(0xFFFFFBEB))
+                            .border(
+                                1.dp,
+                                if (alreadyCheckedToday) Color(0xFFA7F3D0) else Color(0xFFFDE68A),
+                                RoundedCornerShape(10.dp)
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (alreadyCheckedToday) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (alreadyCheckedToday) Color(0xFF059669) else Color(0xFFD97706),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = if (alreadyCheckedToday) {
+                                if (isEn) "Already checked-in today ($checkInTimeText)"
+                                else "Sudah Check-In Masih Haid hari ini ($checkInTimeText)"
+                            } else {
+                                if (isEn) "Not checked-in today — tap Check-In if still on Haid for prayer roll call"
+                                else "Belum Check-In hari ini — tekan Check-In jika antre/lapor masih haid saat mau sholat"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (alreadyCheckedToday) Color(0xFF065F46) else Color(0xFF92400E)
+                        )
+                    }
+
                     Text(
                         text = if (isEn) {
-                            "${student.name} is currently active in Daftar Haid (Day ${activeRec.durationDays} of max 15 days). If she has completed Mandi Suci today, you can move her directly to Daftar Suci."
+                            "${student.name} is currently active in Daftar Haid (Day ${activeRec.durationDays} of max 15 days). Tap Check-In if she is confirming today's prayer exemption, or move her to Daftar Suci if completed."
                         } else {
-                            "${student.name} saat ini masih aktif di Daftar Haid (Hari ke-${activeRec.durationDays} dari maksimal 15 hari). Jika hari ini sudah selesai bersuci, Anda dapat langsung memindahkannya ke Daftar Suci."
+                            "${student.name} saat ini tercatat aktif di Daftar Haid (Hari ke-${activeRec.durationDays} dari maks 15 hari). Pilih Check-In jika hari ini masih haid saat absen sholat, atau pindahkan ke Daftar Suci bila sudah suci."
                         },
-                        fontSize = 12.5.sp,
+                        fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        lineHeight = 18.sp
+                        lineHeight = 17.sp
                     )
+
+                    // Tombol Utama: Check-In Masih Haid Hari Ini (siap lanjut scan siswi berikutnya!)
+                    Button(
+                        onClick = {
+                            onCheckInHaid(activeRec.id)
+                            pendingAlreadyActiveHaid = null
+                            selectedStudent = null
+                            sessionCheckInFeedback = if (isEn) {
+                                "✓ ${student.name} checked in as still Haid (Day ${activeRec.durationDays}). Ready to scan next student."
+                            } else {
+                                "✓ ${student.name} berhasil Check-In Masih Haid (Hari ke-${activeRec.durationDays}). Siap scan siswi berikutnya."
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_checkin_active_haid")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VerifiedUser,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = if (alreadyCheckedToday) {
+                                if (isEn) "Update Today's Haid Check-In" else "Perbarui Check-In Masih Haid"
+                            } else {
+                                if (isEn) "Check-In: Still on Haid Today" else "Check-In: Masih Haid Hari Ini"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -789,6 +906,7 @@ fun InputHaidDialog(
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
+                                .testTag("btn_dismiss_active_haid_popup")
                         ) {
                             Text(appStrings.nav.close)
                         }
@@ -804,6 +922,7 @@ fun InputHaidDialog(
                             modifier = Modifier
                                 .weight(1.4f)
                                 .heightIn(min = 48.dp)
+                                .testTag("btn_move_suci_from_active")
                         ) {
                             Text(
                                 if (isEn) "Move to Daftar Suci" else "Pindahkan ke Daftar Suci",

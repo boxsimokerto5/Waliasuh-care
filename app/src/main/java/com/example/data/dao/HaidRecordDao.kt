@@ -56,6 +56,9 @@ interface HaidRecordDao {
     @Query("UPDATE haid_records SET endDate = :endDate, status = :status, updatedAt = :updatedAt WHERE id = :id")
     suspend fun completeHaid(id: Long, endDate: Long, status: String = "SUCI", updatedAt: Long = System.currentTimeMillis())
 
+    @Query("UPDATE haid_records SET lastCheckedInAt = :checkedInAt, lastCheckInBy = :checkedInBy, updatedAt = :checkedInAt WHERE id = :id")
+    suspend fun checkInHaid(id: Long, checkedInAt: Long = System.currentTimeMillis(), checkedInBy: String = "Wali Asuh")
+
     @Query("DELETE FROM haid_records WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
 

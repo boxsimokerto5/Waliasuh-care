@@ -1178,7 +1178,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val assignedId = if (record.id > 0L) record.id else PocketBaseSyncManager.generateCloudSafeId()
-            val stamped = record.copy(id = assignedId, schoolId = activeSchool)
+            val now = System.currentTimeMillis()
+            val stamped = record.copy(
+                id = assignedId,
+                schoolId = activeSchool,
+                lastCheckedInAt = record.lastCheckedInAt ?: if (record.status == "HAID" && record.endDate == null) now else null,
+                lastCheckInBy = record.lastCheckInBy.ifBlank { record.waliName.ifBlank { _waliName.value.ifBlank { "Wali Asuh" } } }
+            )
             repository.insertHaidRecord(stamped)
             onComplete()
             if (!isUnitTestEnvironment()) {
@@ -1194,6 +1200,24 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onComplete()
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
+            }
+        }
+    }
+
+    fun checkInHaidRecord(
+        id: Long,
+        checkedInBy: String = _waliName.value.ifBlank { "Wali Asuh" },
+        checkedInAt: Long = System.currentTimeMillis(),
+        onComplete: () -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            val actor = checkedInBy.ifBlank { "Wali Asuh" }
+            repository.checkInHaidRecord(id, checkedInAt, actor)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                repository.getHaidRecordById(id)?.let { updated ->
+                    PocketBaseSyncManager.uploadSingleHaidRecord(getApplication(), updated)
+                }
             }
         }
     }

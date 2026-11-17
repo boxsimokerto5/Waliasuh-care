@@ -353,11 +353,6 @@ fun DashboardTourOverlay(
             modifier = Modifier
                 .fillMaxSize()
                 .testTag("dashboard_tour_overlay")
-                .clickable(
-                    interactionSource = remember { MutableInteractionSource() },
-                    indication = null,
-                    onClick = {}
-                )
         ) {
             val containerWidthPx = with(density) { maxWidth.toPx() }
             val containerHeightPx = with(density) { maxHeight.toPx() }
@@ -395,10 +390,15 @@ fun DashboardTourOverlay(
                 label = "tour_progress"
             )
 
-            // Scrim Backdrop + Glowing Rounded Cutout
+            // Scrim Backdrop + Glowing Rounded Cutout (klik di luar tooltip tidak tembus ke dashboard)
             Canvas(
                 modifier = Modifier
                     .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
                     .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
             ) {
                 drawRect(color = Color(0xCC0F172A))

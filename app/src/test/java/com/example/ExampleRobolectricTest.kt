@@ -7031,7 +7031,203 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithText("VIDEO").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_banner_mute_vid_2").assertIsDisplayed()
   }
+
+  @Test
+  fun `verify HaidRecord daily checkIn flags reset across calendar days and roundtrip through PbHaidRecordDto`() {
+    val now = System.currentTimeMillis()
+    val yesterday = now - 86_400_000L
+
+    val uncheckedNew = com.example.data.model.HaidRecord(
+      id = 1L,
+      studentId = 101L,
+      studentName = "Aisyah Putri",
+      startDate = yesterday,
+      status = "HAID",
+      lastCheckedInAt = null
+    )
+    org.junit.Assert.assertFalse(uncheckedNew.isCheckedInToday)
+    org.junit.Assert.assertTrue(uncheckedNew.isPendingCheckInToday)
+
+    val checkedYesterday = uncheckedNew.copy(lastCheckedInAt = yesterday, lastCheckInBy = "Ustadzah A")
+    org.junit.Assert.assertFalse(checkedYesterday.isCheckedInToday)
+    org.junit.Assert.assertTrue(checkedYesterday.isPendingCheckInToday)
+
+    val checkedToday = uncheckedNew.copy(lastCheckedInAt = now, lastCheckInBy = "Ustadzah B")
+    org.junit.Assert.assertTrue(checkedToday.isCheckedInToday)
+    org.junit.Assert.assertFalse(checkedToday.isPendingCheckInToday)
+
+    val dto = com.example.data.remote.pocketbase.PbHaidRecordDto.fromDomain(checkedToday)
+    assertEquals(now, dto.lastCheckedInAt)
+    assertEquals("Ustadzah B", dto.lastCheckInBy)
+    val restored = dto.toDomainModel()
+    assertEquals(now, restored.lastCheckedInAt)
+    assertEquals("Ustadzah B", restored.lastCheckInBy)
+  }
+
+  @Test
+  fun `verify InputHaidDialog Check-In Masih Haid popup and DaftarHaidSheet unchecked roll-call workflow`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val now = System.currentTimeMillis()
+    val yesterday = now - 86_400_000L
+
+    val studentAdelia = com.example.data.model.ChildStudent(
+      id = 8801L,
+      name = "Adelia Sukmawati",
+      nis = "318801",
+      gender = "P",
+      age = 15,
+      dormitory = "Asrama Putri",
+      classGrade = "IX-B",
+      assignedWaliUsername = "wali1",
+      assignedWaliName = "Ustadzah Sari",
+      schoolId = "SRT1-KDR"
+    )
+    val activeAdelia = com.example.data.model.HaidRecord(
+      id = 501L,
+      studentId = 8801L,
+      studentName = "Adelia Sukmawati",
+      studentNis = "318801",
+      studentClass = "IX-B",
+      studentDorm = "Asrama Putri",
+      startDate = now - (4L * 86_400_000L),
+      status = "HAID",
+      lastCheckedInAt = yesterday,
+      lastCheckInBy = "Ustadzah Sari"
+    )
+    val activeChecked1 = com.example.data.model.HaidRecord(
+      id = 502L,
+      studentId = 8802L,
+      studentName = "Fatimah Zahra",
+      studentClass = "VIII-A",
+      studentDorm = "Asrama Putri",
+      startDate = now - 86_400_000L,
+      status = "HAID",
+      lastCheckedInAt = now,
+      lastCheckInBy = "Ustadzah Sari"
+    )
+    val activeChecked2 = com.example.data.model.HaidRecord(
+      id = 503L,
+      studentId = 8803L,
+      studentName = "Nadia Khairani",
+      studentClass = "VII-C",
+      studentDorm = "Asrama Putri",
+      startDate = now - (2L * 86_400_000L),
+      status = "HAID",
+      lastCheckedInAt = now,
+      lastCheckInBy = "Ustadzah Sari"
+    )
+
+    val mode = androidx.compose.runtime.mutableIntStateOf(0) // 0=InputHaidDialog, 1=DaftarHaidSheet
+    var checkedInId: Long? = null
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        if (mode.intValue == 0) {
+          com.example.ui.dialogs.InputHaidDialog(
+            students = listOf(studentAdelia),
+            activeHaidRecords = listOf(activeAdelia),
+            suciRecords = emptyList(),
+            waliName = "Ustadzah Sari",
+            schoolId = "SRT1-KDR",
+            initialStudent = studentAdelia,
+            onSaveHaid = {},
+            onCheckInHaid = { checkedInId = it },
+            onCompleteHaid = {},
+            onDismiss = {}
+          )
+        } else {
+          com.example.ui.dialogs.DaftarHaidSheet(
+            activeHaidRecords = listOf(activeAdelia, activeChecked1, activeChecked2),
+            waliName = "Ustadzah Sari",
+            onCheckInHaid = { checkedInId = it },
+            onCompleteHaid = {},
+            onDeleteRecord = {},
+            onOpenInputHaid = {},
+            onDismiss = {}
+          )
+        }
+      }
+    }
+
+    // 1. InputHaidDialog auto-opens Siswi Masih di Daftar Haid sheet -> Check-In Masih Haid
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("sheet_active_haid_checkin").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_checkin_active_haid").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals(501L, checkedInId)
+    composeTestRule.onNodeWithTag("sheet_active_haid_checkin").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("banner_checkin_haid_feedback").assertIsDisplayed()
+
+    // 2. Switch to DaftarHaidSheet -> 2 Sudah Check-In & 1 Belum Check-In banner + filter + 1-tap check-in
+    checkedInId = null
+    mode.intValue = 1
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("summary_haid_unchecked").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("banner_haid_unchecked_info").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_daftar_haid")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("filter_haid_unchecked"))
+    composeTestRule.onNodeWithTag("filter_haid_unchecked").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("list_daftar_haid")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("item_haid_501"))
+    composeTestRule.onNodeWithTag("item_haid_501").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("item_haid_502").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("btn_card_checkin_haid_501").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(501L, checkedInId)
+  }
+
+  @Test
+  fun `verify HealthViewModel checkInHaidRecord persists today checkIn timestamp in Room`() = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val dao = db.haidRecordDao()
+
+    val yesterday = System.currentTimeMillis() - 86_400_000L
+    val insertedId = dao.insert(
+      com.example.data.model.HaidRecord(
+        studentId = 9901L,
+        studentName = "Siti Aminah",
+        startDate = yesterday,
+        status = "HAID",
+        lastCheckedInAt = yesterday,
+        lastCheckInBy = "Wali Lama",
+        schoolId = "SRT1-KDR"
+      )
+    )
+
+    val before = dao.getById(insertedId)!!
+    org.junit.Assert.assertFalse(before.isCheckedInToday)
+
+    var callbackDone = false
+    val checkInAt = System.currentTimeMillis()
+    vm.checkInHaidRecord(
+      id = insertedId,
+      checkedInBy = "Ustadzah Piket",
+      checkedInAt = checkInAt,
+      onComplete = { callbackDone = true }
+    )
+    var ticks = 0
+    while (ticks < 40 && !callbackDone) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(50)
+      ticks++
+    }
+    org.junit.Assert.assertTrue(callbackDone)
+
+    val after = dao.getById(insertedId)!!
+    org.junit.Assert.assertTrue(after.isCheckedInToday)
+    assertEquals(checkInAt, after.lastCheckedInAt)
+    assertEquals("Ustadzah Piket", after.lastCheckInBy)
+  }
 }
+
 
 
 

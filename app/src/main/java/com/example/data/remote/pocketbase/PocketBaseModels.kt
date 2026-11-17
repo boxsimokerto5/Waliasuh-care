@@ -314,6 +314,8 @@ data class PbHaidRecordDto(
     @Json(name = "symptoms") val symptoms: String? = null,
     @Json(name = "notes") val notes: String? = null,
     @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "last_checked_in_at") val lastCheckedInAt: Long? = null,
+    @Json(name = "last_check_in_by") val lastCheckInBy: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -333,6 +335,8 @@ data class PbHaidRecordDto(
             notes = notes ?: "",
             waliName = waliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            lastCheckedInAt = lastCheckedInAt?.takeIf { it > 0L },
+            lastCheckInBy = lastCheckInBy ?: "",
             createdAt = createdAt?.takeIf { it > 0L } ?: startDate,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: startDate
         )
@@ -359,6 +363,8 @@ data class PbHaidRecordDto(
                 symptoms = model.symptoms,
                 notes = model.notes,
                 waliName = model.waliName,
+                lastCheckedInAt = model.lastCheckedInAt ?: 0L,
+                lastCheckInBy = model.lastCheckInBy,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

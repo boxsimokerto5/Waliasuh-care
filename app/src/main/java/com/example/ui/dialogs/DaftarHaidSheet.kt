@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.BottomSheetDefaults
@@ -44,6 +45,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -86,6 +89,7 @@ fun DaftarHaidSheet(
     activeHaidRecords: List<HaidRecord>,
     schoolProfile: SchoolProfile = SchoolProfile(),
     waliName: String = "Wali Asuh",
+    onCheckInHaid: (Long) -> Unit = {},
     onCompleteHaid: (Long) -> Unit,
     onUpdateRecord: (HaidRecord) -> Unit = {},
     onDeleteRecord: (HaidRecord) -> Unit,
@@ -96,6 +100,7 @@ fun DaftarHaidSheet(
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     var searchQuery by remember { mutableStateOf("") }
+    var checkInFilter by remember { mutableStateOf("ALL") } // "ALL", "UNCHECKED", "CHECKED"
     var selectedDetailRecord by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToComplete by remember { mutableStateOf<HaidRecord?>(null) }
     var recordToEdit by remember { mutableStateOf<HaidRecord?>(null) }
@@ -103,19 +108,38 @@ fun DaftarHaidSheet(
     var showDailyReportSheet by remember { mutableStateOf(false) }
 
     val dateFormat = remember(s.language) { SimpleDateFormat("dd MMM yyyy", s.locale) }
+    val timeFormat = remember(s.language) { SimpleDateFormat("HH:mm", s.locale) }
 
-    val filteredRecords = remember(searchQuery, activeHaidRecords) {
-        if (searchQuery.isBlank()) {
-            activeHaidRecords
+    val checkedInCount = remember(activeHaidRecords) {
+        activeHaidRecords.count { it.isCheckedInToday }
+    }
+    val uncheckedCount = remember(activeHaidRecords) {
+        activeHaidRecords.count { !it.isCheckedInToday }
+    }
+
+    val filteredRecords = remember(searchQuery, checkInFilter, activeHaidRecords) {
+        val byCheckIn = when (checkInFilter) {
+            "UNCHECKED" -> activeHaidRecords.filter { !it.isCheckedInToday }
+            "CHECKED" -> activeHaidRecords.filter { it.isCheckedInToday }
+            else -> activeHaidRecords
+        }
+        val byQuery = if (searchQuery.isBlank()) {
+            byCheckIn
         } else {
             val q = searchQuery.trim().lowercase()
-            activeHaidRecords.filter {
+            byCheckIn.filter {
                 it.studentName.lowercase().contains(q) ||
                     it.studentClass.lowercase().contains(q) ||
                     it.studentDorm.lowercase().contains(q) ||
                     it.studentNik.contains(q)
             }
         }
+        // Prioritaskan yang belum check-in hari ini di atas agar langsung terlihat
+        byQuery.sortedWith(
+            compareBy<HaidRecord> { it.isCheckedInToday }
+                .thenByDescending { it.durationDays }
+                .thenBy { it.studentName.lowercase() }
+        )
     }
 
     val maxDayCount = remember(activeHaidRecords) {
@@ -200,58 +224,92 @@ fun DaftarHaidSheet(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Ringkasan Cepat & Status Batas 15 Hari
+                // Ringkasan Cepat: Total Haid, Sudah Check-In Hari Ini, & Belum Check-In (klik untuk filter)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Card(
-                        modifier = Modifier.weight(1f),
+                        onClick = { checkInFilter = "ALL" },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("summary_haid_all"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF2F8))
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFDF2F8)),
+                        border = if (checkInFilter == "ALL") BorderStroke(1.5.dp, Color(0xFFDB2777)) else null
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp)) {
                             Text(
-                                if (isEn) "Total Currently Haid" else "Total Sedang Haid",
-                                fontSize = 10.sp,
-                                color = Color(0xFF9D174D)
+                                text = if (isEn) "Total Haid" else "Sedang Haid",
+                                fontSize = 9.5.sp,
+                                color = Color(0xFF9D174D),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                             Text(
-                                text = if (isEn) "${activeHaidRecords.size} Students" else "${activeHaidRecords.size} Siswi",
-                                fontSize = 16.sp,
+                                text = if (isEn) "${activeHaidRecords.size}" else "${activeHaidRecords.size} Siswi",
+                                fontSize = 14.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF831843)
+                                color = Color(0xFF831843),
+                                maxLines = 1
                             )
                         }
                     }
 
                     Card(
-                        modifier = Modifier.weight(1.25f),
+                        onClick = { checkInFilter = if (checkInFilter == "CHECKED") "ALL" else "CHECKED" },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("summary_haid_checked"),
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (maxDayCount > 0) Color(0xFFFEE2E2) else Color(0xFFF0FDF4)
-                        )
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                        border = if (checkInFilter == "CHECKED") BorderStroke(1.5.dp, Color(0xFF059669)) else null
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
+                        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp)) {
                             Text(
-                                text = if (isEn) {
-                                    if (maxDayCount > 0) "Day 15 Limit" else "15d Flexible Rule"
-                                } else {
-                                    if (maxDayCount > 0) "Batas Hari ke-15" else "Aturan Fleksibel 15h"
-                                },
-                                fontSize = 10.sp,
-                                color = if (maxDayCount > 0) Color(0xFFB91C1C) else Color(0xFF15803D),
-                                fontWeight = FontWeight.Bold
+                                text = if (isEn) "Checked-In" else "Sudah Check-In",
+                                fontSize = 9.5.sp,
+                                color = Color(0xFF047857),
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1
                             )
                             Text(
-                                text = if (isEn) {
-                                    if (maxDayCount > 0) "$maxDayCount Students Day 15" else "Auto Suci > 15 Days"
-                                } else {
-                                    if (maxDayCount > 0) "$maxDayCount Siswi Hari ke-15" else "Auto Suci > 15 Hari"
-                                },
-                                fontSize = 12.5.sp,
+                                text = if (isEn) "$checkedInCount Today" else "$checkedInCount Siswi",
+                                fontSize = 14.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = if (maxDayCount > 0) Color(0xFF991B1B) else Color(0xFF166534)
+                                color = Color(0xFF065F46),
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Card(
+                        onClick = { checkInFilter = if (checkInFilter == "UNCHECKED") "ALL" else "UNCHECKED" },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("summary_haid_unchecked"),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (uncheckedCount > 0) Color(0xFFFFFBEB) else Color(0xFFF0FDF4)
+                        ),
+                        border = if (checkInFilter == "UNCHECKED") {
+                            BorderStroke(1.5.dp, if (uncheckedCount > 0) Color(0xFFD97706) else Color(0xFF16A34A))
+                        } else null
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 9.dp, vertical = 8.dp)) {
+                            Text(
+                                text = if (isEn) "Unchecked" else "Belum Check-In",
+                                fontSize = 9.5.sp,
+                                color = if (uncheckedCount > 0) Color(0xFFB45309) else Color(0xFF15803D),
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Text(
+                                text = if (isEn) "$uncheckedCount Left" else "$uncheckedCount Siswi",
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (uncheckedCount > 0) Color(0xFF92400E) else Color(0xFF166534),
+                                maxLines = 1
                             )
                         }
                     }
@@ -259,7 +317,75 @@ fun DaftarHaidSheet(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Tombol Cepat: Laporan Haid Hari Ini (PDF berkop resmi multi-tenant + Ringkasan WA)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 560.dp)
+                        .testTag("list_daftar_haid"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (uncheckedCount > 0) {
+                        item(key = "banner_unchecked") {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFFFFBEB),
+                                border = BorderStroke(1.dp, Color(0xFFFDE68A)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("banner_haid_unchecked_info")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Warning,
+                                        contentDescription = null,
+                                        tint = Color(0xFFD97706),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = if (isEn) {
+                                            "$uncheckedCount students haven't checked in today — check if late to roll call or already Suci/praying."
+                                        } else {
+                                            "$uncheckedCount orang belum check-in hari ini — cek apakah belum scan saat sholat atau sudah suci."
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF92400E)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    if (maxDayCount > 0) {
+                        item(key = "banner_max_day") {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFFEE2E2),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = if (isEn) {
+                                        "⚠ $maxDayCount students on Day 15 (Max limit — Auto Suci after day 15)"
+                                    } else {
+                                        "⚠ $maxDayCount siswi memasuki Hari ke-15 (Batas maksimal — Auto Suci > 15 hari)"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF991B1B),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Tombol Cepat: Laporan Haid Hari Ini (PDF berkop resmi multi-tenant + Ringkasan WA)
+                    item(key = "daily_report_btn") {
                 OutlinedButton(
                     onClick = { showDailyReportSheet = true },
                     shape = RoundedCornerShape(12.dp),
@@ -296,10 +422,10 @@ fun DaftarHaidSheet(
                         modifier = Modifier.size(18.dp)
                     )
                 }
+                    }
 
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // Search Bar + Tombol Tambah Cepat
+                    // Search Bar + Tombol Tambah Cepat
+                    item(key = "search_row") {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -343,64 +469,116 @@ fun DaftarHaidSheet(
                         Text("Input", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                // List Siswi Sedang Haid
-                if (filteredRecords.isEmpty()) {
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                        )
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(24.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Female,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outline,
-                                modifier = Modifier.size(44.dp)
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = if (activeHaidRecords.isEmpty()) {
-                                    if (isEn) "No female students currently on Haid" else "Tidak ada siswi yang sedang haid saat ini"
-                                } else {
-                                    if (isEn) "No students match your search" else "Tidak ada siswi yang cocok dengan pencarian"
-                                },
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = if (isEn) {
-                                    "All female students are in Daftar Suci and ready for prayer."
-                                } else {
-                                    "Semua santriwati berada di Daftar Suci dan siap beribadah."
-                                },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 160.dp, max = 430.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+
+                    // Filter Chips: Semua / Belum Check-In / Sudah Check-In
+                    item(key = "filter_chips_row") {
+                        Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    FilterChip(
+                        selected = checkInFilter == "ALL",
+                        onClick = { checkInFilter = "ALL" },
+                        label = {
+                            Text(
+                                if (isEn) "All (${activeHaidRecords.size})" else "Semua (${activeHaidRecords.size})",
+                                fontSize = 11.sp,
+                                fontWeight = if (checkInFilter == "ALL") FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFDB2777),
+                            selectedLabelColor = Color.White
+                        ),
+                        modifier = Modifier.testTag("filter_haid_all")
+                    )
+                    FilterChip(
+                        selected = checkInFilter == "UNCHECKED",
+                        onClick = { checkInFilter = "UNCHECKED" },
+                        label = {
+                            Text(
+                                if (isEn) "Unchecked ($uncheckedCount)" else "Belum Check-In ($uncheckedCount)",
+                                fontSize = 11.sp,
+                                fontWeight = if (checkInFilter == "UNCHECKED") FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFFD97706),
+                            selectedLabelColor = Color.White
+                        ),
+                        modifier = Modifier.testTag("filter_haid_unchecked")
+                    )
+                    FilterChip(
+                        selected = checkInFilter == "CHECKED",
+                        onClick = { checkInFilter = "CHECKED" },
+                        label = {
+                            Text(
+                                if (isEn) "Checked ($checkedInCount)" else "Sudah ($checkedInCount)",
+                                fontSize = 11.sp,
+                                fontWeight = if (checkInFilter == "CHECKED") FontWeight.Bold else FontWeight.Medium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF059669),
+                            selectedLabelColor = Color.White
+                        ),
+                        modifier = Modifier.testTag("filter_haid_checked")
+                    )
+                }
+                    }
+
+                    // List Siswi Sedang Haid
+                    if (filteredRecords.isEmpty()) {
+                        item(key = "empty_haid_state") {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Female,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.outline,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text(
+                                        text = if (activeHaidRecords.isEmpty()) {
+                                            if (isEn) "No female students currently on Haid" else "Tidak ada siswi yang sedang haid saat ini"
+                                        } else {
+                                            if (isEn) "No students match your search" else "Tidak ada siswi yang cocok dengan pencarian"
+                                        },
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = if (isEn) {
+                                            "All female students are in Daftar Suci and ready for prayer."
+                                        } else {
+                                            "Semua santriwati berada di Daftar Suci dan siap beribadah."
+                                        },
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    } else {
                         items(filteredRecords, key = { it.id }) { record ->
                             val days = record.durationDays
                             val isMaxDay = record.isIstihadhahWarning
@@ -517,6 +695,95 @@ fun DaftarHaidSheet(
                                                 tint = Color(0xFF9D174D).copy(alpha = 0.65f),
                                                 modifier = Modifier.size(18.dp)
                                             )
+                                        }
+                                    }
+
+                                    // Status Check-In Harian + Aksi 1-Ketuk bila Belum Check-In
+                                    val isCheckedToday = record.isCheckedInToday
+                                    val checkInTimeStr = record.lastCheckedInAt?.let { timeFormat.format(Date(it)) }.orEmpty()
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(6.dp))
+                                                .background(if (isCheckedToday) Color(0xFFDCFCE7) else Color(0xFFFEF3C7))
+                                                .padding(horizontal = 7.dp, vertical = 3.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (isCheckedToday) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                                contentDescription = null,
+                                                tint = if (isCheckedToday) Color(0xFF15803D) else Color(0xFFB45309),
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Text(
+                                                text = if (isCheckedToday) {
+                                                    if (isEn) "Checked-In ($checkInTimeStr)" else "Sudah Check-In ($checkInTimeStr)"
+                                                } else {
+                                                    if (isEn) "Not Checked-In Today" else "Belum Check-In Hari Ini"
+                                                },
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isCheckedToday) Color(0xFF166534) else Color(0xFF92400E)
+                                            )
+                                        }
+                                    }
+
+                                    if (!isCheckedToday) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Button(
+                                                onClick = { onCheckInHaid(record.id) },
+                                                shape = RoundedCornerShape(10.dp),
+                                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("btn_card_checkin_haid_${record.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.VerifiedUser,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(5.dp))
+                                                Text(
+                                                    text = if (isEn) "Check-In Haid" else "Check-In Haid",
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                            OutlinedButton(
+                                                onClick = { recordToComplete = record },
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, Color(0xFF059669)),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("btn_card_suci_haid_${record.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF059669),
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(5.dp))
+                                                Text(
+                                                    text = if (isEn) "Already Suci" else "Sudah Suci",
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF059669)
+                                                )
+                                            }
                                         }
                                     }
 
@@ -749,6 +1016,35 @@ fun DaftarHaidSheet(
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(s.nav.delete, fontSize = 12.sp, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
                         }
+                    }
+
+                    Button(
+                        onClick = {
+                            onCheckInHaid(rec.id)
+                            selectedDetailRecord = null
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFDB2777)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_detail_checkin_haid_${rec.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.VerifiedUser,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (rec.isCheckedInToday) {
+                                if (isEn) "Update Today's Haid Check-In" else "Perbarui Check-In Masih Haid"
+                            } else {
+                                if (isEn) "Check-In: Still on Haid Today" else "Check-In: Masih Haid Hari Ini"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
 
                     Button(

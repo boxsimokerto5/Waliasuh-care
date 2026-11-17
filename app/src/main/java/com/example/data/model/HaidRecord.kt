@@ -49,6 +49,13 @@ object HaidDateCalculator {
             add(Calendar.DAY_OF_YEAR, -(clampedDay - 1))
         }.timeInMillis
     }
+
+    fun isSameCalendarDay(millisA: Long, millisB: Long = System.currentTimeMillis()): Boolean {
+        val calA = Calendar.getInstance().apply { timeInMillis = millisA }
+        val calB = Calendar.getInstance().apply { timeInMillis = millisB }
+        return calA.get(Calendar.YEAR) == calB.get(Calendar.YEAR) &&
+            calA.get(Calendar.DAY_OF_YEAR) == calB.get(Calendar.DAY_OF_YEAR)
+    }
 }
 
 @Entity(tableName = "haid_records")
@@ -67,6 +74,8 @@ data class HaidRecord(
     val notes: String = "",
     val waliName: String = "Wali Asuh",
     val schoolId: String = "SRT1-KDR",
+    val lastCheckedInAt: Long? = null,
+    val lastCheckInBy: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 ) {
@@ -137,4 +146,16 @@ data class HaidRecord(
      */
     val isIstihadhahWarning: Boolean
         get() = isActive && durationDays >= HaidDateCalculator.MAX_HAID_DAYS
+
+    /**
+     * True jika siswi yang masih aktif haid sudah check-in (konfirmasi masih haid) pada hari ini.
+     */
+    val isCheckedInToday: Boolean
+        get() = isActive && lastCheckedInAt?.let { it > 0L && HaidDateCalculator.isSameCalendarDay(it) } == true
+
+    /**
+     * True jika siswi masih tercatat aktif haid namun belum check-in hari ini (indikasi perlu konfirmasi / mungkin sudah suci).
+     */
+    val isPendingCheckInToday: Boolean
+        get() = isActive && !isCheckedInToday
 }

@@ -277,6 +277,14 @@ class HealthRepository(
         haidRecordDao?.completeHaid(id, endDate, status)
     }
 
+    suspend fun checkInHaidRecord(
+        id: Long,
+        checkedInAt: Long = System.currentTimeMillis(),
+        checkedInBy: String = "Wali Asuh"
+    ) {
+        haidRecordDao?.checkInHaid(id, checkedInAt, checkedInBy)
+    }
+
     suspend fun getActiveHaidForStudent(studentId: Long): HaidRecord? =
         haidRecordDao?.getActiveRecordForStudent(studentId)
 

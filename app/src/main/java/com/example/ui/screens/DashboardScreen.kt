@@ -1825,6 +1825,9 @@ fun DashboardScreen(
             onSaveHaid = { record ->
                 viewModel.saveHaidRecord(record)
             },
+            onCheckInHaid = { id ->
+                viewModel.checkInHaidRecord(id)
+            },
             onCompleteHaid = { id ->
                 viewModel.completeHaidRecord(id)
             },
@@ -1842,6 +1845,9 @@ fun DashboardScreen(
             activeHaidRecords = activeHaidRecords,
             schoolProfile = schoolProfile,
             waliName = waliName,
+            onCheckInHaid = { id ->
+                viewModel.checkInHaidRecord(id)
+            },
             onCompleteHaid = { id ->
                 viewModel.completeHaidRecord(id)
             },
