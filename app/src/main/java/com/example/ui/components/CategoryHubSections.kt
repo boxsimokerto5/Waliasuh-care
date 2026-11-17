@@ -1166,9 +1166,9 @@ internal fun LazyListScope.orangTuaCategoryItems(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CartoonMenuCard(
-                    title = if (isEn) "Select Foster Kids" else "Pilih Anak Asuh",
+                    title = if (isEn) "Claim Foster Kids" else "Klaim Anak Asuh",
                     subtitle = if (isEn) "Claim & Search Students" else "Cari & Klaim Binaan",
-                    imageRes = R.drawable.img_menu_anak_asuh,
+                    imageRes = R.drawable.img_menu_klaim_anak_asuh,
                     badgeText = if (myFosterStudentsCount > 0) {
                         "$myFosterStudentsCount ${if (isEn) "Kids" else "Anak"}"
                     } else {

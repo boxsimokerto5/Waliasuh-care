@@ -957,6 +957,10 @@ fun DashboardScreen(
                                 modalState.mengajiRecordToEdit = null
                                 modalState.showInputMengajiDialog = true
                             },
+                            onOpenPilihAnakAsuh = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.showPilihAnakAsuhSheet = true
+                            },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,

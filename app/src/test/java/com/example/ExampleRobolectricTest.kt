@@ -4345,7 +4345,8 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.PESAN,
       com.example.data.model.DashboardIconKey.BEROBAT,
       com.example.data.model.DashboardIconKey.TABUNGAN,
-      com.example.data.model.DashboardIconKey.KONSELING
+      com.example.data.model.DashboardIconKey.KONSELING,
+      com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH
     )
     var saveOk = false
     vm.saveDashboardIconOrder(customOrder) { success, _ -> saveOk = success }
@@ -4392,7 +4393,8 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.PUASA,
       com.example.data.model.DashboardIconKey.PESAN,
       com.example.data.model.DashboardIconKey.TABUNGAN,
-      com.example.data.model.DashboardIconKey.KONSELING
+      com.example.data.model.DashboardIconKey.KONSELING,
+      com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH
     )
     vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
     org.junit.Assert.assertEquals(cloudOrder, vm.dashboardIconOrder.value)
@@ -5552,6 +5554,7 @@ class ExampleRobolectricTest {
     val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
       com.example.util.i18n.AppLanguage.INDONESIAN
     )
+    var openedPilihAnakAsuh = false
     composeTestRule.setContent {
       CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
         com.example.ui.components.QuickMenuTiles(
@@ -5559,7 +5562,9 @@ class ExampleRobolectricTest {
           onNavigateToDirectTreatment = {},
           onNavigateToRecords = {},
           onNavigateToStudents = {},
-          onShowPuskesmasInfo = {}
+          onShowPuskesmasInfo = {},
+          onOpenPilihAnakAsuh = { openedPilihAnakAsuh = true },
+          myFosterStudentsCount = 4
         )
       }
     }
@@ -5571,6 +5576,14 @@ class ExampleRobolectricTest {
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("category_mengaji"))
     composeTestRule.onNodeWithTag("category_mengaji").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_anak_asuh").assertIsDisplayed()
+
+    composeTestRule.onNodeWithTag("quick_menu_carousel_row")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_klaim_anak_asuh"))
+    composeTestRule.onNodeWithTag("tile_klaim_anak_asuh").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Klaim Anak Asuh").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_klaim_anak_asuh").performClick()
+    composeTestRule.waitForIdle()
+    org.junit.Assert.assertTrue(openedPilihAnakAsuh)
   }
 
   @Test

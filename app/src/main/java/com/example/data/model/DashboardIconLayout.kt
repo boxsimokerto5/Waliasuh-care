@@ -12,7 +12,8 @@ enum class DashboardIconKey(val key: String) {
     PESAN("PESAN"),
     MENGAJI("MENGAJI"),
     TABUNGAN("TABUNGAN"),
-    KONSELING("KONSELING");
+    KONSELING("KONSELING"),
+    KLAIM_ANAK_ASUH("KLAIM_ANAK_ASUH");
 
     companion object {
         val DEFAULT_ORDER: List<DashboardIconKey> = entries.toList()

@@ -119,6 +119,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_konseling,
             tileBg = Color(0xFFEDE9FE)
         )
+        DashboardIconKey.KLAIM_ANAK_ASUH -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Claim Foster" else "Klaim Anak Asuh",
+            imageRes = R.drawable.img_menu_klaim_anak_asuh,
+            tileBg = Color(0xFFE0E7FF)
+        )
     }
 }
 
@@ -178,6 +184,7 @@ fun QuickMenuTiles(
     onOpenChecklistPuasa: () -> Unit = {},
     onOpenRankingPuasa: () -> Unit = {},
     onOpenInputMengaji: () -> Unit = {},
+    onOpenPilihAnakAsuh: () -> Unit = {},
     todayPlansCount: Int = 0,
     inpatientCount: Int = 0,
     studentsCount: Int = 0,
@@ -354,6 +361,20 @@ fun QuickMenuTiles(
                     badgeBg = if (konselingFollowUpCount > 0) Color(0xFF7C3AED) else Color(0xFF6D28D9),
                     testTag = "category_konseling",
                     onClick = { onOpenCategoryHub(DashboardCategoryHub.KONSELING) }
+                )
+            }
+            DashboardIconKey.KLAIM_ANAK_ASUH -> {
+                val klaimBadge = if (myFosterStudentsCount > 0) {
+                    "$myFosterStudentsCount ${if (isEn) "Kids" else "Anak"}"
+                } else {
+                    if (isEn) "Claim" else "Klaim"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = klaimBadge,
+                    badgeBg = Color(0xFF4338CA),
+                    testTag = "tile_klaim_anak_asuh",
+                    onClick = onOpenPilihAnakAsuh
                 )
             }
         }
