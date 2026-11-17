@@ -6814,6 +6814,79 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("dialog_konseling_guide").assertIsDisplayed()
   }
+
+  @Test
+  fun `verify DashboardScreen spotlight coach marks tour covers all 13 features, supports Next Prev Skip and persists completion`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    app.getSharedPreferences("waliasuh_tour_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    vm.executeLogin("anaksuperadmin", "Woyowoyo12@", rememberMe = false)
+    org.robolectric.shadows.ShadowLooper.idleMainLooper()
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        val plans by vm.activePlans.collectAsStateWithLifecycle()
+        val students by vm.students.collectAsStateWithLifecycle()
+        val waliName by vm.waliName.collectAsStateWithLifecycle()
+        com.example.ui.screens.DashboardScreen(
+          viewModel = vm,
+          waliName = waliName,
+          activePlans = plans,
+          students = students,
+          onNavigateToPlan = {},
+          onNavigateToRecords = {},
+          onNavigateToStudents = {},
+          onNavigateToProfile = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Tidak mengganggu alur otomatis saat unit test, tetapi tombol Tur langsung membukanya
+    composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("btn_dashboard_tour").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_tour_tooltip").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 13")
+
+    // Lanjut ke langkah 2: Klaim Anak Asuh (Fondasi)
+    composeTestRule.onNodeWithTag("btn_tour_next").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 13")
+    composeTestRule.onNodeWithTag("text_tour_title").assertTextEquals("Klaim Anak Asuh (Mulai Sini!)")
+
+    // Kembali ke langkah 1
+    composeTestRule.onNodeWithTag("btn_tour_prev").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 13")
+
+    // Jelajahi seluruh 13 langkah fitur (termasuk Tabungan & Konseling) sampai selesai
+    repeat(12) {
+      composeTestRule.onNodeWithTag("btn_tour_next").performClick()
+      composeTestRule.waitForIdle()
+    }
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("13 / 13")
+    composeTestRule.onNodeWithTag("btn_tour_next").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertDoesNotExist()
+    org.junit.Assert.assertTrue(vm.isDashboardTourCompleted())
+
+    // Putar ulang & uji tombol Lewati (Skip)
+    vm.startDashboardTour()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_tour_skip").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertDoesNotExist()
+  }
 }
 
 

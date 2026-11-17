@@ -583,7 +583,12 @@ private fun WaliAsuhCareAppContent(
                         isDarkTheme = isDarkTheme,
                         onToggleTheme = onToggleTheme,
                         records = allRecords,
-                        onLogout = onLogout
+                        onLogout = onLogout,
+                        onStartInteractiveTour = {
+                            dashboardModalState.activeCategoryHub = null
+                            currentScreen = WaliNavScreen.DASHBOARD
+                            viewModel.startDashboardTour()
+                        }
                     )
                 }
             }

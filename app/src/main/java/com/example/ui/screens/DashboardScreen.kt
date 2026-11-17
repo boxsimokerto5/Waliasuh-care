@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.Healing
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Person
@@ -65,6 +67,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -75,6 +78,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.SpanStyle
@@ -87,6 +91,7 @@ import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardBannerActionType
 import com.example.data.model.DashboardBannerFeatureTarget
 import com.example.data.model.DashboardBannerItem
+import com.example.data.model.DashboardIconKey
 import com.example.data.model.KonselingHelper
 import com.example.data.model.MedicalRecord
 import com.example.data.model.ShiftMessage
@@ -96,13 +101,19 @@ import com.example.ui.components.CategoryHubOverlay
 import com.example.ui.components.DashboardBannerCarousel
 import com.example.ui.components.DashboardCategoryHub
 import com.example.ui.components.DashboardModalState
+import com.example.ui.components.DashboardTourOverlay
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.ShiftMessageDetailSheet
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.components.TodayShiftMessagesStrip
+import com.example.ui.components.TourCoordinateRegistry
+import com.example.ui.components.TourTargetId
+import com.example.ui.components.buildDashboardTourSteps
+import com.example.ui.components.buildTwoRowCarouselColumns
 import com.example.ui.components.rememberDashboardModalState
+import com.example.ui.components.tourTarget
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChecklistPuasaSheet
 import com.example.ui.dialogs.CreateFastingSessionDialog
@@ -209,11 +220,17 @@ fun DashboardScreen(
     val dashboardBannerConfig by viewModel.dashboardBannerConfig.collectAsStateWithLifecycle()
     val isSavingDashboardBanner by viewModel.isSavingDashboardBanner.collectAsStateWithLifecycle()
     val isUploadingBannerImage by viewModel.isUploadingBannerImage.collectAsStateWithLifecycle()
+    val showDashboardTour by viewModel.showDashboardTour.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
 
     LaunchedEffect(Unit) {
         viewModel.syncDashboardIconLayoutNow()
         viewModel.syncDashboardBannersNow()
+    }
+    LaunchedEffect(currentUserRole) {
+        if (currentUserRole == com.example.ui.UserRole.WALI) {
+            viewModel.maybeStartDashboardTourOnWaliEntry()
+        }
     }
     LaunchedEffect(
         modalState.activeCategoryHub,
@@ -280,6 +297,44 @@ fun DashboardScreen(
     var showLayoutEditorSheet by remember { mutableStateOf(false) }
     var showBannerEditorSheet by remember { mutableStateOf(false) }
     var selectedTodayShiftMessageId by remember { mutableStateOf<Long?>(null) }
+
+    val dashboardListState = rememberLazyListState()
+    val quickMenuRowState = rememberLazyListState()
+    val tourRegistry = remember { TourCoordinateRegistry() }
+    val tourSteps = remember(isEn) { buildDashboardTourSteps(isEn) }
+    var tourStepIndex by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(showDashboardTour) {
+        if (showDashboardTour) {
+            tourStepIndex = 0
+            showGridTiles = true
+            modalState.activeCategoryHub = null
+        }
+    }
+
+    LaunchedEffect(showDashboardTour, tourStepIndex, dashboardIconOrder, tourSteps) {
+        if (showDashboardTour && tourSteps.isNotEmpty()) {
+            val step = tourSteps[tourStepIndex.coerceIn(0, tourSteps.lastIndex)]
+            when {
+                step.targetId == TourTargetId.HERO_CARE -> {
+                    dashboardListState.animateScrollToItem(0)
+                }
+                step.targetId == TourTargetId.TOUR_REPLAY_BUTTON -> {
+                    dashboardListState.animateScrollToItem(1)
+                }
+                step.dashboardIconKey != null -> {
+                    showGridTiles = true
+                    dashboardListState.animateScrollToItem(1)
+                    val ordered = DashboardIconKey.normalizeOrder(dashboardIconOrder.map { it.key })
+                    val cols = buildTwoRowCarouselColumns(ordered)
+                    val colIdx = cols.indexOfFirst { it.top == step.dashboardIconKey || it.bottom == step.dashboardIconKey }
+                    if (colIdx >= 0) {
+                        quickMenuRowState.animateScrollToItem(colIdx)
+                    }
+                }
+            }
+        }
+    }
 
     fun handleBannerItemClick(banner: DashboardBannerItem) {
         TopOnAdManager.onUserActionClick(context)
@@ -419,7 +474,11 @@ fun DashboardScreen(
     val totalSchoolStudents = students.size
     val progressRatio = (totalToday.toFloat() / 20f).coerceIn(0f, 1f)
 
-    Box(modifier = modifier.fillMaxSize()) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onGloballyPositioned { tourRegistry.updateRoot(it) }
+    ) {
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0)
@@ -431,6 +490,7 @@ fun DashboardScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             LazyColumn(
+                state = dashboardListState,
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 640.dp)
@@ -478,6 +538,7 @@ fun DashboardScreen(
                     ElevatedCard(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .tourTarget(tourRegistry, TourTargetId.HERO_CARE)
                             .testTag("card_summary_today"),
                         shape = RoundedCornerShape(14.dp),
                         colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
@@ -871,6 +932,33 @@ fun DashboardScreen(
                                     )
                                 }
                             }
+                            Row(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFE0F2FE))
+                                    .clickable {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        viewModel.startDashboardTour()
+                                    }
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .tourTarget(tourRegistry, TourTargetId.TOUR_REPLAY_BUTTON)
+                                    .testTag("btn_dashboard_tour"),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.HelpOutline,
+                                    contentDescription = if (isEn) "Interactive Feature Tour" else "Tur Panduan Fitur",
+                                    tint = Color(0xFF0284C7),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "Tour" else "Tur",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0284C7)
+                                )
+                            }
                             IconButton(
                                 onClick = {
                                     TopOnAdManager.onUserActionClick(context)
@@ -989,7 +1077,9 @@ fun DashboardScreen(
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
                             iconOrder = dashboardIconOrder,
-                            showPuskesmasCard = false
+                            showPuskesmasCard = false,
+                            lazyRowState = quickMenuRowState,
+                            tourRegistry = tourRegistry
                         )
                     }
                     item {
@@ -1334,6 +1424,27 @@ fun DashboardScreen(
                 }
             )
         }
+
+        DashboardTourOverlay(
+            visible = showDashboardTour && modalState.activeCategoryHub == null,
+            steps = tourSteps,
+            currentStepIndex = tourStepIndex,
+            registry = tourRegistry,
+            isEn = isEn,
+            onPrev = {
+                if (tourStepIndex > 0) tourStepIndex--
+            },
+            onNext = {
+                if (tourStepIndex < tourSteps.lastIndex) {
+                    tourStepIndex++
+                } else {
+                    viewModel.dismissDashboardTour(markCompleted = true)
+                }
+            },
+            onSkip = {
+                viewModel.dismissDashboardTour(markCompleted = true)
+            }
+        )
     }
 
     if (modalState.showCreateDialog) {

@@ -105,6 +105,7 @@ fun ProfileScreen(
     onToggleTheme: () -> Unit,
     records: List<MedicalRecord>,
     onLogout: () -> Unit = {},
+    onStartInteractiveTour: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -441,6 +442,21 @@ fun ProfileScreen(
                         showGuideDialog = true
                     },
                     testTag = "menu_panduan"
+                )
+            }
+
+            item {
+                MenuSettingCard(
+                    title = if (isEn) "Interactive Feature Tour" else "Tur Interaktif Semua Fitur",
+                    subtitle = if (isEn) "Replay spotlight walkthrough on Dashboard" else "Putar ulang sorotan panduan semua fitur di Dashboard",
+                    icon = Icons.Default.OndemandVideo,
+                    iconBg = Color(0xFFE0F2FE),
+                    iconColor = Color(0xFF0284C7),
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        onStartInteractiveTour()
+                    },
+                    testTag = "menu_tur_interaktif"
                 )
             }
 
@@ -884,7 +900,20 @@ fun ProfileScreen(
                         }
                     }
                     Spacer(modifier = Modifier.height(4.dp))
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                showGuideDialog = false
+                                onStartInteractiveTour()
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("btn_guide_start_tour")
+                        ) {
+                            Text(if (isEn) "Interactive Tour" else "Putar Tur Fitur")
+                        }
                         Button(onClick = { showGuideDialog = false }, shape = RoundedCornerShape(10.dp)) {
                             Text(s.nav.closeBtn)
                         }

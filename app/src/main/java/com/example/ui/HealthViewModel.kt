@@ -172,6 +172,34 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val _isSavingDashboardLayout = MutableStateFlow(false)
     val isSavingDashboardLayout: StateFlow<Boolean> = _isSavingDashboardLayout.asStateFlow()
 
+    // Interactive Coach Marks Tour State (Muncul otomatis sekali bagi Wali baru, bisa diputar ulang kapan saja)
+    private val tourPrefs = application.getSharedPreferences("waliasuh_tour_prefs", Context.MODE_PRIVATE)
+    private val _showDashboardTour = MutableStateFlow(false)
+    val showDashboardTour: StateFlow<Boolean> = _showDashboardTour.asStateFlow()
+
+    fun maybeStartDashboardTourOnWaliEntry() {
+        if (isUnitTestEnvironment()) return
+        if (_currentUserRole.value != UserRole.WALI) return
+        if (!tourPrefs.getBoolean("dashboard_tour_v1_done", false)) {
+            _showDashboardTour.value = true
+        }
+    }
+
+    fun startDashboardTour() {
+        _showDashboardTour.value = true
+    }
+
+    fun dismissDashboardTour(markCompleted: Boolean = true) {
+        _showDashboardTour.value = false
+        if (markCompleted) {
+            tourPrefs.edit().putBoolean("dashboard_tour_v1_done", true).apply()
+        }
+    }
+
+    fun isDashboardTourCompleted(): Boolean {
+        return tourPrefs.getBoolean("dashboard_tour_v1_done", false)
+    }
+
     private fun loadSavedDashboardIconOrder(): List<DashboardIconKey> {
         val raw = layoutPrefs.getString("icon_order_json", null)
         return DashboardIconKey.parseJson(raw) ?: DashboardIconKey.DEFAULT_ORDER

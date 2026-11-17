@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -211,6 +212,8 @@ fun QuickMenuTiles(
     faskesBannerSubtitle: String = "",
     iconOrder: List<DashboardIconKey> = DashboardIconKey.DEFAULT_ORDER,
     showPuskesmasCard: Boolean = true,
+    lazyRowState: LazyListState = rememberLazyListState(),
+    tourRegistry: TourCoordinateRegistry? = null,
     modifier: Modifier = Modifier
 ) {
     val isEn = LocalAppStrings.current.isEnglish
@@ -383,7 +386,6 @@ fun QuickMenuTiles(
     val carouselColumns = remember(orderedSpecs) {
         buildTwoRowCarouselColumns(orderedSpecs)
     }
-    val lazyRowState = rememberLazyListState()
     val canScrollBackward by remember { derivedStateOf { lazyRowState.canScrollBackward } }
     val canScrollForward by remember { derivedStateOf { lazyRowState.canScrollForward } }
     val showScrollIndicator by remember {
@@ -478,7 +480,9 @@ fun QuickMenuTiles(
                                         badgeBg = col.top.badgeBg,
                                         onClick = col.top.onClick,
                                         testTag = col.top.testTag,
-                                        modifier = Modifier.fillMaxWidth()
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .tourTarget(tourRegistry, col.top.meta.key.toTourTargetId())
                                     )
                                     val bottom = col.bottom
                                     if (bottom != null) {
@@ -490,7 +494,9 @@ fun QuickMenuTiles(
                                             badgeBg = bottom.badgeBg,
                                             onClick = bottom.onClick,
                                             testTag = bottom.testTag,
-                                            modifier = Modifier.fillMaxWidth()
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .tourTarget(tourRegistry, bottom.meta.key.toTourTargetId())
                                         )
                                     } else {
                                         Spacer(modifier = Modifier.height(98.dp))
