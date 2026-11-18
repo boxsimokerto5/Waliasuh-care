@@ -1208,6 +1208,7 @@ internal fun LazyListScope.orangTuaCategoryItems(
     val unreadParentCount = parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
     val unreadExpectationCount = parentExpectations.count { !it.isReadByWali }
     val cardsCount = parentAccessLinks.size
+    val pendingDeletionCount = parentAccessLinks.count { it.deletionRequested }
     val unclaimedCount = students.count { it.assignedWaliUsername.isBlank() && it.assignedWaliName.isBlank() }
 
     item(key = "hub_orang_tua_grid") {
@@ -1237,9 +1238,13 @@ internal fun LazyListScope.orangTuaCategoryItems(
                     title = if (isEn) "Parent Cards" else "Kartu Akses Ortu",
                     subtitle = if (isEn) "ID Card & Share WA" else "Akun Login & Share WA",
                     imageRes = R.drawable.img_menu_orang_tua,
-                    badgeText = if (cardsCount > 0) "$cardsCount ${if (isEn) "Cards" else "Kartu"}" else if (isEn) "Auto" else "Otomatis",
-                    badgeBg = Color(0xFFEDE9FE),
-                    badgeColor = Color(0xFF6D28D9),
+                    badgeText = when {
+                        pendingDeletionCount > 0 -> "$pendingDeletionCount ${if (isEn) "Delete Req" else "Hapus Akun"}"
+                        cardsCount > 0 -> "$cardsCount ${if (isEn) "Cards" else "Kartu"}"
+                        else -> if (isEn) "Auto" else "Otomatis"
+                    },
+                    badgeBg = if (pendingDeletionCount > 0) Color(0xFFFEE2E2) else Color(0xFFEDE9FE),
+                    badgeColor = if (pendingDeletionCount > 0) Color(0xFFDC2626) else Color(0xFF6D28D9),
                     bgGradient = listOf(Color(0xFFF5F3FF), Color(0xFFEDE9FE).copy(alpha = 0.6f)),
                     borderColor = Color(0xFFDDD6FE),
                     onClick = onOpenKartuAksesOrtu,

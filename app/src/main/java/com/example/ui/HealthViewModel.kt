@@ -2051,6 +2051,193 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    val isCurrentParentAccountDeleted: StateFlow<Boolean> = combine(
+        repository.allDeletionLogs,
+        _currentUserRole,
+        _currentParentStudentId,
+        _currentUsername,
+        activeParentAccessLink
+    ) { logs, role, studentId, username, activeLink ->
+        if (role != UserRole.PARENT || activeLink != null) {
+            false
+        } else {
+            val cleanUser = username?.trim().orEmpty()
+            logs.any { log ->
+                log.category == DeletionLog.CATEGORY_PARENT_ACCESS && (
+                    (studentId > 0L && log.studentId == studentId) ||
+                        (cleanUser.isNotBlank() && log.deletedSummary.contains(cleanUser, ignoreCase = true))
+                    )
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private suspend fun resolveActiveParentLinkForCurrentSession(): ParentAccessLink? {
+        val targetStudentId = _currentParentStudentId.value
+        val activeUsername = _currentUsername.value?.trim().orEmpty()
+        val allLinks = repository.getAllParentAccessLinksList()
+        return activeParentAccessLink.value?.let { current ->
+            allLinks.firstOrNull { it.id == current.id } ?: current
+        } ?: allLinks.firstOrNull { targetStudentId > 0L && it.studentId == targetStudentId }
+            ?: allLinks.firstOrNull {
+                activeUsername.isNotBlank() && it.username.equals(activeUsername, ignoreCase = true)
+            }
+            ?: activeUsername.takeIf { it.isNotBlank() }?.let {
+                repository.getParentAccessLinkByUsername(it)
+            }
+    }
+
+    // --- Pengajuan Hapus Akun oleh Orang Tua (Menunggu Persetujuan Wali Asuh) ---
+    fun requestParentAccountDeletion(
+        reason: String = "",
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val existingLink = resolveActiveParentLinkForCurrentSession()
+            if (existingLink == null) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Parent account data not found. Please sync your data first."
+                    } else {
+                        "Data akun orang tua tidak ditemukan. Silakan sinkronkan data terlebih dahulu."
+                    }
+                )
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            val updated = existingLink.copy(
+                deletionRequested = true,
+                deletionReason = reason.trim(),
+                deletionRequestedAt = now,
+                updatedAt = now
+            )
+            repository.updateParentAccessLink(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) {
+                    "Account deletion request sent. Waiting for Wali Asuh approval."
+                } else {
+                    "Pengajuan hapus akun terkirim. Menunggu persetujuan Wali Asuh."
+                }
+            )
+        }
+    }
+
+    fun cancelParentAccountDeletionRequest(
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val existingLink = resolveActiveParentLinkForCurrentSession()
+            if (existingLink == null) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Parent account data not found."
+                    } else {
+                        "Data akun orang tua tidak ditemukan."
+                    }
+                )
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            val updated = existingLink.copy(
+                deletionRequested = false,
+                deletionReason = "",
+                deletionRequestedAt = 0L,
+                updatedAt = now
+            )
+            repository.updateParentAccessLink(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) {
+                    "Account deletion request cancelled."
+                } else {
+                    "Pengajuan hapus akun dibatalkan."
+                }
+            )
+        }
+    }
+
+    // --- Persetujuan atau Penolakan Hapus Akun Orang Tua oleh Wali Asuh ---
+    fun rejectParentAccountDeletion(
+        link: ParentAccessLink,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val now = System.currentTimeMillis()
+            val updated = link.copy(
+                deletionRequested = false,
+                deletionReason = "",
+                deletionRequestedAt = 0L,
+                updatedAt = now
+            )
+            repository.updateParentAccessLink(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) {
+                    "Account deletion request for ${link.studentName}'s parent was declined."
+                } else {
+                    "Pengajuan hapus akun orang tua ${link.studentName} ditolak."
+                }
+            )
+        }
+    }
+
+    fun approveAndDeleteParentAccount(
+        link: ParentAccessLink,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            if (!link.deletionRequested) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "This account has no pending deletion request from the parent."
+                    } else {
+                        "Akun ini belum memiliki pengajuan hapus dari orang tua."
+                    }
+                )
+                return@launch
+            }
+            val activeSchool = link.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val deletionLog = createAndRecordDeletionLog(
+                category = DeletionLog.CATEGORY_PARENT_ACCESS,
+                studentId = link.studentId,
+                studentName = link.studentName,
+                studentClass = link.studentClass,
+                recordId = link.id,
+                deletedSummary = "Akun orang tua ${link.username} (${link.studentName}) dihapus atas persetujuan Wali Asuh",
+                schoolId = activeSchool
+            )
+            repository.deleteParentAccessLink(link)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), deletionLog)
+                PocketBaseSyncManager.deleteRemoteParentAccessLink(getApplication(), link.id)
+            }
+            onResult(
+                true,
+                if (isEn) {
+                    "Parent account '${link.username}' has been permanently deleted."
+                } else {
+                    "Akun orang tua '${link.username}' telah disetujui dan dihapus permanen."
+                }
+            )
+        }
+    }
+
     // ==========================================
     // TABUNGAN PRIBADI WALI ASUH (PENITIPAN UANG SISWA - ISOLASI PRIVAT)
     // Hanya terlihat oleh Wali Asuh pemiliknya & anaksuperadmin (serta Portal Ortu jika dicentang)

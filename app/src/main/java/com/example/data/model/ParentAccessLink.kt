@@ -24,6 +24,9 @@ data class ParentAccessLink(
     val canViewProfile: Boolean = true,
     val canViewTabungan: Boolean = false,
     val schoolId: String = "SRT1-KDR",
+    val deletionRequested: Boolean = false,
+    val deletionReason: String = "",
+    val deletionRequestedAt: Long = 0L,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

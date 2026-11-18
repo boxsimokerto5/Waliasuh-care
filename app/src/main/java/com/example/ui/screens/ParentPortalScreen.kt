@@ -36,8 +36,10 @@ import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.NightlightRound
@@ -47,6 +49,8 @@ import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -66,6 +70,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -110,6 +115,7 @@ import com.example.ui.components.StatusBadge
 import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.ChangeParentPasswordDialog
+import com.example.ui.dialogs.DeleteParentAccountDialog
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.i18n.AppLanguage
@@ -153,6 +159,7 @@ fun ParentPortalScreen(
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
+    val isCurrentParentAccountDeleted by viewModel.isCurrentParentAccountDeleted.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
 
     val resolvedStudentId = activeLink?.studentId ?: currentParentStudentId
@@ -204,8 +211,25 @@ fun ParentPortalScreen(
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showChangePasswordSheet by remember { mutableStateOf(false) }
+    var showDeleteAccountSheet by remember { mutableStateOf(false) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     val currentTab = visibleTabs.getOrElse(safeTabIndex) { ParentPortalTab.HOME }
+
+    LaunchedEffect(isCurrentParentAccountDeleted) {
+        if (isCurrentParentAccountDeleted) {
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Your parent account has been deleted with Wali Asuh approval."
+                } else {
+                    "Akun orang tua Anda telah dihapus atas persetujuan Wali Asuh."
+                },
+                Toast.LENGTH_LONG
+            ).show()
+            viewModel.logout()
+            onLogout()
+        }
+    }
 
     val studentMengaji = remember(mengajiRecords, student, resolvedStudentId) {
         if (student != null) {
@@ -497,13 +521,33 @@ fun ParentPortalScreen(
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
                             if (idx >= 0) selectedTabIndex = idx
-                        }
+                        },
+                        onOpenRequestDeleteAccount = if (activeLink != null) {
+                            { showDeleteAccountSheet = true }
+                        } else null,
+                        onCancelDeletionRequest = if (activeLink != null) {
+                            {
+                                viewModel.cancelParentAccountDeletionRequest { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        } else null
                     )
                     ParentPortalTab.PROFILE -> ParentProfileContent(
                         student = student,
                         link = activeLink,
                         onOpenChangePassword = if (activeLink != null) {
                             { showChangePasswordSheet = true }
+                        } else null,
+                        onOpenRequestDeleteAccount = if (activeLink != null) {
+                            { showDeleteAccountSheet = true }
+                        } else null,
+                        onCancelDeletionRequest = if (activeLink != null) {
+                            {
+                                viewModel.cancelParentAccountDeletionRequest { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
                         } else null
                     )
                     ParentPortalTab.MENGAJI -> ParentMengajiContent(records = studentMengaji)
@@ -569,6 +613,16 @@ fun ParentPortalScreen(
             onDismiss = { showChangePasswordSheet = false }
         )
     }
+    if (showDeleteAccountSheet && currentActiveLink != null) {
+        DeleteParentAccountDialog(
+            viewModel = viewModel,
+            link = currentActiveLink,
+            studentName = student?.name ?: currentActiveLink.studentName,
+            assignedWaliName = student?.assignedWaliName?.ifBlank { currentActiveLink.assignedWaliName }
+                ?: currentActiveLink.assignedWaliName,
+            onDismiss = { showDeleteAccountSheet = false }
+        )
+    }
 }
 
 @Composable
@@ -585,7 +639,9 @@ private fun ParentOverviewContent(
     messages: List<ParentMessage>,
     expectations: List<ParentExpectation>,
     unreadMessageCount: Int,
-    onOpenTab: (ParentPortalTab) -> Unit
+    onOpenTab: (ParentPortalTab) -> Unit,
+    onOpenRequestDeleteAccount: (() -> Unit)? = null,
+    onCancelDeletionRequest: (() -> Unit)? = null
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -742,6 +798,75 @@ private fun ParentOverviewContent(
             }
         }
 
+        if (link?.deletionRequested == true) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .testTag("banner_parent_home_deletion_pending"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.HourglassTop,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isEn) "Account Deletion Pending Approval" else "Pengajuan Hapus Akun Menunggu Wali Asuh",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                        Text(
+                            text = if (isEn) {
+                                "Your account will only be permanently deleted once approved by Wali Asuh."
+                            } else {
+                                "Akun baru akan dihapus permanen setelah disetujui oleh Wali Asuh ananda."
+                            },
+                            fontSize = 11.5.sp,
+                            color = Color(0xFF78350F)
+                        )
+                        if (link.deletionReason.isNotBlank()) {
+                            Text(
+                                text = "${if (isEn) "Reason:" else "Alasan:"} ${link.deletionReason}",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                        if (onCancelDeletionRequest != null) {
+                            OutlinedButton(
+                                onClick = onCancelDeletionRequest,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFFB45309)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_home_parent_cancel_delete")
+                            ) {
+                                Text(
+                                    text = if (isEn) "Cancel Deletion Request" else "Batalkan Pengajuan Hapus",
+                                    color = Color(0xFF92400E),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                 ParentSuperAppIconGrid(
@@ -774,6 +899,63 @@ private fun ParentOverviewContent(
                 onOpenHarapan = { onOpenTab(ParentPortalTab.HARAPAN) }
             )
         }
+
+        if (link != null && !link.deletionRequested && onOpenRequestDeleteAccount != null) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .testTag("card_parent_home_delete_account"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, Color(0xFFFCA5A5))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = if (isEn) "Portal Account Control" else "Pengaturan Akun Portal",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = if (isEn) {
+                                "Need to remove this Parent Portal login? Submission requires Wali Asuh approval first."
+                            } else {
+                                "Ingin menghapus akun login Portal Orang Tua? Pengajuan memerlukan persetujuan Wali Asuh terlebih dahulu."
+                            },
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        OutlinedButton(
+                            onClick = onOpenRequestDeleteAccount,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFFDC2626)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_home_parent_delete_account")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteForever,
+                                contentDescription = null,
+                                tint = Color(0xFFDC2626),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isEn) "Request Account Deletion" else "Ajukan Hapus Akun",
+                                color = Color(0xFFDC2626),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -788,7 +970,9 @@ private fun maskIdNumber(raw: String): String {
 private fun ParentProfileContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
-    onOpenChangePassword: (() -> Unit)? = null
+    onOpenChangePassword: (() -> Unit)? = null,
+    onOpenRequestDeleteAccount: (() -> Unit)? = null,
+    onCancelDeletionRequest: (() -> Unit)? = null
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     if (student == null && link == null) {
@@ -983,6 +1167,7 @@ private fun ParentProfileContent(
                                 border = BorderStroke(1.dp, Color(0xFF3730A3)),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                                     .testTag("btn_profile_parent_change_password")
                             ) {
                                 Icon(
@@ -997,6 +1182,115 @@ private fun ParentProfileContent(
                                     color = Color(0xFF3730A3),
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+
+                        if (link.deletionRequested) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("card_parent_deletion_pending"),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFBEB)),
+                                border = BorderStroke(1.dp, Color(0xFFF59E0B))
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            imageVector = Icons.Default.HourglassTop,
+                                            contentDescription = null,
+                                            tint = Color(0xFFB45309),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isEn) "Waiting for Wali Asuh Approval" else "Menunggu Persetujuan Wali Asuh",
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF92400E)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isEn) {
+                                            "Your deletion request has been submitted. Account removal will happen only after Wali Asuh approves it."
+                                        } else {
+                                            "Pengajuan hapus akun sudah dikirim. Akun hanya akan dihapus setelah disetujui oleh Wali Asuh."
+                                        },
+                                        fontSize = 11.5.sp,
+                                        color = Color(0xFF78350F)
+                                    )
+                                    if (link.deletionReason.isNotBlank()) {
+                                        Text(
+                                            text = "${if (isEn) "Reason:" else "Alasan:"} ${link.deletionReason}",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF92400E)
+                                        )
+                                    }
+                                    if (link.deletionRequestedAt > 0L) {
+                                        Text(
+                                            text = "${if (isEn) "Submitted:" else "Diajukan:"} ${DateUtils.formatDateTime(link.deletionRequestedAt, LocalAppStrings.current.language)}",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF92400E)
+                                        )
+                                    }
+                                    if (onCancelDeletionRequest != null) {
+                                        OutlinedButton(
+                                            onClick = onCancelDeletionRequest,
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = BorderStroke(1.dp, Color(0xFFB45309)),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_profile_parent_cancel_delete")
+                                        ) {
+                                            Text(
+                                                text = if (isEn) "Cancel Deletion Request" else "Batalkan Pengajuan Hapus",
+                                                color = Color(0xFF92400E),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (onOpenRequestDeleteAccount != null) {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Text(
+                                    text = if (isEn) {
+                                        "Account deletion requires confirmation & approval from your child's Wali Asuh."
+                                    } else {
+                                        "Penghapusan akun hanya dapat diproses setelah disetujui oleh Wali Asuh pembina ananda."
+                                    },
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                OutlinedButton(
+                                    onClick = onOpenRequestDeleteAccount,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFDC2626)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_profile_parent_delete_account")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.DeleteForever,
+                                        contentDescription = null,
+                                        tint = Color(0xFFDC2626),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isEn) "Request Account Deletion" else "Ajukan Hapus Akun",
+                                        color = Color(0xFFDC2626),
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }

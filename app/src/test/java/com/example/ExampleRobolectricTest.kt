@@ -9319,10 +9319,210 @@ class ExampleRobolectricTest {
     val metaInitCls = Class.forName("com.anythink.network.facebook.FacebookATInitManager")
     org.junit.Assert.assertNotNull(metaInitCls)
 
-    val mobileAdsVersion = com.yandex.mobile.ads.common.MobileAds.getLibraryVersion()
+    val mobileAdsVersion = com.yandex.mobile.ads.common.MobileAds.libraryVersion
     org.junit.Assert.assertTrue(mobileAdsVersion.isNotBlank())
     org.junit.Assert.assertEquals("h6af3e64badfd8", com.example.util.TopOnAdManager.getAppId())
     org.junit.Assert.assertEquals("n6af3e7b1e288d", com.example.util.TopOnAdManager.getInterstitialPlacementId())
     org.junit.Assert.assertEquals("n6af3e88b080a6", com.example.util.TopOnAdManager.getRewardPlacementId())
+  }
+
+  @Test
+  fun `verify ParentPortalScreen account deletion requires Wali Asuh approval before permanent removal`() = kotlinx.coroutines.runBlocking {
+    val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(context)
+    val vm = com.example.ui.HealthViewModel(context)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val student = com.example.data.model.ChildStudent(
+      id = 919901L,
+      name = "Rafi Pratama",
+      nis = "102555889",
+      gender = "L",
+      age = 14,
+      dormitory = "Asrama Putra",
+      classGrade = "VIII-A",
+      allergies = "-",
+      bloodType = "A",
+      emergencyContact = "081987654321",
+      motherName = "SITI AMINAH",
+      parentPhone = "081987654321",
+      assignedWaliUsername = "ekowahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val parentUser = "ortu_rafi_5889"
+    val parentPass = "RafiPass123"
+    val initialLink = com.example.data.model.ParentAccessLink(
+      id = 919902L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      parentName = "SITI AMINAH",
+      parentPhone = "081987654321",
+      username = parentUser,
+      password = parentPass,
+      assignedWaliUsername = "ekowahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      canViewProfile = true,
+      schoolId = activeSchool
+    )
+    db.parentAccessLinkDao().insert(initialLink)
+
+    // 1. Wali Asuh tidak boleh langsung menghapus akun sebelum orang tua mengajukan
+    var preRequestApproveResult: Boolean? = null
+    vm.approveAndDeleteParentAccount(initialLink) { ok, _ -> preRequestApproveResult = ok }
+    for (attempt in 1..15) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (preRequestApproveResult != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    assertEquals(false, preRequestApproveResult)
+    org.junit.Assert.assertNotNull(db.parentAccessLinkDao().getByUsername(parentUser))
+
+    // 2. Login sebagai Orang Tua & ajukan hapus akun melalui UI ParentPortalScreen
+    val loginRes = vm.executeLogin(parentUser, parentPass)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+
+    var loops = 0
+    while (loops < 25 && vm.activeParentAccessLink.value == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertNotNull(vm.activeParentAccessLink.value)
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    var parentLoggedOut = false
+    var showParentPortal by androidx.compose.runtime.mutableStateOf(true)
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        if (showParentPortal) {
+          com.example.ui.screens.ParentPortalScreen(
+            viewModel = vm,
+            onLogout = { parentLoggedOut = true }
+          )
+        } else {
+          val links by vm.parentAccessLinks.collectAsState(initial = emptyList())
+          val currentStudents by vm.students.collectAsState(initial = emptyList())
+          com.example.ui.dialogs.KartuAksesOrangTuaSheet(
+            students = currentStudents,
+            parentAccessLinks = links,
+            schoolProfile = vm.schoolProfile.value,
+            isStudentClaimedByCurrentWali = { it.id == student.id },
+            isAdmin = true,
+            onGenerateAccessCard = {},
+            onResetPassword = {},
+            onEditStudentProfile = {},
+            onApproveDeleteParentAccount = { target -> vm.approveAndDeleteParentAccount(target) { _, _ -> } },
+            onRejectDeleteParentAccount = { target -> vm.rejectParentAccountDeletion(target) { _, _ -> } },
+            onDismiss = {}
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Buka Profil Anak -> klik Ajukan Hapus Akun
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_profile_content")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_profile_parent_delete_account"))
+    composeTestRule.onNodeWithTag("btn_profile_parent_delete_account").performClick()
+    composeTestRule.waitForIdle()
+
+    // Isi alasan & kirim pengajuan
+    composeTestRule.onNodeWithTag("input_parent_delete_reason").performScrollTo().performTextInput("Ganti perangkat baru")
+    composeTestRule.onNodeWithTag("btn_confirm_request_delete_parent").performScrollTo().performClick()
+
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      composeTestRule.waitForIdle()
+      val pending = db.parentAccessLinkDao().getByUsername(parentUser)
+      if (pending?.deletionRequested == true) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    val pendingLink = db.parentAccessLinkDao().getByUsername(parentUser)
+    org.junit.Assert.assertNotNull(pendingLink)
+    assertEquals(true, pendingLink?.deletionRequested)
+    assertEquals("Ganti perangkat baru", pendingLink?.deletionReason)
+    assertEquals(false, parentLoggedOut)
+
+    composeTestRule.onNodeWithTag("parent_profile_content")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_parent_deletion_pending"))
+    composeTestRule.onNodeWithTag("card_parent_deletion_pending").assertIsDisplayed()
+
+    // 3. Uji Wali Asuh menolak dulu di KartuAksesOrangTuaSheet -> akun tetap ada & status kembali aktif
+    showParentPortal = false
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("banner_pending_parent_deletions").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_deletion_approval_${student.id}").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_reject_parent_delete_${student.id}").performClick()
+
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      composeTestRule.waitForIdle()
+      val afterReject = db.parentAccessLinkDao().getByUsername(parentUser)
+      if (afterReject != null && !afterReject.deletionRequested) break
+      kotlinx.coroutines.delay(30)
+    }
+    val afterReject = db.parentAccessLinkDao().getByUsername(parentUser)
+    org.junit.Assert.assertNotNull(afterReject)
+    assertEquals(false, afterReject?.deletionRequested)
+
+    // 4. Orang tua mengajukan lagi, lalu Wali Asuh klik Setujui & Hapus + konfirmasi AlertDialog
+    var reRequestOk = false
+    vm.requestParentAccountDeletion("Sudah pasti ingin hapus akun") { ok, _ -> reRequestOk = ok }
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      composeTestRule.waitForIdle()
+      if (reRequestOk && db.parentAccessLinkDao().getByUsername(parentUser)?.deletionRequested == true) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, reRequestOk)
+
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_approve_parent_delete_${student.id}").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dialog_confirm_approve_parent_delete").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_confirm_approve_parent_delete").performClick()
+
+    for (attempt in 1..30) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      composeTestRule.waitForIdle()
+      if (db.parentAccessLinkDao().getByUsername(parentUser) == null) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    // 5. Pastikan akun terhapus permanen, deletion log tercatat, login ditolak, dan status akun terhapus aktif
+    org.junit.Assert.assertNull(db.parentAccessLinkDao().getByUsername(parentUser))
+    val deleteLogs = db.deletionLogDao().getLogsByCategory(activeSchool, com.example.data.model.DeletionLog.CATEGORY_PARENT_ACCESS)
+    org.junit.Assert.assertTrue(deleteLogs.any { it.recordId == initialLink.id && it.studentId == student.id })
+    org.junit.Assert.assertTrue(vm.isCurrentParentAccountDeleted.value)
+
+    // Kembali ke ParentPortalScreen saat sesi parent terhapus -> langsung memicu onLogout
+    showParentPortal = true
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      composeTestRule.waitForIdle()
+      if (parentLoggedOut) break
+      kotlinx.coroutines.delay(25)
+    }
+    assertEquals(true, parentLoggedOut)
+
+    val loginAfterDelete = vm.executeLogin(parentUser, parentPass)
+    org.junit.Assert.assertTrue(loginAfterDelete is com.example.ui.LoginResult.Error)
+
+    deleteLogs.filter { it.recordId == initialLink.id }.forEach { db.deletionLogDao().delete(it) }
+    db.childStudentDao().delete(student)
+    Unit
   }
 }

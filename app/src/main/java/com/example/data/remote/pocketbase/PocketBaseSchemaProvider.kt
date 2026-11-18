@@ -356,6 +356,9 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("can_view_haid", "bool"),
                 PbFieldDef("can_view_profile", "bool"),
                 PbFieldDef("can_view_tabungan", "bool"),
+                PbFieldDef("deletion_requested", "bool"),
+                PbFieldDef("deletion_reason", "text"),
+                PbFieldDef("deletion_requested_at", "number"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),

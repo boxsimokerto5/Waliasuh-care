@@ -22,5 +22,6 @@ data class DeletionLog(
         const val CATEGORY_PUASA = "PUASA"
         const val CATEGORY_BEROBAT = "BEROBAT"
         const val CATEGORY_PARENT_MESSAGE = "PARENT_MESSAGE"
+        const val CATEGORY_PARENT_ACCESS = "PARENT_ACCESS"
     }
 }

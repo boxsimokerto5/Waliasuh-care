@@ -1533,6 +1533,24 @@ object PocketBaseSyncManager {
         }
 
         try {
+            val remoteDeletedLinkIds = runCatching {
+                fetchAllPages { page ->
+                    service.listDeletionLogs(
+                        page = page,
+                        perPage = 500,
+                        filter = "category = '${DeletionLog.CATEGORY_PARENT_ACCESS}'"
+                    )
+                }.getOrNull()
+                    ?.map { it.toDomainModel() }
+                    ?.also { logs ->
+                        if (logs.isNotEmpty()) repository.insertAllDeletionLogs(logs)
+                    }
+                    ?.map { it.recordId }
+                    ?.filter { it > 0L }
+                    ?.toSet()
+                    ?: emptySet()
+            }.getOrDefault(emptySet())
+
             val remoteParentResult = fetchAllPages { page ->
                 service.listParentAccessLinks(page = page, perPage = 500)
             }
@@ -1540,8 +1558,21 @@ object PocketBaseSyncManager {
                 ?.map { it.toDomainModel() }
                 ?.filterNot { PocketBaseConfig.isSchoolCodeDeleted(context, it.schoolId) }
                 .orEmpty()
-            if (remoteParents.isNotEmpty()) {
-                repository.insertAllParentAccessLinks(remoteParents)
+            val activeParents = mutableListOf<ParentAccessLink>()
+            for (link in remoteParents) {
+                if (link.id in remoteDeletedLinkIds) {
+                    runCatching { service.deleteRecord("parent_access_links", PocketBaseIdCodec.toPbId(link.id)) }
+                } else {
+                    activeParents.add(link)
+                }
+            }
+            if (activeParents.isNotEmpty()) {
+                repository.insertAllParentAccessLinks(activeParents)
+            }
+            if (remoteDeletedLinkIds.isNotEmpty()) {
+                repository.getAllParentAccessLinksList()
+                    .filter { it.id in remoteDeletedLinkIds }
+                    .forEach { repository.deleteParentAccessLink(it) }
             }
         } catch (e: Exception) {
             Log.e(TAG, "Silent error sync parent_access_links", e)
@@ -1618,8 +1649,12 @@ object PocketBaseSyncManager {
             .filter { it.category == DeletionLog.CATEGORY_PARENT_MESSAGE && it.recordId > 0L }
             .map { it.recordId }
             .toSet()
+        val deletedParentLinkIds = mergedDeletionLogs
+            .filter { it.category == DeletionLog.CATEGORY_PARENT_ACCESS && it.recordId > 0L }
+            .map { it.recordId }
+            .toSet()
 
-        runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds) }
         runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds) }
         runCatching { syncParentExpectationsMerged(service, cleanSchoolId, filter, repository) }
     }
@@ -1896,13 +1931,26 @@ object PocketBaseSyncManager {
         service: PocketBaseService,
         cleanSchoolId: String,
         filter: String,
-        repository: HealthRepository
+        repository: HealthRepository,
+        deletedLinkIds: Set<Long> = emptySet()
     ) {
-        val localLinks = repository.getParentAccessLinksBySchoolList(cleanSchoolId)
+        val localAll = repository.getParentAccessLinksBySchoolList(cleanSchoolId)
+        if (deletedLinkIds.isNotEmpty()) {
+            localAll.filter { it.id in deletedLinkIds }.forEach { link ->
+                repository.deleteParentAccessLink(link)
+            }
+        }
+        val localLinks = localAll.filter { it.id !in deletedLinkIds }
         val remoteRes = fetchAllPages { page ->
             service.listParentAccessLinks(page = page, perPage = 500, filter = filter)
         }
-        val remoteLinks = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+        val remoteAll = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+        if (deletedLinkIds.isNotEmpty()) {
+            remoteAll.filter { it.id in deletedLinkIds }.forEach { stale ->
+                runCatching { service.deleteRecord("parent_access_links", PocketBaseIdCodec.toPbId(stale.id)) }
+            }
+        }
+        val remoteLinks = remoteAll.filter { it.id !in deletedLinkIds }
 
         val localById = localLinks.associateBy { it.id }
         val remoteById = remoteLinks.associateBy { it.id }
@@ -2644,8 +2692,12 @@ object PocketBaseSyncManager {
                 .filter { it.category == DeletionLog.CATEGORY_PARENT_MESSAGE && it.recordId > 0L }
                 .map { it.recordId }
                 .toSet()
+            val deletedParentLinkIds = mergedDeletionLogs
+                .filter { it.category == DeletionLog.CATEGORY_PARENT_ACCESS && it.recordId > 0L }
+                .map { it.recordId }
+                .toSet()
             runCatching {
-                syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository)
+                syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds)
             }
             runCatching {
                 syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds)

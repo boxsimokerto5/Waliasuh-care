@@ -2525,6 +2525,16 @@ fun DashboardScreen(
             onEditStudentProfile = { st ->
                 modalState.studentToEditParentPhone = st
             },
+            onApproveDeleteParentAccount = { link ->
+                viewModel.approveAndDeleteParentAccount(link) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            },
+            onRejectDeleteParentAccount = { link ->
+                viewModel.rejectParentAccountDeletion(link) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
             onDismiss = { modalState.showKartuAksesOrtuSheet = false }
         )
     }

@@ -1078,6 +1078,9 @@ data class PbParentAccessLinkDto(
     @Json(name = "can_view_haid") val canViewHaid: Boolean? = null,
     @Json(name = "can_view_profile") val canViewProfile: Boolean? = null,
     @Json(name = "can_view_tabungan") val canViewTabungan: Boolean? = null,
+    @Json(name = "deletion_requested") val deletionRequested: Boolean? = null,
+    @Json(name = "deletion_reason") val deletionReason: String? = null,
+    @Json(name = "deletion_requested_at") val deletionRequestedAt: Long? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1104,6 +1107,9 @@ data class PbParentAccessLinkDto(
             canViewProfile = canViewProfile ?: true,
             canViewTabungan = canViewTabungan ?: false,
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            deletionRequested = deletionRequested ?: false,
+            deletionReason = deletionReason.orEmpty(),
+            deletionRequestedAt = deletionRequestedAt ?: 0L,
             createdAt = resolvedCreated,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
         )
@@ -1135,6 +1141,9 @@ data class PbParentAccessLinkDto(
                 canViewHaid = model.canViewHaid,
                 canViewProfile = model.canViewProfile,
                 canViewTabungan = model.canViewTabungan,
+                deletionRequested = model.deletionRequested,
+                deletionReason = model.deletionReason,
+                deletionRequestedAt = model.deletionRequestedAt,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )
