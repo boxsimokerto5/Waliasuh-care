@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
@@ -58,6 +59,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -81,6 +83,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -106,6 +109,7 @@ import com.example.ui.components.ParentSwipeableHighlightsSection
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
+import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.i18n.AppLanguage
@@ -199,6 +203,7 @@ fun ParentPortalScreen(
     }
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var showChangePasswordSheet by remember { mutableStateOf(false) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     val currentTab = visibleTabs.getOrElse(safeTabIndex) { ParentPortalTab.HOME }
 
@@ -357,6 +362,25 @@ fun ParentPortalScreen(
                     }
                     IconButton(
                         onClick = {
+                            if (activeLink != null) {
+                                showChangePasswordSheet = true
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Account data is not loaded yet. Please sync first." else "Data akun belum termuat. Silakan sinkronkan terlebih dahulu.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        modifier = Modifier.testTag("btn_parent_change_password")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LockReset,
+                            contentDescription = if (isEn) "Change Password" else "Ganti Password"
+                        )
+                    }
+                    IconButton(
+                        onClick = {
                             viewModel.syncAllWithCloud { _, msg ->
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
@@ -477,7 +501,10 @@ fun ParentPortalScreen(
                     )
                     ParentPortalTab.PROFILE -> ParentProfileContent(
                         student = student,
-                        link = activeLink
+                        link = activeLink,
+                        onOpenChangePassword = if (activeLink != null) {
+                            { showChangePasswordSheet = true }
+                        } else null
                     )
                     ParentPortalTab.MENGAJI -> ParentMengajiContent(records = studentMengaji)
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(records = studentMedical)
@@ -531,6 +558,16 @@ fun ParentPortalScreen(
                 }
             }
         }
+    }
+
+    val currentActiveLink = activeLink
+    if (showChangePasswordSheet && currentActiveLink != null) {
+        ChangeParentPasswordDialog(
+            viewModel = viewModel,
+            link = currentActiveLink,
+            studentName = student?.name ?: currentActiveLink.studentName,
+            onDismiss = { showChangePasswordSheet = false }
+        )
     }
 }
 
@@ -750,7 +787,8 @@ private fun maskIdNumber(raw: String): String {
 @Composable
 private fun ParentProfileContent(
     student: ChildStudent?,
-    link: ParentAccessLink?
+    link: ParentAccessLink?,
+    onOpenChangePassword: (() -> Unit)? = null
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     if (student == null && link == null) {
@@ -896,6 +934,72 @@ private fun ParentProfileContent(
                         student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }?.ifBlank { "-" }
                             ?: link?.assignedWaliName?.ifBlank { "-" } ?: "-"
                     )
+                }
+            }
+        }
+
+        if (link != null) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_parent_account_security"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, Color(0xFFC7D2FE))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = if (isEn) "Portal Account & Security" else "Akun & Keamanan Portal",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF3730A3)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isEn) "Username (Locked)" else "Username (Terkunci)",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = link.username,
+                                fontSize = 12.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF3730A3)
+                            )
+                        }
+                        if (onOpenChangePassword != null) {
+                            OutlinedButton(
+                                onClick = onOpenChangePassword,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFF3730A3)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_profile_parent_change_password")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.LockReset,
+                                    contentDescription = null,
+                                    tint = Color(0xFF3730A3),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = if (isEn) "Change Portal Password" else "Ganti Password Portal",
+                                    color = Color(0xFF3730A3),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

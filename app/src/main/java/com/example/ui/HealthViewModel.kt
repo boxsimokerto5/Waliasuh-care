@@ -1988,6 +1988,69 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // --- Ganti Password Mandiri oleh Orang Tua (Tanpa verifikasi password lama, username dikunci, tersinkron ke PocketBase) ---
+    fun updateParentSelfPassword(
+        newPassword: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val cleanPass = newPassword.trim()
+            if (cleanPass.length < 6) {
+                onResult(
+                    false,
+                    if (isEn) "New password must be at least 6 characters." else "Password baru minimal 6 karakter."
+                )
+                return@launch
+            }
+
+            val targetStudentId = _currentParentStudentId.value
+            val activeUsername = _currentUsername.value?.trim().orEmpty()
+            val allLinks = repository.getAllParentAccessLinksList()
+
+            val existingLink = activeParentAccessLink.value?.let { current ->
+                allLinks.firstOrNull { it.id == current.id } ?: current
+            } ?: allLinks.firstOrNull { targetStudentId > 0L && it.studentId == targetStudentId }
+                ?: allLinks.firstOrNull {
+                    activeUsername.isNotBlank() && it.username.equals(activeUsername, ignoreCase = true)
+                }
+                ?: activeUsername.takeIf { it.isNotBlank() }?.let {
+                    repository.getParentAccessLinkByUsername(it)
+                }
+
+            if (existingLink == null) {
+                onResult(
+                    false,
+                    if (isEn) {
+                        "Parent account data not found. Please sync your data first."
+                    } else {
+                        "Data akun orang tua tidak ditemukan. Silakan sinkronkan data terlebih dahulu."
+                    }
+                )
+                return@launch
+            }
+
+            val updated = existingLink.copy(
+                password = cleanPass,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateParentAccessLink(updated)
+            _currentUsername.value = updated.username
+            _currentParentStudentId.value = updated.studentId
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) {
+                    "Parent portal password updated & synced!"
+                } else {
+                    "Password portal orang tua berhasil diperbarui & tersinkron!"
+                }
+            )
+        }
+    }
+
     // ==========================================
     // TABUNGAN PRIBADI WALI ASUH (PENITIPAN UANG SISWA - ISOLASI PRIVAT)
     // Hanya terlihat oleh Wali Asuh pemiliknya & anaksuperadmin (serta Portal Ortu jika dicentang)

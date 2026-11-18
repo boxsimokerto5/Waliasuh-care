@@ -92,8 +92,11 @@ object TopOnAdManager {
             val appKey = getAppKey()
 
             Log.d(TAG, "Initializing TopOn SDK with AppID: $appId")
-            ATSDK.setNetworkLogDebug(false)
+            ATSDK.setNetworkLogDebug(BuildConfig.DEBUG)
             ATSDK.init(appContext, appId, appKey)
+            if (BuildConfig.DEBUG) {
+                ATSDK.integrationChecking(appContext)
+            }
             isInitialized = true
 
             setupInterstitial(appContext)

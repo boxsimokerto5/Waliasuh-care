@@ -19,3 +19,21 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# TopOn (AnyThink) Core & Mediation
+-keep class com.anythink.** { *; }
+-dontwarn com.anythink.**
+-keepattributes EnclosingMethod, InnerClasses, Signature, *Annotation*
+
+# Meta Audience Network
+-keep class com.facebook.ads.** { *; }
+-dontwarn com.facebook.ads.**
+
+# Yandex Mobile Ads & AppMetrica
+-keep class com.yandex.mobile.ads.** { *; }
+-dontwarn com.yandex.mobile.ads.**
+-keep class com.yandex.metrica.** { *; }
+-dontwarn com.yandex.metrica.**
+-keep class io.appmetrica.analytics.** { *; }
+-dontwarn io.appmetrica.analytics.**
+

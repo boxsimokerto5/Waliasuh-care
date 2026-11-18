@@ -9098,7 +9098,7 @@ class ExampleRobolectricTest {
     val c1 = com.example.data.model.InfoPentingComment(
       id = 9101L,
       postId = 777L,
-      authorUsername = "ust_ali",
+      authorKey = "SRT1-KDR:ust_ali",
       authorName = "Ust. Ali",
       authorSchoolId = "SRT1-KDR",
       authorSchoolName = "Sekolah Rakyat Kediri",
@@ -9165,7 +9165,7 @@ class ExampleRobolectricTest {
                 picName = pic,
                 picEmail = email,
                 picPhone = phone,
-                requestedCode = "SR-KDR5"
+                generatedSchoolCode = "SR-KDR5"
               )
             )
           }
@@ -9188,5 +9188,141 @@ class ExampleRobolectricTest {
     assertEquals("Sekolah Rakyat Harapan", capturedSchoolName)
     assertEquals(6, capturedWaliCount)
     composeTestRule.onNodeWithTag("btn_send_wa_superadmin").performScrollTo().assertIsDisplayed()
+  }
+
+  @Test
+  fun `verify ParentPortalScreen Option A self password change from TopBar and Profile without old password verification`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val vm = com.example.ui.HealthViewModel(app)
+    val db = com.example.data.database.AppDatabase.getDatabase(app)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val student = com.example.data.model.ChildStudent(
+      id = 918801L,
+      name = "Auliana Widiani",
+      nis = "102444512",
+      gender = "P",
+      age = 15,
+      dormitory = "Asrama Putri",
+      classGrade = "X-1",
+      allergies = "-",
+      bloodType = "O",
+      emergencyContact = "081234567890",
+      motherName = "SURYANI",
+      parentPhone = "081234567890",
+      assignedWaliUsername = "ekowahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val oldPass = "AwalOrtu123"
+    val newPass = "BaruOrtu999"
+    val link = com.example.data.model.ParentAccessLink(
+      id = 918802L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      parentName = "SURYANI",
+      parentPhone = "081234567890",
+      username = "ortu_auliana_4512",
+      password = oldPass,
+      assignedWaliUsername = "ekowahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      canViewProfile = true,
+      schoolId = activeSchool
+    )
+    db.parentAccessLinkDao().insert(link)
+
+    val loginRes = vm.executeLogin("ortu_auliana_4512", oldPass)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+
+    var loops = 0
+    while (loops < 25 && vm.activeParentAccessLink.value == null) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      kotlinx.coroutines.delay(40)
+      loops++
+    }
+    org.junit.Assert.assertNotNull(vm.activeParentAccessLink.value)
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.ParentPortalScreen(viewModel = vm, onLogout = {})
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Cek tombol ganti password di Profil Anak
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_profile_content")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_parent_account_security"))
+    composeTestRule.onNodeWithTag("card_parent_account_security").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("parent_profile_content")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_profile_parent_change_password"))
+    composeTestRule.onNodeWithTag("btn_profile_parent_change_password").assertIsDisplayed()
+
+    // 2. Buka dialog ganti password lewat ikon TopBar (Option A) tanpa input password lama
+    composeTestRule.onNodeWithTag("btn_parent_change_password").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("input_parent_new_password").performScrollTo().performTextInput(newPass)
+    composeTestRule.onNodeWithTag("input_parent_confirm_password").performScrollTo().performTextInput(newPass)
+    composeTestRule.onNodeWithTag("btn_save_parent_password").performScrollTo().performClick()
+
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      composeTestRule.waitForIdle()
+      val updatedLink = db.parentAccessLinkDao().getByUsername("ortu_auliana_4512")
+      if (updatedLink?.password == newPass) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    val updatedLink = db.parentAccessLinkDao().getByUsername("ortu_auliana_4512")
+    assertEquals("ortu_auliana_4512", updatedLink?.username)
+    assertEquals(newPass, updatedLink?.password)
+
+    // 3. Logout lalu pastikan password lama ditolak dan password baru berhasil login
+    vm.logout()
+    val loginOldAfter = vm.executeLogin("ortu_auliana_4512", oldPass)
+    org.junit.Assert.assertTrue(loginOldAfter is com.example.ui.LoginResult.Error)
+
+    val loginNewAfter = vm.executeLogin("ortu_auliana_4512", newPass)
+    org.junit.Assert.assertTrue(loginNewAfter is com.example.ui.LoginResult.SuccessParent)
+
+    if (updatedLink != null) db.parentAccessLinkDao().delete(updatedLink)
+    db.childStudentDao().delete(student)
+    Unit
+  }
+
+  @Test
+  fun `verify TopOn mediation bundles both Meta Audience Network and Yandex Ads adapters cleanly`() {
+    val yandexInitCls = Class.forName("com.anythink.network.yandex.YandexATInitManager")
+    val getInstanceMethod = yandexInitCls.getMethod("getInstance")
+    val yandexInitInstance = getInstanceMethod.invoke(null)
+    org.junit.Assert.assertNotNull(yandexInitInstance)
+
+    val networkVersionMethod = yandexInitCls.getMethod("getNetworkVersion")
+    val yandexVersion = networkVersionMethod.invoke(yandexInitInstance) as? String
+    org.junit.Assert.assertFalse(yandexVersion.isNullOrBlank())
+
+    val yandexInterstitialCls = Class.forName("com.anythink.network.yandex.YandexATInterstitialAdapter")
+    val yandexRewardCls = Class.forName("com.anythink.network.yandex.YandexATRewardedVideoAdapter")
+    org.junit.Assert.assertNotNull(yandexInterstitialCls)
+    org.junit.Assert.assertNotNull(yandexRewardCls)
+
+    val metaInitCls = Class.forName("com.anythink.network.facebook.FacebookATInitManager")
+    org.junit.Assert.assertNotNull(metaInitCls)
+
+    val mobileAdsVersion = com.yandex.mobile.ads.common.MobileAds.getLibraryVersion()
+    org.junit.Assert.assertTrue(mobileAdsVersion.isNotBlank())
+    org.junit.Assert.assertEquals("h6af3e64badfd8", com.example.util.TopOnAdManager.getAppId())
+    org.junit.Assert.assertEquals("n6af3e7b1e288d", com.example.util.TopOnAdManager.getInterstitialPlacementId())
+    org.junit.Assert.assertEquals("n6af3e88b080a6", com.example.util.TopOnAdManager.getRewardPlacementId())
   }
 }

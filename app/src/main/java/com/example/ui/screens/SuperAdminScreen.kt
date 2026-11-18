@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutoutPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,6 +30,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -76,8 +78,11 @@ import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
@@ -94,12 +99,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -109,7 +113,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -117,6 +124,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -185,9 +193,13 @@ fun SuperAdminScreen(
     var selectedSchoolForDetail by remember { mutableStateOf<SchoolRegistration?>(null) }
     var showLogoutConfirmDialog by remember { mutableStateOf(false) }
 
-    // Intercept back button
+    // Intercept back button: return to Requests tab first, then ask logout confirmation
     BackHandler {
-        showLogoutConfirmDialog = true
+        if (selectedMainTab != 0) {
+            selectedMainTab = 0
+        } else {
+            showLogoutConfirmDialog = true
+        }
     }
 
     // Filter registrations
@@ -319,188 +331,283 @@ fun SuperAdminScreen(
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface)
+            // Header Senada WaliTopBar
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 2.dp,
+                shadowElevation = 1.dp
             ) {
-                TopAppBar(
-                    title = {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .displayCutoutPadding(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .widthIn(max = 768.dp)
+                            .padding(horizontal = 14.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(end = 8.dp)
+                        ) {
                             Image(
                                 painter = painterResource(id = R.drawable.logo_sr_care),
-                                contentDescription = "Logo",
+                                contentDescription = "Logo Wali Asuh Care",
+                                contentScale = ContentScale.Crop,
                                 modifier = Modifier
-                                    .size(34.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
+                                    .border(1.dp, WaliPrimary.copy(alpha = 0.25f), CircleShape)
                             )
                             Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     Text(
                                         text = if (isEn) "Superadmin Portal" else "Portal Superadmin",
-                                        fontSize = 17.sp,
+                                        fontSize = 16.5.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = WaliPrimary,
+                                        letterSpacing = 0.1.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
                                     Box(
                                         modifier = Modifier
                                             .clip(RoundedCornerShape(6.dp))
-                                            .background(Color(0xFF8B5CF6))
-                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            .background(WaliPrimary.copy(alpha = 0.12f))
+                                            .border(0.8.dp, WaliPrimary.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                                            .padding(horizontal = 6.dp, vertical = 1.5.dp)
                                     ) {
                                         Text(
                                             text = "MASTER",
-                                            color = Color.White,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
+                                            color = WaliPrimary,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 }
                                 Text(
-                                    text = if (isEn) "Multi-School Authorization & Registration" else "Otorisasi & Pendaftaran Multi-Sekolah",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    },
-                    actions = {
-                        Surface(
-                            onClick = {
-                                viewModel.setAppLanguage(
-                                    if (isEn) AppLanguage.INDONESIAN else AppLanguage.ENGLISH
-                                )
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            color = WaliPrimary.copy(alpha = 0.12f),
-                            border = BorderStroke(1.dp, WaliPrimary.copy(alpha = 0.35f)),
-                            modifier = Modifier
-                                .heightIn(min = 48.dp)
-                                .widthIn(min = 48.dp)
-                                .padding(vertical = 4.dp)
-                                .semantics {
-                                    contentDescription = if (isEn) {
-                                        "Switch language to Indonesian"
+                                    text = if (isEn) {
+                                        "Multi-School Authorization & Registration"
                                     } else {
-                                        "Ubah bahasa ke Inggris"
-                                    }
-                                }
-                                .testTag("btn_superadmin_toggle_language")
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = if (isEn) "EN" else "ID",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = WaliPrimary
+                                        "Otorisasi & Pendaftaran Multi-Sekolah"
+                                    },
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
-                        IconButton(
-                            onClick = {
-                                viewModel.refreshSuperadminCloudData { _, msg ->
-                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                                }
-                            },
-                            enabled = !isSyncing,
-                            modifier = Modifier.testTag("btn_superadmin_refresh_cloud")
-                        ) {
-                            if (isSyncing) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = if (isEn) "Sync Data from Cloud" else "Sinkronkan Data dari Cloud",
-                                    tint = WaliPrimary
-                                )
-                            }
-                        }
-                        IconButton(
-                            onClick = { showLogoutConfirmDialog = true },
-                            modifier = Modifier.testTag("btn_superadmin_logout")
-                        ) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ExitToApp,
-                                contentDescription = if (isEn) "Log Out" else "Logout",
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-                )
 
-                TabRow(
-                    selectedTabIndex = selectedMainTab,
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Surface(
+                                onClick = {
+                                    viewModel.setAppLanguage(
+                                        if (isEn) AppLanguage.INDONESIAN else AppLanguage.ENGLISH
+                                    )
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                color = WaliPrimary.copy(alpha = 0.10f),
+                                border = BorderStroke(1.dp, WaliPrimary.copy(alpha = 0.3f)),
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .semantics {
+                                        contentDescription = if (isEn) {
+                                            "Switch language to Indonesian"
+                                        } else {
+                                            "Ubah bahasa ke Inggris"
+                                        }
+                                    }
+                                    .testTag("btn_superadmin_toggle_language")
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                ) {
+                                    Text(
+                                        text = if (isEn) "EN" else "ID",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WaliPrimary
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    viewModel.refreshSuperadminCloudData { _, msg ->
+                                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                enabled = !isSyncing,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .testTag("btn_superadmin_refresh_cloud")
+                            ) {
+                                if (isSyncing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                        color = WaliPrimary
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = if (isEn) "Sync Data from Cloud" else "Sinkronkan Data dari Cloud",
+                                        tint = WaliPrimary,
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = { showLogoutConfirmDialog = true },
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .testTag("btn_superadmin_logout")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                                    contentDescription = if (isEn) "Log Out" else "Logout",
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(21.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        bottomBar = {
+            // Bottom Navigation Bar Senada Portal Wali Asuh
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                NavigationBar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .widthIn(max = 640.dp)
+                        .testTag("superadmin_bottom_nav_bar"),
                     containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = WaliPrimary
+                    tonalElevation = 6.dp
                 ) {
-                    Tab(
+                    NavigationBarItem(
                         selected = selectedMainTab == 0,
                         onClick = { selectedMainTab = 0 },
-                        text = {
+                        icon = {
+                            BadgedBox(
+                                badge = {
+                                    if (pendingCount > 0) {
+                                        Badge(
+                                            containerColor = Color(0xFFEF4444),
+                                            contentColor = Color.White
+                                        ) {
+                                            Text(
+                                                text = if (pendingCount > 99) "99+" else "$pendingCount",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.School,
+                                    contentDescription = if (isEn) "Requests" else "Pengajuan",
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        },
+                        label = {
                             Text(
                                 text = if (isEn) "Requests (${registrations.size})" else "Pengajuan (${registrations.size})",
-                                fontWeight = if (selectedMainTab == 0) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 12.sp,
-                                maxLines = 1
+                                fontWeight = if (selectedMainTab == 0) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
-                        icon = {
-                            Icon(
-                                Icons.Default.School,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = WaliPrimary,
+                            selectedTextColor = WaliPrimary,
+                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
+                        ),
                         modifier = Modifier.testTag("tab_superadmin_pengajuan")
                     )
-                    Tab(
+
+                    NavigationBarItem(
                         selected = selectedMainTab == 1,
                         onClick = { selectedMainTab = 1 },
-                        text = {
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Assessment,
+                                contentDescription = if (isEn) "Reports" else "Laporan",
+                                modifier = Modifier.size(22.dp)
+                            )
+                        },
+                        label = {
                             Text(
                                 text = if (isEn) "Reports" else "Laporan",
-                                fontWeight = if (selectedMainTab == 1) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 12.sp,
-                                maxLines = 1
+                                fontWeight = if (selectedMainTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
-                        icon = {
-                            Icon(
-                                Icons.Default.Assessment,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = WaliPrimary,
+                            selectedTextColor = WaliPrimary,
+                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
+                        ),
                         modifier = Modifier.testTag("tab_superadmin_laporan")
                     )
-                    Tab(
+
+                    NavigationBarItem(
                         selected = selectedMainTab == 2,
                         onClick = { selectedMainTab = 2 },
-                        text = {
-                            Text(
-                                text = "Cloud DB",
-                                fontWeight = if (selectedMainTab == 2) FontWeight.Bold else FontWeight.Normal,
-                                fontSize = 12.sp,
-                                maxLines = 1
-                            )
-                        },
                         icon = {
                             Icon(
-                                Icons.Default.Code,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
+                                imageVector = Icons.Default.Code,
+                                contentDescription = "Cloud DB",
+                                modifier = Modifier.size(22.dp)
                             )
                         },
+                        label = {
+                            Text(
+                                text = "Cloud DB",
+                                fontWeight = if (selectedMainTab == 2) FontWeight.Bold else FontWeight.Medium,
+                                fontSize = 10.5.sp,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                        },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = WaliPrimary,
+                            selectedTextColor = WaliPrimary,
+                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
+                        ),
                         modifier = Modifier.testTag("tab_superadmin_sql")
                     )
                 }
@@ -514,81 +621,144 @@ fun SuperAdminScreen(
             contentAlignment = Alignment.TopCenter
         ) {
             if (selectedMainTab == 0) {
+                val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val heroGradient = if (isDarkSurface) {
+                    listOf(Color(0xFF0F2942), Color(0xFF133A5E), Color(0xFF154A75))
+                } else {
+                    listOf(Color(0xFFEFF6FF), Color(0xFFDBEAFE), Color(0xFFE0F2FE))
+                }
+                val heroBorderColor = if (isDarkSurface) {
+                    Color(0xFF60A5FA).copy(alpha = 0.4f)
+                } else {
+                    Color(0xFF93C5FD)
+                }
+                val heroTitleColor = if (isDarkSurface) Color(0xFFEFF6FF) else Color(0xFF0D3B66)
+                val heroSubtitleColor = if (isDarkSurface) Color(0xFFBFDBFE) else Color(0xFF1E40AF)
+
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .widthIn(max = 768.dp)
-                        .padding(horizontal = 16.dp),
-                    contentPadding = PaddingValues(vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(14.dp)
+                        .padding(horizontal = 12.dp),
+                    contentPadding = PaddingValues(top = 10.dp, bottom = 18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                // Ringkasan KPI Cards
+                // Hero Status Card ala Wali Asuh Care
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(
-                            text = if (isEn) "School Request Status" else "Status Pengajuan Sekolah",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Brush.linearGradient(heroGradient))
+                                .border(1.dp, heroBorderColor, RoundedCornerShape(14.dp))
                         ) {
-                            SuperadminKpiCard(
-                                title = if (isEn) "All" else "Semua",
-                                count = totalCount,
-                                color = WaliPrimary,
-                                isSelected = selectedStatusFilter == "Semua",
-                                onClick = { selectedStatusFilter = "Semua" },
-                                modifier = Modifier.weight(1f)
-                            )
-                            SuperadminKpiCard(
-                                title = if (isEn) "Pending" else "Menunggu",
-                                count = pendingCount,
-                                color = Color(0xFFD97706),
-                                isSelected = selectedStatusFilter == "PENDING",
-                                onClick = { selectedStatusFilter = "PENDING" },
-                                modifier = Modifier.weight(1f)
-                            )
-                            SuperadminKpiCard(
-                                title = if (isEn) "Approved" else "Disetujui",
-                                count = approvedCount,
-                                color = Color(0xFF16A34A),
-                                isSelected = selectedStatusFilter == "APPROVED",
-                                onClick = { selectedStatusFilter = "APPROVED" },
-                                modifier = Modifier.weight(1f)
-                            )
-                            SuperadminKpiCard(
-                                title = if (isEn) "Suspended" else "Suspend",
-                                count = suspendedCount,
-                                color = Color(0xFFEA580C),
-                                isSelected = selectedStatusFilter == "SUSPENDED",
-                                onClick = { selectedStatusFilter = "SUSPENDED" },
-                                modifier = Modifier.weight(1f)
-                            )
-                            SuperadminKpiCard(
-                                title = if (isEn) "Rejected" else "Ditolak",
-                                count = rejectedCount,
-                                color = Color(0xFFDC2626),
-                                isSelected = selectedStatusFilter == "REJECTED",
-                                onClick = { selectedStatusFilter = "REJECTED" },
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isEn) "School Request Status" else "Status Pengajuan Sekolah",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = heroTitleColor
+                                        )
+                                        Text(
+                                            text = if (isEn) {
+                                                "Tap a status pill below to filter schools"
+                                            } else {
+                                                "Ketuk status di bawah untuk menyaring daftar sekolah"
+                                            },
+                                            fontSize = 11.sp,
+                                            color = heroSubtitleColor
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isDarkSurface) Color(0xFF0B1F33).copy(alpha = 0.8f) else Color.White.copy(alpha = 0.9f),
+                                        border = BorderStroke(0.8.dp, heroBorderColor)
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "$totalCount Schools" else "$totalCount Sekolah",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDarkSurface) Color(0xFF93C5FD) else WaliPrimary,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    SuperadminKpiCard(
+                                        title = if (isEn) "All" else "Semua",
+                                        count = totalCount,
+                                        color = WaliPrimary,
+                                        isSelected = selectedStatusFilter == "Semua",
+                                        onClick = { selectedStatusFilter = "Semua" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    SuperadminKpiCard(
+                                        title = if (isEn) "Pending" else "Menunggu",
+                                        count = pendingCount,
+                                        color = Color(0xFFD97706),
+                                        isSelected = selectedStatusFilter == "PENDING",
+                                        onClick = { selectedStatusFilter = "PENDING" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    SuperadminKpiCard(
+                                        title = if (isEn) "Approved" else "Disetujui",
+                                        count = approvedCount,
+                                        color = Color(0xFF16A34A),
+                                        isSelected = selectedStatusFilter == "APPROVED",
+                                        onClick = { selectedStatusFilter = "APPROVED" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    SuperadminKpiCard(
+                                        title = if (isEn) "Suspended" else "Suspend",
+                                        count = suspendedCount,
+                                        color = Color(0xFFEA580C),
+                                        isSelected = selectedStatusFilter == "SUSPENDED",
+                                        onClick = { selectedStatusFilter = "SUSPENDED" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    SuperadminKpiCard(
+                                        title = if (isEn) "Rejected" else "Ditolak",
+                                        count = rejectedCount,
+                                        color = Color(0xFFDC2626),
+                                        isSelected = selectedStatusFilter == "REJECTED",
+                                        onClick = { selectedStatusFilter = "REJECTED" },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
                 // Search Bar & Filter Chips
                 item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         OutlinedTextField(
                             value = searchQuery,
                             onValueChange = { searchQuery = it },
                             placeholder = {
                                 Text(
                                     if (isEn) "Search school name, city, PIC, WhatsApp..."
-                                    else "Cari nama sekolah, kota, penanggung jawab, WA..."
+                                    else "Cari nama sekolah, kota, penanggung jawab, WA...",
+                                    fontSize = 12.5.sp
                                 )
                             },
                             leadingIcon = {
@@ -606,15 +776,21 @@ fun SuperAdminScreen(
                             },
                             singleLine = true,
                             shape = RoundedCornerShape(14.dp),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                            ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("search_superadmin_input")
                         )
 
                         // Filter Chips
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             listOf("Semua", "PENDING", "APPROVED", "SUSPENDED", "REJECTED").forEach { status ->
                                 val label = when (status) {
@@ -627,7 +803,11 @@ fun SuperAdminScreen(
                                 FilterChip(
                                     selected = selectedStatusFilter == status,
                                     onClick = { selectedStatusFilter = status },
-                                    label = { Text(label, fontSize = 12.sp) }
+                                    label = { Text(label, fontSize = 11.5.sp, fontWeight = FontWeight.Medium) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = WaliPrimary.copy(alpha = 0.14f),
+                                        selectedLabelColor = WaliPrimary
+                                    )
                                 )
                             }
                         }
@@ -643,7 +823,7 @@ fun SuperAdminScreen(
                     ) {
                         Text(
                             text = if (isEn) "Request List (${filteredList.size})" else "Daftar Pengajuan (${filteredList.size})",
-                            fontSize = 14.sp,
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -1137,36 +1317,55 @@ fun SuperadminKpiCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    ElevatedCard(
-        modifier = modifier
-            .clickable { onClick() }
-            .then(
-                if (isSelected) Modifier.border(2.dp, color, RoundedCornerShape(12.dp))
-                else Modifier
-            ),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.elevatedCardElevation().let {
-            CardDefaults.cardColors(containerColor = if (isSelected) color.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surface)
-        }
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val containerColor = when {
+        isSelected && isDarkSurface -> color.copy(alpha = 0.28f)
+        isSelected -> Color.White
+        isDarkSurface -> MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+        else -> Color.White.copy(alpha = 0.78f)
+    }
+    val borderColor = if (isSelected) color else color.copy(alpha = if (isDarkSurface) 0.35f else 0.25f)
+
+    Surface(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 48.dp),
+        shape = RoundedCornerShape(10.dp),
+        color = containerColor,
+        border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, borderColor),
+        shadowElevation = if (isSelected) 2.dp else 0.dp
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(vertical = 10.dp, horizontal = 8.dp),
+                .padding(vertical = 8.dp, horizontal = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text(
-                text = count.toString(),
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold,
-                color = color
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(7.dp)
+                        .clip(CircleShape)
+                        .background(color)
+                )
+                Text(
+                    text = count.toString(),
+                    fontSize = 15.5.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = color
+                )
+            }
+            Spacer(modifier = Modifier.height(2.dp))
             Text(
                 text = title,
-                fontSize = 11.sp,
+                fontSize = 10.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -1290,12 +1489,18 @@ fun SuperadminRegistrationItemCard(
 
             // TAMPILAN JIKA STATUS APPROVED: KARTU AKSES DIGITAL + TOMBOL SUSPEND & HAPUS
             if (normalizedStatus == "APPROVED") {
+                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val accessBg = if (isDark) Color(0xFF064E3B).copy(alpha = 0.45f) else Color(0xFFF0FDF4)
+                val accessBorder = if (isDark) Color(0xFF34D399).copy(alpha = 0.5f) else Color(0xFF86EFAC)
+                val accessTitleColor = if (isDark) Color(0xFF6EE7B7) else Color(0xFF15803D)
+                val accessLabelColor = if (isDark) Color(0xFFA7F3D0) else Color(0xFF166534)
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFF0FDF4))
-                        .border(1.5.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+                        .background(accessBg)
+                        .border(1.2.dp, accessBorder, RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1305,20 +1510,20 @@ fun SuperadminRegistrationItemCard(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Verified, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
+                                Icon(Icons.Default.Verified, contentDescription = null, tint = accessTitleColor, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
                                     text = if (isEn) "OFFICIAL ADMIN ACCESS CARD" else "KARTU AKSES ADMIN RESMI",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 11.5.sp,
-                                    color = Color(0xFF15803D)
+                                    color = accessTitleColor
                                 )
                             }
                             Text(
                                 text = registration.generatedSchoolCode,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 12.sp,
-                                color = Color(0xFF15803D)
+                                color = accessTitleColor
                             )
                         }
 
@@ -1327,12 +1532,13 @@ fun SuperadminRegistrationItemCard(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Username:", fontSize = 12.sp, color = Color(0xFF166534))
+                            Text(text = "Username:", fontSize = 12.sp, color = accessLabelColor)
                             Text(
                                 text = registration.generatedAdminUsername,
                                 fontFamily = FontFamily.Monospace,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 12.sp
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
 
@@ -1341,23 +1547,25 @@ fun SuperadminRegistrationItemCard(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Password:", fontSize = 12.sp, color = Color(0xFF166534))
+                            Text(text = "Password:", fontSize = 12.sp, color = accessLabelColor)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
                                     text = if (passwordVisible) registration.generatedAdminPassword else "••••••••",
                                     fontFamily = FontFamily.Monospace,
                                     fontWeight = FontWeight.Bold,
-                                    fontSize = 12.sp
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
                                 )
                                 Spacer(modifier = Modifier.width(4.dp))
                                 IconButton(
                                     onClick = { passwordVisible = !passwordVisible },
-                                    modifier = Modifier.size(24.dp)
+                                    modifier = Modifier.size(28.dp)
                                 ) {
                                     Icon(
                                         imageVector = if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                         contentDescription = if (isEn) "Toggle password visibility" else "Lihat atau sembunyikan password",
-                                        modifier = Modifier.size(14.dp)
+                                        modifier = Modifier.size(14.dp),
+                                        tint = accessLabelColor
                                     )
                                 }
                             }
@@ -1434,12 +1642,18 @@ fun SuperadminRegistrationItemCard(
 
             // TAMPILAN JIKA STATUS SUSPENDED: BANNER & TOMBOL BUKA SUSPEND / HAPUS
             if (normalizedStatus == "SUSPENDED") {
+                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val suspBg = if (isDark) Color(0xFF7C2D12).copy(alpha = 0.42f) else Color(0xFFFFF7ED)
+                val suspBorder = if (isDark) Color(0xFFFB923C).copy(alpha = 0.5f) else Color(0xFFFDBA74)
+                val suspTitleColor = if (isDark) Color(0xFFFDBA74) else Color(0xFF9A3412)
+                val suspTextColor = if (isDark) Color(0xFFFED7AA) else Color(0xFF7C2D12)
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(12.dp))
-                        .background(Color(0xFFFFF7ED))
-                        .border(1.5.dp, Color(0xFFFDBA74), RoundedCornerShape(12.dp))
+                        .background(suspBg)
+                        .border(1.2.dp, suspBorder, RoundedCornerShape(12.dp))
                         .padding(12.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1450,7 +1664,7 @@ fun SuperadminRegistrationItemCard(
                                 text = if (isEn) "THIS SCHOOL ACCOUNT IS SUSPENDED" else "AKUN SEKOLAH INI SEDANG DISUSPEND",
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 11.5.sp,
-                                color = Color(0xFF9A3412)
+                                color = suspTitleColor
                             )
                         }
 
@@ -1461,7 +1675,7 @@ fun SuperadminRegistrationItemCard(
                                 "Seluruh user (Admin dan Wali Asuh) pada ID ${registration.generatedSchoolCode} diblokir dari login dan akan menerima notifikasi:\n\"Maaf akun sedang disuspend oleh admin\"."
                             },
                             fontSize = 11.5.sp,
-                            color = Color(0xFF7C2D12),
+                            color = suspTextColor,
                             lineHeight = 16.sp
                         )
 
@@ -1504,12 +1718,18 @@ fun SuperadminRegistrationItemCard(
 
             // TAMPILAN JIKA STATUS REJECTED: ALASAN PENOLAKAN + TOMBOL HAPUS
             if (normalizedStatus == "REJECTED") {
+                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val rejBg = if (isDark) Color(0xFF7F1D1D).copy(alpha = 0.4f) else Color(0xFFFEF2F2)
+                val rejBorder = if (isDark) Color(0xFFF87171).copy(alpha = 0.5f) else Color(0xFFFECACA)
+                val rejTitleColor = if (isDark) Color(0xFFFCA5A5) else Color(0xFFB91C1C)
+                val rejTextColor = if (isDark) Color(0xFFFEE2E2) else Color(0xFF7F1D1D)
+
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(Color(0xFFFEF2F2))
-                        .border(1.dp, Color(0xFFFECACA), RoundedCornerShape(8.dp))
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(rejBg)
+                        .border(1.dp, rejBorder, RoundedCornerShape(10.dp))
                         .padding(10.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1517,14 +1737,14 @@ fun SuperadminRegistrationItemCard(
                             text = if (isEn) "Rejection Reason:" else "Alasan Penolakan:",
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
-                            color = Color(0xFFB91C1C)
+                            color = rejTitleColor
                         )
                         Text(
                             text = registration.rejectionReason.ifBlank {
                                 if (isEn) "Incomplete data." else "Data belum lengkap."
                             },
                             fontSize = 11.5.sp,
-                            color = Color(0xFF7F1D1D)
+                            color = rejTextColor
                         )
                         OutlinedButton(
                             onClick = onDelete,
@@ -1787,145 +2007,172 @@ fun SuperadminReportsView(
         ).show()
     }
 
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val heroGradient = if (isDarkSurface) {
+        listOf(Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF0F3D5E))
+    } else {
+        listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7), Color(0xFFE0F2FE))
+    }
+    val heroBorderColor = if (isDarkSurface) {
+        Color(0xFF34D399).copy(alpha = 0.45f)
+    } else {
+        Color(0xFF86EFAC)
+    }
+    val heroTitleColor = if (isDarkSurface) Color(0xFFECFDF5) else Color(0xFF064E3B)
+    val heroSubtitleColor = if (isDarkSurface) Color(0xFFA7F3D0) else Color(0xFF14532D)
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .widthIn(max = 768.dp)
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+            .padding(horizontal = 12.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        // Kartu Ringkasan Eksekutif
+        // Kartu Ringkasan Eksekutif (Hero Gradient ala Wali Asuh Care)
         item {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.elevatedCardElevation().let {
-                    CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                }
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
             ) {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .background(Brush.linearGradient(heroGradient))
+                        .border(1.dp, heroBorderColor, RoundedCornerShape(14.dp))
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(WaliPrimary.copy(alpha = 0.12f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Assessment,
-                                    contentDescription = null,
-                                    tint = WaliPrimary,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = if (isEn) "Multi-School Summary" else "Rekapitulasi Multi-Sekolah",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = if (isEn) {
-                                        "Tenant Quota & Wali Asuh Account Monitoring"
-                                    } else {
-                                        "Monitoring Kuota & Akun Wali Asuh Seluruh Tenant"
-                                    },
-                                    fontSize = 11.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-
-                    // 4 KPI Grid
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ReportStatBox(
-                            title = if (isEn) "Total Schools" else "Total Sekolah",
-                            value = "$totalActiveSchools",
-                            subtitle = if (isEn) "Active Schools" else "Sekolah Aktif",
-                            color = WaliPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
-                        ReportStatBox(
-                            title = if (isEn) "Total Wali Asuh" else "Total Wali Asuh",
-                            value = "$totalWaliAccounts",
-                            subtitle = if (isEn) "Caregiver Accounts" else "Akun Pengasuh",
-                            color = Color(0xFF16A34A),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        ReportStatBox(
-                            title = if (isEn) "Avg. Wali Asuh" else "Rata-rata Wali",
-                            value = avgWaliPerSchool,
-                            subtitle = if (isEn) "per School" else "per Sekolah",
-                            color = Color(0xFF8B5CF6),
-                            modifier = Modifier.weight(1f)
-                        )
-                        ReportStatBox(
-                            title = if (isEn) "Total Students" else "Total Siswa",
-                            value = "$totalStudentsCount",
-                            subtitle = if (isEn) "Foster Students" else "Anak Asuh",
-                            color = Color(0xFF0284C7),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-
-                    // Action Buttons Row: WhatsApp & Copy
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Button(
-                            onClick = { shareViaWhatsApp() },
-                            modifier = Modifier
-                                .weight(1.5f)
-                                .height(42.dp)
-                                .testTag("btn_share_report_wa"),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF25D366))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                if (isEn) "Share to WhatsApp" else "Bagikan ke WhatsApp",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(38.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .background(if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.8f) else Color.White.copy(alpha = 0.9f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Assessment,
+                                        contentDescription = null,
+                                        tint = if (isDarkSurface) Color(0xFF6EE7B7) else Color(0xFF047857),
+                                        modifier = Modifier.size(21.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(10.dp))
+                                Column {
+                                    Text(
+                                        text = if (isEn) "Multi-School Summary" else "Rekapitulasi Multi-Sekolah",
+                                        fontSize = 15.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = heroTitleColor
+                                    )
+                                    Text(
+                                        text = if (isEn) {
+                                            "Tenant Quota & Wali Asuh Account Monitoring"
+                                        } else {
+                                            "Monitoring Kuota & Akun Wali Asuh Seluruh Tenant"
+                                        },
+                                        fontSize = 11.sp,
+                                        color = heroSubtitleColor
+                                    )
+                                }
+                            }
+                        }
+
+                        // 4 KPI Grid
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            ReportStatBox(
+                                title = if (isEn) "Total Schools" else "Total Sekolah",
+                                value = "$totalActiveSchools",
+                                subtitle = if (isEn) "Active Schools" else "Sekolah Aktif",
+                                color = WaliPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            ReportStatBox(
+                                title = if (isEn) "Total Wali Asuh" else "Total Wali Asuh",
+                                value = "$totalWaliAccounts",
+                                subtitle = if (isEn) "Caregiver Accounts" else "Akun Pengasuh",
+                                color = Color(0xFF16A34A),
+                                modifier = Modifier.weight(1f)
                             )
                         }
 
-                        OutlinedButton(
-                            onClick = { copyToClipboard() },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(42.dp)
-                                .testTag("btn_copy_report"),
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (isEn) "Copy Summary" else "Salin Rekap", fontSize = 12.sp)
+                            ReportStatBox(
+                                title = if (isEn) "Avg. Wali Asuh" else "Rata-rata Wali",
+                                value = avgWaliPerSchool,
+                                subtitle = if (isEn) "per School" else "per Sekolah",
+                                color = Color(0xFF0284C7),
+                                modifier = Modifier.weight(1f)
+                            )
+                            ReportStatBox(
+                                title = if (isEn) "Total Students" else "Total Siswa",
+                                value = "$totalStudentsCount",
+                                subtitle = if (isEn) "Foster Students" else "Anak Asuh",
+                                color = Color(0xFF0D9488),
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        // Action Buttons Row: WhatsApp & Copy
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 2.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { shareViaWhatsApp() },
+                                modifier = Modifier
+                                    .weight(1.4f)
+                                    .height(42.dp)
+                                    .testTag("btn_share_report_wa"),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A))
+                            ) {
+                                Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    if (isEn) "Share to WhatsApp" else "Bagikan ke WhatsApp",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = { copyToClipboard() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(42.dp)
+                                    .testTag("btn_copy_report"),
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.9f),
+                                    contentColor = heroTitleColor
+                                ),
+                                border = BorderStroke(1.dp, heroBorderColor)
+                            ) {
+                                Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(if (isEn) "Copy Summary" else "Salin Rekap", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
                 }
@@ -2103,12 +2350,13 @@ fun ReportStatBox(
     color: Color,
     modifier: Modifier = Modifier
 ) {
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .background(color.copy(alpha = 0.08f))
-            .border(1.dp, color.copy(alpha = 0.25f), RoundedCornerShape(12.dp))
-            .padding(vertical = 10.dp, horizontal = 12.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (isDarkSurface) MaterialTheme.colorScheme.surface.copy(alpha = 0.78f) else Color.White.copy(alpha = 0.88f))
+            .border(1.dp, color.copy(alpha = if (isDarkSurface) 0.4f else 0.3f), RoundedCornerShape(10.dp))
+            .padding(vertical = 8.dp, horizontal = 10.dp)
     ) {
         Column(
             modifier = Modifier.fillMaxWidth(),
@@ -2116,20 +2364,24 @@ fun ReportStatBox(
         ) {
             Text(
                 text = title,
-                fontSize = 11.sp,
+                fontSize = 10.5.sp,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             Text(
                 text = value,
-                fontSize = 20.sp,
+                fontSize = 19.sp,
                 fontWeight = FontWeight.Bold,
                 color = color
             )
             Text(
                 text = subtitle,
-                fontSize = 10.5.sp,
-                color = color.copy(alpha = 0.85f)
+                fontSize = 10.sp,
+                color = color.copy(alpha = 0.9f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
@@ -2227,13 +2479,20 @@ fun SuperadminReportSchoolCard(
                 }
             }
 
-            // HIGHLIGHT BOX: REKAP JUMLAH USER WALI ASUH
+            // HIGHLIGHT BOX: REKAP JUMLAH USER WALI ASUH (Dark & Light Mode Safe)
+            val isDarkHighlight = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+            val hlBg = if (isDarkHighlight) Color(0xFF064E3B).copy(alpha = 0.45f) else Color(0xFFF0FDF4)
+            val hlBorder = if (isDarkHighlight) Color(0xFF34D399).copy(alpha = 0.5f) else Color(0xFF86EFAC)
+            val hlIconBg = if (isDarkHighlight) Color(0xFF065F46) else Color(0xFFDCFCE7)
+            val hlTitleColor = if (isDarkHighlight) Color(0xFFA7F3D0) else Color(0xFF166534)
+            val hlValueColor = if (isDarkHighlight) Color(0xFF6EE7B7) else Color(0xFF15803D)
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFF0FDF4))
-                    .border(1.5.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+                    .background(hlBg)
+                    .border(1.2.dp, hlBorder, RoundedCornerShape(12.dp))
                     .padding(12.dp)
             ) {
                 Row(
@@ -2246,13 +2505,13 @@ fun SuperadminReportSchoolCard(
                             modifier = Modifier
                                 .size(36.dp)
                                 .clip(CircleShape)
-                                .background(Color(0xFFDCFCE7)),
+                                .background(hlIconBg),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Group,
                                 contentDescription = null,
-                                tint = Color(0xFF16A34A),
+                                tint = hlValueColor,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
@@ -2261,14 +2520,14 @@ fun SuperadminReportSchoolCard(
                             Text(
                                 text = if (isEn) "Wali Asuh Account Users" else "Pengguna Akun Wali Asuh",
                                 fontSize = 11.sp,
-                                color = Color(0xFF166534),
+                                color = hlTitleColor,
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
                                 text = if (isEn) "${school.waliCount} Wali Asuh Users" else "${school.waliCount} User Wali Asuh",
                                 fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF15803D)
+                                color = hlValueColor
                             )
                         }
                     }
@@ -2488,239 +2747,356 @@ fun SuperAdminSqlEditorView(
         }
     }
 
+    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val heroGradient = if (isDarkSurface) {
+        listOf(Color(0xFF0F2942), Color(0xFF133A5E), Color(0xFF0E4A5A))
+    } else {
+        listOf(Color(0xFFEFF6FF), Color(0xFFE0F2FE), Color(0xFFECFDF5))
+    }
+    val heroBorderColor = if (isDarkSurface) {
+        Color(0xFF38BDF8).copy(alpha = 0.4f)
+    } else {
+        Color(0xFF93C5FD)
+    }
+    val heroTitleColor = if (isDarkSurface) Color(0xFFEFF6FF) else Color(0xFF0D3B66)
+
     LazyColumn(
         modifier = modifier
             .fillMaxSize()
             .widthIn(max = 768.dp)
-            .padding(horizontal = 16.dp),
-        contentPadding = PaddingValues(vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+            .padding(horizontal = 12.dp),
+        contentPadding = PaddingValues(top = 10.dp, bottom = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         item {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
+                elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
             ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brush.linearGradient(heroGradient))
+                        .border(1.dp, heroBorderColor, RoundedCornerShape(14.dp))
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(WaliPrimary.copy(alpha = 0.12f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Storage,
-                                contentDescription = if (isEn) "PocketBase Database Schema" else "Skema Database PocketBase",
-                                tint = WaliPrimary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isEn) "Latest PocketBase Table Schema" else "Kode Tabel PocketBase Terbaru",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "Version: ${PocketBaseSchemaProvider.SCHEMA_VERSION}"
-                                } else {
-                                    "Versi: ${PocketBaseSchemaProvider.SCHEMA_VERSION}"
-                                },
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = WaliPrimary
-                            )
-                        }
-                    }
-
-                    Text(
-                        text = if (isEn) {
-                            "This schema code is automatically updated with all app features & columns (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}). Safe to re-run on VPS SSH (adds new tables/columns without deleting old data) or import via Settings → Import collections."
-                        } else {
-                            "Kode skema ini selalu diperbarui otomatis mengikuti seluruh fitur & kolom aplikasi (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}). Aman dijalankan ulang di SSH VPS (menambah tabel/kolom baru tanpa menghapus data lama) atau diimpor via Settings → Import collections."
-                        },
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        FilterChip(
-                            selected = selectedCodeMode == 0,
-                            onClick = { selectedCodeMode = 0 },
-                            label = {
-                                Text(
-                                    if (isEn) "VPS SSH Script (Auto Update)" else "Skrip SSH VPS (Auto Update)",
-                                    fontSize = 11.5.sp
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(RoundedCornerShape(11.dp))
+                                    .background(if (isDarkSurface) Color(0xFF0B1F33).copy(alpha = 0.85f) else Color.White.copy(alpha = 0.9f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Storage,
+                                    contentDescription = if (isEn) "PocketBase Database Schema" else "Skema Database PocketBase",
+                                    tint = WaliPrimary,
+                                    modifier = Modifier.size(22.dp)
                                 )
-                            },
-                            modifier = Modifier.testTag("chip_pb_mode_ssh")
-                        )
-                        FilterChip(
-                            selected = selectedCodeMode == 1,
-                            onClick = { selectedCodeMode = 1 },
-                            label = { Text("JSON Import", fontSize = 11.5.sp) },
-                            modifier = Modifier.testTag("chip_pb_mode_json")
-                        )
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Button(
-                            onClick = { copyActiveCode() },
-                            modifier = Modifier
-                                .weight(1.3f)
-                                .height(48.dp)
-                                .testTag("btn_copy_sql_superadmin"),
-                            colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.ContentCopy,
-                                contentDescription = if (isEn) "Copy Table Code" else "Salin Kode Tabel",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = if (selectedCodeMode == 0) {
-                                    if (isEn) "Copy Full SSH Script" else "Salin Skrip SSH Lengkap"
-                                } else {
-                                    if (isEn) "Copy Collection JSON" else "Salin JSON Koleksi"
-                                },
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isEn) "Latest PocketBase Table Schema" else "Kode Tabel PocketBase Terbaru",
+                                    fontSize = 15.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = heroTitleColor
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "Version: ${PocketBaseSchemaProvider.SCHEMA_VERSION}"
+                                    } else {
+                                        "Versi: ${PocketBaseSchemaProvider.SCHEMA_VERSION}"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isDarkSurface) Color(0xFF7DD3FC) else WaliPrimary
+                                )
+                            }
                         }
 
-                        OutlinedButton(
-                            onClick = { shareActiveCode() },
-                            modifier = Modifier
-                                .weight(0.8f)
-                                .height(48.dp)
-                                .testTag("btn_share_sql_superadmin"),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp)
-                        ) {
-                            Icon(
-                                Icons.Default.Share,
-                                contentDescription = if (isEn) "Share Code" else "Bagikan Kode",
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(if (isEn) "Share" else "Bagikan", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-
-                    Button(
-                        onClick = { showAutoSyncSchemaDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("btn_auto_sync_schema_pocketbase"),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudSync,
-                            contentDescription = if (isEn) "Auto Sync Schema to Server" else "Sync Skema ke Server Sekarang",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
                         Text(
                             text = if (isEn) {
-                                "Sync Schema to Server Now (Recommended)"
+                                "This schema code is automatically updated with all app features & columns (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}). Safe to re-run on VPS SSH (adds new tables/columns without deleting old data) or import via Settings → Import collections."
                             } else {
-                                "Sync Skema ke Server Sekarang (Anti Gagal)"
+                                "Kode skema ini selalu diperbarui otomatis mengikuti seluruh fitur & kolom aplikasi (${com.example.data.remote.pocketbase.PocketBaseConfig.EMBEDDED_URL}). Aman dijalankan ulang di SSH VPS (menambah tabel/kolom baru tanpa menghapus data lama) atau diimpor via Settings → Import collections."
                             },
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
                         )
-                    }
 
-                    OutlinedButton(
-                        onClick = {
-                            onTestConnection { success, msg ->
-                                testResultSuccess = success
-                                testResultMsg = msg
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        enabled = !isSyncing,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("btn_test_pocketbase_superadmin"),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        if (isSyncing) {
-                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (isEn) "Testing PocketBase Connection..." else "Menguji Koneksi PocketBase...", fontSize = 12.sp)
-                        } else {
-                            Icon(
-                                Icons.Default.CloudDone,
-                                contentDescription = if (isEn) "Test PocketBase Connection" else "Uji Koneksi PocketBase",
-                                modifier = Modifier.size(16.dp),
-                                tint = Color(0xFF16A34A)
+                        // Mode Switcher Chips
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            FilterChip(
+                                selected = selectedCodeMode == 0,
+                                onClick = { selectedCodeMode = 0 },
+                                label = {
+                                    Text(
+                                        if (isEn) "VPS SSH Script" else "Skrip SSH VPS",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (selectedCodeMode == 0) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = WaliPrimary.copy(alpha = 0.16f),
+                                    selectedLabelColor = WaliPrimary
+                                ),
+                                modifier = Modifier.testTag("chip_pb_mode_ssh")
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                if (isEn) "Test PocketBase Connection" else "Uji Koneksi PocketBase",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
+                            FilterChip(
+                                selected = selectedCodeMode == 1,
+                                onClick = { selectedCodeMode = 1 },
+                                label = {
+                                    Text(
+                                        "JSON Import",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = if (selectedCodeMode == 1) FontWeight.Bold else FontWeight.Medium
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = WaliPrimary.copy(alpha = 0.16f),
+                                    selectedLabelColor = WaliPrimary
+                                ),
+                                modifier = Modifier.testTag("chip_pb_mode_json")
                             )
                         }
-                    }
 
-                    OutlinedButton(
-                        onClick = { showCloudConfigDialog = true },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("btn_open_pocketbase_sync_superadmin"),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudSync,
-                            contentDescription = if (isEn) "Manage Sync & PocketBase Server" else "Kelola Sinkronisasi & Server PocketBase",
-                            modifier = Modifier.size(16.dp),
-                            tint = Color(0xFF16A34A)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            if (isEn) "Manage Sync & PocketBase Server" else "Kelola Sinkronisasi & Server PocketBase",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-
-                    if (testResultMsg != null) {
-                        Card(
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (testResultSuccess) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
-                            ),
-                            shape = RoundedCornerShape(10.dp)
+                        // Primary CTA: Auto Sync Schema
+                        Button(
+                            onClick = { showAutoSyncSchemaDialog = true },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_auto_sync_schema_pocketbase"),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text(
-                                text = testResultMsg ?: "",
-                                fontSize = 11.5.sp,
-                                color = if (testResultSuccess) Color(0xFF166534) else Color(0xFF991B1B),
-                                modifier = Modifier.padding(10.dp)
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = if (isEn) "Auto Sync Schema to Server" else "Sync Skema ke Server Sekarang",
+                                modifier = Modifier.size(18.dp)
                             )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (isEn) {
+                                    "Sync Schema to Server Now (Recommended)"
+                                } else {
+                                    "Sync Skema ke Server Sekarang (Anti Gagal)"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+
+                        // Quick Action Grid Baris 1: Copy & Share (ala QuickMenuTiles Wali Asuh)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { copyActiveCode() },
+                                modifier = Modifier
+                                    .weight(1.35f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_copy_sql_superadmin"),
+                                colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.ContentCopy,
+                                    contentDescription = if (isEn) "Copy Table Code" else "Salin Kode Tabel",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (selectedCodeMode == 0) {
+                                        if (isEn) "Copy Full SSH Script" else "Salin Skrip SSH Lengkap"
+                                    } else {
+                                        if (isEn) "Copy Collection JSON" else "Salin JSON Koleksi"
+                                    },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Surface(
+                                onClick = { shareActiveCode() },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isDarkSurface) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.92f),
+                                border = BorderStroke(1.dp, heroBorderColor),
+                                modifier = Modifier
+                                    .weight(0.75f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_share_sql_superadmin")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Share,
+                                        contentDescription = if (isEn) "Share Code" else "Bagikan Kode",
+                                        tint = WaliPrimary,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isEn) "Share" else "Bagikan",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
+
+                        // Quick Action Grid Baris 2: Test Connection & Manage Sync Server (Tile Card 2 Kolom)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                onClick = {
+                                    if (!isSyncing) {
+                                        onTestConnection { success, msg ->
+                                            testResultSuccess = success
+                                            testResultMsg = msg
+                                            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                },
+                                enabled = !isSyncing,
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isDarkSurface) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.92f),
+                                border = BorderStroke(1.dp, Color(0xFF16A34A).copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 56.dp)
+                                    .testTag("btn_test_pocketbase_superadmin")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color(0xFF16A34A).copy(alpha = 0.14f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isSyncing) {
+                                            CircularProgressIndicator(
+                                                modifier = Modifier.size(16.dp),
+                                                strokeWidth = 2.dp,
+                                                color = Color(0xFF16A34A)
+                                            )
+                                        } else {
+                                            Icon(
+                                                Icons.Default.CloudDone,
+                                                contentDescription = if (isEn) "Test PocketBase Connection" else "Uji Koneksi PocketBase",
+                                                modifier = Modifier.size(18.dp),
+                                                tint = Color(0xFF16A34A)
+                                            )
+                                        }
+                                    }
+                                    Text(
+                                        text = if (isSyncing) {
+                                            if (isEn) "Testing..." else "Menguji..."
+                                        } else {
+                                            if (isEn) "Test Connection" else "Uji Koneksi"
+                                        },
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        lineHeight = 14.sp,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            Surface(
+                                onClick = { showCloudConfigDialog = true },
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isDarkSurface) MaterialTheme.colorScheme.surface.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.92f),
+                                border = BorderStroke(1.dp, WaliPrimary.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 56.dp)
+                                    .testTag("btn_open_pocketbase_sync_superadmin")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(WaliPrimary.copy(alpha = 0.14f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CloudSync,
+                                            contentDescription = if (isEn) "Manage Sync & PocketBase Server" else "Kelola Sinkronisasi & Server PocketBase",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = WaliPrimary
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isEn) "Manage Server & Sync" else "Kelola Server & Sync",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 2,
+                                        lineHeight = 14.sp,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                        }
+
+                        if (testResultMsg != null) {
+                            val resBg = if (testResultSuccess) {
+                                if (isDarkSurface) Color(0xFF064E3B).copy(alpha = 0.55f) else Color(0xFFDCFCE7)
+                            } else {
+                                if (isDarkSurface) Color(0xFF7F1D1D).copy(alpha = 0.55f) else Color(0xFFFEE2E2)
+                            }
+                            val resText = if (testResultSuccess) {
+                                if (isDarkSurface) Color(0xFF6EE7B7) else Color(0xFF166534)
+                            } else {
+                                if (isDarkSurface) Color(0xFFFCA5A5) else Color(0xFF991B1B)
+                            }
+                            Card(
+                                colors = CardDefaults.cardColors(containerColor = resBg),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Text(
+                                    text = testResultMsg ?: "",
+                                    fontSize = 11.5.sp,
+                                    color = resText,
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
                         }
                     }
                 }
