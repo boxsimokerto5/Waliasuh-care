@@ -9139,4 +9139,54 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("list_info_comments").assertIsDisplayed()
     composeTestRule.onNodeWithText("Siap dilaksanakan mulai pekan ini.").assertIsDisplayed()
   }
+
+  @Test
+  fun `verify compact pastel SchoolRegistrationDialog validates, submits neatly, and renders proof ticket`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    var capturedSchoolName: String? = null
+    var capturedWaliCount: Int? = null
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.SchoolRegistrationDialog(
+          onDismiss = {},
+          onSubmit = { sName, addr, cityName, waliEst, pic, email, phone, onDone ->
+            capturedSchoolName = sName
+            capturedWaliCount = waliEst
+            onDone(
+              com.example.data.model.SchoolRegistration(
+                id = 501L,
+                schoolName = sName,
+                address = addr,
+                city = cityName,
+                estimatedWaliCount = waliEst,
+                picName = pic,
+                picEmail = email,
+                picPhone = phone,
+                requestedCode = "SR-KDR5"
+              )
+            )
+          }
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("sheet_school_registration").assertExists()
+    composeTestRule.onNodeWithText("Pendaftaran Sekolah Baru").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("reg_school_name").performScrollTo().performTextInput("Sekolah Rakyat Harapan")
+    composeTestRule.onNodeWithTag("reg_city").performScrollTo().performTextInput("Kediri")
+    composeTestRule.onNodeWithTag("reg_address").performScrollTo().performTextInput("Jl. Melati No. 8")
+    composeTestRule.onNodeWithTag("reg_pic_name").performScrollTo().performTextInput("Ust. Farhan")
+    composeTestRule.onNodeWithTag("reg_pic_email").performScrollTo().performTextInput("farhan@sekolah.id")
+    composeTestRule.onNodeWithTag("reg_pic_phone").performScrollTo().performTextInput("08123456789")
+    composeTestRule.onNodeWithTag("btn_submit_registration").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals("Sekolah Rakyat Harapan", capturedSchoolName)
+    assertEquals(6, capturedWaliCount)
+    composeTestRule.onNodeWithTag("btn_send_wa_superadmin").performScrollTo().assertIsDisplayed()
+  }
 }
