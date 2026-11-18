@@ -28,5 +28,7 @@ data class ChildStudent(
     val schoolId: String = "SRT1-KDR",
     val parentPhone: String = "",
     val assignedWaliUsername: String = "",
-    val assignedWaliName: String = ""
+    val assignedWaliName: String = "",
+    val photoUrl: String = "",
+    val photoFallbackUrl: String = ""
 )

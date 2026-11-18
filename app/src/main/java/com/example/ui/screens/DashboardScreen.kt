@@ -245,6 +245,7 @@ fun DashboardScreen(
     val infoPentingComments by viewModel.infoPentingComments.collectAsStateWithLifecycle()
     val unreadInfoPentingCount by viewModel.unreadInfoPentingCount.collectAsStateWithLifecycle()
     val isPublishingInfoPenting by viewModel.isPublishingInfoPenting.collectAsStateWithLifecycle()
+    val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
     val canManageSchedule = isAdminUser || isAnakSuperAdmin || isAnakAdminSekolah
 
@@ -2449,7 +2450,8 @@ fun DashboardScreen(
         )
     }
 
-    modalState.visitStudentForDetail?.let { detailStudent ->
+    modalState.visitStudentForDetail?.let { selected ->
+        val detailStudent = students.firstOrNull { it.id == selected.id } ?: selected
         val stRecords = allRecords.filter { it.studentId == detailStudent.id }
         StudentDetailDialog(
             student = detailStudent,
@@ -2461,6 +2463,13 @@ fun DashboardScreen(
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
+            isUploadingPhoto = isUploadingStudentPhoto,
+            onUploadStudentPhoto = { target, uri, cb ->
+                viewModel.uploadStudentProfilePhoto(target, uri, cb)
+            },
+            onRemoveStudentPhoto = { target, cb ->
+                viewModel.removeStudentProfilePhoto(target, cb)
+            },
             onDismiss = { modalState.visitStudentForDetail = null }
         )
     }
@@ -2633,13 +2642,23 @@ fun DashboardScreen(
             initialStudent = editingStudent,
             activeSchoolId = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" },
             onDismiss = { modalState.studentToEditParentPhone = null },
-            onConfirmStudent = { updated ->
+            onConfirmStudentWithPhoto = { updated, pickedPhotoUri, removePhoto ->
                 viewModel.updateStudent(updated) {
                     Toast.makeText(
                         context,
                         if (isEn) "Profile & parent phone updated!" else "Profil & No. HP orang tua diperbarui!",
                         Toast.LENGTH_SHORT
                     ).show()
+                    when {
+                        pickedPhotoUri != null -> {
+                            viewModel.uploadStudentProfilePhoto(updated, pickedPhotoUri) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        removePhoto -> {
+                            viewModel.removeStudentProfilePhoto(updated)
+                        }
+                    }
                 }
                 modalState.studentToEditParentPhone = null
             }

@@ -3,6 +3,8 @@ package com.example.data.remote.pocketbase
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Log
@@ -3110,6 +3112,273 @@ object PocketBaseSyncManager {
             syncInfoPentingPostsMerged(service, repository, baseUrl)
             syncInfoPentingReactionsMerged(service, repository)
             syncInfoPentingCommentsMerged(service, repository)
+        }
+    }
+
+    // --- Upload & Kompresi Foto Profil Siswa (Wali Asuh -> PocketBase / R2 CDN -> Portal Ortu) ---
+
+    data class UploadedStudentPhoto(
+        val cdnUrl: String,
+        val fallbackUrl: String
+    )
+
+    fun compressStudentPhotoBytes(context: Context, imageUri: Uri): ByteArray? {
+        return runCatching {
+            val orientation = runCatching {
+                context.contentResolver.openInputStream(imageUri)?.use { exifStream ->
+                    ExifInterface(exifStream).getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION,
+                        ExifInterface.ORIENTATION_NORMAL
+                    )
+                }
+            }.getOrNull() ?: ExifInterface.ORIENTATION_NORMAL
+
+            val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            context.contentResolver.openInputStream(imageUri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, boundsOpts)
+            }
+            val srcW = boundsOpts.outWidth
+            val srcH = boundsOpts.outHeight
+            var sampleSize = 1
+            if (srcW > 1080 || srcH > 1080) {
+                while ((srcW / sampleSize) > 1080 || (srcH / sampleSize) > 1080) {
+                    sampleSize *= 2
+                }
+            }
+            val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+            val decoded = context.contentResolver.openInputStream(imageUri)?.use { input ->
+                BitmapFactory.decodeStream(input, null, decodeOpts)
+            } ?: return@runCatching null
+
+            val rotated = when (orientation) {
+                ExifInterface.ORIENTATION_ROTATE_90 -> {
+                    val m = Matrix().apply { postRotate(90f) }
+                    Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true).also {
+                        if (it !== decoded) decoded.recycle()
+                    }
+                }
+                ExifInterface.ORIENTATION_ROTATE_180 -> {
+                    val m = Matrix().apply { postRotate(180f) }
+                    Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true).also {
+                        if (it !== decoded) decoded.recycle()
+                    }
+                }
+                ExifInterface.ORIENTATION_ROTATE_270 -> {
+                    val m = Matrix().apply { postRotate(270f) }
+                    Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, m, true).also {
+                        if (it !== decoded) decoded.recycle()
+                    }
+                }
+                else -> decoded
+            }
+
+            val maxDim = 720
+            val scaled = if (rotated.width > maxDim || rotated.height > maxDim) {
+                val ratio = minOf(maxDim.toFloat() / rotated.width, maxDim.toFloat() / rotated.height)
+                val targetW = (rotated.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (rotated.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(rotated, targetW, targetH, true).also {
+                    if (it !== rotated) rotated.recycle()
+                }
+            } else {
+                rotated
+            }
+
+            ByteArrayOutputStream().use { out ->
+                scaled.compress(Bitmap.CompressFormat.JPEG, 86, out)
+                scaled.recycle()
+                out.toByteArray()
+            }
+        }.getOrNull()
+    }
+
+    fun saveStudentPhotoLocally(context: Context, studentId: Long, jpegBytes: ByteArray): String? {
+        return runCatching {
+            val dir = java.io.File(context.filesDir, "student_photos").apply { mkdirs() }
+            dir.listFiles()?.forEach { f ->
+                if (f.name.startsWith("student_${studentId}_")) {
+                    runCatching { f.delete() }
+                }
+            }
+            val dest = java.io.File(dir, "student_${studentId}_${System.currentTimeMillis()}.jpg")
+            dest.writeBytes(jpegBytes)
+            Uri.fromFile(dest).toString()
+        }.getOrNull()
+    }
+
+    fun clearLocalStudentPhotos(context: Context, studentId: Long) {
+        runCatching {
+            val dir = java.io.File(context.filesDir, "student_photos")
+            if (dir.exists()) {
+                dir.listFiles()?.forEach { f ->
+                    if (f.name.startsWith("student_${studentId}_")) {
+                        f.delete()
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun uploadStudentProfilePhotoToCloud(
+        context: Context,
+        student: ChildStudent,
+        imageUri: Uri
+    ): Result<UploadedStudentPhoto> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+
+        val compressed = compressStudentPhotoBytes(context, imageUri)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Unable to read selected image." else "Gagal membaca foto yang dipilih.")
+            )
+
+        val now = System.currentTimeMillis()
+        val safeId = if (student.id > 0L) student.id else PocketBaseIdCodec.stablePositiveHash(
+            "${student.schoolId}:${student.nik}:${student.nis}:${student.name}"
+        )
+        val pbId = PocketBaseIdCodec.toPbId(safeId)
+        val filename = "student_${safeId}_${now}.jpg"
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+
+        val patchBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "photo_file",
+                filename,
+                compressed.toRequestBody("image/jpeg".toMediaType())
+            )
+            .build()
+
+        val patchRequest = Request.Builder()
+            .url("$baseUrl/api/collections/child_students/records/$pbId")
+            .patch(patchBody)
+            .build()
+
+        return@withContext try {
+            var responseRaw = ""
+            var responseCode = 0
+            var wasSuccess = false
+
+            client.newCall(patchRequest).execute().use { resp ->
+                responseCode = resp.code
+                responseRaw = resp.body?.string().orEmpty()
+                wasSuccess = resp.isSuccessful
+            }
+
+            if (responseCode == 404) {
+                val activeSchool = student.schoolId.ifBlank { "SRT1-KDR" }
+                val createBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("id", pbId)
+                    .addFormDataPart("local_id", safeId.toString())
+                    .addFormDataPart("school_id", activeSchool)
+                    .addFormDataPart("name", student.name)
+                    .addFormDataPart("nis", student.nis)
+                    .addFormDataPart("gender", student.gender)
+                    .addFormDataPart("age", student.age.toString())
+                    .addFormDataPart("dormitory", student.dormitory)
+                    .addFormDataPart("class_grade", student.classGrade)
+                    .addFormDataPart("allergies", student.allergies)
+                    .addFormDataPart("blood_type", student.bloodType)
+                    .addFormDataPart("emergency_contact", student.emergencyContact)
+                    .addFormDataPart("special_notes", student.specialNotes)
+                    .addFormDataPart("nik", com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik))
+                    .addFormDataPart("no_kk", com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk))
+                    .addFormDataPart("birth_place", student.birthPlace)
+                    .addFormDataPart("birth_date", student.birthDate)
+                    .addFormDataPart("mother_name", student.motherName)
+                    .addFormDataPart("address", student.address)
+                    .addFormDataPart("district", student.district)
+                    .addFormDataPart("room_number", student.roomNumber)
+                    .addFormDataPart("jenjang", student.jenjang)
+                    .addFormDataPart("parent_phone", com.example.util.StudentCsvParser.cleanPhoneNumber(student.parentPhone))
+                    .addFormDataPart("assigned_wali_username", student.assignedWaliUsername)
+                    .addFormDataPart("assigned_wali_name", student.assignedWaliName)
+                    .addFormDataPart(
+                        "photo_file",
+                        filename,
+                        compressed.toRequestBody("image/jpeg".toMediaType())
+                    )
+                    .build()
+                val postRequest = Request.Builder()
+                    .url("$baseUrl/api/collections/child_students/records")
+                    .post(createBody)
+                    .build()
+                client.newCall(postRequest).execute().use { postResp ->
+                    responseCode = postResp.code
+                    responseRaw = postResp.body?.string().orEmpty()
+                    wasSuccess = postResp.isSuccessful
+                }
+            }
+
+            if (!wasSuccess) {
+                Log.e(TAG, "Student photo upload HTTP $responseCode: $responseRaw")
+                val errMsg = parsePocketBaseUploadError(responseRaw, responseCode, isEn)
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) "Failed to upload student photo: $errMsg"
+                        else "Gagal mengunggah foto siswa: $errMsg"
+                    )
+                )
+            }
+
+            val json = JSONObject(responseRaw)
+            val recordId = json.optString("id", "").trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "child_students").ifBlank { "child_students" }
+            val uploadedFilename = when {
+                json.has("photo_file") && json.optJSONArray("photo_file") != null -> {
+                    json.optJSONArray("photo_file")?.optString(0, "").orEmpty()
+                }
+                else -> json.optString("photo_file", "")
+            }.trim()
+
+            if (uploadedFilename.isBlank()) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Server has not synced 'photo_file' column on child_students yet. Run Sync Schema in Superadmin."
+                        } else {
+                            "Kolom 'photo_file' pada child_students belum aktif di server. Jalankan Sync Skema di Superadmin terlebih dahulu."
+                        }
+                    )
+                )
+            }
+
+            val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+            val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+
+            val updatedStudent = student.copy(
+                id = safeId,
+                photoUrl = cdnUrl,
+                photoFallbackUrl = fallbackUrl
+            )
+            uploadSingleStudent(context, updatedStudent)
+            clearLocalStudentPhotos(context, safeId)
+
+            Result.success(
+                UploadedStudentPhoto(
+                    cdnUrl = cdnUrl,
+                    fallbackUrl = fallbackUrl
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadStudentProfilePhotoToCloud", e)
+            Result.failure(e)
         }
     }
 }

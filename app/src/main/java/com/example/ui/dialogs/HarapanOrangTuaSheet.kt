@@ -482,7 +482,9 @@ fun HarapanOrangTuaSheet(
                                         StudentAvatar(
                                             name = student.name,
                                             gender = student.gender,
-                                            size = 42.dp
+                                            size = 42.dp,
+                                            photoUrl = student.photoUrl,
+                                            photoFallbackUrl = student.photoFallbackUrl
                                         )
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {

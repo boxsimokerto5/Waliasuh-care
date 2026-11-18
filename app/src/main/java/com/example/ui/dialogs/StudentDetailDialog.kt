@@ -3,6 +3,7 @@ package com.example.ui.dialogs
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.net.Uri
 import android.widget.Toast
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -36,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -123,6 +125,9 @@ fun StudentDetailDialog(
     onDeleteMengajiRecord: ((MengajiRecord) -> Unit)? = null,
     onDeleteMedicalRecord: ((MedicalRecord) -> Unit)? = null,
     onDeleteFastingRecord: ((FastingRecord) -> Unit)? = null,
+    isUploadingPhoto: Boolean = false,
+    onUploadStudentPhoto: ((ChildStudent, Uri, (Boolean, String) -> Unit) -> Unit)? = null,
+    onRemoveStudentPhoto: ((ChildStudent, (Boolean, String) -> Unit) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -138,6 +143,8 @@ fun StudentDetailDialog(
     var showCardGeneratorForStudent by remember { mutableStateOf(false) }
     var showInlineKartuMengaji by remember { mutableStateOf(false) }
     var showAllMengajiHistory by remember { mutableStateOf(false) }
+    var showPhotoManager by remember { mutableStateOf(false) }
+    var showPhotoPreview by remember { mutableStateOf(false) }
     var pendingDeleteMengaji by remember { mutableStateOf<MengajiRecord?>(null) }
     var pendingDeleteMedical by remember { mutableStateOf<MedicalRecord?>(null) }
     var pendingDeleteFasting by remember { mutableStateOf<FastingRecord?>(null) }
@@ -228,11 +235,47 @@ fun StudentDetailDialog(
                             .padding(end = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        StudentAvatar(
-                            name = student.name,
-                            gender = student.gender,
-                            size = 50.dp
-                        )
+                        val hasPhoto = student.photoUrl.isNotBlank() || student.photoFallbackUrl.isNotBlank()
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .let { mod ->
+                                    when {
+                                        onUploadStudentPhoto != null -> mod.clickable { showPhotoManager = true }
+                                        hasPhoto -> mod.clickable { showPhotoPreview = true }
+                                        else -> mod
+                                    }
+                                }
+                                .testTag("btn_student_photo_action"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            StudentAvatar(
+                                name = student.name,
+                                gender = student.gender,
+                                size = 54.dp,
+                                photoUrl = student.photoUrl,
+                                photoFallbackUrl = student.photoFallbackUrl
+                            )
+                            if (onUploadStudentPhoto != null) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(20.dp)
+                                        .clip(CircleShape)
+                                        .background(MaterialTheme.colorScheme.primary)
+                                        .border(1.5.dp, Color.White, CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddAPhoto,
+                                        contentDescription = if (isEn) "Manage Student Photo" else "Kelola Foto Siswa",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                }
+                            }
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f, fill = false)) {
                             Text(
@@ -1371,6 +1414,38 @@ fun StudentDetailDialog(
                     Text(if (isEn) "Cancel" else "Batal")
                 }
             }
+        )
+    }
+
+    if (showPhotoManager && onUploadStudentPhoto != null) {
+        StudentPhotoManagerDialog(
+            student = student,
+            isUploading = isUploadingPhoto,
+            onPickPhoto = { pickedUri ->
+                onUploadStudentPhoto(student, pickedUri) { ok, msg ->
+                    Toast.makeText(context, msg, if (ok) Toast.LENGTH_SHORT else Toast.LENGTH_LONG).show()
+                }
+            },
+            onRemovePhoto = {
+                onRemoveStudentPhoto?.invoke(student) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) {
+                        showPhotoManager = false
+                    }
+                }
+            },
+            onDismiss = { showPhotoManager = false }
+        )
+    }
+
+    if (showPhotoPreview) {
+        StudentPhotoPreviewDialog(
+            studentName = student.name,
+            gender = student.gender,
+            subtitle = "${student.classGrade.ifBlank { "-" }} • ${student.dormitory.ifBlank { "-" }}",
+            photoUrl = student.photoUrl,
+            photoFallbackUrl = student.photoFallbackUrl,
+            onDismiss = { showPhotoPreview = false }
         )
     }
 }

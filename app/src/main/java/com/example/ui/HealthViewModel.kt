@@ -55,9 +55,11 @@ import com.example.util.NotificationHelper
 import com.example.util.PasswordGenerator
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -1789,6 +1791,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 parentPhone = cleanPhone.ifBlank { existing.parentPhone },
                 assignedWaliUsername = assignedWaliUser.ifBlank { existing.assignedWaliUsername },
                 assignedWaliName = assignedWaliDisplay.ifBlank { existing.assignedWaliName },
+                studentPhotoUrl = student.photoUrl.ifBlank { existing.studentPhotoUrl },
+                studentPhotoFallbackUrl = student.photoFallbackUrl.ifBlank { existing.studentPhotoFallbackUrl },
                 updatedAt = now
             )
         } else {
@@ -1812,6 +1816,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewHaid = true,
                 canViewProfile = true,
                 schoolId = activeSchool,
+                studentPhotoUrl = student.photoUrl,
+                studentPhotoFallbackUrl = student.photoFallbackUrl,
                 createdAt = now,
                 updatedAt = now
             )
@@ -4828,6 +4834,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private val _isUploadingStudentPhoto = MutableStateFlow(false)
+    val isUploadingStudentPhoto: StateFlow<Boolean> = _isUploadingStudentPhoto.asStateFlow()
+
     // Add student
     fun addStudent(
         name: String,
@@ -4849,7 +4858,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         district: String = "",
         roomNumber: String = "",
         jenjang: String = "",
-        parentPhone: String = ""
+        parentPhone: String = "",
+        onCreated: ((ChildStudent) -> Unit)? = null
     ) {
         viewModelScope.launch {
             val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
@@ -4881,8 +4891,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 schoolId = activeSchool
             )
             val newId = repository.insertStudent(student)
+            val inserted = student.copy(id = newId)
+            onCreated?.invoke(inserted)
             if (!isUnitTestEnvironment()) {
-                PocketBaseSyncManager.uploadSingleStudent(getApplication(), student.copy(id = newId))
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), inserted)
             }
         }
     }
@@ -4904,7 +4916,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 jenjang = student.jenjang.trim(),
                 nik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
                 noKk = com.example.util.StudentCsvParser.cleanDigitsOnly(student.noKk),
-                parentPhone = cleanParentPhone
+                parentPhone = cleanParentPhone,
+                photoUrl = student.photoUrl.trim(),
+                photoFallbackUrl = student.photoFallbackUrl.trim()
             )
             repository.updateStudent(sanitizedStudent)
             val activeSchool = sanitizedStudent.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
@@ -4919,6 +4933,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     parentPhone = cleanParentPhone,
                     assignedWaliUsername = sanitizedStudent.assignedWaliUsername,
                     assignedWaliName = sanitizedStudent.assignedWaliName,
+                    studentPhotoUrl = sanitizedStudent.photoUrl,
+                    studentPhotoFallbackUrl = sanitizedStudent.photoFallbackUrl,
                     updatedAt = System.currentTimeMillis()
                 )
                 repository.updateParentAccessLink(syncedLink)
@@ -4930,6 +4946,138 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleStudent(getApplication(), sanitizedStudent)
             }
+        }
+    }
+
+    fun uploadStudentProfilePhoto(
+        student: ChildStudent,
+        imageUri: android.net.Uri,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val isEn = AppLanguageManager.getStrings(context).isEnglish
+            val latestStudent = repository.getStudentById(student.id) ?: student
+            _isUploadingStudentPhoto.value = true
+            try {
+                val resolvedPair: Pair<String, String>? = if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(context)) {
+                    val cloudRes = PocketBaseSyncManager.uploadStudentProfilePhotoToCloud(
+                        context = context,
+                        student = latestStudent,
+                        imageUri = imageUri
+                    )
+                    if (cloudRes.isFailure) {
+                        val msg = cloudRes.exceptionOrNull()?.message ?: if (isEn) {
+                            "Failed to upload student profile photo."
+                        } else {
+                            "Gagal mengunggah foto profil siswa."
+                        }
+                        onResult(false, msg)
+                        return@launch
+                    }
+                    val uploaded = cloudRes.getOrNull()!!
+                    uploaded.cdnUrl to uploaded.fallbackUrl
+                } else {
+                    val bytes = withContext(Dispatchers.IO) {
+                        PocketBaseSyncManager.compressStudentPhotoBytes(context, imageUri)
+                            ?: runCatching {
+                                context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+                            }.getOrNull()
+                    }
+                    if (bytes == null || bytes.isEmpty()) {
+                        onResult(
+                            false,
+                            if (isEn) "Unable to read selected photo." else "Gagal membaca foto yang dipilih."
+                        )
+                        return@launch
+                    }
+                    val localPath = withContext(Dispatchers.IO) {
+                        PocketBaseSyncManager.saveStudentPhotoLocally(context, latestStudent.id, bytes)
+                    } ?: imageUri.toString()
+                    localPath to localPath
+                }
+
+                if (resolvedPair == null) {
+                    onResult(false, if (isEn) "Failed to save photo." else "Gagal menyimpan foto.")
+                    return@launch
+                }
+                val (primaryUrl, fallbackUrl) = resolvedPair
+                val updatedStudent = latestStudent.copy(
+                    photoUrl = primaryUrl,
+                    photoFallbackUrl = fallbackUrl
+                )
+                repository.updateStudent(updatedStudent)
+
+                val activeSchool = updatedStudent.schoolId.ifBlank {
+                    _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                }
+                repository.getParentAccessLinkByStudentId(updatedStudent.id, activeSchool)?.let { link ->
+                    val syncedLink = link.copy(
+                        studentPhotoUrl = primaryUrl,
+                        studentPhotoFallbackUrl = fallbackUrl,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                    repository.updateParentAccessLink(syncedLink)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.uploadSingleParentAccessLink(context, syncedLink)
+                    }
+                }
+
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Profile photo for ${updatedStudent.name} updated & synced!"
+                    } else {
+                        "Foto profil ${updatedStudent.name} berhasil diunggah & disinkronkan!"
+                    }
+                )
+            } finally {
+                _isUploadingStudentPhoto.value = false
+            }
+        }
+    }
+
+    fun removeStudentProfilePhoto(
+        student: ChildStudent,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val isEn = AppLanguageManager.getStrings(context).isEnglish
+            val latestStudent = repository.getStudentById(student.id) ?: student
+            val updatedStudent = latestStudent.copy(
+                photoUrl = "",
+                photoFallbackUrl = ""
+            )
+            repository.updateStudent(updatedStudent)
+            withContext(Dispatchers.IO) {
+                PocketBaseSyncManager.clearLocalStudentPhotos(context, updatedStudent.id)
+            }
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleStudent(context, updatedStudent)
+            }
+            val activeSchool = updatedStudent.schoolId.ifBlank {
+                _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            }
+            repository.getParentAccessLinkByStudentId(updatedStudent.id, activeSchool)?.let { link ->
+                val syncedLink = link.copy(
+                    studentPhotoUrl = "",
+                    studentPhotoFallbackUrl = "",
+                    updatedAt = System.currentTimeMillis()
+                )
+                repository.updateParentAccessLink(syncedLink)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadSingleParentAccessLink(context, syncedLink)
+                }
+            }
+            onResult(
+                true,
+                if (isEn) {
+                    "Profile photo for ${updatedStudent.name} removed."
+                } else {
+                    "Foto profil ${updatedStudent.name} berhasil dihapus."
+                }
+            )
         }
     }
 

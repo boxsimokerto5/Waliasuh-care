@@ -690,7 +690,9 @@ fun GuruNgajiScreen(
                                         StudentAvatar(
                                             name = st.name,
                                             gender = st.gender,
-                                            size = 42.dp
+                                            size = 42.dp,
+                                            photoUrl = st.photoUrl,
+                                            photoFallbackUrl = st.photoFallbackUrl
                                         )
                                         Spacer(modifier = Modifier.width(10.dp))
                                         Column(modifier = Modifier.weight(1f)) {

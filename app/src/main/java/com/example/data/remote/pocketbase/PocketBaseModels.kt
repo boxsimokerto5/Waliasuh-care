@@ -135,7 +135,9 @@ data class PbStudentDto(
     @Json(name = "jenjang") val jenjang: String? = null,
     @Json(name = "parent_phone") val parentPhone: String? = null,
     @Json(name = "assigned_wali_username") val assignedWaliUsername: String? = null,
-    @Json(name = "assigned_wali_name") val assignedWaliName: String? = null
+    @Json(name = "assigned_wali_name") val assignedWaliName: String? = null,
+    @Json(name = "photo_url") val photoUrl: String? = null,
+    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ChildStudent {
         return ChildStudent(
@@ -162,7 +164,9 @@ data class PbStudentDto(
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
             parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(parentPhone),
             assignedWaliUsername = assignedWaliUsername ?: "",
-            assignedWaliName = assignedWaliName ?: ""
+            assignedWaliName = assignedWaliName ?: "",
+            photoUrl = photoUrl?.trim().orEmpty(),
+            photoFallbackUrl = photoFallbackUrl?.trim().orEmpty()
         )
     }
 
@@ -198,7 +202,9 @@ data class PbStudentDto(
                 jenjang = model.jenjang,
                 parentPhone = com.example.util.StudentCsvParser.cleanPhoneNumber(model.parentPhone),
                 assignedWaliUsername = model.assignedWaliUsername,
-                assignedWaliName = model.assignedWaliName
+                assignedWaliName = model.assignedWaliName,
+                photoUrl = model.photoUrl.trim(),
+                photoFallbackUrl = model.photoFallbackUrl.trim()
             )
         }
     }
@@ -1081,6 +1087,8 @@ data class PbParentAccessLinkDto(
     @Json(name = "deletion_requested") val deletionRequested: Boolean? = null,
     @Json(name = "deletion_reason") val deletionReason: String? = null,
     @Json(name = "deletion_requested_at") val deletionRequestedAt: Long? = null,
+    @Json(name = "student_photo_url") val studentPhotoUrl: String? = null,
+    @Json(name = "student_photo_fallback_url") val studentPhotoFallbackUrl: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1110,6 +1118,8 @@ data class PbParentAccessLinkDto(
             deletionRequested = deletionRequested ?: false,
             deletionReason = deletionReason.orEmpty(),
             deletionRequestedAt = deletionRequestedAt ?: 0L,
+            studentPhotoUrl = studentPhotoUrl?.trim().orEmpty(),
+            studentPhotoFallbackUrl = studentPhotoFallbackUrl?.trim().orEmpty(),
             createdAt = resolvedCreated,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
         )
@@ -1144,6 +1154,8 @@ data class PbParentAccessLinkDto(
                 deletionRequested = model.deletionRequested,
                 deletionReason = model.deletionReason,
                 deletionRequestedAt = model.deletionRequestedAt,
+                studentPhotoUrl = model.studentPhotoUrl.trim(),
+                studentPhotoFallbackUrl = model.studentPhotoFallbackUrl.trim(),
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

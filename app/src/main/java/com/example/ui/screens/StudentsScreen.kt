@@ -82,6 +82,7 @@ fun StudentsScreen(
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var showCardGeneratorSheet by remember { mutableStateOf(false) }
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
@@ -278,7 +279,7 @@ fun StudentsScreen(
         AddStudentDialog(
             activeSchoolId = activeSchoolCode,
             onDismiss = { showAddStudentDialog = false },
-            onConfirmStudent = { newStudent ->
+            onConfirmStudentWithPhoto = { newStudent, pickedPhotoUri, _ ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.addStudent(
                     name = newStudent.name,
@@ -300,7 +301,14 @@ fun StudentsScreen(
                     district = newStudent.district,
                     roomNumber = newStudent.roomNumber,
                     jenjang = newStudent.jenjang,
-                    parentPhone = newStudent.parentPhone
+                    parentPhone = newStudent.parentPhone,
+                    onCreated = { inserted ->
+                        if (pickedPhotoUri != null) {
+                            viewModel.uploadStudentProfilePhoto(inserted, pickedPhotoUri) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                 )
                 showAddStudentDialog = false
             }
@@ -313,7 +321,7 @@ fun StudentsScreen(
             initialStudent = editingStudent,
             activeSchoolId = activeSchoolCode,
             onDismiss = { studentToEdit = null },
-            onConfirmStudent = { updated ->
+            onConfirmStudentWithPhoto = { updated, pickedPhotoUri, removePhoto ->
                 TopOnAdManager.onUserActionClick(context)
                 viewModel.updateStudent(updated) {
                     Toast.makeText(
@@ -321,13 +329,24 @@ fun StudentsScreen(
                         if (isEn) "Profile for ${updated.name} updated!" else "Data ${updated.name} berhasil diperbarui!",
                         Toast.LENGTH_SHORT
                     ).show()
+                    when {
+                        pickedPhotoUri != null -> {
+                            viewModel.uploadStudentProfilePhoto(updated, pickedPhotoUri) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        removePhoto -> {
+                            viewModel.removeStudentProfilePhoto(updated)
+                        }
+                    }
                 }
                 studentToEdit = null
             }
         )
     }
 
-    selectedStudentForDetail?.let { student ->
+    selectedStudentForDetail?.let { selected ->
+        val student = students.firstOrNull { it.id == selected.id } ?: selected
         val studentHistory = records.filter { it.studentId == student.id }
         val studentMengaji = MengajiHelper.recordsForStudent(mengajiRecords, student)
         StudentDetailDialog(
@@ -352,6 +371,13 @@ fun StudentsScreen(
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
+            isUploadingPhoto = isUploadingStudentPhoto,
+            onUploadStudentPhoto = { target, uri, cb ->
+                viewModel.uploadStudentProfilePhoto(target, uri, cb)
+            },
+            onRemoveStudentPhoto = { target, cb ->
+                viewModel.removeStudentProfilePhoto(target, cb)
+            },
             onDismiss = { selectedStudentForDetail = null }
         )
     }
@@ -436,11 +462,13 @@ fun CompactStudentCardItem(
                 .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Student Portrait Avatar matching mockups
+            // Student Portrait Avatar
             com.example.ui.components.StudentAvatar(
                 name = student.name,
                 gender = student.gender,
-                size = 40.dp
+                size = 40.dp,
+                photoUrl = student.photoUrl,
+                photoFallbackUrl = student.photoFallbackUrl
             )
 
             Spacer(modifier = Modifier.width(10.dp))

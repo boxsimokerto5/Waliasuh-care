@@ -9525,4 +9525,169 @@ class ExampleRobolectricTest {
     db.childStudentDao().delete(student)
     Unit
   }
+
+  @Test
+  fun `verify Student Profile Photo upload removal and Parent Portal display`() = kotlinx.coroutines.runBlocking {
+    val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(context)
+    val vm = com.example.ui.HealthViewModel(context)
+    val activeSchool = "SRT1-KDR"
+
+    val student = com.example.data.model.ChildStudent(
+      id = 928801L,
+      name = "NAJWA KAMILA",
+      nis = "2026928801",
+      gender = "P",
+      age = 15,
+      dormitory = "Asrama Putri",
+      classGrade = "X-2",
+      motherName = "ROHMAH",
+      parentPhone = "081233445566",
+      assignedWaliUsername = "ekowahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val parentUser = "ortu_najwa_photo"
+    val parentPass = "NajwaPass123"
+    val link = com.example.data.model.ParentAccessLink(
+      id = 928802L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      parentName = "ROHMAH",
+      parentPhone = "081233445566",
+      username = parentUser,
+      password = parentPass,
+      assignedWaliUsername = "ekowahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      canViewProfile = true,
+      schoolId = activeSchool
+    )
+    db.parentAccessLinkDao().insert(link)
+
+    // Create a valid sample JPEG in cache dir
+    val sampleBitmap = android.graphics.Bitmap.createBitmap(96, 96, android.graphics.Bitmap.Config.ARGB_8888)
+    sampleBitmap.eraseColor(android.graphics.Color.BLUE)
+    val tempPhotoFile = java.io.File(context.cacheDir, "sample_student_photo_test.jpg")
+    java.io.FileOutputStream(tempPhotoFile).use { out ->
+      sampleBitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 90, out)
+    }
+    sampleBitmap.recycle()
+    val pickedUri = android.net.Uri.fromFile(tempPhotoFile)
+
+    var uploadSuccess: Boolean? = null
+    vm.uploadStudentProfilePhoto(student, pickedUri) { ok, _ ->
+      uploadSuccess = ok
+    }
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (uploadSuccess != null) break
+      kotlinx.coroutines.delay(30)
+    }
+    assertEquals(true, uploadSuccess)
+
+    val updatedStudent = db.childStudentDao().getById(student.id)
+    org.junit.Assert.assertNotNull(updatedStudent)
+    org.junit.Assert.assertTrue(updatedStudent!!.photoUrl.isNotBlank())
+    val updatedLink = db.parentAccessLinkDao().getByUsername(parentUser)
+    org.junit.Assert.assertNotNull(updatedLink)
+    assertEquals(updatedStudent.photoUrl, updatedLink!!.studentPhotoUrl)
+
+    // Login Parent & verify photo card + lightbox in ParentPortalScreen
+    val loginRes = vm.executeLogin(parentUser, parentPass)
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.activeParentAccessLink.value != null) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    var showParentMode by androidx.compose.runtime.mutableStateOf(true)
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        if (showParentMode) {
+          com.example.ui.screens.ParentPortalScreen(
+            viewModel = vm,
+            onLogout = {}
+          )
+        } else {
+          com.example.ui.dialogs.StudentDetailDialog(
+            student = updatedStudent,
+            studentRecords = emptyList(),
+            isUploadingPhoto = false,
+            onUploadStudentPhoto = { target, uri, cb -> vm.uploadStudentProfilePhoto(target, uri, cb) },
+            onRemoveStudentPhoto = { target, cb -> vm.removeStudentProfilePhoto(target, cb) },
+            onDismiss = {}
+          )
+        }
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Open Profil Anak from overview grid
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_parent_profile_photo_header").assertIsDisplayed()
+
+    // Tap avatar to open full-screen preview dialog
+    composeTestRule.onNodeWithTag("btn_parent_preview_student_photo").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dialog_student_photo_preview").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_close_student_photo_preview").performClick()
+    composeTestRule.waitForIdle()
+
+    // Verify Wali Asuh StudentDetailDialog quick photo manager
+    showParentMode = false
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_student_photo_action").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dialog_student_photo_manager").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_pick_student_photo").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_preview_student_photo").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_remove_student_photo").assertIsDisplayed()
+
+    // Verify photo removal clears both ChildStudent and ParentAccessLink
+    var removeOk: Boolean? = null
+    vm.removeStudentProfilePhoto(updatedStudent) { ok, _ -> removeOk = ok }
+    for (attempt in 1..20) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (removeOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    assertEquals(true, removeOk)
+    assertEquals("", db.childStudentDao().getById(student.id)?.photoUrl)
+    assertEquals("", db.parentAccessLinkDao().getByUsername(parentUser)?.studentPhotoUrl)
+
+    tempPhotoFile.delete()
+    db.parentAccessLinkDao().getByUsername(parentUser)?.let { db.parentAccessLinkDao().delete(it) }
+    db.childStudentDao().getById(student.id)?.let { db.childStudentDao().delete(it) }
+    Unit
+  }
+
+  @Test
+  fun `verify AddStudentDialog displays profile photo picker card and pick button`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.AddStudentDialog(
+          activeSchoolId = "SRT1-KDR",
+          onDismiss = {},
+          onConfirmStudentWithPhoto = { _, _, _ -> }
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_add_student_photo_picker").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_pick_student_photo_form").assertIsDisplayed()
+  }
 }
+

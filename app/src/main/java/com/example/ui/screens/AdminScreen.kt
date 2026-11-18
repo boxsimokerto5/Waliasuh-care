@@ -211,6 +211,7 @@ fun AdminScreen(
     val infoPentingComments by viewModel.infoPentingComments.collectAsStateWithLifecycle()
     val unreadInfoPentingCount by viewModel.unreadInfoPentingCount.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
+    val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
 
     var showInfoPentingSheet by remember { mutableStateOf(false) }
     var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
@@ -2562,7 +2563,7 @@ fun AdminScreen(
         AddStudentDialog(
             activeSchoolId = activeSchoolCode,
             onDismiss = { showAddStudentDialog = false },
-            onConfirmStudent = { newStudent ->
+            onConfirmStudentWithPhoto = { newStudent, pickedPhotoUri, _ ->
                 viewModel.addStudent(
                     name = newStudent.name,
                     nis = newStudent.nis,
@@ -2583,7 +2584,14 @@ fun AdminScreen(
                     district = newStudent.district,
                     roomNumber = newStudent.roomNumber,
                     jenjang = newStudent.jenjang,
-                    parentPhone = newStudent.parentPhone
+                    parentPhone = newStudent.parentPhone,
+                    onCreated = { inserted ->
+                        if (pickedPhotoUri != null) {
+                            viewModel.uploadStudentProfilePhoto(inserted, pickedPhotoUri) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    }
                 )
                 Toast.makeText(
                     context,
@@ -2604,20 +2612,31 @@ fun AdminScreen(
             initialStudent = editingStudent,
             activeSchoolId = activeSchoolCode,
             onDismiss = { studentToEdit = null },
-            onConfirmStudent = { updated ->
+            onConfirmStudentWithPhoto = { updated, pickedPhotoUri, removePhoto ->
                 viewModel.updateStudent(updated) {
                     Toast.makeText(
                         context,
                         if (isEn) "Profile for ${updated.name} updated!" else "Profil ${updated.name} berhasil diperbarui!",
                         Toast.LENGTH_SHORT
                     ).show()
+                    when {
+                        pickedPhotoUri != null -> {
+                            viewModel.uploadStudentProfilePhoto(updated, pickedPhotoUri) { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                        removePhoto -> {
+                            viewModel.removeStudentProfilePhoto(updated)
+                        }
+                    }
                 }
                 studentToEdit = null
             }
         )
     }
 
-    selectedDetailStudent?.let { student ->
+    selectedDetailStudent?.let { selected ->
+        val student = students.firstOrNull { it.id == selected.id } ?: selected
         StudentDetailDialog(
             student = student,
             studentRecords = allRecords.filter { it.studentId == student.id },
@@ -2640,6 +2659,13 @@ fun AdminScreen(
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
+            isUploadingPhoto = isUploadingStudentPhoto,
+            onUploadStudentPhoto = { target, uri, cb ->
+                viewModel.uploadStudentProfilePhoto(target, uri, cb)
+            },
+            onRemoveStudentPhoto = { target, cb ->
+                viewModel.removeStudentProfilePhoto(target, cb)
+            },
             onDismiss = { selectedDetailStudent = null }
         )
     }
@@ -3918,7 +3944,13 @@ fun AdminStudentCardItem(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                StudentAvatar(name = student.name, gender = student.gender, size = 44.dp)
+                StudentAvatar(
+                    name = student.name,
+                    gender = student.gender,
+                    size = 44.dp,
+                    photoUrl = student.photoUrl,
+                    photoFallbackUrl = student.photoFallbackUrl
+                )
                 Spacer(modifier = Modifier.width(10.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Row(

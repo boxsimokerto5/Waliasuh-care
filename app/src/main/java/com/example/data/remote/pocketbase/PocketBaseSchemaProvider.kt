@@ -63,7 +63,15 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("jenjang", "text"),
                 PbFieldDef("parent_phone", "text"),
                 PbFieldDef("assigned_wali_username", "text"),
-                PbFieldDef("assigned_wali_name", "text")
+                PbFieldDef("assigned_wali_name", "text"),
+                PbFieldDef("photo_url", "text"),
+                PbFieldDef("photo_fallback_url", "text"),
+                PbFieldDef(
+                    name = "photo_file",
+                    type = "file",
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
+                )
             ),
             indexes = listOf("CREATE INDEX idx_cs_school ON child_students (school_id)")
         ),
@@ -359,6 +367,8 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("deletion_requested", "bool"),
                 PbFieldDef("deletion_reason", "text"),
                 PbFieldDef("deletion_requested_at", "number"),
+                PbFieldDef("student_photo_url", "text"),
+                PbFieldDef("student_photo_fallback_url", "text"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),

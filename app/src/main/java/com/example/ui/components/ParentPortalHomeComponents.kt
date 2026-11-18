@@ -103,7 +103,8 @@ fun ParentGreetingHeroCard(
     unreadMessageCount: Int,
     isEn: Boolean,
     onOpenChat: () -> Unit,
-    onOpenProfile: (() -> Unit)? = null
+    onOpenProfile: (() -> Unit)? = null,
+    onAvatarClick: (() -> Unit)? = null
 ) {
     val studentName = student?.name ?: link?.studentName.orEmpty().ifBlank { "Ananda" }
     val parentName = link?.parentName?.ifBlank { student?.motherName.orEmpty() }.orEmpty()
@@ -199,18 +200,28 @@ fun ParentGreetingHeroCard(
                         .let { mod -> if (onOpenProfile != null) mod.clickable(onClick = onOpenProfile) else mod },
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    val heroPhotoUrl = student?.photoUrl?.takeIf { it.isNotBlank() } ?: link?.studentPhotoUrl.orEmpty()
+                    val heroPhotoFallbackUrl = student?.photoFallbackUrl?.takeIf { it.isNotBlank() }
+                        ?: link?.studentPhotoFallbackUrl.orEmpty()
                     Box(
                         modifier = Modifier
                             .size(58.dp)
                             .clip(CircleShape)
                             .border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                            .let { mod ->
+                                if (onAvatarClick != null) {
+                                    mod.clickable(onClick = onAvatarClick).testTag("btn_hero_student_avatar")
+                                } else mod
+                            }
                             .padding(2.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         StudentAvatar(
                             name = studentName,
                             gender = student?.gender ?: "L",
-                            size = 52.dp
+                            size = 52.dp,
+                            photoUrl = heroPhotoUrl,
+                            photoFallbackUrl = heroPhotoFallbackUrl
                         )
                     }
                     Spacer(modifier = Modifier.width(12.dp))

@@ -27,6 +27,8 @@ data class ParentAccessLink(
     val deletionRequested: Boolean = false,
     val deletionReason: String = "",
     val deletionRequestedAt: Long = 0L,
+    val studentPhotoUrl: String = "",
+    val studentPhotoFallbackUrl: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

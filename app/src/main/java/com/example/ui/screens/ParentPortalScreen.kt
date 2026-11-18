@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
@@ -116,6 +117,7 @@ import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.ui.dialogs.DeleteParentAccountDialog
+import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.i18n.AppLanguage
@@ -186,10 +188,19 @@ fun ParentPortalScreen(
                 parentPhone = link.parentPhone,
                 assignedWaliUsername = link.assignedWaliUsername,
                 assignedWaliName = link.assignedWaliName,
-                schoolId = link.schoolId
+                schoolId = link.schoolId,
+                photoUrl = link.studentPhotoUrl,
+                photoFallbackUrl = link.studentPhotoFallbackUrl
             )
         }
     }
+    val resolvedPhotoUrl = remember(student, activeLink) {
+        student?.photoUrl?.takeIf { it.isNotBlank() } ?: activeLink?.studentPhotoUrl.orEmpty()
+    }
+    val resolvedPhotoFallbackUrl = remember(student, activeLink) {
+        student?.photoFallbackUrl?.takeIf { it.isNotBlank() } ?: activeLink?.studentPhotoFallbackUrl.orEmpty()
+    }
+    var showPhotoPreview by remember { mutableStateOf(false) }
 
     val isFemaleStudent = remember(student) {
         student != null && StudentClassifier.isFemaleStudent(student)
@@ -531,7 +542,8 @@ fun ParentPortalScreen(
                                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        } else null
+                        } else null,
+                        onPreviewPhoto = { showPhotoPreview = true }
                     )
                     ParentPortalTab.PROFILE -> ParentProfileContent(
                         student = student,
@@ -548,7 +560,8 @@ fun ParentPortalScreen(
                                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                 }
                             }
-                        } else null
+                        } else null,
+                        onPreviewPhoto = { showPhotoPreview = true }
                     )
                     ParentPortalTab.MENGAJI -> ParentMengajiContent(records = studentMengaji)
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(records = studentMedical)
@@ -623,6 +636,19 @@ fun ParentPortalScreen(
             onDismiss = { showDeleteAccountSheet = false }
         )
     }
+    if (showPhotoPreview) {
+        StudentPhotoPreviewDialog(
+            studentName = student?.name ?: currentActiveLink?.studentName ?: "Ananda",
+            gender = student?.gender ?: "L",
+            subtitle = listOfNotNull(
+                (student?.classGrade ?: currentActiveLink?.studentClass)?.takeIf { it.isNotBlank() },
+                (student?.dormitory ?: currentActiveLink?.studentDorm)?.takeIf { it.isNotBlank() }
+            ).joinToString(" • "),
+            photoUrl = resolvedPhotoUrl,
+            photoFallbackUrl = resolvedPhotoFallbackUrl,
+            onDismiss = { showPhotoPreview = false }
+        )
+    }
 }
 
 @Composable
@@ -641,7 +667,8 @@ private fun ParentOverviewContent(
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit,
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
-    onCancelDeletionRequest: (() -> Unit)? = null
+    onCancelDeletionRequest: (() -> Unit)? = null,
+    onPreviewPhoto: (() -> Unit)? = null
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -785,6 +812,10 @@ private fun ParentOverviewContent(
     ) {
         item {
             Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                val hasHeroPhoto = !(student?.photoUrl.isNullOrBlank() &&
+                    student?.photoFallbackUrl.isNullOrBlank() &&
+                    link?.studentPhotoUrl.isNullOrBlank() &&
+                    link?.studentPhotoFallbackUrl.isNullOrBlank())
                 ParentGreetingHeroCard(
                     student = student,
                     link = link,
@@ -793,7 +824,8 @@ private fun ParentOverviewContent(
                     onOpenChat = { onOpenTab(ParentPortalTab.MESSAGES) },
                     onOpenProfile = if (link?.canViewProfile == true) {
                         { onOpenTab(ParentPortalTab.PROFILE) }
-                    } else null
+                    } else null,
+                    onAvatarClick = if (hasHeroPhoto) onPreviewPhoto else null
                 )
             }
         }
@@ -972,7 +1004,8 @@ private fun ParentProfileContent(
     link: ParentAccessLink?,
     onOpenChangePassword: (() -> Unit)? = null,
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
-    onCancelDeletionRequest: (() -> Unit)? = null
+    onCancelDeletionRequest: (() -> Unit)? = null,
+    onPreviewPhoto: (() -> Unit)? = null
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     if (student == null && link == null) {
@@ -987,6 +1020,10 @@ private fun ParentProfileContent(
         student?.birthPlace?.takeIf { it.isNotBlank() },
         student?.birthDate?.takeIf { it.isNotBlank() }
     ).joinToString(", ").ifBlank { "-" }
+    val profilePhotoUrl = student?.photoUrl?.takeIf { it.isNotBlank() } ?: link?.studentPhotoUrl.orEmpty()
+    val profilePhotoFallbackUrl = student?.photoFallbackUrl?.takeIf { it.isNotBlank() }
+        ?: link?.studentPhotoFallbackUrl.orEmpty()
+    val hasProfilePhoto = profilePhotoUrl.isNotBlank() || profilePhotoFallbackUrl.isNotBlank()
 
     LazyColumn(
         modifier = Modifier
@@ -995,6 +1032,114 @@ private fun ParentProfileContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        item {
+            ElevatedCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { mod ->
+                        if (onPreviewPhoto != null) {
+                            mod.clickable(onClick = onPreviewPhoto)
+                        } else mod
+                    }
+                    .testTag("card_parent_profile_photo_header"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(Color(0xFF312E81), Color(0xFF4338CA), Color(0xFF6D28D9))
+                            )
+                        )
+                        .padding(18.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(98.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.22f))
+                                .let { mod ->
+                                    if (onPreviewPhoto != null) {
+                                        mod.clickable(onClick = onPreviewPhoto).testTag("btn_parent_preview_student_photo")
+                                    } else mod
+                                }
+                                .padding(3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            StudentAvatar(
+                                name = student?.name ?: link?.studentName ?: "Ananda",
+                                gender = student?.gender ?: "L",
+                                size = 92.dp,
+                                photoUrl = profilePhotoUrl,
+                                photoFallbackUrl = profilePhotoFallbackUrl
+                            )
+                            if (hasProfilePhoto) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFF312E81),
+                                    border = BorderStroke(1.5.dp, Color.White),
+                                    modifier = Modifier
+                                        .align(Alignment.BottomEnd)
+                                        .size(28.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.ZoomIn,
+                                            contentDescription = if (isEn) "Zoom photo" else "Perbesar foto",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        Text(
+                            text = student?.name ?: link?.studentName ?: "-",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = listOfNotNull(
+                                (student?.classGrade ?: link?.studentClass)?.takeIf { it.isNotBlank() }?.let {
+                                    if (isEn) "Class $it" else "Kelas $it"
+                                },
+                                (student?.dormitory ?: link?.studentDorm)?.takeIf { it.isNotBlank() },
+                                (student?.nis ?: link?.studentNis)?.takeIf { it.isNotBlank() }?.let { "NIS $it" }
+                            ).joinToString(" • ").ifBlank { "-" },
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.88f)
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.White.copy(alpha = 0.16f),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.28f))
+                        ) {
+                            Text(
+                                text = if (hasProfilePhoto) {
+                                    if (isEn) "Tap photo to zoom full size" else "Ketuk foto untuk memperbesar"
+                                } else {
+                                    if (isEn) "Profile photo not uploaded by Wali Asuh yet" else "Foto profil belum diunggah oleh Wali Asuh"
+                                },
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),

@@ -1,14 +1,21 @@
 package com.example.ui.dialogs
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -18,12 +25,16 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -48,6 +59,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
+import com.example.ui.components.StudentAvatar
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
 import com.example.util.i18n.LocalAppStrings
@@ -58,7 +70,8 @@ fun AddStudentDialog(
     initialStudent: ChildStudent? = null,
     activeSchoolId: String = "SRT1-KDR",
     onDismiss: () -> Unit,
-    onConfirmStudent: (ChildStudent) -> Unit
+    onConfirmStudent: (ChildStudent) -> Unit = {},
+    onConfirmStudentWithPhoto: ((ChildStudent, Uri?, Boolean) -> Unit)? = null
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -101,6 +114,17 @@ fun AddStudentDialog(
     var specialNotes by remember { mutableStateOf(initialStudent?.specialNotes ?: "") }
 
     var showHealthSection by remember { mutableStateOf(isEditMode) }
+    var pendingPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    var removeExistingPhoto by remember { mutableStateOf(false) }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            pendingPhotoUri = uri
+            removeExistingPhoto = false
+        }
+    }
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -142,6 +166,122 @@ fun AddStudentDialog(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
+                }
+
+                val previewPhotoUrl = pendingPhotoUri?.toString()
+                    ?: if (removeExistingPhoto) "" else initialStudent?.photoUrl.orEmpty()
+                val previewFallbackUrl = if (pendingPhotoUri != null || removeExistingPhoto) {
+                    ""
+                } else {
+                    initialStudent?.photoFallbackUrl.orEmpty()
+                }
+                val hasFormPhoto = previewPhotoUrl.isNotBlank() || previewFallbackUrl.isNotBlank()
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_add_student_photo_picker"),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        StudentAvatar(
+                            name = name.ifBlank { initialStudent?.name ?: "Siswa" },
+                            gender = gender,
+                            size = 58.dp,
+                            photoUrl = previewPhotoUrl,
+                            photoFallbackUrl = previewFallbackUrl
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (isEn) "Student Profile Photo" else "Foto Profil Siswa",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = when {
+                                    pendingPhotoUri != null -> if (isEn) "New photo selected (will upload on save)" else "Foto baru dipilih (otomatis terunggah saat simpan)"
+                                    hasFormPhoto -> if (isEn) "Current photo shown on Parent Portal" else "Foto tampil di profil Wali Asuh & Orang Tua"
+                                    else -> if (isEn) "Optional • Shown to parents & caregivers" else "Opsional • Tampil di profil anak & Portal Orang Tua"
+                                },
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 14.sp
+                            )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    },
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .heightIn(min = 36.dp)
+                                        .testTag("btn_pick_student_photo_form")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.AddAPhoto,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = if (hasFormPhoto) {
+                                            if (isEn) "Change Photo" else "Ganti Foto"
+                                        } else {
+                                            if (isEn) "Pick Photo" else "Pilih Foto"
+                                        },
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                if (hasFormPhoto) {
+                                    TextButton(
+                                        onClick = {
+                                            pendingPhotoUri = null
+                                            removeExistingPhoto = true
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        modifier = Modifier
+                                            .heightIn(min = 36.dp)
+                                            .testTag("btn_clear_student_photo_form")
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.DeleteOutline,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(15.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (isEn) "Remove" else "Hapus",
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 OutlinedTextField(
@@ -509,9 +649,15 @@ fun AddStudentDialog(
                                     district = district.trim(),
                                     roomNumber = roomNumber.trim(),
                                     jenjang = jenjang.trim().ifBlank { StudentCsvParser.deriveJenjang(classGrade) },
-                                    schoolId = initialStudent?.schoolId?.ifBlank { activeSchoolId } ?: activeSchoolId
+                                    schoolId = initialStudent?.schoolId?.ifBlank { activeSchoolId } ?: activeSchoolId,
+                                    photoUrl = if (removeExistingPhoto && pendingPhotoUri == null) "" else (initialStudent?.photoUrl ?: ""),
+                                    photoFallbackUrl = if (removeExistingPhoto && pendingPhotoUri == null) "" else (initialStudent?.photoFallbackUrl ?: "")
                                 )
-                                onConfirmStudent(updated)
+                                if (onConfirmStudentWithPhoto != null) {
+                                    onConfirmStudentWithPhoto(updated, pendingPhotoUri, removeExistingPhoto && pendingPhotoUri == null)
+                                } else {
+                                    onConfirmStudent(updated)
+                                }
                             }
                         },
                         enabled = name.isNotBlank() && dormitory.isNotBlank(),

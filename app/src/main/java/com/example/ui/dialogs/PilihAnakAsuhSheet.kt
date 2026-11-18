@@ -365,7 +365,13 @@ fun PilihAnakAsuhSheet(
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    StudentAvatar(name = student.name, gender = student.gender, size = 40.dp)
+                                    StudentAvatar(
+                                        name = student.name,
+                                        gender = student.gender,
+                                        size = 40.dp,
+                                        photoUrl = student.photoUrl,
+                                        photoFallbackUrl = student.photoFallbackUrl
+                                    )
                                     Spacer(modifier = Modifier.width(10.dp))
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(

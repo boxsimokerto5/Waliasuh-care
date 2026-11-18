@@ -867,7 +867,9 @@ fun SlimMedicalRecordCardItem(
                 StudentAvatar(
                     name = record.studentName,
                     gender = gender,
-                    size = 40.dp
+                    size = 40.dp,
+                    photoUrl = student?.photoUrl.orEmpty(),
+                    photoFallbackUrl = student?.photoFallbackUrl.orEmpty()
                 )
 
                 Spacer(modifier = Modifier.width(10.dp))
@@ -1114,7 +1116,9 @@ fun ChildHealthPrimaryCardItem(
                 StudentAvatar(
                     name = student.name,
                     gender = student.gender,
-                    size = 44.dp
+                    size = 44.dp,
+                    photoUrl = student.photoUrl,
+                    photoFallbackUrl = student.photoFallbackUrl
                 )
 
                 Spacer(modifier = Modifier.width(10.dp))
@@ -1295,7 +1299,9 @@ fun MedicalRecordDetailSheet(
                         StudentAvatar(
                             name = record.studentName,
                             gender = gender,
-                            size = 46.dp
+                            size = 46.dp,
+                            photoUrl = student?.photoUrl.orEmpty(),
+                            photoFallbackUrl = student?.photoFallbackUrl.orEmpty()
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
@@ -2052,7 +2058,9 @@ fun ChildHealthPassportSheet(
                         StudentAvatar(
                             name = student.name,
                             gender = student.gender,
-                            size = 50.dp
+                            size = 50.dp,
+                            photoUrl = student.photoUrl,
+                            photoFallbackUrl = student.photoFallbackUrl
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
