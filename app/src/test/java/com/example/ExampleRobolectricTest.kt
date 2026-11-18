@@ -5,10 +5,13 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -2162,7 +2165,10 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithText("Input Puasa Siswa").assertIsDisplayed()
     composeTestRule.onNodeWithText("1 Terdaftar").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("chip_session_input_${session.id}").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("dropdown_session_input").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("dropdown_session_input_item_${session.id}").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("btn_scan_barcode_puasa").assertIsDisplayed()
 
     composeTestRule.onNodeWithTag("input_search_student_puasa").performTextInput("ABIMANYU")
@@ -3988,25 +3994,27 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("parent_portal_screen").assertIsDisplayed()
     composeTestRule.onNodeWithTag("parent_tab_home").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("parent_tab_profile").performScrollTo().assertIsDisplayed()
-    composeTestRule.onNodeWithTag("parent_tab_mengaji").performScrollTo().assertIsDisplayed()
-    composeTestRule.onNodeWithTag("parent_tab_medical").assertDoesNotExist()
-    composeTestRule.onNodeWithTag("parent_tab_fasting").assertDoesNotExist()
-    composeTestRule.onNodeWithTag("parent_tab_haid").performScrollTo().assertIsDisplayed()
-    composeTestRule.onNodeWithTag("parent_tab_messages").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_summary_mengaji").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_summary_medical").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("card_parent_summary_fasting").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("card_parent_summary_haid").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_summary_messages").performScrollTo().assertIsDisplayed()
 
-    // Open Profile tab -> verify biodata renders
-    composeTestRule.onNodeWithTag("parent_tab_profile").performScrollTo().performClick()
+    // Open Profile tile -> verify biodata renders, then return to Home grid
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("parent_profile_content").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_parent_back_home").performClick()
+    composeTestRule.waitForIdle()
 
-    // Open Haid tab -> verify female haid cycle tab renders
-    composeTestRule.onNodeWithTag("parent_tab_haid").performScrollTo().performClick()
+    // Open Haid tile -> verify female haid cycle tab renders
+    composeTestRule.onNodeWithTag("card_parent_summary_haid").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("parent_haid_list").assertIsDisplayed()
 
     // Open Messages tab and send a message from Parent to Wali Asuh
-    composeTestRule.onNodeWithTag("parent_tab_messages").performScrollTo().performClick()
+    composeTestRule.onNodeWithTag("parent_tab_messages").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("input_parent_portal_message").performTextInput("Assalamualaikum ustadzah, bagaimana kabar Nadia?")
     composeTestRule.onNodeWithTag("btn_parent_portal_send").performClick()
@@ -4315,7 +4323,8 @@ class ExampleRobolectricTest {
       }
     }
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("parent_tab_profile").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_parent_summary_haid").assertDoesNotExist()
     composeTestRule.onNodeWithTag("parent_tab_haid").assertDoesNotExist()
   }
 
@@ -4354,7 +4363,8 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.TABUNGAN,
       com.example.data.model.DashboardIconKey.KONSELING,
       com.example.data.model.DashboardIconKey.JADWAL_WALI,
-      com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH
+      com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH,
+      com.example.data.model.DashboardIconKey.INFO_PENTING
     )
     var saveOk = false
     vm.saveDashboardIconOrder(customOrder) { success, _ -> saveOk = success }
@@ -4403,7 +4413,8 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.TABUNGAN,
       com.example.data.model.DashboardIconKey.KONSELING,
       com.example.data.model.DashboardIconKey.JADWAL_WALI,
-      com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH
+      com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH,
+      com.example.data.model.DashboardIconKey.INFO_PENTING
     )
     vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
     org.junit.Assert.assertEquals(cloudOrder, vm.dashboardIconOrder.value)
@@ -6863,25 +6874,25 @@ class ExampleRobolectricTest {
 
     composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertIsDisplayed()
     composeTestRule.onNodeWithTag("card_tour_tooltip").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 14")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 15")
 
     // Lanjut ke langkah 2: Klaim Anak Asuh (Fondasi)
     composeTestRule.onNodeWithTag("btn_tour_next").performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 14")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 15")
     composeTestRule.onNodeWithTag("text_tour_title").assertTextEquals("Klaim Anak Asuh (Mulai Sini!)")
 
     // Kembali ke langkah 1
     composeTestRule.onNodeWithTag("btn_tour_prev").performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 14")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 15")
 
-    // Jelajahi seluruh 14 langkah fitur (termasuk Tabungan, Konseling & Jadwal) sampai selesai
-    repeat(13) {
+    // Jelajahi seluruh 15 langkah fitur (termasuk Tabungan, Konseling, Jadwal & Info Penting) sampai selesai
+    repeat(14) {
       composeTestRule.onNodeWithTag("btn_tour_next").performClick()
       composeTestRule.waitForIdle()
     }
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("14 / 14")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("15 / 15")
     composeTestRule.onNodeWithTag("btn_tour_next").performClick()
     composeTestRule.waitForIdle()
 
@@ -8287,8 +8298,8 @@ class ExampleRobolectricTest {
       com.example.data.model.InfoPentingReaction(id = 12L, postId = 1L, userKey = "SRT3:citra", reactionType = com.example.data.model.InfoPentingHelper.REACTION_NONE)
     )
     val summary = com.example.data.model.InfoPentingHelper.summarizeReactions(reactions, postId = 1L, currentUserKey = userA)
-    assertEquals(1, summary.likeCount)
-    assertEquals(1, summary.dislikeCount)
+    assertEquals(1, summary.likesCount)
+    assertEquals(1, summary.dislikesCount)
     assertEquals(com.example.data.model.InfoPentingHelper.REACTION_LIKE, summary.myReaction)
 
     // 4. Point 4: Thread balasan komentar & hapus hanya komentar milik sendiri
@@ -8313,7 +8324,7 @@ class ExampleRobolectricTest {
     )
     val threads = com.example.data.model.InfoPentingHelper.buildCommentThreads(listOf(cReply, cRoot), postId = 1L)
     assertEquals(1, threads.size)
-    assertEquals(100L, threads[0].root.id)
+    assertEquals(100L, threads[0].comment.id)
     assertEquals(1, threads[0].replies.size)
     assertEquals(101L, threads[0].replies[0].id)
 
@@ -8333,7 +8344,7 @@ class ExampleRobolectricTest {
       schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
       title = "Sosialisasi SOP Kesehatan",
       content = "Silakan tonton video panduan terbaru lintas sekolah.",
-      category = com.example.data.model.InfoPentingHelper.CATEGORY_SOP,
+      category = com.example.data.model.InfoPentingHelper.CATEGORY_PENGUMUMAN,
       mediaType = com.example.data.model.InfoPentingHelper.MEDIA_VIDEO,
       mediaUrl = "https://example.org/panduan.mp4",
       mediaName = "panduan.mp4",
@@ -8399,11 +8410,12 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithText("anaksuperadmin", substring = true).assertDoesNotExist()
     composeTestRule.onNodeWithTag("info_video_player_card_501").assertExists()
 
-    // Like & Buka Komentar
-    composeTestRule.onNodeWithTag("btn_like_post_501").performClick()
+    // Like & Buka Komentar (scroll dulu ke tombol reaksi agar tidak terpotong batas viewport LazyColumn)
+    composeTestRule.onNodeWithTag("btn_like_post_501").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
     assertEquals(com.example.data.model.InfoPentingHelper.REACTION_LIKE, reactionClicked)
 
-    composeTestRule.onNodeWithTag("btn_open_comments_501").performClick()
+    composeTestRule.onNodeWithTag("btn_open_comments_501").performScrollTo().performClick()
     composeTestRule.waitForIdle()
 
     // Tombol hapus hanya muncul di komentar milik sendiri (901), bukan komentar orang lain (902)
@@ -8412,13 +8424,13 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_delete_comment_902").assertDoesNotExist()
 
     // Balas komentar orang lain (902)
-    composeTestRule.onNodeWithTag("btn_reply_comment_902").performClick()
+    composeTestRule.onNodeWithTag("btn_reply_comment_902").performScrollTo().performClick()
     composeTestRule.onNodeWithTag("input_info_comment").performTextInput("Siap dibantu Pak Budi")
     composeTestRule.onNodeWithTag("btn_send_info_comment").performClick()
     assertEquals(Triple(501L, "Siap dibantu Pak Budi", 902L), sentReplyTuple)
 
     // Hapus komentar sendiri (901)
-    composeTestRule.onNodeWithTag("btn_delete_comment_901").performClick()
+    composeTestRule.onNodeWithTag("btn_delete_comment_901").performScrollTo().performClick()
     assertEquals(901L, deletedCommentId)
   }
 
@@ -8659,9 +8671,60 @@ class ExampleRobolectricTest {
     val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
       com.example.util.i18n.AppLanguage.INDONESIAN
     )
+    val stage = androidx.compose.runtime.mutableIntStateOf(0)
+    var openedHarapanSheet = false
+    var savedWaliNotePair: Pair<Long, String>? = null
+    val savedExpHolder = androidx.compose.runtime.mutableStateOf<com.example.data.model.ParentExpectation?>(null)
+
     composeTestRule.setContent {
       androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
-        com.example.ui.screens.ParentPortalScreen(viewModel = vm, onLogout = {})
+        when (stage.intValue) {
+          0 -> com.example.ui.screens.ParentPortalScreen(viewModel = vm, onLogout = {})
+          1 -> com.example.ui.components.CategoryHubOverlay(
+            category = com.example.ui.components.DashboardCategoryHub.ORANG_TUA,
+            schoolProfile = com.example.data.model.SchoolProfile(),
+            activePlans = emptyList(),
+            inpatientCount = 0,
+            fastingSessions = emptyList(),
+            fastingRecords = emptyList(),
+            activeHaidRecords = emptyList(),
+            suciRecords = emptyList(),
+            shiftMessages = emptyList(),
+            students = listOf(student),
+            parentAccessLinks = listOf(parentLink),
+            parentMessages = emptyList(),
+            parentExpectations = listOfNotNull(savedExpHolder.value),
+            myFosterStudentsCount = 1,
+            onDismiss = {},
+            onNavigateToPlan = {},
+            onNavigateToRecords = {},
+            onOpenCreatePlan = {},
+            onOpenDirectTreatment = {},
+            onOpenFaskesInfo = {},
+            onOpenInputPuasa = {},
+            onOpenDaftarPuasa = {},
+            onOpenChecklistPuasa = {},
+            onOpenRankingPuasa = {},
+            onOpenInputHaid = {},
+            onOpenDaftarHaid = {},
+            onOpenDaftarSuci = {},
+            onOpenFiqihHaid = {},
+            onOpenShiftMessages = {},
+            onOpenCreateShiftMessage = {},
+            onOpenShiftHistory = {},
+            onOpenHarapanOrtu = { openedHarapanSheet = true }
+          )
+          else -> com.example.ui.dialogs.HarapanOrangTuaSheet(
+            students = listOf(student),
+            parentExpectations = listOfNotNull(savedExpHolder.value),
+            isStudentClaimedByCurrentWali = { it.id == 9601L },
+            isAdmin = false,
+            onMarkReadByWali = {},
+            onSaveFollowUpNote = { exp, note -> savedWaliNotePair = exp.id to note },
+            onOpenChatWithStudent = {},
+            onDismiss = {}
+          )
+        }
       }
     }
     composeTestRule.waitForIdle()
@@ -8694,67 +8757,19 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
     val savedExp = vm.parentExpectations.value.first { it.studentId == 9601L }
+    savedExpHolder.value = savedExp
+    composeTestRule.onNodeWithTag("parent_harapan_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_parent_harapan_item_${savedExp.id}"))
     composeTestRule.onNodeWithTag("card_parent_harapan_item_${savedExp.id}").assertExists()
 
-    // Verifikasi tampilan di sisi Wali Asuh: CategoryHubOverlay (ORANG_TUA) + HarapanOrangTuaSheet
-    var openedHarapanSheet = false
-    composeTestRule.setContent {
-      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
-        com.example.ui.components.CategoryHubOverlay(
-          category = com.example.ui.components.DashboardCategoryHub.ORANG_TUA,
-          schoolProfile = com.example.data.model.SchoolProfile(),
-          activePlans = emptyList(),
-          inpatientCount = 0,
-          fastingSessions = emptyList(),
-          fastingRecords = emptyList(),
-          activeHaidRecords = emptyList(),
-          suciRecords = emptyList(),
-          shiftMessages = emptyList(),
-          students = listOf(student),
-          parentAccessLinks = listOf(parentLink),
-          parentMessages = emptyList(),
-          parentExpectations = listOf(savedExp),
-          myFosterStudentsCount = 1,
-          onDismiss = {},
-          onNavigateToPlan = {},
-          onNavigateToRecords = {},
-          onOpenCreatePlan = {},
-          onOpenDirectTreatment = {},
-          onOpenFaskesInfo = {},
-          onOpenInputPuasa = {},
-          onOpenDaftarPuasa = {},
-          onOpenChecklistPuasa = {},
-          onOpenRankingPuasa = {},
-          onOpenInputHaid = {},
-          onOpenDaftarHaid = {},
-          onOpenDaftarSuci = {},
-          onOpenFiqihHaid = {},
-          onOpenShiftMessages = {},
-          onOpenCreateShiftMessage = {},
-          onOpenShiftHistory = {},
-          onOpenHarapanOrtu = { openedHarapanSheet = true }
-        )
-      }
-    }
+    // Verifikasi tampilan di sisi Wali Asuh: CategoryHubOverlay (ORANG_TUA)
+    stage.intValue = 1
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("tile_harapan_ortu").performScrollTo().assertIsDisplayed().performClick()
     org.junit.Assert.assertTrue(openedHarapanSheet)
 
-    var savedWaliNotePair: Pair<Long, String>? = null
-    composeTestRule.setContent {
-      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
-        com.example.ui.dialogs.HarapanOrangTuaSheet(
-          students = listOf(student),
-          parentExpectations = listOf(savedExp),
-          isStudentClaimedByCurrentWali = { it.id == 9601L },
-          isAdmin = false,
-          onMarkReadByWali = {},
-          onSaveFollowUpNote = { exp, note -> savedWaliNotePair = exp.id to note },
-          onOpenChatWithStudent = {},
-          onDismiss = {}
-        )
-      }
-    }
+    // Verifikasi tampilan HarapanOrangTuaSheet
+    stage.intValue = 2
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_harapan_ortu").assertExists()
     composeTestRule.onNodeWithTag("card_harapan_student_9601").assertExists()
@@ -8989,11 +9004,11 @@ class ExampleRobolectricTest {
       loops++
     }
     org.junit.Assert.assertTrue(vm.parentMessages.value.none { it.id == insertedMsg.id })
-    val storedLogs = db.deletionLogDao().getBySchoolSnapshot("SRT1-KDR")
+    val storedLogs = db.deletionLogDao().getLogsBySchoolList("SRT1-KDR")
     org.junit.Assert.assertTrue(
-      storedLogs.any {
-        it.category == com.example.data.model.DeletionLog.CATEGORY_PARENT_MESSAGE &&
-          it.recordId == insertedMsg.id
+      storedLogs.any { log ->
+        log.category == com.example.data.model.DeletionLog.CATEGORY_PARENT_MESSAGE &&
+          log.recordId == insertedMsg.id
       }
     )
     // Must not pollute user-facing audit log feed
@@ -9002,5 +9017,64 @@ class ExampleRobolectricTest {
         it.category == com.example.data.model.DeletionLog.CATEGORY_PARENT_MESSAGE
       }
     )
+  }
+
+  @Test
+  fun `verify AdminScreen card hub redesign displays hero summary, 8 menu tiles, CSV sheet, and security sheet`(): Unit = kotlinx.coroutines.runBlocking {
+    val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+    app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+    val vm = com.example.ui.HealthViewModel(app)
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.AdminScreen(viewModel = vm, onLogout = {})
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Hero card & 2x4 card menu hub are displayed cleanly
+    composeTestRule.onNodeWithTag("card_admin_hero").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_admin_sync_cloud").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_admin_menu_hub").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_students").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_wali").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_jadwal").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_fasting").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_visit").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_edit_school_profile").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_csv").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_security").assertIsDisplayed()
+
+    // 2. Tap Akun Wali hub tile -> switches into Wali tab
+    composeTestRule.onNodeWithTag("tile_admin_hub_wali").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_admin_anak_admin_quota"))
+    composeTestRule.onNodeWithTag("card_admin_anak_admin_quota").assertExists()
+
+    // 3. Scroll back to menu hub & open CSV Backup Sheet
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_csv"))
+    composeTestRule.onNodeWithTag("tile_admin_hub_csv").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("sheet_admin_csv_backup").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_import_students_csv").assertExists()
+    composeTestRule.onNodeWithTag("btn_export_students_csv").assertExists()
+    composeTestRule.onNodeWithTag("btn_import_wali_csv").assertExists()
+    composeTestRule.onNodeWithTag("btn_export_wali_csv").assertExists()
+
+    // Dismiss CSV sheet via Close button & open Security & Maintenance Sheet
+    composeTestRule.onNodeWithTag("btn_close_admin_csv_backup").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("sheet_admin_csv_backup").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("tile_admin_hub_security").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("sheet_admin_security").assertExists()
+    composeTestRule.onNodeWithTag("btn_admin_change_password").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_clear_school_data").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_delete_admin_school_account").performScrollTo().assertIsDisplayed()
   }
 }

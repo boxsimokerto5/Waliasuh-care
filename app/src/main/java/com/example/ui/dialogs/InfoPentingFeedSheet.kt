@@ -706,7 +706,7 @@ private fun InfoPentingPostCard(
                         if (isLiked) Color(0xFF0F766E) else Color.Transparent
                     ),
                     modifier = Modifier
-                        .heightIn(min = 40.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .clickable { onToggleReaction(InfoPentingHelper.REACTION_LIKE) }
                         .testTag("btn_like_post_${post.id}")
@@ -740,7 +740,7 @@ private fun InfoPentingPostCard(
                         if (isDisliked) Color(0xFFDC2626) else Color.Transparent
                     ),
                     modifier = Modifier
-                        .heightIn(min = 40.dp)
+                        .heightIn(min = 48.dp)
                         .clip(RoundedCornerShape(999.dp))
                         .clickable { onToggleReaction(InfoPentingHelper.REACTION_DISLIKE) }
                         .testTag("btn_dislike_post_${post.id}")

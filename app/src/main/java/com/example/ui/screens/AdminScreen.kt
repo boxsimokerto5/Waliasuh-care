@@ -141,6 +141,10 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
+import com.example.ui.components.AdminCsvBackupSheet
+import com.example.ui.components.AdminHeroSummaryCard
+import com.example.ui.components.AdminQuickMenuGridCard
+import com.example.ui.components.AdminSecurityMaintenanceSheet
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
@@ -233,6 +237,8 @@ fun AdminScreen(
     var editingJadwalCellTarget by remember { mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null) }
     var readyAdminJadwalPdf by remember { mutableStateOf<File?>(null) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
+    var showCsvBackupSheet by remember { mutableStateOf(false) }
+    var showSecurityMaintenanceSheet by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showImportStudentsDialog by remember { mutableStateOf(false) }
     var showImportWaliDialog by remember { mutableStateOf(false) }
@@ -530,6 +536,34 @@ fun AdminScreen(
         }
     }
 
+    fun triggerExportStudentsCsv() {
+        if (schoolStudents.isEmpty()) {
+            Toast.makeText(
+                context,
+                if (isEn) "No student data to export yet." else "Belum ada data siswa untuk diekspor.",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+            val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
+            exportStudentsCsvLauncher.launch("data_siswa_${codeSlug}_$dateSlug.csv")
+        }
+    }
+
+    fun triggerExportWaliCsv() {
+        if (schoolAccounts.isEmpty()) {
+            Toast.makeText(
+                context,
+                if (isEn) "No Wali Asuh accounts to export yet." else "Belum ada akun wali asuh untuk diekspor.",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
+            val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
+            exportWaliCsvLauncher.launch("data_wali_${codeSlug}_$dateSlug.csv")
+        }
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = WindowInsets.safeDrawing,
@@ -542,21 +576,23 @@ fun AdminScreen(
                                 imageVector = Icons.Default.AdminPanelSettings,
                                 contentDescription = null,
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(19.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (isEn) "Administrator Portal" else "Portal Administrator",
-                                fontSize = 16.sp,
+                                text = if (isEn) "Admin Portal" else "Portal Admin",
+                                fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                         Text(
                             text = "${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }} • ${schoolProfile.city}",
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.88f),
-                            maxLines = 2,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
@@ -709,304 +745,42 @@ fun AdminScreen(
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Multi-Tenant Core Configuration Card
-                item {
-                    ElevatedCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = MaterialTheme.colorScheme.surface
-                        ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(WaliPrimary.copy(alpha = 0.12f)),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.School,
-                                            contentDescription = null,
-                                            tint = WaliPrimary,
-                                            modifier = Modifier.size(22.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            text = if (isEn) "School & Multi-Tenant Settings" else "Pengaturan Sekolah & Multi-Tenant",
-                                            fontSize = 14.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "${schoolProfile.schoolName} (${schoolProfile.tenantCode})",
-                                            fontSize = 11.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        if (schoolProfile.address.isNotBlank()) {
-                                            Text(
-                                                text = schoolProfile.address,
-                                                fontSize = 10.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                    }
-                                }
+                // 1. Kartu Hero Ringkas Sekolah (senada gaya Beranda Wali Asuh)
+                item(key = "admin_hero_card") {
+                    AdminHeroSummaryCard(
+                        schoolProfile = schoolProfile,
+                        activeSchoolCode = activeSchoolCode,
+                        studentsCount = schoolStudents.size,
+                        waliCount = schoolAccounts.size,
+                        jadwalCount = jadwalMonthEntries.size,
+                        sessionsCount = schoolFastingSessions.size + schoolVisitSessions.size,
+                        isSyncing = isSyncing,
+                        isEn = isEn,
+                        onSyncCloud = {
+                            viewModel.syncAllWithCloud { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                             }
+                        },
+                        onEditSchool = { showEditSchoolDialog = true },
+                        onSelectMetricTab = { tabIdx -> selectedAdminTab = tabIdx }
+                    )
+                }
 
-                            Text(
-                                text = if (isEn) {
-                                    "Customize school name, letterhead address, referral health facilities, and bulk import/export student & Wali Asuh data via CSV files."
-                                } else {
-                                    "Kustomisasi nama sekolah, alamat kop surat, faskes rujukan, serta impor/ekspor data anak asuh & wali asuh secara massal menggunakan file CSV."
-                                },
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-
-                            // 3 Action Buttons: Edit School, Import Siswa CSV, Import Wali CSV
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = { showEditSchoolDialog = true },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f).testTag("btn_edit_school_profile")
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(Icons.Default.Business, contentDescription = null, modifier = Modifier.size(18.dp), tint = WaliPrimary)
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(if (isEn) "School Profile" else "Profil Sekolah", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text(if (isEn) "Name, Address & Facility" else "Nama, Alamat & Faskes", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = { showImportStudentsDialog = true },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f).testTag("btn_import_students_csv")
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF16A34A))
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(if (isEn) "Import Students" else "Import Siswa", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text(if (isEn) "${schoolStudents.size} Registered" else "${schoolStudents.size} Terdaftar", fontSize = 9.sp, color = Color(0xFF16A34A))
-                                    }
-                                }
-
-                                OutlinedButton(
-                                    onClick = { showImportWaliDialog = true },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f).testTag("btn_import_wali_csv")
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFF2563EB))
-                                        Spacer(modifier = Modifier.height(2.dp))
-                                        Text(if (isEn) "Import Wali" else "Import Wali", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
-                                        Text(if (isEn) "${schoolAccounts.size} Accounts" else "${schoolAccounts.size} Akun", fontSize = 9.sp, color = Color(0xFF2563EB))
-                                    }
-                                }
-                            }
-
-                            // 2 Action Buttons: Export Siswa CSV & Export Wali CSV (cadangan backup)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                OutlinedButton(
-                                    onClick = {
-                                        if (schoolStudents.isEmpty()) {
-                                            Toast.makeText(
-                                                context,
-                                                if (isEn) "No student data to export yet." else "Belum ada data siswa untuk diekspor.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } else {
-                                            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-                                            val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
-                                            exportStudentsCsvLauncher.launch("data_siswa_${codeSlug}_$dateSlug.csv")
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f).testTag("btn_export_students_csv")
-                                ) {
-                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF0F766E))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isEn) "Export Students (.csv)" else "Export Siswa (.csv)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                OutlinedButton(
-                                    onClick = {
-                                        if (schoolAccounts.isEmpty()) {
-                                            Toast.makeText(
-                                                context,
-                                                if (isEn) "No Wali Asuh accounts to export yet." else "Belum ada akun wali asuh untuk diekspor.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                        } else {
-                                            val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date())
-                                            val codeSlug = activeSchoolCode.lowercase(Locale.US).replace(Regex("[^a-z0-9_-]"), "_")
-                                            exportWaliCsvLauncher.launch("data_wali_${codeSlug}_$dateSlug.csv")
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
-                                    modifier = Modifier.weight(1f).testTag("btn_export_wali_csv")
-                                ) {
-                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFF1D4ED8))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isEn) "Export Wali (.csv)" else "Export Wali (.csv)",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-
-                            // Tombol Ganti Password Admin Sekolah (Username dikunci, sinkron ke Superadmin)
-                            OutlinedButton(
-                                onClick = { showChangePasswordDialog = true },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("btn_admin_change_password"),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                Icon(Icons.Default.LockReset, contentDescription = null, modifier = Modifier.size(16.dp), tint = WaliPrimary)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isEn) "Change School Admin Password" else "Ganti Password Admin Sekolah",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = WaliPrimary
-                                )
-                            }
-
-                            // Tombol Sinkronkan Data Sekolah ke Cloud (PocketBase)
-                            Button(
-                                onClick = {
-                                    viewModel.syncAllWithCloud { success, msg ->
-                                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                                    }
-                                },
-                                enabled = !isSyncing,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("btn_admin_sync_cloud"),
-                                colors = ButtonDefaults.buttonColors(containerColor = WaliPrimary),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                if (isSyncing) {
-                                    CircularProgressIndicator(
-                                        color = Color.White,
-                                        modifier = Modifier.size(16.dp),
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (isEn) "Syncing to PocketBase Cloud..." else "Menyinkronkan ke Cloud PocketBase...",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Default.CloudSync,
-                                        contentDescription = if (isEn) "Cloud Sync" else "Sinkron Cloud",
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isEn) "Sync All School Data to Cloud" else "Sinkronkan Semua Data Sekolah ke Cloud",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-
-                            // Tombol Bersihkan / Reset Data Siswa & Wali Sekolah Ini
-                            OutlinedButton(
-                                onClick = { showClearDataConfirmDialog = true },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("btn_clear_school_data"),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f)),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                            ) {
-                                Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isEn) "Clear School Students & Wali Data (Reset to 0)" else "Bersihkan Data Siswa & Wali Sekolah Ini (Reset ke 0)",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-
-                            // Tombol Hapus Akun Admin & Seluruh Data Sekolah Permanen (Kebijakan Google Play)
-                            Button(
-                                onClick = {
-                                    deleteSchoolAccountError = null
-                                    showDeleteSchoolAccountSheet = true
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("btn_delete_admin_school_account"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
-                                    contentColor = MaterialTheme.colorScheme.error
-                                ),
-                                shape = RoundedCornerShape(10.dp),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.DeleteForever,
-                                    contentDescription = if (isEn) "Delete School Admin Account Permanently" else "Hapus Akun Admin Sekolah Permanen",
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = if (isEn) "Permanently Delete Admin Account & School Data" else "Hapus Akun Admin & Data Sekolah Permanen",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
+                // 2. Grid Kartu Menu Pengelola 2x4 (senada kartu QuickMenuTiles Wali Asuh)
+                item(key = "admin_menu_hub_card") {
+                    AdminQuickMenuGridCard(
+                        selectedTab = selectedAdminTab,
+                        studentsCount = schoolStudents.size,
+                        waliCount = schoolAccounts.size,
+                        jadwalCount = jadwalMonthEntries.size,
+                        activeFastingCount = schoolFastingSessions.count { it.isActive },
+                        activeVisitCount = schoolVisitSessions.count { it.isActive },
+                        isEn = isEn,
+                        onSelectTab = { tabIdx -> selectedAdminTab = tabIdx },
+                        onOpenSchoolProfile = { showEditSchoolDialog = true },
+                        onOpenCsvBackupSheet = { showCsvBackupSheet = true },
+                        onOpenSecuritySheet = { showSecurityMaintenanceSheet = true }
+                    )
                 }
 
                 // Tab Navigasi: Kelola Data Siswa vs Akun Wali vs Sesi Puasa vs Kunjungan
@@ -1209,6 +983,32 @@ fun AdminScreen(
                                             Text(if (isEn) "Female Students" else "Siswa Putri", fontSize = 10.5.sp, color = Color(0xFFBE185D))
                                             Text(if (isEn) "$studentPutriCount Students" else "$studentPutriCount Siswa", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color(0xFFBE185D))
                                         }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { showImportStudentsDialog = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        modifier = Modifier.weight(1f).testTag("btn_quick_import_students")
+                                    ) {
+                                        Icon(Icons.Default.FileUpload, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF16A34A))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Import CSV" else "Import CSV", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF166534))
+                                    }
+                                    OutlinedButton(
+                                        onClick = { triggerExportStudentsCsv() },
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                        modifier = Modifier.weight(1f).testTag("btn_quick_export_students")
+                                    ) {
+                                        Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF0F766E))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(if (isEn) "Export CSV" else "Export CSV", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF0F766E))
                                     }
                                 }
                             }
@@ -1453,6 +1253,32 @@ fun AdminScreen(
                                             color = Color(0xFF4338CA)
                                         )
                                     }
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showImportWaliDialog = true },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_quick_import_wali")
+                                ) {
+                                    Icon(Icons.Default.GroupAdd, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF2563EB))
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(if (isEn) "Import Wali CSV" else "Import Wali CSV", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1D4ED8))
+                                }
+                                OutlinedButton(
+                                    onClick = { triggerExportWaliCsv() },
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
+                                    modifier = Modifier.weight(1f).testTag("btn_quick_export_wali")
+                                ) {
+                                    Icon(Icons.Default.FileDownload, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color(0xFF1D4ED8))
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(if (isEn) "Export Wali CSV" else "Export Wali CSV", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Color(0xFF1D4ED8))
                                 }
                             }
                         }
@@ -3078,6 +2904,35 @@ fun AdminScreen(
             schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
             schoolCode = activeSchoolCode,
             onDismiss = { showChangePasswordDialog = false }
+        )
+    }
+
+    if (showCsvBackupSheet) {
+        AdminCsvBackupSheet(
+            studentsCount = schoolStudents.size,
+            waliCount = schoolAccounts.size,
+            isEn = isEn,
+            onImportStudents = { showImportStudentsDialog = true },
+            onExportStudents = { triggerExportStudentsCsv() },
+            onImportWali = { showImportWaliDialog = true },
+            onExportWali = { triggerExportWaliCsv() },
+            onOpenSchoolProfile = { showEditSchoolDialog = true },
+            onDismiss = { showCsvBackupSheet = false }
+        )
+    }
+
+    if (showSecurityMaintenanceSheet) {
+        AdminSecurityMaintenanceSheet(
+            schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+            activeSchoolCode = activeSchoolCode,
+            isEn = isEn,
+            onChangePassword = { showChangePasswordDialog = true },
+            onClearSchoolData = { showClearDataConfirmDialog = true },
+            onDeleteSchoolAccount = {
+                deleteSchoolAccountError = null
+                showDeleteSchoolAccountSheet = true
+            },
+            onDismiss = { showSecurityMaintenanceSheet = false }
         )
     }
 
