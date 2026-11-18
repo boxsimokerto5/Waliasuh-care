@@ -2,7 +2,9 @@ package com.example
 
 import android.content.Context
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertCountEquals
@@ -9464,8 +9466,8 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("banner_pending_parent_deletions").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("card_parent_deletion_approval_${student.id}").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("btn_reject_parent_delete_${student.id}").performClick()
+    composeTestRule.onNodeWithTag("card_parent_deletion_approval_${student.id}").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_reject_parent_delete_${student.id}").performScrollTo().performClick()
 
     for (attempt in 1..25) {
       org.robolectric.shadows.ShadowLooper.idleMainLooper()
@@ -9490,21 +9492,22 @@ class ExampleRobolectricTest {
     assertEquals(true, reRequestOk)
 
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("btn_approve_parent_delete_${student.id}").performClick()
+    composeTestRule.onNodeWithTag("btn_approve_parent_delete_${student.id}").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("dialog_confirm_approve_parent_delete").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_confirm_approve_parent_delete").performClick()
 
-    for (attempt in 1..30) {
+    for (attempt in 1..40) {
       org.robolectric.shadows.ShadowLooper.idleMainLooper()
       composeTestRule.waitForIdle()
-      if (db.parentAccessLinkDao().getByUsername(parentUser) == null) break
-      kotlinx.coroutines.delay(30)
+      if (db.parentAccessLinkDao().getByUsername(parentUser) == null && vm.isCurrentParentAccountDeleted.value) break
+      kotlinx.coroutines.delay(35)
     }
 
     // 5. Pastikan akun terhapus permanen, deletion log tercatat, login ditolak, dan status akun terhapus aktif
     org.junit.Assert.assertNull(db.parentAccessLinkDao().getByUsername(parentUser))
-    val deleteLogs = db.deletionLogDao().getLogsByCategory(activeSchool, com.example.data.model.DeletionLog.CATEGORY_PARENT_ACCESS)
+    val deleteLogs = db.deletionLogDao().getLogsBySchoolList(activeSchool)
+      .filter { it.category == com.example.data.model.DeletionLog.CATEGORY_PARENT_ACCESS }
     org.junit.Assert.assertTrue(deleteLogs.any { it.recordId == initialLink.id && it.studentId == student.id })
     org.junit.Assert.assertTrue(vm.isCurrentParentAccountDeleted.value)
 
@@ -9521,7 +9524,6 @@ class ExampleRobolectricTest {
     val loginAfterDelete = vm.executeLogin(parentUser, parentPass)
     org.junit.Assert.assertTrue(loginAfterDelete is com.example.ui.LoginResult.Error)
 
-    deleteLogs.filter { it.recordId == initialLink.id }.forEach { db.deletionLogDao().delete(it) }
     db.childStudentDao().delete(student)
     Unit
   }
@@ -9593,6 +9595,10 @@ class ExampleRobolectricTest {
     val updatedStudent = db.childStudentDao().getById(student.id)
     org.junit.Assert.assertNotNull(updatedStudent)
     org.junit.Assert.assertTrue(updatedStudent!!.photoUrl.isNotBlank())
+    org.junit.Assert.assertTrue(
+      "Expected compressed .webp file URL, got: ${updatedStudent.photoUrl}",
+      updatedStudent.photoUrl.endsWith(".webp")
+    )
     val updatedLink = db.parentAccessLinkDao().getByUsername(parentUser)
     org.junit.Assert.assertNotNull(updatedLink)
     assertEquals(updatedStudent.photoUrl, updatedLink!!.studentPhotoUrl)

@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.media.ExifInterface
 import android.net.Uri
+import android.os.Build
 import android.provider.OpenableColumns
 import android.util.Log
 import com.example.data.model.ChildStudent
@@ -3172,7 +3173,7 @@ object PocketBaseSyncManager {
                 else -> decoded
             }
 
-            val maxDim = 720
+            val maxDim = 640
             val scaled = if (rotated.width > maxDim || rotated.height > maxDim) {
                 val ratio = minOf(maxDim.toFloat() / rotated.width, maxDim.toFloat() / rotated.height)
                 val targetW = (rotated.width * ratio).toInt().coerceAtLeast(1)
@@ -3184,15 +3185,30 @@ object PocketBaseSyncManager {
                 rotated
             }
 
-            ByteArrayOutputStream().use { out ->
-                scaled.compress(Bitmap.CompressFormat.JPEG, 86, out)
-                scaled.recycle()
-                out.toByteArray()
+            @Suppress("DEPRECATION")
+            val webpFormat = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Bitmap.CompressFormat.WEBP_LOSSY
+            } else {
+                Bitmap.CompressFormat.WEBP
             }
+
+            var bestBytes: ByteArray? = null
+            for (quality in intArrayOf(78, 66, 54, 42)) {
+                val attempt = ByteArrayOutputStream().use { out ->
+                    val ok = scaled.compress(webpFormat, quality, out)
+                    if (ok) out.toByteArray() else null
+                }
+                if (attempt != null && attempt.isNotEmpty()) {
+                    bestBytes = attempt
+                    if (attempt.size <= 85 * 1024) break
+                }
+            }
+            scaled.recycle()
+            bestBytes?.takeIf { it.isNotEmpty() }
         }.getOrNull()
     }
 
-    fun saveStudentPhotoLocally(context: Context, studentId: Long, jpegBytes: ByteArray): String? {
+    fun saveStudentPhotoLocally(context: Context, studentId: Long, webpBytes: ByteArray): String? {
         return runCatching {
             val dir = java.io.File(context.filesDir, "student_photos").apply { mkdirs() }
             dir.listFiles()?.forEach { f ->
@@ -3200,8 +3216,8 @@ object PocketBaseSyncManager {
                     runCatching { f.delete() }
                 }
             }
-            val dest = java.io.File(dir, "student_${studentId}_${System.currentTimeMillis()}.jpg")
-            dest.writeBytes(jpegBytes)
+            val dest = java.io.File(dir, "student_${studentId}_${System.currentTimeMillis()}.webp")
+            dest.writeBytes(webpBytes)
             Uri.fromFile(dest).toString()
         }.getOrNull()
     }
@@ -3247,7 +3263,7 @@ object PocketBaseSyncManager {
             "${student.schoolId}:${student.nik}:${student.nis}:${student.name}"
         )
         val pbId = PocketBaseIdCodec.toPbId(safeId)
-        val filename = "student_${safeId}_${now}.jpg"
+        val filename = "student_${safeId}_${now}.webp"
 
         val client = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -3260,7 +3276,7 @@ object PocketBaseSyncManager {
             .addFormDataPart(
                 "photo_file",
                 filename,
-                compressed.toRequestBody("image/jpeg".toMediaType())
+                compressed.toRequestBody("image/webp".toMediaType())
             )
             .build()
 
@@ -3312,7 +3328,7 @@ object PocketBaseSyncManager {
                     .addFormDataPart(
                         "photo_file",
                         filename,
-                        compressed.toRequestBody("image/jpeg".toMediaType())
+                        compressed.toRequestBody("image/webp".toMediaType())
                     )
                     .build()
                 val postRequest = Request.Builder()

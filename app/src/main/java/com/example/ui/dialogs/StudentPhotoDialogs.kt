@@ -446,9 +446,9 @@ fun StudentPhotoManagerDialog(
 
                 Text(
                     text = if (isEn) {
-                        "Uploaded photos are automatically resized, synced to PocketBase, and shown on the Parent Portal."
+                        "Photos are automatically resized & compressed to lightweight WebP, synced to PocketBase, and shown on the Parent Portal."
                     } else {
-                        "Foto otomatis dirapikan ukurannya, disinkronkan ke server, dan langsung tampil di halaman Orang Tua."
+                        "Foto otomatis dirapikan & dikompres ke format WebP ringan, disinkronkan ke server, dan langsung tampil di halaman Orang Tua."
                     },
                     fontSize = 11.5.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
