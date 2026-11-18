@@ -9077,4 +9077,66 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_clear_school_data").performScrollTo().assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_delete_admin_school_account").performScrollTo().assertIsDisplayed()
   }
+
+  @Test
+  fun `verify InfoPentingCommentsSheet shows compact commented post image and text preview above scrollable comments`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val imagePost = com.example.data.model.InfoPentingPost(
+      id = 777L,
+      schoolId = com.example.data.model.InfoPentingHelper.GLOBAL_SCHOOL_ID,
+      category = com.example.data.model.InfoPentingHelper.CATEGORY_PENGUMUMAN,
+      title = "Panduan Foto Asrama Baru",
+      content = "Mohon wali asuh mengecek kebersihan kamar setiap Jumat pagi sesuai poster berikut.",
+      mediaType = com.example.data.model.InfoPentingHelper.MEDIA_IMAGE,
+      mediaUrl = "https://example.org/poster-asrama.jpg",
+      mediaName = "poster-asrama.jpg",
+      authorDisplayName = "Superadmin",
+      createdAt = System.currentTimeMillis()
+    )
+    val c1 = com.example.data.model.InfoPentingComment(
+      id = 9101L,
+      postId = 777L,
+      authorUsername = "ust_ali",
+      authorName = "Ust. Ali",
+      authorSchoolId = "SRT1-KDR",
+      authorSchoolName = "Sekolah Rakyat Kediri",
+      content = "Siap dilaksanakan mulai pekan ini.",
+      createdAt = System.currentTimeMillis() - 60_000L
+    )
+    val threads = com.example.data.model.InfoPentingHelper.buildCommentThreads(listOf(c1), 777L)
+    var openedImagePreview = false
+
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.InfoPentingCommentsSheet(
+          post = imagePost,
+          threads = threads,
+          currentUserKey = "SRT1-KDR:ust_ali",
+          isEn = false,
+          onOpenFullscreenImage = { openedImagePreview = true },
+          onSendComment = { _, _ -> },
+          onDeleteOwnComment = {},
+          onDismiss = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // Kartu konteks postingan (gambar + judul + teks) tampil di antara header komentar & daftar chat
+    composeTestRule.onNodeWithTag("sheet_info_comments").assertExists()
+    composeTestRule.onNodeWithTag("card_comment_post_context").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("img_comment_post_context_thumb").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Mohon wali asuh mengecek kebersihan kamar setiap Jumat pagi sesuai poster berikut.")
+      .assertIsDisplayed()
+
+    // Ketuk thumbnail gambar memicu pratinjau layar penuh
+    composeTestRule.onNodeWithTag("btn_preview_comment_post_image").performClick()
+    org.junit.Assert.assertTrue(openedImagePreview)
+
+    // Daftar chat di bawahnya tampil dalam container LazyColumn yang dapat digeser
+    composeTestRule.onNodeWithTag("list_info_comments").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Siap dilaksanakan mulai pekan ini.").assertIsDisplayed()
+  }
 }

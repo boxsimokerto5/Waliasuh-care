@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -34,12 +35,16 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.PlayCircleFilled
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -418,6 +423,8 @@ fun InfoPentingFeedSheet(
             threads = threads,
             currentUserKey = currentUserKey,
             isEn = isEn,
+            onOpenFullscreenImage = { fullscreenImagePost = livePost },
+            onOpenFullscreenVideo = { fullscreenVideoPost = livePost },
             onSendComment = { text, replyTo ->
                 onSendComment(livePost, text, replyTo)
             },
@@ -807,6 +814,8 @@ fun InfoPentingCommentsSheet(
     threads: List<InfoPentingCommentThread>,
     currentUserKey: String,
     isEn: Boolean,
+    onOpenFullscreenImage: () -> Unit = {},
+    onOpenFullscreenVideo: () -> Unit = {},
     onSendComment: (content: String, replyTo: InfoPentingComment?) -> Unit,
     onDeleteOwnComment: (InfoPentingComment) -> Unit,
     onDismiss: () -> Unit
@@ -857,7 +866,7 @@ fun InfoPentingCommentsSheet(
                 }
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -867,6 +876,15 @@ fun InfoPentingCommentsSheet(
                     )
                 }
             }
+
+            // Kartu konteks objek yang dikomentari (setinggi ~2 bubble chat, sticky di antara header & daftar chat)
+            CommentedPostContextCard(
+                post = post,
+                isEn = isEn,
+                onOpenFullscreenImage = onOpenFullscreenImage,
+                onOpenFullscreenVideo = onOpenFullscreenVideo
+            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
 
             if (threads.isEmpty()) {
                 Box(
@@ -886,7 +904,8 @@ fun InfoPentingCommentsSheet(
                 LazyColumn(
                     modifier = Modifier
                         .weight(1f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .testTag("list_info_comments"),
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
@@ -1013,6 +1032,231 @@ fun InfoPentingCommentsSheet(
                         imageVector = Icons.AutoMirrored.Filled.Send,
                         contentDescription = if (isEn) "Send Comment" else "Kirim Komentar",
                         modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CommentedPostContextCard(
+    post: InfoPentingPost,
+    isEn: Boolean,
+    onOpenFullscreenImage: () -> Unit,
+    onOpenFullscreenVideo: () -> Unit
+) {
+    val context = LocalContext.current
+    val gifLoader = rememberBannerGifImageLoader(context)
+    val mediaUpper = post.mediaType.uppercase()
+    var useFallbackImage by remember(post.id, post.mediaUrl) { mutableStateOf(false) }
+    val resolvedMediaUrl = if (useFallbackImage && post.fallbackMediaUrl.isNotBlank()) {
+        post.fallbackMediaUrl
+    } else {
+        post.mediaUrl.ifBlank { post.fallbackMediaUrl }
+    }
+    val hasVisualMedia = (mediaUpper == InfoPentingHelper.MEDIA_IMAGE || mediaUpper == InfoPentingHelper.MEDIA_GIF) &&
+        resolvedMediaUrl.isNotBlank()
+    val hasVideoMedia = mediaUpper == InfoPentingHelper.MEDIA_VIDEO && resolvedMediaUrl.isNotBlank()
+    val hasDocumentMedia = mediaUpper == InfoPentingHelper.MEDIA_DOCUMENT &&
+        (post.mediaName.isNotBlank() || resolvedMediaUrl.isNotBlank())
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .heightIn(max = 104.dp)
+            .testTag("card_comment_post_context"),
+        shape = RoundedCornerShape(12.dp),
+        color = Color(0xFFF0FDFA),
+        border = BorderStroke(1.dp, Color(0xFF99F6E4))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            when {
+                hasVisualMedia -> {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Color(0xFFCCFBF1))
+                            .clickable { onOpenFullscreenImage() }
+                            .testTag("btn_preview_comment_post_image")
+                    ) {
+                        AsyncImage(
+                            model = ImageRequest.Builder(context)
+                                .data(resolvedMediaUrl)
+                                .crossfade(true)
+                                .build(),
+                            imageLoader = gifLoader,
+                            contentDescription = post.title.ifBlank {
+                                if (isEn) "Commented image preview" else "Pratinjau gambar yang dikomentari"
+                            },
+                            contentScale = ContentScale.Crop,
+                            onError = {
+                                if (!useFallbackImage && post.fallbackMediaUrl.isNotBlank() && resolvedMediaUrl != post.fallbackMediaUrl) {
+                                    useFallbackImage = true
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag("img_comment_post_context_thumb")
+                        )
+                        Surface(
+                            shape = CircleShape,
+                            color = Color.Black.copy(alpha = 0.55f),
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(4.dp)
+                                .size(20.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.ZoomIn,
+                                    contentDescription = if (isEn) "Enlarge image" else "Perbesar gambar",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                hasVideoMedia -> {
+                    Box(
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(
+                                Brush.linearGradient(
+                                    listOf(Color(0xFF075E54), Color(0xFF0F766E))
+                                )
+                            )
+                            .clickable { onOpenFullscreenVideo() }
+                            .testTag("btn_preview_comment_post_video"),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PlayCircleFilled,
+                                contentDescription = if (isEn) "Play video" else "Putar video",
+                                tint = Color.White,
+                                modifier = Modifier.size(28.dp)
+                            )
+                            Text(
+                                text = "Video",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+
+                hasDocumentMedia -> {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 56.dp, height = 68.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(Color(0xFFCCFBF1)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                            modifier = Modifier.padding(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Description,
+                                contentDescription = if (isEn) "Document attachment" else "Lampiran dokumen",
+                                tint = Color(0xFF0F766E),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "DOC",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0F766E)
+                            )
+                        }
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(5.dp),
+                        color = Color(0xFFCCFBF1)
+                    ) {
+                        Text(
+                            text = InfoPentingHelper.categoryLabel(post.category, isEn),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F766E),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                        )
+                    }
+                    Text(
+                        text = InfoPentingHelper.resolvePublicAuthor(post.authorDisplayName),
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF0F766E),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (post.externalLink.isNotBlank()) {
+                        Icon(
+                            imageVector = Icons.Default.Link,
+                            contentDescription = null,
+                            tint = Color(0xFF0369A1),
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                }
+
+                if (post.title.isNotBlank()) {
+                    Text(
+                        text = post.title,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        lineHeight = 15.sp
+                    )
+                }
+
+                val bodyPreview = when {
+                    post.content.isNotBlank() -> post.content
+                    hasDocumentMedia && post.mediaName.isNotBlank() -> post.mediaName
+                    post.externalLink.isNotBlank() -> post.externalLink
+                    hasVisualMedia -> if (isEn) "Tap thumbnail to view full photo" else "Ketuk foto untuk melihat ukuran penuh"
+                    hasVideoMedia -> if (isEn) "Tap thumbnail to play video" else "Ketuk pratinjau untuk memutar video"
+                    else -> ""
+                }
+                if (bodyPreview.isNotBlank()) {
+                    Text(
+                        text = bodyPreview,
+                        fontSize = 11.5.sp,
+                        lineHeight = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
