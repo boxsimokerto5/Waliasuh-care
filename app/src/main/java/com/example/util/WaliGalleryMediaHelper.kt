@@ -11,6 +11,8 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.example.data.model.ChatMediaLocalSave
+import com.example.data.model.ChristianWorshipLocalSave
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.ParentMessage
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
@@ -197,6 +199,40 @@ object WaliGalleryMediaHelper {
             )
         }
     }
+
+    suspend fun saveChristianWorshipPhotoToParentGallery(
+        context: Context,
+        record: ChristianWorshipRecord
+    ): Result<ChristianWorshipLocalSave> =
+        withContext(Dispatchers.IO) {
+            val candidateUrls = listOf(record.photoUrl, record.photoFallbackUrl, record.localPhotoPath)
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            val bytes = downloadFromCandidateUrls(context, candidateUrls).getOrElse {
+                return@withContext Result.failure(it)
+            }
+            val (ext, mimeType) = resolveExtensionAndMime(candidateUrls)
+            val safeName = record.studentName
+                .replace(Regex("[^A-Za-z0-9]"), "_")
+                .trim('_')
+                .take(18)
+                .ifBlank { "Ananda" }
+            val fileName = "WaliAsuh_Ibadah_${safeName}_${record.activityType}_${record.id}.$ext"
+            writeImageBytesToDeviceGallery(
+                context = context,
+                displayFileName = fileName,
+                mimeType = mimeType,
+                bytes = bytes
+            ).map { galleryUri ->
+                ChristianWorshipLocalSave(
+                    recordId = record.id,
+                    localGalleryUri = galleryUri,
+                    displayFileName = fileName,
+                    savedAt = System.currentTimeMillis()
+                )
+            }
+        }
 
     private fun resolveExtensionAndMime(candidateUrls: List<String>): Pair<String, String> {
         val ext = when {

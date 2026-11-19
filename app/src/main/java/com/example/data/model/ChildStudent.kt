@@ -30,5 +30,33 @@ data class ChildStudent(
     val assignedWaliUsername: String = "",
     val assignedWaliName: String = "",
     val photoUrl: String = "",
-    val photoFallbackUrl: String = ""
+    val photoFallbackUrl: String = "",
+    val religion: String = "" // "" / "ISLAM" (default) atau "KRISTEN"
 )
+
+object StudentReligionHelper {
+    const val RELIGION_ISLAM = "ISLAM"
+    const val RELIGION_KRISTEN = "KRISTEN"
+
+    fun isChristian(raw: String?): Boolean {
+        val clean = raw?.trim()?.uppercase().orEmpty()
+        return clean == RELIGION_KRISTEN ||
+            clean.contains("KRISTEN") ||
+            clean == "PROTESTAN" ||
+            clean == "KATOLIK" ||
+            clean == "CHRISTIAN"
+    }
+
+    fun isChristian(student: ChildStudent?): Boolean = isChristian(student?.religion)
+
+    fun isChristian(student: ChildStudent?, link: ParentAccessLink?): Boolean {
+        return isChristian(student?.religion) || isChristian(link?.studentReligion)
+    }
+
+    fun normalize(raw: String?): String {
+        val clean = raw?.trim().orEmpty()
+        if (clean.isBlank()) return ""
+        return if (isChristian(clean)) RELIGION_KRISTEN else RELIGION_ISLAM
+    }
+}
+

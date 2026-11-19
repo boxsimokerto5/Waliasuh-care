@@ -23,6 +23,8 @@ import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -5362,6 +5364,255 @@ object PdfReportGenerator {
                 Intent.createChooser(
                     shareIntent,
                     if (isEn) "Share Prayer Attendance PDF" else "Bagikan PDF Absensi Sholat"
+                )
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Membuat dokumen PDF Rekap Laporan Kegiatan Ibadah Agama Kristen
+     * (Doa Ibadah Pagi, Doa Ibadah Malam, Kegiatan ke Gereja).
+     */
+    fun generateChristianWorshipPdf(
+        context: Context,
+        records: List<ChristianWorshipRecord>,
+        students: List<ChildStudent>,
+        schoolProfile: SchoolProfile,
+        filterTitle: String = "",
+        waliName: String = "Wali Asuh"
+    ): File? {
+        return try {
+            val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            val marginX = 35f
+            val contentRight = pageWidth - marginX
+            var pageNumber = 1
+            var currentPage = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+            var canvas = currentPage.canvas
+            val paint = Paint().apply { isAntiAlias = true }
+
+            var currentY = 34f
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = UNIT_BIMBINGAN_SPIRITUAL
+            )
+
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 12f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(
+                if (isEn) "CHRISTIAN WORSHIP & PRAYER ACTIVITY REPORT" else "REKAP LAPORAN KEGIATAN IBADAH AGAMA KRISTEN",
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            currentY += 13f
+            if (filterTitle.isNotBlank()) {
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(3, 105, 161)
+                canvas.drawText(filterTitle.uppercase(Locale.getDefault()), pageWidth / 2f, currentY, paint)
+                currentY += 14f
+            } else {
+                currentY += 6f
+            }
+            paint.textAlign = Paint.Align.LEFT
+
+            val activeRecords = records.filter { !it.isDeleted }
+                .sortedWith(compareByDescending<ChristianWorshipRecord> { it.activityDate }.thenByDescending { it.createdAt })
+            val pagiCount = activeRecords.count { ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_PAGI }
+            val malamCount = activeRecords.count { ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_MALAM }
+            val gerejaCount = activeRecords.count { ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_KE_GEREJA }
+            val photoCount = activeRecords.count { ChristianWorshipHelper.hasAnyPhoto(it) }
+
+            val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(240, 249, 255)
+            canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(186, 230, 253)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            val kpis = listOf(
+                (if (isEn) "Christian Kids" else "Anak Kristen") to "${students.size}",
+                (if (isEn) "Total Logs" else "Total Kegiatan") to "${activeRecords.size}",
+                (if (isEn) "Morning Prayer" else "Doa Pagi") to "$pagiCount",
+                (if (isEn) "Evening Prayer" else "Doa Malam") to "$malamCount",
+                (if (isEn) "Church" else "Ke Gereja") to "$gerejaCount",
+                (if (isEn) "Photos" else "Bukti Foto") to "$photoCount"
+            )
+            val colW = (contentRight - marginX) / kpis.size
+            kpis.forEachIndexed { idx, (lbl, v) ->
+                val cx = marginX + idx * colW + colW / 2f
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 7.3f
+                paint.color = Color.rgb(3, 105, 161)
+                canvas.drawText(lbl, cx, currentY + 15f, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 10.5f
+                paint.color = Color.rgb(15, 23, 42)
+                canvas.drawText(v, cx, currentY + 32f, paint)
+            }
+            paint.textAlign = Paint.Align.LEFT
+            currentY += 54f
+
+            val tWidths = floatArrayOf(68f, 118f, 84f, 115f, 80f, (contentRight - marginX) - 465f)
+            val tHeaders = listOf(
+                if (isEn) "Date" else "Tanggal",
+                if (isEn) "Student" else "Nama Anak",
+                if (isEn) "Activity" else "Jenis Ibadah",
+                if (isEn) "Theme / Notes" else "Tema & Catatan",
+                if (isEn) "Caregiver" else "Pembina",
+                if (isEn) "Photo" else "Foto"
+            )
+
+            fun drawTableHeader(yPos: Float): Float {
+                val h = 20f
+                paint.style = Paint.Style.FILL
+                paint.color = Color.rgb(3, 105, 161)
+                canvas.drawRect(marginX, yPos, contentRight, yPos + h, paint)
+                var cx = marginX
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8f
+                paint.color = Color.WHITE
+                tHeaders.forEachIndexed { i, title ->
+                    canvas.drawText(title, cx + 4f, yPos + 13.5f, paint)
+                    cx += tWidths[i]
+                }
+                return yPos + h
+            }
+
+            if (activeRecords.isEmpty()) {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText(
+                    if (isEn) "No Christian worship activities recorded for this filter."
+                    else "Belum ada catatan kegiatan ibadah Agama Kristen pada filter ini.",
+                    marginX,
+                    currentY + 12f,
+                    paint
+                )
+                currentY += 32f
+            } else {
+                currentY = drawTableHeader(currentY)
+                val rowH = 20f
+                val dateFmt = SimpleDateFormat("dd/MM/yy", Locale.US)
+                activeRecords.forEachIndexed { idx, rec ->
+                    if (currentY + rowH > pageHeight - 125f) {
+                        document.finishPage(currentPage)
+                        pageNumber++
+                        currentPage = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+                        canvas = currentPage.canvas
+                        currentY = 34f
+                        currentY = drawTableHeader(currentY)
+                    }
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+
+                    val dateText = dateFmt.format(Date(rec.activityDate))
+                    val nameText = if (rec.studentClass.isNotBlank()) "${rec.studentName} (${rec.studentClass})" else rec.studentName
+                    val actLabel = ChristianWorshipHelper.activityShortLabel(rec.activityType, isEn)
+                    val themeNote = listOfNotNull(
+                        rec.title.takeIf { it.isNotBlank() },
+                        rec.notes.takeIf { it.isNotBlank() }
+                    ).joinToString(" - ").ifBlank { "-" }
+                    val photoLabel = when {
+                        ChristianWorshipHelper.isProofActive(rec) -> if (isEn) "Active" else "Ada Foto"
+                        rec.isMediaPurgedFromServer -> if (isEn) "Expired" else "Arsip"
+                        else -> "-"
+                    }
+                    val rowCells = listOf(dateText, nameText, actLabel, themeNote, rec.waliName, photoLabel)
+                    var cx = marginX
+                    paint.textSize = 7.7f
+                    rowCells.forEachIndexed { cIdx, cellVal ->
+                        paint.typeface = Typeface.create(
+                            Typeface.DEFAULT,
+                            if (cIdx == 1 || cIdx == 2) Typeface.BOLD else Typeface.NORMAL
+                        )
+                        paint.color = if (cIdx == 2) Color.rgb(3, 105, 161) else Color.rgb(15, 23, 42)
+                        val ellipsized = TextUtils.ellipsize(
+                            cellVal,
+                            TextPaint(paint),
+                            tWidths[cIdx] - 7f,
+                            TextUtils.TruncateAt.END
+                        ).toString()
+                        canvas.drawText(ellipsized, cx + 4f, currentY + 13f, paint)
+                        cx += tWidths[cIdx]
+                    }
+
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.5f
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+                    paint.style = Paint.Style.FILL
+                    currentY += rowH
+                }
+                currentY += 12f
+            }
+
+            if (currentY > pageHeight - 135f) {
+                document.finishPage(currentPage)
+                pageNumber++
+                currentPage = document.startPage(PdfDocument.PageInfo.Builder(pageWidth, pageHeight, pageNumber).create())
+                canvas = currentPage.canvas
+                currentY = 34f
+            }
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            document.finishPage(currentPage)
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val file = File(outputDir, "Rekap_Ibadah_Kristen_${System.currentTimeMillis()}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    fun shareChristianWorshipPdf(
+        context: Context,
+        pdfFile: File,
+        subject: String,
+        text: String
+    ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val s = AppLanguageManager.getStrings(context).report
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                pdfFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    if (isEn) "Share Christian Worship Report PDF" else "Bagikan PDF Rekap Ibadah Kristen"
                 )
             )
         } catch (e: Exception) {

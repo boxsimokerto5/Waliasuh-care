@@ -807,7 +807,7 @@ internal fun LazyListScope.pesanCategoryItems(
 }
 
 @Composable
-private fun HubStatTile(
+internal fun HubStatTile(
     value: String,
     label: String,
     bg: Color,

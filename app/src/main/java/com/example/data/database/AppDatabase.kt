@@ -39,11 +39,15 @@ import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
 import com.example.data.dao.ChatMediaLocalSaveDao
+import com.example.data.dao.ChristianWorshipDao
+import com.example.data.dao.ChristianWorshipLocalSaveDao
 import com.example.data.dao.WaliGalleryLocalSaveDao
 import com.example.data.dao.WaliGalleryPostDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.ChatMediaLocalSave
+import com.example.data.model.ChristianWorshipLocalSave
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -96,9 +100,11 @@ import com.example.data.model.WaliShiftCode
         SholatRecord::class,
         WaliGalleryPost::class,
         WaliGalleryLocalSave::class,
-        ChatMediaLocalSave::class
+        ChatMediaLocalSave::class,
+        ChristianWorshipRecord::class,
+        ChristianWorshipLocalSave::class
     ],
-    version = 33,
+    version = 34,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -130,6 +136,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun waliGalleryPostDao(): WaliGalleryPostDao
     abstract fun waliGalleryLocalSaveDao(): WaliGalleryLocalSaveDao
     abstract fun chatMediaLocalSaveDao(): ChatMediaLocalSaveDao
+    abstract fun christianWorshipDao(): ChristianWorshipDao
+    abstract fun christianWorshipLocalSaveDao(): ChristianWorshipLocalSaveDao
 
     companion object {
         @Volatile
@@ -878,6 +886,61 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_33_34 = object : androidx.room.migration.Migration(33, 34) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN religion TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE parent_access_links ADD COLUMN studentReligion TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS christian_worship_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL,
+                        studentNik TEXT NOT NULL DEFAULT '',
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        activityType TEXT NOT NULL DEFAULT 'DOA_PAGI',
+                        activityDate INTEGER NOT NULL DEFAULT 0,
+                        dateKey TEXT NOT NULL DEFAULT '',
+                        title TEXT NOT NULL DEFAULT '',
+                        notes TEXT NOT NULL DEFAULT '',
+                        waliUsername TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        photoUrl TEXT NOT NULL DEFAULT '',
+                        photoFallbackUrl TEXT NOT NULL DEFAULT '',
+                        localPhotoPath TEXT NOT NULL DEFAULT '',
+                        pbRecordId TEXT NOT NULL DEFAULT '',
+                        pbCollectionId TEXT NOT NULL DEFAULT '',
+                        pbFilename TEXT NOT NULL DEFAULT '',
+                        proofUploadedAt INTEGER,
+                        proofExpiresAt INTEGER,
+                        proofStatus TEXT NOT NULL DEFAULT 'NONE',
+                        isMediaPurgedFromServer INTEGER NOT NULL DEFAULT 0,
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS christian_worship_local_saves (
+                        recordId INTEGER PRIMARY KEY NOT NULL,
+                        localGalleryUri TEXT NOT NULL DEFAULT '',
+                        displayFileName TEXT NOT NULL DEFAULT '',
+                        savedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -911,7 +974,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_29_30,
                         MIGRATION_30_31,
                         MIGRATION_31_32,
-                        MIGRATION_32_33
+                        MIGRATION_32_33,
+                        MIGRATION_33_34
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
@@ -951,7 +1015,10 @@ abstract class AppDatabase : RoomDatabase() {
                             roomNumber = obj.optString("roomNumber", ""),
                             jenjang = obj.optString("jenjang", ""),
                             schoolId = "SRT1-KDR",
-                            parentPhone = obj.optString("parentPhone", obj.optString("noHpOrangTua", ""))
+                            parentPhone = obj.optString("parentPhone", obj.optString("noHpOrangTua", "")),
+                            religion = com.example.data.model.StudentReligionHelper.normalize(
+                                obj.optString("religion", obj.optString("agama", ""))
+                            )
                         )
                     )
                 }

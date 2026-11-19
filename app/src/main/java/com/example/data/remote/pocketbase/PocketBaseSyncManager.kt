@@ -10,6 +10,8 @@ import android.os.Build
 import android.provider.OpenableColumns
 import android.util.Log
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardBannerMediaKind
@@ -1685,6 +1687,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "parent_expectations", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
             runCatching { deleteCollectionByFilter(service, "wali_gallery_posts", filter) }
+            runCatching { deleteCollectionByFilter(service, "christian_worship_records", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
@@ -3077,6 +3080,15 @@ object PocketBaseSyncManager {
                     pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
                 )
             }
+            runCatching {
+                syncChristianWorshipMerged(
+                    service = service,
+                    schoolId = cleanSchoolId,
+                    filter = filter,
+                    repository = repository,
+                    pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
+                )
+            }
 
             // 10. Sinkronkan Tabungan Pribadi Wali Asuh & Log Audit (tabungan_logs & tabungan_transactions)
             runCatching {
@@ -4234,6 +4246,304 @@ object PocketBaseSyncManager {
                 val purged = purgeWaliGalleryServerMedia(context, post).getOrNull()
                 if (purged != null) {
                     repository.updateWaliGalleryPost(purged)
+                }
+            }
+        }
+    }
+
+    // --- Modul Agama Kristen (Doa Pagi, Doa Malam, Kegiatan Gereja + Foto 90 Hari R2) ---
+
+    suspend fun uploadChristianWorshipWithPhoto(
+        context: Context,
+        draftRecord: ChristianWorshipRecord,
+        imageUri: Uri
+    ): Result<ChristianWorshipRecord> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+
+        val compressed = com.example.util.WaliGalleryMediaHelper.compressGalleryPhotoBytes(context, imageUri)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Unable to compress worship photo." else "Gagal memproses foto kegiatan ibadah.")
+            )
+
+        val now = System.currentTimeMillis()
+        val safeId = if (draftRecord.id > 0L) draftRecord.id else generateCloudSafeId()
+        val pbId = draftRecord.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
+        val cleanSchool = draftRecord.schoolId.ifBlank { "SRT1-KDR" }
+        val uploadedAt = draftRecord.proofUploadedAt ?: now
+        val expiresAt = draftRecord.proofExpiresAt ?: ChristianWorshipHelper.computeExpiresAt(uploadedAt)
+        val filename = "ibadah_kristen_${safeId}_${now}.webp"
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("id", pbId)
+            .addFormDataPart("local_id", safeId.toString())
+            .addFormDataPart("school_id", cleanSchool)
+            .addFormDataPart("student_id", draftRecord.studentId.toString())
+            .addFormDataPart("student_name", draftRecord.studentName)
+            .addFormDataPart("student_nik", com.example.util.StudentCsvParser.cleanDigitsOnly(draftRecord.studentNik))
+            .addFormDataPart("student_nis", draftRecord.studentNis)
+            .addFormDataPart("student_class", draftRecord.studentClass)
+            .addFormDataPart("student_dorm", draftRecord.studentDorm)
+            .addFormDataPart("activity_type", ChristianWorshipHelper.normalizeType(draftRecord.activityType))
+            .addFormDataPart("activity_date", draftRecord.activityDate.toString())
+            .addFormDataPart("date_key", draftRecord.dateKey.ifBlank { ChristianWorshipHelper.dateKeyFromMillis(draftRecord.activityDate) })
+            .addFormDataPart("title", draftRecord.title)
+            .addFormDataPart("notes", draftRecord.notes)
+            .addFormDataPart("wali_username", draftRecord.waliUsername)
+            .addFormDataPart("wali_name", draftRecord.waliName)
+            .addFormDataPart("proof_uploaded_at", uploadedAt.toString())
+            .addFormDataPart("proof_expires_at", expiresAt.toString())
+            .addFormDataPart("proof_status", ChristianWorshipRecord.PROOF_STATUS_ACTIVE)
+            .addFormDataPart("is_media_purged_from_server", "false")
+            .addFormDataPart("is_deleted", "false")
+            .addFormDataPart("created_at", draftRecord.createdAt.toString())
+            .addFormDataPart("updated_at", draftRecord.updatedAt.toString())
+            .addFormDataPart("photo_file", filename, compressed.toRequestBody("image/webp".toMediaType()))
+            .build()
+
+        val postRequest = Request.Builder()
+            .url("$baseUrl/api/collections/christian_worship_records/records")
+            .post(multipart)
+            .build()
+
+        return@withContext try {
+            var responseCode = 0
+            var responseRaw = ""
+            var wasSuccess = false
+
+            client.newCall(postRequest).execute().use { resp ->
+                responseCode = resp.code
+                responseRaw = resp.body?.string().orEmpty()
+                wasSuccess = resp.isSuccessful
+            }
+
+            if (responseCode == 404) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Collection 'christian_worship_records' is not synced on server yet. Run Sync Schema in Superadmin."
+                        } else {
+                            "Koleksi 'christian_worship_records' belum disinkronkan di server. Jalankan Sync Skema di Superadmin terlebih dahulu."
+                        }
+                    )
+                )
+            }
+
+            if (!wasSuccess) {
+                val errMsg = parsePocketBaseUploadError(responseRaw, responseCode, isEn)
+                return@withContext Result.failure(
+                    Exception(if (isEn) "Failed to upload photo: $errMsg" else "Gagal mengunggah foto ke R2/PocketBase: $errMsg")
+                )
+            }
+
+            val json = JSONObject(responseRaw)
+            val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "christian_worship_records")
+                .ifBlank { "christian_worship_records" }
+            val uploadedFilename = when {
+                json.has("photo_file") && json.optJSONArray("photo_file") != null -> {
+                    json.optJSONArray("photo_file")?.optString(0, "").orEmpty()
+                }
+                else -> json.optString("photo_file", "")
+            }.trim()
+
+            if (uploadedFilename.isBlank()) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Column 'photo_file' on christian_worship_records is not active yet. Run Sync Schema."
+                        } else {
+                            "Kolom 'photo_file' pada christian_worship_records belum aktif di server. Jalankan Sync Skema di Superadmin."
+                        }
+                    )
+                )
+            }
+
+            val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+            val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+            val finalized = draftRecord.copy(
+                id = safeId,
+                schoolId = cleanSchool,
+                photoUrl = cdnUrl,
+                photoFallbackUrl = fallbackUrl,
+                pbRecordId = recordId,
+                pbCollectionId = collectionId,
+                pbFilename = uploadedFilename,
+                proofUploadedAt = uploadedAt,
+                proofExpiresAt = expiresAt,
+                proofStatus = ChristianWorshipRecord.PROOF_STATUS_ACTIVE,
+                isMediaPurgedFromServer = false
+            )
+            uploadSingleChristianWorshipRecord(context, finalized)
+            Result.success(finalized)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadChristianWorshipWithPhoto", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadSingleChristianWorshipRecord(context: Context, record: ChristianWorshipRecord): Boolean =
+        withContext(Dispatchers.IO) {
+            val service = PocketBaseClient.getService(context) ?: return@withContext false
+            val dto = PbChristianWorshipRecordDto.fromDomain(record)
+            upsertSingleDto(service, "christian_worship_records", dto.id!!, dto)
+        }
+
+    /**
+     * Menghapus file foto ibadah Kristen dari PocketBase & R2 setelah masa retensi 90 hari berakhir,
+     * sementara catatan ibadah tetap tersimpan permanen.
+     */
+    suspend fun purgeChristianWorshipServerMedia(
+        context: Context,
+        record: ChristianWorshipRecord
+    ): Result<ChristianWorshipRecord> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val purgedLocal = record.copy(
+            photoUrl = "",
+            photoFallbackUrl = "",
+            localPhotoPath = "",
+            pbFilename = "",
+            proofStatus = ChristianWorshipRecord.PROOF_STATUS_EXPIRED,
+            isMediaPurgedFromServer = true,
+            updatedAt = maxOf(now, record.updatedAt + 1L)
+        )
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.success(purgedLocal)
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.success(purgedLocal)
+        }
+        val pbId = ChristianWorshipHelper.resolveRecordPbId(record)
+        val payload = JSONObject().apply {
+            put("photo_file", JSONObject.NULL)
+            put("photo_url", "")
+            put("photo_fallback_url", "")
+            put("pb_filename", "")
+            put("proof_status", ChristianWorshipRecord.PROOF_STATUS_EXPIRED)
+            put("is_media_purged_from_server", true)
+            put("updated_at", purgedLocal.updatedAt)
+        }
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val request = Request.Builder()
+            .url("$baseUrl/api/collections/christian_worship_records/records/$pbId")
+            .patch(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        return@withContext runCatching {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful && resp.code != 404) {
+                    error("HTTP ${resp.code}: ${resp.body?.string().orEmpty()}")
+                }
+            }
+            purgedLocal
+        }
+    }
+
+    suspend fun deleteRemoteChristianWorshipRecord(context: Context, record: ChristianWorshipRecord): Boolean =
+        withContext(Dispatchers.IO) {
+            val service = PocketBaseClient.getService(context) ?: return@withContext false
+            val pbId = ChristianWorshipHelper.resolveRecordPbId(record)
+            val resp = runCatching { service.deleteRecord("christian_worship_records", pbId) }.getOrNull()
+            resp != null && (resp.isSuccessful || resp.code() == 404)
+        }
+
+    private suspend fun syncChristianWorshipMerged(
+        service: PocketBaseService,
+        schoolId: String,
+        filter: String,
+        repository: HealthRepository,
+        pbBaseUrl: String
+    ) {
+        val localRecords = repository.getAllChristianWorshipRecordsIncludingDeletedList()
+            .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
+        val remoteRes = fetchAllPages { page ->
+            service.listChristianWorshipRecords(page = page, perPage = 500, filter = filter)
+        }
+        val remoteRecords = remoteRes.getOrNull()
+            ?.map { it.toDomainModel(schoolId, pbBaseUrl) }
+            ?: return
+
+        val localById = localRecords.associateBy { it.id }
+        val remoteById = remoteRecords.associateBy { it.id }
+
+        val mergedRemoteToLocal = remoteRecords.map { rem ->
+            val loc = localById[rem.id]
+            if (loc == null) {
+                rem
+            } else {
+                val newest = if (rem.updatedAt >= loc.updatedAt) rem else loc
+                val isPurged = loc.isMediaPurgedFromServer || rem.isMediaPurgedFromServer
+                newest.copy(
+                    isMediaPurgedFromServer = isPurged,
+                    proofStatus = if (isPurged) ChristianWorshipRecord.PROOF_STATUS_EXPIRED else newest.proofStatus,
+                    photoUrl = if (isPurged) "" else newest.photoUrl,
+                    photoFallbackUrl = if (isPurged) "" else newest.photoFallbackUrl,
+                    pbFilename = if (isPurged) "" else newest.pbFilename
+                )
+            }
+        }
+        if (mergedRemoteToLocal.isNotEmpty()) {
+            repository.insertAllChristianWorshipRecords(mergedRemoteToLocal)
+        }
+
+        val toPush = localRecords.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPush.isNotEmpty()) {
+            val pairs = toPush.map { r ->
+                val dto = PbChristianWorshipRecordDto.fromDomain(r)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "christian_worship_records", pairs)
+        }
+    }
+
+    suspend fun syncChristianWorshipOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+        val baseUrl = PocketBaseConfig.getBaseUrl(context)
+
+        runCatching { syncChristianWorshipMerged(service, cleanSchoolId, filter, repository, baseUrl) }
+
+        // Pembersihan otomatis file foto ibadah Kristen hanya setelah masa retensi 90 hari berakhir
+        val activeRecords = repository.getChristianWorshipRecordsBySchoolList(cleanSchoolId)
+        val now = System.currentTimeMillis()
+        for (record in activeRecords) {
+            if (!record.isMediaPurgedFromServer &&
+                record.proofExpiresAt != null &&
+                record.proofExpiresAt <= now &&
+                (record.photoUrl.isNotBlank() || record.photoFallbackUrl.isNotBlank())
+            ) {
+                val purged = purgeChristianWorshipServerMedia(context, record).getOrNull()
+                if (purged != null) {
+                    repository.updateChristianWorshipRecord(purged)
                 }
             }
         }

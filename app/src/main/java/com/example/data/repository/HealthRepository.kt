@@ -48,7 +48,11 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.dao.ChatMediaLocalSaveDao
+import com.example.data.dao.ChristianWorshipDao
+import com.example.data.dao.ChristianWorshipLocalSaveDao
 import com.example.data.model.ChatMediaLocalSave
+import com.example.data.model.ChristianWorshipLocalSave
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.ParentMessage
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
@@ -88,7 +92,9 @@ class HealthRepository(
     private val sholatRecordDao: SholatRecordDao? = null,
     private val waliGalleryPostDao: WaliGalleryPostDao? = null,
     private val waliGalleryLocalSaveDao: WaliGalleryLocalSaveDao? = null,
-    private val chatMediaLocalSaveDao: ChatMediaLocalSaveDao? = null
+    private val chatMediaLocalSaveDao: ChatMediaLocalSaveDao? = null,
+    private val christianWorshipDao: ChristianWorshipDao? = null,
+    private val christianWorshipLocalSaveDao: ChristianWorshipLocalSaveDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -133,6 +139,10 @@ class HealthRepository(
         waliGalleryLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
     val allChatMediaLocalSaves: Flow<List<ChatMediaLocalSave>> =
         chatMediaLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
+    val allChristianWorshipRecords: Flow<List<ChristianWorshipRecord>> =
+        christianWorshipDao?.getAllRecords() ?: emptyFlow()
+    val allChristianWorshipLocalSaves: Flow<List<ChristianWorshipLocalSave>> =
+        christianWorshipLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -889,5 +899,45 @@ class HealthRepository(
 
     suspend fun deleteWaliGalleryLocalSave(postId: Long) {
         waliGalleryLocalSaveDao?.deleteByPostId(postId)
+    }
+
+    // --- Modul Agama Kristen (Doa Pagi, Doa Malam, Kegiatan Gereja + Retensi Foto 90 Hari) ---
+    suspend fun insertChristianWorshipRecord(record: ChristianWorshipRecord): Long =
+        christianWorshipDao?.insertRecord(record) ?: 0L
+
+    suspend fun insertAllChristianWorshipRecords(records: List<ChristianWorshipRecord>) {
+        christianWorshipDao?.insertAllRecords(records)
+    }
+
+    suspend fun updateChristianWorshipRecord(record: ChristianWorshipRecord) {
+        christianWorshipDao?.updateRecord(record)
+    }
+
+    suspend fun getChristianWorshipRecordById(id: Long): ChristianWorshipRecord? =
+        christianWorshipDao?.getRecordById(id)
+
+    suspend fun getAllChristianWorshipRecordsIncludingDeletedList(): List<ChristianWorshipRecord> =
+        christianWorshipDao?.getAllRecordsIncludingDeletedList() ?: emptyList()
+
+    suspend fun getChristianWorshipRecordsBySchoolList(schoolId: String): List<ChristianWorshipRecord> =
+        christianWorshipDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteChristianWorshipRecordById(id: Long) {
+        christianWorshipDao?.deleteById(id)
+    }
+
+    suspend fun deleteChristianWorshipRecordsBySchool(schoolId: String) {
+        christianWorshipDao?.deleteBySchool(schoolId)
+    }
+
+    suspend fun upsertChristianWorshipLocalSave(save: ChristianWorshipLocalSave) {
+        christianWorshipLocalSaveDao?.upsertLocalSave(save)
+    }
+
+    suspend fun getChristianWorshipLocalSave(recordId: Long): ChristianWorshipLocalSave? =
+        christianWorshipLocalSaveDao?.getByRecordId(recordId)
+
+    suspend fun deleteChristianWorshipLocalSave(recordId: Long) {
+        christianWorshipLocalSaveDao?.deleteByRecordId(recordId)
     }
 }

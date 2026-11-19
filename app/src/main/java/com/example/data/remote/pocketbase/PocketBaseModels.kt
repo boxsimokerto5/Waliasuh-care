@@ -1,6 +1,8 @@
 package com.example.data.remote.pocketbase
 
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.DashboardBannerConfig
 import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
@@ -143,7 +145,8 @@ data class PbStudentDto(
     @Json(name = "assigned_wali_username") val assignedWaliUsername: String? = null,
     @Json(name = "assigned_wali_name") val assignedWaliName: String? = null,
     @Json(name = "photo_url") val photoUrl: String? = null,
-    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null
+    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null,
+    @Json(name = "religion") val religion: String? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ChildStudent {
         return ChildStudent(
@@ -172,7 +175,8 @@ data class PbStudentDto(
             assignedWaliUsername = assignedWaliUsername ?: "",
             assignedWaliName = assignedWaliName ?: "",
             photoUrl = photoUrl?.trim().orEmpty(),
-            photoFallbackUrl = photoFallbackUrl?.trim().orEmpty()
+            photoFallbackUrl = photoFallbackUrl?.trim().orEmpty(),
+            religion = com.example.data.model.StudentReligionHelper.normalize(religion)
         )
     }
 
@@ -210,7 +214,8 @@ data class PbStudentDto(
                 assignedWaliUsername = model.assignedWaliUsername,
                 assignedWaliName = model.assignedWaliName,
                 photoUrl = model.photoUrl.trim(),
-                photoFallbackUrl = model.photoFallbackUrl.trim()
+                photoFallbackUrl = model.photoFallbackUrl.trim(),
+                religion = com.example.data.model.StudentReligionHelper.normalize(model.religion)
             )
         }
     }
@@ -392,6 +397,149 @@ data class PbHaidRecordDto(
         }
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class PbChristianWorshipRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "collectionId") val collectionId: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "activity_type") val activityType: String? = null,
+    @Json(name = "activity_date") val activityDate: Long? = null,
+    @Json(name = "date_key") val dateKey: String? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "wali_username") val waliUsername: String? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "photo_url") val photoUrl: String? = null,
+    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null,
+    @Json(name = "pb_record_id") val pbRecordId: String? = null,
+    @Json(name = "pb_collection_id") val pbCollectionId: String? = null,
+    @Json(name = "pb_filename") val pbFilename: String? = null,
+    @Json(name = "photo_file") val photoFile: String? = null,
+    @Json(name = "proof_uploaded_at") val proofUploadedAt: Long? = null,
+    @Json(name = "proof_expires_at") val proofExpiresAt: Long? = null,
+    @Json(name = "proof_status") val proofStatus: String? = null,
+    @Json(name = "is_media_purged_from_server") val isMediaPurgedFromServer: Boolean? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(
+        fallbackSchoolId: String = "SRT1-KDR",
+        pbBaseUrl: String = DashboardBannerItem.DEFAULT_POCKETBASE_BASE_URL
+    ): ChristianWorshipRecord {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        val purged = isMediaPurgedFromServer ?: false
+        val recId = pbRecordId.orEmpty().trim().ifBlank { id.orEmpty().trim() }
+        val colId = pbCollectionId.orEmpty().trim().ifBlank { collectionId.orEmpty().trim() }
+            .ifBlank { "christian_worship_records" }
+        val file = pbFilename.orEmpty().trim().ifBlank { photoFile.orEmpty().trim() }
+        val resolvedPrimary = if (purged) "" else {
+            photoUrl?.takeIf { it.isNotBlank() } ?: run {
+                if (recId.isNotBlank() && file.isNotBlank()) {
+                    DashboardBannerItem.buildR2CdnUrl(colId, recId, file)
+                } else ""
+            }
+        }
+        val resolvedFallback = if (purged) "" else {
+            photoFallbackUrl?.takeIf { it.isNotBlank() } ?: run {
+                if (recId.isNotBlank() && file.isNotBlank()) {
+                    DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, file)
+                } else ""
+            }
+        }
+        val actDate = activityDate?.takeIf { it > 0L } ?: now
+        val uploaded = proofUploadedAt?.takeIf { it > 0L }
+        val expires = proofExpiresAt?.takeIf { it > 0L } ?: uploaded?.let { ChristianWorshipHelper.computeExpiresAt(it) }
+        val expiredByTime = expires != null && expires <= now
+        val status = when {
+            purged || proofStatus == ChristianWorshipRecord.PROOF_STATUS_EXPIRED || expiredByTime ->
+                ChristianWorshipRecord.PROOF_STATUS_EXPIRED
+            resolvedPrimary.isNotBlank() || resolvedFallback.isNotBlank() || proofStatus == ChristianWorshipRecord.PROOF_STATUS_ACTIVE ->
+                ChristianWorshipRecord.PROOF_STATUS_ACTIVE
+            else -> ChristianWorshipRecord.PROOF_STATUS_NONE
+        }
+        val finalPurged = purged || (status == ChristianWorshipRecord.PROOF_STATUS_EXPIRED && resolvedPrimary.isBlank() && resolvedFallback.isBlank())
+        return ChristianWorshipRecord(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = resolvedSchool,
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            activityType = ChristianWorshipHelper.normalizeType(activityType),
+            activityDate = actDate,
+            dateKey = dateKey?.takeIf { it.isNotBlank() } ?: ChristianWorshipHelper.dateKeyFromMillis(actDate),
+            title = title.orEmpty().trim(),
+            notes = notes.orEmpty().trim(),
+            waliUsername = waliUsername.orEmpty().trim(),
+            waliName = waliName?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            photoUrl = if (finalPurged) "" else resolvedPrimary,
+            photoFallbackUrl = if (finalPurged) "" else resolvedFallback,
+            localPhotoPath = "",
+            pbRecordId = recId,
+            pbCollectionId = if (recId.isNotBlank()) colId else "",
+            pbFilename = if (finalPurged) "" else file,
+            proofUploadedAt = uploaded,
+            proofExpiresAt = expires,
+            proofStatus = status,
+            isMediaPurgedFromServer = finalPurged,
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: actDate,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: ChristianWorshipRecord): PbChristianWorshipRecordDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "christian_worship:${model.schoolId}:${model.studentId}:${model.activityType}:${model.createdAt}"
+            )
+            val pbId = model.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
+            return PbChristianWorshipRecordDto(
+                id = pbId,
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                activityType = ChristianWorshipHelper.normalizeType(model.activityType),
+                activityDate = model.activityDate,
+                dateKey = model.dateKey.ifBlank { ChristianWorshipHelper.dateKeyFromMillis(model.activityDate) },
+                title = model.title,
+                notes = model.notes,
+                waliUsername = model.waliUsername,
+                waliName = model.waliName,
+                photoUrl = if (model.isMediaPurgedFromServer) "" else model.photoUrl,
+                photoFallbackUrl = if (model.isMediaPurgedFromServer) "" else model.photoFallbackUrl,
+                pbRecordId = pbId,
+                pbCollectionId = model.pbCollectionId.ifBlank { "christian_worship_records" },
+                pbFilename = if (model.isMediaPurgedFromServer) "" else model.pbFilename,
+                proofUploadedAt = model.proofUploadedAt,
+                proofExpiresAt = model.proofExpiresAt,
+                proofStatus = model.proofStatus,
+                isMediaPurgedFromServer = model.isMediaPurgedFromServer,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
 
 @JsonClass(generateAdapter = true)
 data class PbWaliAccountDto(
@@ -1114,6 +1262,7 @@ data class PbParentAccessLinkDto(
     @Json(name = "deletion_requested_at") val deletionRequestedAt: Long? = null,
     @Json(name = "student_photo_url") val studentPhotoUrl: String? = null,
     @Json(name = "student_photo_fallback_url") val studentPhotoFallbackUrl: String? = null,
+    @Json(name = "student_religion") val studentReligion: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1146,6 +1295,7 @@ data class PbParentAccessLinkDto(
             deletionRequestedAt = deletionRequestedAt ?: 0L,
             studentPhotoUrl = studentPhotoUrl?.trim().orEmpty(),
             studentPhotoFallbackUrl = studentPhotoFallbackUrl?.trim().orEmpty(),
+            studentReligion = com.example.data.model.StudentReligionHelper.normalize(studentReligion),
             createdAt = resolvedCreated,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
         )
@@ -1183,6 +1333,7 @@ data class PbParentAccessLinkDto(
                 deletionRequestedAt = model.deletionRequestedAt,
                 studentPhotoUrl = model.studentPhotoUrl.trim(),
                 studentPhotoFallbackUrl = model.studentPhotoFallbackUrl.trim(),
+                studentReligion = com.example.data.model.StudentReligionHelper.normalize(model.studentReligion),
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

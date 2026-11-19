@@ -32,7 +32,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.50.0 • 28 Koleksi Multi-Tenant + Foto Chat 2 Arah & Galeri R2 (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.51.0 • 29 Koleksi Multi-Tenant + Agama Kristen & Ibadah R2 (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -66,6 +66,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("assigned_wali_name", "text"),
                 PbFieldDef("photo_url", "text"),
                 PbFieldDef("photo_fallback_url", "text"),
+                PbFieldDef("religion", "text"),
                 PbFieldDef(
                     name = "photo_file",
                     type = "file",
@@ -382,6 +383,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("deletion_requested_at", "number"),
                 PbFieldDef("student_photo_url", "text"),
                 PbFieldDef("student_photo_fallback_url", "text"),
+                PbFieldDef("student_religion", "text"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),
@@ -808,6 +810,47 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_wgp_school ON wali_gallery_posts (school_id, wali_username)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "christian_worship_records",
+            description = "Catatan kegiatan ibadah Agama Kristen (Doa Pagi, Doa Malam, Kegiatan ke Gereja) + foto retensi 90 hari R2",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nik", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("activity_type", "text"),
+                PbFieldDef("activity_date", "number"),
+                PbFieldDef("date_key", "text"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("notes", "text"),
+                PbFieldDef("wali_username", "text"),
+                PbFieldDef("wali_name", "text"),
+                PbFieldDef("photo_url", "text"),
+                PbFieldDef("photo_fallback_url", "text"),
+                PbFieldDef("pb_record_id", "text"),
+                PbFieldDef("pb_collection_id", "text"),
+                PbFieldDef("pb_filename", "text"),
+                PbFieldDef(
+                    name = "photo_file",
+                    type = "file",
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
+                ),
+                PbFieldDef("proof_uploaded_at", "number"),
+                PbFieldDef("proof_expires_at", "number"),
+                PbFieldDef("proof_status", "text"),
+                PbFieldDef("is_media_purged_from_server", "bool"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_cwr_school ON christian_worship_records (school_id, student_id)")
         )
     )
 

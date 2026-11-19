@@ -7,7 +7,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipLocalSave
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.DashboardBannerConfig
+import com.example.data.model.StudentReligionHelper
 import com.example.data.model.DashboardBannerItem
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.DeletionLog
@@ -139,7 +143,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.sholatRecordDao(),
             db.waliGalleryPostDao(),
             db.waliGalleryLocalSaveDao(),
-            db.chatMediaLocalSaveDao()
+            db.chatMediaLocalSaveDao(),
+            db.christianWorshipDao(),
+            db.christianWorshipLocalSaveDao()
         )
     }
 
@@ -1999,6 +2005,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 parentPhone = cleanPhone.ifBlank { existing.parentPhone },
                 assignedWaliUsername = assignedWaliUser.ifBlank { existing.assignedWaliUsername },
                 assignedWaliName = assignedWaliDisplay.ifBlank { existing.assignedWaliName },
+                schoolId = activeSchool,
+                studentReligion = StudentReligionHelper.normalize(student.religion),
                 studentPhotoUrl = student.photoUrl.ifBlank { existing.studentPhotoUrl },
                 studentPhotoFallbackUrl = student.photoFallbackUrl.ifBlank { existing.studentPhotoFallbackUrl },
                 updatedAt = now
@@ -2025,6 +2033,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewProfile = true,
                 canViewSholat = true,
                 schoolId = activeSchool,
+                studentReligion = StudentReligionHelper.normalize(student.religion),
                 studentPhotoUrl = student.photoUrl,
                 studentPhotoFallbackUrl = student.photoFallbackUrl,
                 createdAt = now,
@@ -5966,6 +5975,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteTabunganLogsBySchool(registration.generatedSchoolCode)
                 repository.deleteKonselingRecordsBySchool(registration.generatedSchoolCode)
                 repository.deleteKonselingLogsBySchool(registration.generatedSchoolCode)
+                repository.deleteChristianWorshipRecordsBySchool(registration.generatedSchoolCode)
                 repository.deleteSchoolRegistrationsByCode(registration.generatedSchoolCode)
             }
             if (registration.id > 0L) {
@@ -6738,6 +6748,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteVisitSessionsBySchool(targetSchoolId)
                 repository.deleteMengajiRecordsBySchool(targetSchoolId)
                 repository.deleteHaidRecordsBySchool(targetSchoolId)
+                repository.deleteChristianWorshipRecordsBySchool(targetSchoolId)
                 repository.deleteShiftMessagesBySchool(targetSchoolId)
                 repository.deleteStudentsBySchool(targetSchoolId)
                 repository.deleteWaliAccountsBySchool(targetSchoolId)
@@ -7773,6 +7784,318 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     res.exceptionOrNull()?.message
                         ?: if (isEn) "Failed to clean server file." else "Gagal membersihkan file server."
                 )
+            }
+        }
+    }
+
+    // --- Modul Agama Kristen (Klaim Agama Kristen & Kegiatan Ibadah 90 Hari DB + Auto-Galeri Ortu) ---
+
+    private val _christianWorshipAutoSaveEnabled = MutableStateFlow(
+        galleryPrefs.getBoolean("christian_auto_save_media", true)
+    )
+    val christianWorshipAutoSaveEnabled: StateFlow<Boolean> = _christianWorshipAutoSaveEnabled.asStateFlow()
+
+    fun setChristianWorshipAutoSaveEnabled(enabled: Boolean) {
+        _christianWorshipAutoSaveEnabled.value = enabled
+        galleryPrefs.edit().putBoolean("christian_auto_save_media", enabled).apply()
+    }
+
+    private val _isSavingChristianWorship = MutableStateFlow(false)
+    val isSavingChristianWorship: StateFlow<Boolean> = _isSavingChristianWorship.asStateFlow()
+
+    private val _isSavingChristianMedia = MutableStateFlow(false)
+    val isSavingChristianMedia: StateFlow<Boolean> = _isSavingChristianMedia.asStateFlow()
+
+    val christianWorshipRecords: StateFlow<List<ChristianWorshipRecord>> = combine(
+        repository.allChristianWorshipRecords,
+        _schoolProfile,
+        _currentUserRole
+    ) { records, profile, role ->
+        val active = records.filter { !it.isDeleted }
+        if (role == UserRole.SUPERADMIN) {
+            active
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            active.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val christianWorshipLocalSaves: StateFlow<List<ChristianWorshipLocalSave>> =
+        repository.allChristianWorshipLocalSaves
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun syncChristianWorshipOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncChristianWorshipOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun claimStudentsChristianReligion(
+        selectedStudents: List<ChildStudent>,
+        markAsChristian: Boolean,
+        onResult: (Int, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (selectedStudents.isEmpty()) {
+            onResult(0, if (isEn) "Select at least 1 student first." else "Pilih minimal 1 anak asuh terlebih dahulu.")
+            return
+        }
+        viewModelScope.launch {
+            val targetReligion = if (markAsChristian) StudentReligionHelper.RELIGION_KRISTEN else ""
+            val updatedStudents = mutableListOf<ChildStudent>()
+            val updatedLinks = mutableListOf<ParentAccessLink>()
+            val now = System.currentTimeMillis()
+            selectedStudents.forEach { st ->
+                val cleanStudent = st.copy(religion = targetReligion)
+                repository.updateStudent(cleanStudent)
+                updatedStudents.add(cleanStudent)
+
+                val school = cleanStudent.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                val existingLink = repository.getParentAccessLinkByStudentId(cleanStudent.id, school)
+                if (existingLink != null) {
+                    val syncedLink = existingLink.copy(
+                        studentReligion = targetReligion,
+                        updatedAt = maxOf(now, existingLink.updatedAt + 1L)
+                    )
+                    repository.insertParentAccessLink(syncedLink)
+                    updatedLinks.add(syncedLink)
+                }
+            }
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                if (updatedStudents.isNotEmpty()) {
+                    PocketBaseSyncManager.uploadStudents(getApplication(), updatedStudents)
+                }
+                updatedLinks.forEach { link ->
+                    PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), link)
+                }
+            }
+            val msg = if (markAsChristian) {
+                if (isEn) "${updatedStudents.size} student(s) marked as Christian."
+                else "${updatedStudents.size} anak berhasil diklaim sebagai Agama Kristen."
+            } else {
+                if (isEn) "${updatedStudents.size} student(s) removed from Christian list."
+                else "${updatedStudents.size} anak dihapus dari daftar Agama Kristen."
+            }
+            onResult(updatedStudents.size, msg)
+        }
+    }
+
+    fun saveChristianWorshipActivity(
+        student: ChildStudent,
+        activityType: String,
+        activityDate: Long,
+        title: String,
+        notes: String,
+        imageUri: Uri? = null,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (!StudentReligionHelper.isChristian(student)) {
+            onResult(
+                false,
+                if (isEn) "This student is not registered under Christian religion yet."
+                else "Anak ini belum diklaim pada daftar Agama Kristen."
+            )
+            return
+        }
+        viewModelScope.launch {
+            _isSavingChristianWorship.value = true
+            try {
+                val now = System.currentTimeMillis()
+                val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                val cleanType = ChristianWorshipHelper.normalizeType(activityType)
+                val cleanDate = activityDate.takeIf { it > 0L } ?: now
+                val dateKey = ChristianWorshipHelper.dateKeyFromMillis(cleanDate)
+                val waliUser = _currentUsername.value?.trim().orEmpty()
+                val waliDisplay = when (_currentUserRole.value) {
+                    UserRole.ADMIN -> _schoolProfile.value.adminName.ifBlank { "Admin Sekolah" }
+                    UserRole.SUPERADMIN -> "Superadmin"
+                    else -> _waliName.value.trim().ifBlank { "Wali Asuh" }
+                }
+                val recordId = PocketBaseSyncManager.generateCloudSafeId()
+                val hasPhoto = imageUri != null
+                val draftRecord = ChristianWorshipRecord(
+                    id = recordId,
+                    schoolId = activeSchool,
+                    studentId = student.id,
+                    studentName = student.name,
+                    studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
+                    studentNis = student.nis,
+                    studentClass = student.classGrade,
+                    studentDorm = student.dormitory,
+                    activityType = cleanType,
+                    activityDate = cleanDate,
+                    dateKey = dateKey,
+                    title = title.trim().ifBlank { ChristianWorshipHelper.activityLabel(cleanType, isEn) },
+                    notes = notes.trim(),
+                    waliUsername = waliUser,
+                    waliName = waliDisplay,
+                    proofUploadedAt = if (hasPhoto) now else null,
+                    proofExpiresAt = if (hasPhoto) ChristianWorshipHelper.computeExpiresAt(now) else null,
+                    proofStatus = if (hasPhoto) ChristianWorshipRecord.PROOF_STATUS_ACTIVE else ChristianWorshipRecord.PROOF_STATUS_NONE,
+                    isMediaPurgedFromServer = false,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+
+                val finalRecord = if (imageUri != null) {
+                    if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        val uploadRes = PocketBaseSyncManager.uploadChristianWorshipWithPhoto(
+                            context = getApplication(),
+                            draftRecord = draftRecord,
+                            imageUri = imageUri
+                        )
+                        if (uploadRes.isFailure) {
+                            onResult(
+                                false,
+                                uploadRes.exceptionOrNull()?.message
+                                    ?: if (isEn) "Failed to upload activity photo." else "Gagal mengunggah foto kegiatan."
+                            )
+                            return@launch
+                        }
+                        uploadRes.getOrThrow()
+                    } else {
+                        draftRecord.copy(
+                            photoUrl = imageUri.toString(),
+                            localPhotoPath = imageUri.toString(),
+                            pbRecordId = PocketBaseIdCodec.toPbId(recordId),
+                            pbCollectionId = "christian_worship_records"
+                        )
+                    }
+                } else {
+                    val synced = draftRecord.copy(
+                        pbRecordId = PocketBaseIdCodec.toPbId(recordId),
+                        pbCollectionId = "christian_worship_records"
+                    )
+                    if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        PocketBaseSyncManager.uploadSingleChristianWorshipRecord(getApplication(), synced)
+                    }
+                    synced
+                }
+
+                repository.insertChristianWorshipRecord(finalRecord)
+                onResult(
+                    true,
+                    if (imageUri != null) {
+                        if (isEn) "Worship activity saved! Photo kept in DB for 90 days & ready for Parent Gallery."
+                        else "Kegiatan ibadah tersimpan! Foto disimpan 90 hari & otomatis masuk Galeri Orang Tua."
+                    } else {
+                        if (isEn) "Worship activity saved!" else "Kegiatan ibadah berhasil dicatat!"
+                    }
+                )
+            } catch (e: Exception) {
+                onResult(false, e.message ?: if (isEn) "Failed to save worship activity." else "Gagal menyimpan kegiatan ibadah.")
+            } finally {
+                _isSavingChristianWorship.value = false
+            }
+        }
+    }
+
+    fun deleteChristianWorshipRecord(
+        record: ChristianWorshipRecord,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val deleted = record.copy(
+                photoUrl = "",
+                photoFallbackUrl = "",
+                localPhotoPath = "",
+                pbFilename = "",
+                isMediaPurgedFromServer = true,
+                isDeleted = true,
+                updatedAt = maxOf(System.currentTimeMillis(), record.updatedAt + 1L)
+            )
+            repository.updateChristianWorshipRecord(deleted)
+            repository.deleteChristianWorshipLocalSave(record.id)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleChristianWorshipRecord(getApplication(), deleted)
+                PocketBaseSyncManager.deleteRemoteChristianWorshipRecord(getApplication(), record)
+            }
+            onResult(true, if (isEn) "Worship activity deleted." else "Catatan kegiatan ibadah dihapus.")
+        }
+    }
+
+    fun saveChristianWorshipPhotoToParentDevice(
+        record: ChristianWorshipRecord,
+        silentAuto: Boolean = false,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (!ChristianWorshipHelper.isProofActive(record)) {
+            if (!silentAuto) {
+                onResult(
+                    false,
+                    if (isEn) "Photo is no longer stored on server (90-day retention ended)."
+                    else "Foto sudah melewati masa simpan 90 hari di server."
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            val existingSave = repository.getChristianWorshipLocalSave(record.id)
+            if (existingSave != null && WaliGalleryMediaHelper.isLocalSaveAccessible(getApplication(), existingSave.localGalleryUri)) {
+                if (!silentAuto) {
+                    onResult(true, if (isEn) "Already saved in phone gallery." else "Foto sudah tersimpan di Galeri HP Anda.")
+                }
+                return@launch
+            }
+            if (!silentAuto) _isSavingChristianMedia.value = true
+            try {
+                val saveRes = WaliGalleryMediaHelper.saveChristianWorshipPhotoToParentGallery(getApplication(), record)
+                if (saveRes.isFailure) {
+                    if (!silentAuto) {
+                        onResult(
+                            false,
+                            saveRes.exceptionOrNull()?.message
+                                ?: if (isEn) "Failed to save to phone gallery." else "Gagal menyimpan foto ke Galeri HP."
+                        )
+                    }
+                    return@launch
+                }
+                repository.upsertChristianWorshipLocalSave(saveRes.getOrThrow())
+                if (!silentAuto) {
+                    onResult(
+                        true,
+                        if (isEn) "Saved permanently to Pictures/WaliAsuhCare!"
+                        else "Foto tersimpan permanen di Galeri HP (Pictures/WaliAsuhCare)!"
+                    )
+                }
+            } finally {
+                if (!silentAuto) _isSavingChristianMedia.value = false
+            }
+        }
+    }
+
+    fun saveAllPendingChristianPhotosToDevice(
+        records: List<ChristianWorshipRecord>,
+        onResult: (Int, Int) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            _isSavingChristianMedia.value = true
+            var savedCount = 0
+            var failCount = 0
+            try {
+                for (rec in records) {
+                    if (!ChristianWorshipHelper.isProofActive(rec)) continue
+                    val existing = repository.getChristianWorshipLocalSave(rec.id)
+                    if (existing != null && WaliGalleryMediaHelper.isLocalSaveAccessible(getApplication(), existing.localGalleryUri)) {
+                        continue
+                    }
+                    val saveRes = WaliGalleryMediaHelper.saveChristianWorshipPhotoToParentGallery(getApplication(), rec)
+                    if (saveRes.isSuccess) {
+                        savedCount++
+                        repository.upsertChristianWorshipLocalSave(saveRes.getOrThrow())
+                    } else {
+                        failCount++
+                    }
+                }
+                onResult(savedCount, failCount)
+            } finally {
+                _isSavingChristianMedia.value = false
             }
         }
     }

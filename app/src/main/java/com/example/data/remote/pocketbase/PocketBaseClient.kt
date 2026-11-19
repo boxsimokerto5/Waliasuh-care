@@ -1,11 +1,15 @@
 package com.example.data.remote.pocketbase
 
 import android.content.Context
+import com.example.data.model.SavingRetentionHelper
+import com.example.data.model.SavingTransaction
 import com.squareup.moshi.Moshi
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.asRequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.ResponseBody
 import okhttp3.logging.HttpLoggingInterceptor
@@ -17,10 +21,13 @@ import retrofit2.converter.moshi.MoshiConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Multipart
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.Part
 import retrofit2.http.Path
 import retrofit2.http.Query
+import java.io.File
 import java.util.concurrent.TimeUnit
 
 interface PocketBaseService {
@@ -265,6 +272,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-created_at"
     ): Response<PbListResponse<PbWaliGalleryPostDto>>
 
+    // --- Modul Agama Kristen (Doa Pagi, Doa Malam, Kegiatan ke Gereja + Foto 90 Hari R2) ---
+    @GET("api/collections/christian_worship_records/records")
+    suspend fun listChristianWorshipRecords(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-activity_date,-created_at"
+    ): Response<PbListResponse<PbChristianWorshipRecordDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(
@@ -292,6 +308,28 @@ interface PocketBaseService {
     suspend fun deleteRecord(
         @Path("collection") collection: String,
         @Path("id") id: String
+    ): Response<ResponseBody>
+
+    // --- Saving Transactions (Tabungan Anak Asuh & Bukti Foto 3 Bulan) ---
+    @GET("api/collections/saving_transactions/records")
+    suspend fun listSavingTransactions(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-transaction_date,-created_at"
+    ): Response<PbListResponse<PbSavingTransactionDto>>
+
+    @Multipart
+    @POST("api/collections/saving_transactions/records")
+    suspend fun createSavingTransactionMultipart(
+        @Part parts: List<MultipartBody.Part>
+    ): Response<ResponseBody>
+
+    @Multipart
+    @PATCH("api/collections/saving_transactions/records/{id}")
+    suspend fun updateSavingTransactionMultipart(
+        @Path("id") id: String,
+        @Part parts: List<MultipartBody.Part>
     ): Response<ResponseBody>
 
     @POST("api/batch")
@@ -348,6 +386,54 @@ object PocketBaseClient {
             put("requests", reqArr)
         }
         return root.toString().toRequestBody(jsonMediaType)
+    }
+
+    fun buildSavingMultipartParts(
+        model: SavingTransaction,
+        photoFile: File?,
+        includeId: Boolean
+    ): List<MultipartBody.Part> {
+        val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+            "saving_tx:${model.schoolId}:${model.studentId}:${model.transactionDate}:${model.amount}:${model.purpose}"
+        )
+        val pbId = PocketBaseIdCodec.toPbId(safeId)
+        val isExpired = SavingRetentionHelper.isProofExpired(model)
+        val parts = mutableListOf<MultipartBody.Part>()
+        if (includeId) {
+            parts.add(MultipartBody.Part.createFormData("id", pbId))
+        }
+        parts.add(MultipartBody.Part.createFormData("local_id", safeId.toString()))
+        parts.add(MultipartBody.Part.createFormData("school_id", model.schoolId.ifBlank { "SRT1-KDR" }))
+        parts.add(MultipartBody.Part.createFormData("student_id", model.studentId.toString()))
+        parts.add(MultipartBody.Part.createFormData("student_name", model.studentName))
+        parts.add(MultipartBody.Part.createFormData("student_nik", com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik)))
+        parts.add(MultipartBody.Part.createFormData("student_nis", model.studentNis))
+        parts.add(MultipartBody.Part.createFormData("student_class", model.studentClass))
+        parts.add(MultipartBody.Part.createFormData("student_dorm", model.studentDorm))
+        parts.add(MultipartBody.Part.createFormData("transaction_type", model.transactionType))
+        parts.add(MultipartBody.Part.createFormData("amount", model.amount.toString()))
+        parts.add(MultipartBody.Part.createFormData("transaction_date", model.transactionDate.toString()))
+        parts.add(MultipartBody.Part.createFormData("purpose", model.purpose))
+        parts.add(MultipartBody.Part.createFormData("notes", model.notes))
+        parts.add(MultipartBody.Part.createFormData("wali_name", model.waliName))
+        parts.add(MultipartBody.Part.createFormData("proof_uploaded_at", (model.proofUploadedAt ?: 0L).toString()))
+        parts.add(MultipartBody.Part.createFormData("proof_expires_at", (model.proofExpiresAt ?: 0L).toString()))
+        parts.add(
+            MultipartBody.Part.createFormData(
+                "proof_status",
+                if (isExpired) SavingTransaction.PROOF_STATUS_EXPIRED else model.proofStatus
+            )
+        )
+        parts.add(MultipartBody.Part.createFormData("created_at", model.createdAt.toString()))
+        parts.add(MultipartBody.Part.createFormData("updated_at", model.updatedAt.toString()))
+
+        if (!isExpired && photoFile != null && photoFile.exists() && photoFile.length() > 0L) {
+            val reqFile = photoFile.asRequestBody("image/jpeg".toMediaType())
+            parts.add(MultipartBody.Part.createFormData("proof_photo", photoFile.name, reqFile))
+        } else if (isExpired) {
+            parts.add(MultipartBody.Part.createFormData("proof_photo", ""))
+        }
+        return parts
     }
 
     fun getService(context: Context): PocketBaseService? {
