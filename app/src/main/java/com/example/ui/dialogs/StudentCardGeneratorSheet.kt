@@ -178,7 +178,7 @@ fun StudentCardGeneratorSheet(
         }
         isGenerating = true
         scope.launch {
-            val file = withContext(Dispatchers.Default) {
+            val file = withContext(Dispatchers.IO) {
                 StudentCardPdfGenerator.generateCardsPdf(
                     context = context,
                     students = list,

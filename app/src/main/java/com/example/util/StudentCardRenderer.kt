@@ -183,10 +183,26 @@ object StudentCardRenderer {
         canvas.drawBitmap(bitmap, null, RectF(dx, dy, dx + drawW, dy + drawH), paint)
     }
 
+    private fun drawBitmapCenterCrop(canvas: Canvas, bitmap: Bitmap, targetBox: RectF, paint: Paint) {
+        if (bitmap.width <= 0 || bitmap.height <= 0 || targetBox.width() <= 0f || targetBox.height() <= 0f) return
+        val srcRatio = bitmap.width.toFloat() / bitmap.height.toFloat()
+        val dstRatio = targetBox.width() / targetBox.height()
+        val srcRect = if (srcRatio > dstRatio) {
+            val cropW = (bitmap.height * dstRatio).toInt().coerceIn(1, bitmap.width)
+            val cropX = ((bitmap.width - cropW) / 2).coerceAtLeast(0)
+            android.graphics.Rect(cropX, 0, cropX + cropW, bitmap.height)
+        } else {
+            val cropH = (bitmap.width / dstRatio).toInt().coerceIn(1, bitmap.height)
+            val cropY = ((bitmap.height - cropH) / 2).coerceAtLeast(0)
+            android.graphics.Rect(0, cropY, bitmap.width, cropY + cropH)
+        }
+        canvas.drawBitmap(bitmap, srcRect, targetBox, paint)
+    }
+
     /**
-     * Menggambar Kartu Anak Asuh Konsep A:
+     * Menggambar Kartu Anak Asuh 3 Kolom:
      * Header berwarna Jenjang (SMA Abu-abu / SMP Biru / SD Merah) dengan judul sekolah utuh 2 baris,
-     * body putih bersih ramah cetak, micro-badge jenjang-gender di atas QR, dan NIK utuh pada biodata.
+     * body putih 3 kolom (Pas Foto 3:4 kiri, Biodata lengkap NIK utuh di tengah, micro-badge + QR NIK tajam di kanan).
      */
     fun drawStudentCardOnCanvas(
         canvas: Canvas,
@@ -200,7 +216,8 @@ object StudentCardRenderer {
         logoBitmap: Bitmap? = null,
         kemensosBitmap: Bitmap? = null,
         sekolahRakyatBitmap: Bitmap? = null,
-        language: AppLanguage = AppLanguageManager.currentLanguage
+        language: AppLanguage = AppLanguageManager.currentLanguage,
+        photoBitmap: Bitmap? = null
     ) {
         val isEnglish = language == AppLanguage.ENGLISH
         val palette = resolvePalette(student)
@@ -252,7 +269,7 @@ object StudentCardRenderer {
         canvas.drawRect(left, top + headerHeight + dividerRibbonH, left + sideStripeW, top + height, accentPaint)
 
         // 3. Isi Header: 3 Logo di Kiri + Nama Sekolah Penuh (2 baris) + Subjudul
-        val padX = width * 0.038f
+        val padX = width * 0.034f
         val hasExtraLogos = kemensosBitmap != null || sekolahRakyatBitmap != null
         val logoSize = if (hasExtraLogos) headerHeight * 0.44f else headerHeight * 0.50f
         val logoGap = width * 0.010f
@@ -349,26 +366,27 @@ object StudentCardRenderer {
         val cardSubtitle = if (isEnglish) "STUDENT IDENTITY CARD" else "KARTU IDENTITAS ANAK ASUH"
         canvas.drawText(cardSubtitle, schoolTextLeft, subBaselineY, subLabelPaint)
 
-        // 4. Area Konten Putih: Kiri (Biodata lengkap termasuk NIK utuh) & Kanan (Micro-pill + QR Code)
+        // 4. Area Konten Putih 3 Kolom:
+        // Kiri: Pas Foto 3:4 | Tengah: Biodata lengkap NIK utuh | Kanan: Micro-pill + QR Code Tajam
         val bodyTop = top + headerHeight + dividerRibbonH
-        val contentTop = bodyTop + height * 0.042f
+        val contentTop = bodyTop + height * 0.040f
         val contentBottom = top + height - height * 0.036f
         val contentHeight = (contentBottom - contentTop).coerceAtLeast(24f)
 
-        // Kolom Kanan: Micro-Pill Jenjang • Gender (kecil & manis) + QR Code + Caption
+        // Kolom Kanan: Micro-Pill Jenjang • Gender + QR Code Tajam + Caption
         val badgeText = "${palette.jenjang.label} • ${palette.genderLabel}"
         val badgeTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = palette.genderBadgeTextArgb
-            textSize = height * 0.033f
+            textSize = height * 0.031f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
-        val badgeH = height * 0.080f
-        val qrFrameSize = minOf(contentHeight * 0.68f, width * 0.265f)
+        val badgeH = height * 0.076f
+        val qrFrameSize = minOf(contentHeight * 0.65f, width * 0.242f)
         val rightColRight = left + width - padX
         val qrFrameLeft = rightColRight - qrFrameSize
         val rightCenterX = qrFrameLeft + qrFrameSize / 2f
 
-        val badgeW = maxOf(badgeTextPaint.measureText(badgeText) + width * 0.036f, qrFrameSize * 0.78f)
+        val badgeW = maxOf(badgeTextPaint.measureText(badgeText) + width * 0.030f, qrFrameSize * 0.78f)
         val badgeLeft = (rightCenterX - badgeW / 2f).coerceAtMost(rightColRight - badgeW)
         val badgeRect = RectF(badgeLeft, contentTop, badgeLeft + badgeW, contentTop + badgeH)
 
@@ -385,21 +403,21 @@ object StudentCardRenderer {
         canvas.drawText(badgeText, badgeRect.centerX() - badgeTextW / 2f, badgeTextY, badgeTextPaint)
 
         // Kotak QR di bawah micro-pill
-        val qrFrameTop = badgeRect.bottom + height * 0.026f
+        val qrFrameTop = badgeRect.bottom + height * 0.024f
         val qrFrameBottom = qrFrameTop + qrFrameSize
         val qrFrameRect = RectF(qrFrameLeft, qrFrameTop, rightColRight, qrFrameBottom)
 
         val qrBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
-        canvas.drawRoundRect(qrFrameRect, height * 0.036f, height * 0.036f, qrBgPaint)
+        canvas.drawRoundRect(qrFrameRect, height * 0.034f, height * 0.034f, qrBgPaint)
         val qrBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE
             strokeWidth = height * 0.007f
             color = palette.trimNeonArgb
         }
-        canvas.drawRoundRect(qrFrameRect, height * 0.036f, height * 0.036f, qrBorderPaint)
+        canvas.drawRoundRect(qrFrameRect, height * 0.034f, height * 0.034f, qrBorderPaint)
 
         if (qrBitmap != null) {
-            val qrPad = qrFrameSize * 0.055f
+            val qrPad = qrFrameSize * 0.045f
             val qrDrawRect = RectF(
                 qrFrameRect.left + qrPad,
                 qrFrameRect.top + qrPad,
@@ -416,21 +434,77 @@ object StudentCardRenderer {
 
         val qrCaptionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#64748B")
-            textSize = height * 0.030f
+            textSize = height * 0.029f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             textAlign = Paint.Align.CENTER
-            letterSpacing = 0.06f
+            letterSpacing = 0.05f
         }
-        canvas.drawText("SCAN QR NIK", qrFrameRect.centerX(), qrFrameRect.bottom + height * 0.052f, qrCaptionPaint)
+        canvas.drawText("SCAN QR NIK", qrFrameRect.centerX(), qrFrameRect.bottom + height * 0.050f, qrCaptionPaint)
 
-        // Kolom Kiri: Nama Siswa + Garis Pemanis + NISN, NIK (Utuh), Kelas, Alamat
-        val infoLeft = left + sideStripeW + padX * 0.72f
-        val infoRight = qrFrameLeft - width * 0.032f
+        // Kolom Kiri: Pas Foto Siswa 3:4
+        val photoLeft = left + sideStripeW + padX * 0.65f
+        val photoW = width * 0.168f
+        val photoH = minOf(contentHeight * 0.80f, photoW * 1.28f)
+        val photoTop = contentTop + (contentHeight - photoH) * 0.42f
+        val photoRect = RectF(photoLeft, photoTop, photoLeft + photoW, photoTop + photoH)
+        val photoCorner = photoW * 0.14f
+
+        val photoSave = canvas.save()
+        val photoClip = Path().apply {
+            addRoundRect(photoRect, photoCorner, photoCorner, Path.Direction.CW)
+        }
+        canvas.clipPath(photoClip)
+
+        val validPhoto = photoBitmap != null && !photoBitmap.isRecycled && photoBitmap.width > 0 && photoBitmap.height > 0
+        if (validPhoto) {
+            drawBitmapCenterCrop(canvas, photoBitmap!!, photoRect, bmpPaint)
+        } else {
+            val gradColors = if (palette.isMale) {
+                intArrayOf(0xFFE0F2FE.toInt(), 0xFFBAE6FD.toInt())
+            } else {
+                intArrayOf(0xFFFDE8E8.toInt(), 0xFFFBCFE8.toInt())
+            }
+            val photoBgPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = LinearGradient(
+                    photoRect.left, photoRect.top, photoRect.right, photoRect.bottom,
+                    gradColors, null, Shader.TileMode.CLAMP
+                )
+            }
+            canvas.drawRect(photoRect, photoBgPaint)
+
+            val initials = student.name.trim()
+                .split(" ")
+                .filter { it.isNotEmpty() }
+                .take(2)
+                .map { it.first().uppercase() }
+                .joinToString("")
+                .ifBlank { "SA" }
+            val initPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (palette.isMale) 0xFF0369A1.toInt() else 0xFF9D174D.toInt()
+                textSize = photoW * 0.34f
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                textAlign = Paint.Align.CENTER
+            }
+            val initY = photoRect.centerY() - (initPaint.descent() + initPaint.ascent()) / 2f
+            canvas.drawText(initials, photoRect.centerX(), initY, initPaint)
+        }
+        canvas.restoreToCount(photoSave)
+
+        val photoBorderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = height * 0.007f
+            color = palette.trimNeonArgb
+        }
+        canvas.drawRoundRect(photoRect, photoCorner, photoCorner, photoBorderPaint)
+
+        // Kolom Tengah: Nama Siswa + Garis Pemanis + NISN, NIK (Utuh), Kelas, Alamat
+        val infoLeft = photoRect.right + width * 0.026f
+        val infoRight = qrFrameLeft - width * 0.026f
         val infoWidth = (infoRight - infoLeft).coerceAtLeast(40f).toInt()
 
         val namePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#0F172A")
-            textSize = height * 0.068f
+            textSize = height * 0.060f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val cleanStudentName = student.name.trim().uppercase()
@@ -452,7 +526,7 @@ object StudentCardRenderer {
         nameLayout.draw(canvas)
         canvas.restore()
 
-        var cursorY = contentTop + nameLayout.height + height * 0.022f
+        var cursorY = contentTop + nameLayout.height + height * 0.020f
 
         // Garis pemanis tipis di bawah nama siswa
         canvas.drawRect(
@@ -462,26 +536,26 @@ object StudentCardRenderer {
             cursorY + height * 0.009f,
             accentPaint
         )
-        cursorY += height * 0.048f
+        cursorY += height * 0.046f
 
         val labelPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#64748B")
-            textSize = height * 0.043f
+            textSize = height * 0.040f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
         val valuePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#0F172A")
-            textSize = height * 0.045f
+            textSize = height * 0.041f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val monoValuePaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#0F172A")
-            textSize = height * 0.042f
+            textSize = height * 0.039f
             typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
         }
 
-        val labelColW = width * 0.098f
-        val rowStep = height * 0.086f
+        val labelColW = width * 0.088f
+        val rowStep = height * 0.084f
 
         fun drawFieldRow(label: String, value: String, useMono: Boolean = false) {
             val cleanVal = value.trim().ifBlank { "-" }
@@ -495,7 +569,11 @@ object StudentCardRenderer {
         }
 
         drawFieldRow("NISN", student.nis.ifBlank { "-" })
-        drawFieldRow("NIK", StudentCsvParser.cleanDigitsOnly(student.nik).ifBlank { "-" }, useMono = true)
+        drawFieldRow(
+            "NIK",
+            StudentCsvParser.cleanDigitsOnly(student.nik).ifBlank { student.nik.trim().ifBlank { "-" } },
+            useMono = true
+        )
         val kelasText = buildString {
             append(student.classGrade.ifBlank { "-" })
             if (student.dormitory.isNotBlank()) {
@@ -514,7 +592,7 @@ object StudentCardRenderer {
         val addrValue = ": ${student.address.trim().ifBlank { "-" }}"
         val addrPaint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color.parseColor("#334155")
-            textSize = height * 0.042f
+            textSize = height * 0.039f
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         }
         val addrLayout = StaticLayout.Builder.obtain(

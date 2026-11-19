@@ -9695,5 +9695,97 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("card_add_student_photo_picker").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_pick_student_photo_form").assertIsDisplayed()
   }
+
+  @Test
+  fun `verify StudentIdCardPreview and StudentCardPdfGenerator render Pas Foto slot with crisp QR NIK barcode`() {
+    val context = ApplicationProvider.getApplicationContext<android.app.Application>()
+    val tempWebpFile = java.io.File(context.cacheDir, "test_card_photo_${System.currentTimeMillis()}.webp")
+    val sampleBitmap = android.graphics.Bitmap.createBitmap(240, 320, android.graphics.Bitmap.Config.ARGB_8888).apply {
+      eraseColor(android.graphics.Color.rgb(34, 139, 230))
+    }
+    java.io.FileOutputStream(tempWebpFile).use { out ->
+      @Suppress("DEPRECATION")
+      val fmt = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+        android.graphics.Bitmap.CompressFormat.WEBP_LOSSY
+      } else {
+        android.graphics.Bitmap.CompressFormat.WEBP
+      }
+      sampleBitmap.compress(fmt, 75, out)
+    }
+    sampleBitmap.recycle()
+
+    val studentWithPhoto = com.example.data.model.ChildStudent(
+      id = 9101L,
+      name = "Rafi Pratama",
+      nis = "0077889901",
+      gender = "L",
+      age = 15,
+      dormitory = "Asrama Putra",
+      classGrade = "10 IPA",
+      nik = "3506142512090011",
+      address = "Jl. Melati No. 5, Pare, Kediri",
+      photoUrl = tempWebpFile.absolutePath
+    )
+    val studentWithoutPhoto = com.example.data.model.ChildStudent(
+      id = 9102L,
+      name = "Nadia Putri",
+      nis = "0077889902",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "8A",
+      nik = "3506142512090022",
+      address = "Desa Pelem, Pare, Kediri",
+      photoUrl = ""
+    )
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    var activeStudent by androidx.compose.runtime.mutableStateOf(studentWithoutPhoto)
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.components.StudentIdCardPreview(
+          student = activeStudent,
+          schoolName = "Sekolah Rakyat Kabupaten Kediri"
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_student_photo_slot").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_student_photo_fallback").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_student_qr_box").assertIsDisplayed()
+    composeTestRule.onNodeWithContentDescription("QR NIK ${studentWithoutPhoto.name}").assertIsDisplayed()
+    composeTestRule.onNodeWithText("3506142512090022").assertIsDisplayed()
+    composeTestRule.onNodeWithText("SCAN QR NIK").assertIsDisplayed()
+
+    activeStudent = studentWithPhoto
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_student_photo_slot").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("card_student_qr_box").assertIsDisplayed()
+    composeTestRule.onNodeWithText("3506142512090011").assertIsDisplayed()
+
+    val crispQr = com.example.util.StudentCardRenderer.generateQrBitmap(
+      com.example.util.StudentCardRenderer.resolveQrPayload(studentWithPhoto),
+      480
+    )
+    org.junit.Assert.assertNotNull(crispQr)
+    assertEquals(480, crispQr!!.width)
+    assertEquals(480, crispQr.height)
+    crispQr.recycle()
+
+    val generatedPdf = com.example.util.StudentCardPdfGenerator.generateCardsPdf(
+      context = context,
+      students = listOf(studentWithPhoto, studentWithoutPhoto),
+      schoolName = "Sekolah Rakyat Kabupaten Kediri",
+      filterLabel = "Uji Foto Kartu",
+      schoolAddress = "Jl. Pahlawan No. 1, Kediri"
+    )
+    org.junit.Assert.assertNotNull(generatedPdf)
+    org.junit.Assert.assertTrue(generatedPdf!!.exists() && generatedPdf.length() > 1024L)
+
+    generatedPdf.delete()
+    tempWebpFile.delete()
+  }
 }
 

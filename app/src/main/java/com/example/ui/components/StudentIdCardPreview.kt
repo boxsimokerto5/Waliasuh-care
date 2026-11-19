@@ -23,7 +23,10 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,6 +37,8 @@ import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -41,10 +46,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.request.CachePolicy
+import coil.request.ImageRequest
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.util.StudentCardRenderer
+import com.example.util.StudentClassifier
+import com.example.util.StudentCsvParser
 import com.example.util.i18n.LocalAppStrings
+import java.io.File
 
 @Composable
 fun StudentIdCardPreview(
@@ -52,6 +63,7 @@ fun StudentIdCardPreview(
     schoolName: String,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
     val palette = remember(student.jenjang, student.classGrade, student.gender, student.dormitory, student.roomNumber) {
         StudentCardRenderer.resolvePalette(student)
@@ -60,7 +72,18 @@ fun StudentIdCardPreview(
         StudentCardRenderer.resolveQrPayload(student)
     }
     val qrBitmap = remember(qrPayload) {
-        StudentCardRenderer.generateQrBitmap(qrPayload, sizePx = 360)
+        StudentCardRenderer.generateQrBitmap(qrPayload, sizePx = 480)
+    }
+
+    val primaryPhotoUrl = student.photoUrl.trim()
+    val fallbackPhotoUrl = student.photoFallbackUrl.trim()
+    var useFallbackPhoto by remember(primaryPhotoUrl, fallbackPhotoUrl) { mutableStateOf(false) }
+    var photoLoadFailed by remember(primaryPhotoUrl, fallbackPhotoUrl) { mutableStateOf(false) }
+    val activePhotoUrl = when {
+        photoLoadFailed -> ""
+        !useFallbackPhoto && primaryPhotoUrl.isNotBlank() -> primaryPhotoUrl
+        fallbackPhotoUrl.isNotBlank() -> fallbackPhotoUrl
+        else -> ""
     }
 
     val startColor = Color(palette.gradientStartArgb)
@@ -71,6 +94,23 @@ fun StudentIdCardPreview(
     val genderBadgeBg = Color(palette.genderBadgeBgArgb)
     val genderBadgeText = Color(palette.genderBadgeTextArgb)
     val cleanSchool = schoolName.trim().ifBlank { "Wali Asuh Care School" }.uppercase()
+    val isMale = StudentClassifier.isMaleStudent(student)
+    val photoFallbackGradient = remember(isMale) {
+        if (isMale) {
+            listOf(Color(0xFFE0F2FE), Color(0xFFBAE6FD))
+        } else {
+            listOf(Color(0xFFFDE8E8), Color(0xFFFBCFE8))
+        }
+    }
+    val initials = remember(student.name) {
+        student.name.trim()
+            .split(" ")
+            .filter { it.isNotEmpty() }
+            .take(2)
+            .map { it.first().uppercase() }
+            .joinToString("")
+            .ifBlank { "SA" }
+    }
 
     Card(
         modifier = modifier
@@ -201,7 +241,7 @@ fun StudentIdCardPreview(
                         .background(accentColor)
                 )
 
-                // Isi Utama Putih Bersih: Sisi Kiri (Aksen Vertikal + Biodata) & Sisi Kanan (Micro-Pill + QR)
+                // Isi Utama 3 Kolom: Pas Foto (Kiri) + Biodata (Tengah) + Micro-Pill & QR Tajam (Kanan)
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -218,42 +258,94 @@ fun StudentIdCardPreview(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
-                            .padding(horizontal = 9.dp, vertical = 6.dp),
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // Kolom Kiri: Nama Siswa + Garis Aksen + Biodata (termasuk NIK utuh)
+                        // Kolom 1 (Kiri): Pas Foto Siswa 3:4
+                        Box(
+                            modifier = Modifier
+                                .width(44.dp)
+                                .height(58.dp)
+                                .clip(RoundedCornerShape(7.dp))
+                                .background(Brush.linearGradient(photoFallbackGradient))
+                                .border(1.2.dp, accentColor, RoundedCornerShape(7.dp))
+                                .testTag("card_student_photo_slot"),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = initials,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = if (isMale) Color(0xFF0369A1) else Color(0xFF9D174D),
+                                modifier = Modifier.testTag("card_student_photo_fallback")
+                            )
+
+                            if (activePhotoUrl.isNotBlank()) {
+                                val requestData: Any = if (activePhotoUrl.startsWith("/")) {
+                                    File(activePhotoUrl)
+                                } else {
+                                    activePhotoUrl
+                                }
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(requestData)
+                                        .crossfade(true)
+                                        .diskCachePolicy(CachePolicy.ENABLED)
+                                        .memoryCachePolicy(CachePolicy.ENABLED)
+                                        .build(),
+                                    contentDescription = if (isEn) "Student photo ${student.name}" else "Pas foto ${student.name}",
+                                    contentScale = ContentScale.Crop,
+                                    onError = {
+                                        if (!useFallbackPhoto && fallbackPhotoUrl.isNotBlank() && fallbackPhotoUrl != primaryPhotoUrl) {
+                                            useFallbackPhoto = true
+                                        } else {
+                                            photoLoadFailed = true
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(7.dp))
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(7.dp))
+
+                        // Kolom 2 (Tengah): Nama Siswa + Garis Aksen + Biodata (NIK utuh tanpa terpotong)
                         Column(
                             modifier = Modifier
                                 .weight(1f)
-                                .padding(end = 8.dp),
+                                .padding(end = 6.dp),
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
                                 text = student.name.trim().uppercase(),
                                 color = Color(0xFF0F172A),
-                                fontSize = 12.sp,
-                                lineHeight = 14.sp,
+                                fontSize = 10.6.sp,
+                                lineHeight = 12.2.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
 
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.height(2.5.dp))
 
                             Box(
                                 modifier = Modifier
-                                    .width(42.dp)
+                                    .width(34.dp)
                                     .height(2.dp)
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(accentColor)
                             )
 
-                            Spacer(modifier = Modifier.height(5.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
 
                             CardFieldLine(label = "NISN", value = student.nis.ifBlank { "-" })
+                            val cleanNik = StudentCsvParser.cleanDigitsOnly(student.nik)
+                                .ifBlank { student.nik.trim().ifBlank { "-" } }
                             CardFieldLine(
                                 label = "NIK",
-                                value = student.nik.ifBlank { "-" },
+                                value = cleanNik,
                                 useMonospace = true
                             )
                             val kelasInfo = buildString {
@@ -272,7 +364,7 @@ fun StudentIdCardPreview(
                             )
                         }
 
-                        // Kolom Kanan: Micro-Pill Jenjang • Gender (mungil & manis) + QR Code + Caption
+                        // Kolom 3 (Kanan): Micro-Pill Jenjang • Gender + QR Code Tajam + Caption
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Center
@@ -282,27 +374,28 @@ fun StudentIdCardPreview(
                                     .clip(RoundedCornerShape(50))
                                     .background(genderBadgeBg)
                                     .border(0.9.dp, accentColor, RoundedCornerShape(50))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    .padding(horizontal = 5.dp, vertical = 1.5.dp),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Text(
                                     text = "${palette.jenjang.label} • ${palette.genderLabel}",
                                     color = genderBadgeText,
-                                    fontSize = 6.8.sp,
+                                    fontSize = 6.3.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     maxLines = 1
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Spacer(modifier = Modifier.height(3.dp))
 
                             Box(
                                 modifier = Modifier
-                                    .size(78.dp)
+                                    .size(66.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Color.White)
                                     .border(1.2.dp, accentColor, RoundedCornerShape(8.dp))
-                                    .padding(4.dp),
+                                    .padding(3.dp)
+                                    .testTag("card_student_qr_box"),
                                 contentAlignment = Alignment.Center
                             ) {
                                 if (qrBitmap != null) {
@@ -318,12 +411,12 @@ fun StudentIdCardPreview(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(2.5.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
 
                             Text(
                                 text = "SCAN QR NIK",
                                 color = Color(0xFF64748B),
-                                fontSize = 6.3.sp,
+                                fontSize = 5.9.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.5.sp,
                                 textAlign = TextAlign.Center,
@@ -348,25 +441,25 @@ private fun CardFieldLine(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 1.dp),
+            .padding(vertical = 0.8.dp),
         verticalAlignment = Alignment.Top
     ) {
         Text(
             text = label,
             color = Color(0xFF64748B),
-            fontSize = 8.4.sp,
-            modifier = Modifier.width(if (label.length > 6) 40.dp else 34.dp)
+            fontSize = 7.8.sp,
+            modifier = Modifier.width(if (label.length > 6) 36.dp else 30.dp)
         )
         Text(
             text = ": ",
             color = Color(0xFF64748B),
-            fontSize = 8.4.sp
+            fontSize = 7.8.sp
         )
         Text(
             text = value,
             color = if (isMutedValue) Color(0xFF334155) else Color(0xFF0F172A),
-            fontSize = if (useMonospace) 8.2.sp else 8.6.sp,
-            lineHeight = 10.5.sp,
+            fontSize = if (useMonospace) 7.6.sp else 7.9.sp,
+            lineHeight = 9.8.sp,
             fontFamily = if (useMonospace) FontFamily.Monospace else FontFamily.Default,
             fontWeight = if (isMutedValue) FontWeight.Medium else FontWeight.SemiBold,
             maxLines = maxLines,

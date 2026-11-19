@@ -13,6 +13,7 @@ import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import android.text.TextPaint
 import android.text.TextUtils
+import android.net.Uri
 import android.os.Bundle
 import android.os.CancellationSignal
 import android.os.ParcelFileDescriptor
@@ -27,15 +28,24 @@ import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
+import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 
 object StudentCardPdfGenerator {
+
+    private val photoHttpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(8, TimeUnit.SECONDS)
+            .build()
+    }
 
     private const val A4_WIDTH_PT = 595
     private const val A4_HEIGHT_PT = 842
@@ -194,7 +204,8 @@ object StudentCardPdfGenerator {
 
                     val student = students[slot]
                     val qrPayload = StudentCardRenderer.resolveQrPayload(student)
-                    val qrBitmap = StudentCardRenderer.generateQrBitmap(qrPayload, sizePx = 400)
+                    val qrBitmap = StudentCardRenderer.generateQrBitmap(qrPayload, sizePx = 480)
+                    val photoBitmap = loadStudentPhotoBitmap(context, student)
 
                     // Garis bantu potong (cut marks) tipis di sekeliling slot kartu
                     canvas.drawRect(
@@ -217,10 +228,12 @@ object StudentCardPdfGenerator {
                         logoBitmap = logoBitmap,
                         kemensosBitmap = kemensosBitmap,
                         sekolahRakyatBitmap = sekolahRakyatBitmap,
-                        language = lang
+                        language = lang,
+                        photoBitmap = photoBitmap
                     )
 
                     qrBitmap?.recycle()
+                    photoBitmap?.recycle()
                 }
 
                 // Footer Legend & Disclaimer Independen
@@ -287,6 +300,63 @@ object StudentCardPdfGenerator {
         val dy = targetBox.top + (targetBox.height() - drawH) / 2f
         val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         canvas.drawBitmap(bitmap, null, RectF(dx, dy, dx + drawW, dy + drawH), bmpPaint)
+    }
+
+    private fun loadStudentPhotoBitmap(context: Context, student: ChildStudent): Bitmap? {
+        val candidates = listOf(student.photoUrl.trim(), student.photoFallbackUrl.trim())
+            .filter { it.isNotBlank() }
+            .distinct()
+        for (source in candidates) {
+            val decoded = decodePhotoFromSource(context, source, maxDimPx = 320)
+            if (decoded != null) return decoded
+        }
+        return null
+    }
+
+    private fun decodePhotoFromSource(context: Context, source: String, maxDimPx: Int): Bitmap? {
+        return try {
+            when {
+                source.startsWith("/") -> {
+                    val file = File(source)
+                    if (!file.exists()) return null
+                    decodeSampledBitmapFromBytes(file.readBytes(), maxDimPx)
+                }
+                source.startsWith("file://") -> {
+                    val path = Uri.parse(source).path ?: return null
+                    val file = File(path)
+                    if (!file.exists()) return null
+                    decodeSampledBitmapFromBytes(file.readBytes(), maxDimPx)
+                }
+                source.startsWith("content://") -> {
+                    val bytes = context.contentResolver.openInputStream(Uri.parse(source))?.use { it.readBytes() }
+                        ?: return null
+                    decodeSampledBitmapFromBytes(bytes, maxDimPx)
+                }
+                source.startsWith("http://") || source.startsWith("https://") -> {
+                    val req = Request.Builder().url(source).get().build()
+                    photoHttpClient.newCall(req).execute().use { resp ->
+                        if (!resp.isSuccessful) return null
+                        val bytes = resp.body?.bytes() ?: return null
+                        decodeSampledBitmapFromBytes(bytes, maxDimPx)
+                    }
+                }
+                else -> null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun decodeSampledBitmapFromBytes(bytes: ByteArray, maxDimPx: Int): Bitmap? {
+        if (bytes.isEmpty()) return null
+        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOpts)
+        var inSampleSize = 1
+        while (boundsOpts.outWidth / inSampleSize > maxDimPx || boundsOpts.outHeight / inSampleSize > maxDimPx) {
+            inSampleSize *= 2
+        }
+        val decodeOpts = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts)
     }
 
     fun printCardsWithSystemPrintManager(
