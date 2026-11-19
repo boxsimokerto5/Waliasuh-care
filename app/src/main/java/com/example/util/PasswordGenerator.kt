@@ -139,6 +139,7 @@ object PasswordGenerator {
         }
         val enabledPermissions = buildList {
             if (link.canViewProfile) add(if (isEnglish) "Child Profile" else "Profil Anak")
+            if (link.canViewSholat) add(if (isEnglish) "5 Daily Prayers" else "Pantauan Sholat")
             if (link.canViewMengaji) add(if (isEnglish) "Mengaji History" else "Riwayat Mengaji")
             if (link.canViewMedical) add(if (isEnglish) "Medical History" else "Riwayat Sakit")
             if (link.canViewFasting) add(if (isEnglish) "Fasting History" else "Riwayat Puasa")

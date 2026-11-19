@@ -114,6 +114,10 @@ class DashboardModalState {
     // Saluran Info-Info Penting (Global Lintas Sekolah)
     var showInfoPentingSheet by mutableStateOf(false)
     var showCreateInfoPentingDialog by mutableStateOf(false)
+
+    // Modul Absen Sholat 5 Waktu
+    var showAbsenSholatSheet by mutableStateOf(false)
+    var absenSholatInitialStudent by mutableStateOf<ChildStudent?>(null)
 }
 
 @Composable

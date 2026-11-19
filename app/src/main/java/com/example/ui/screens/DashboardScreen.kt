@@ -95,6 +95,8 @@ import com.example.data.model.DashboardIconKey
 import com.example.data.model.KonselingHelper
 import com.example.data.model.MedicalRecord
 import com.example.data.model.ShiftMessage
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
@@ -170,6 +172,7 @@ import com.example.ui.dialogs.RiwayatMengajiSheet
 import com.example.ui.dialogs.ShareWhatsAppDialog
 import com.example.ui.dialogs.ShiftHistorySheet
 import com.example.ui.dialogs.ShiftMessagesSheet
+import com.example.ui.dialogs.SholatAttendanceSheet
 import com.example.ui.dialogs.SiswaPerKecamatanSheet
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.ui.dialogs.TabunganHistoryLogsSheet
@@ -220,6 +223,7 @@ fun DashboardScreen(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
@@ -259,6 +263,11 @@ fun DashboardScreen(
         if (modalState.showInfoPentingSheet) {
             viewModel.syncInfoPentingChannelNow()
             viewModel.markInfoPentingRead()
+        }
+    }
+    LaunchedEffect(modalState.showAbsenSholatSheet) {
+        if (modalState.showAbsenSholatSheet) {
+            viewModel.syncSholatOnlineQuietly()
         }
     }
     LaunchedEffect(currentUserRole) {
@@ -491,6 +500,10 @@ fun DashboardScreen(
                     DashboardBannerFeatureTarget.FEATURE_STUDENTS_PAGE -> onNavigateToStudents()
                     DashboardBannerFeatureTarget.FEATURE_PROFILE_PAGE -> onNavigateToProfile()
                     DashboardBannerFeatureTarget.FEATURE_INFO_PENTING -> modalState.showInfoPentingSheet = true
+                    DashboardBannerFeatureTarget.FEATURE_ABSEN_SHOLAT -> {
+                        modalState.absenSholatInitialStudent = null
+                        modalState.showAbsenSholatSheet = true
+                    }
                     null -> modalState.showPuskesmasInfoSheet = true
                 }
             }
@@ -1133,6 +1146,11 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 modalState.showInfoPentingSheet = true
                             },
+                            onOpenAbsenSholat = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.absenSholatInitialStudent = null
+                                modalState.showAbsenSholatSheet = true
+                            },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,
@@ -1150,6 +1168,12 @@ fun DashboardScreen(
                             },
                             mengajiTodayCount = mengajiRecords.count { DateUtils.isToday(it.sessionDate) },
                             mengajiTotalCount = mengajiRecords.size,
+                            sholatTodayCount = run {
+                                val todayKey = SholatHelper.todayDateKey()
+                                val activeWaktu = SholatHelper.detectActiveWaktu()
+                                sholatRecords.count { it.dateKey == todayKey && it.waktu == activeWaktu.code }
+                            },
+                            activeSholatWaktuLabel = SholatHelper.detectActiveWaktu().shortCode,
                             visitSessionsCount = visitSessions.size,
                             todayVisitsCount = visitRecords.count { DateUtils.isToday(it.visitDate) },
                             unreadParentMessagesCount = unreadParentMessagesCount,
@@ -2472,9 +2496,17 @@ fun DashboardScreen(
             waliName = waliName,
             mengajiRecords = mengajiRecords,
             fastingRecords = fastingRecords,
+            sholatRecords = sholatRecords,
+            haidRecords = activeHaidRecords + suciRecords,
+            onInputSholat = { target ->
+                modalState.visitStudentForDetail = null
+                modalState.absenSholatInitialStudent = target
+                modalState.showAbsenSholatSheet = true
+            },
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
+            onDeleteSholatRecord = { rec -> viewModel.deleteSholatRecord(rec) },
             isUploadingPhoto = isUploadingStudentPhoto,
             onUploadStudentPhoto = { target, uri, cb ->
                 viewModel.uploadStudentProfilePhoto(target, uri, cb)
@@ -2574,7 +2606,7 @@ fun DashboardScreen(
             onEnsureAccessLink = { st ->
                 viewModel.ensureParentAccessLinkForStudent(st)
             },
-            onUpdatePermissions = { link, canMengaji, canMedical, canFasting, canHaid, canProfile, canTabungan ->
+            onUpdatePermissions = { link, canMengaji, canMedical, canFasting, canHaid, canProfile, canTabungan, canSholat ->
                 viewModel.updateParentAccessPermissions(
                     link = link,
                     canMengaji = canMengaji,
@@ -2582,7 +2614,8 @@ fun DashboardScreen(
                     canFasting = canFasting,
                     canHaid = canHaid,
                     canProfile = canProfile,
-                    canTabungan = canTabungan
+                    canTabungan = canTabungan,
+                    canSholat = canSholat
                 )
             },
             onDismiss = { modalState.showPilihanAksesOrtuSheet = false }
@@ -3173,6 +3206,42 @@ fun DashboardScreen(
                 ) {
                     Text(if (isEn) "Share PDF" else "Bagikan")
                 }
+            }
+        )
+    }
+
+    if (modalState.showAbsenSholatSheet) {
+        SholatAttendanceSheet(
+            students = students,
+            sholatRecords = sholatRecords,
+            haidRecords = activeHaidRecords + suciRecords,
+            currentWaliUsername = currentUsername.orEmpty(),
+            currentWaliName = waliName,
+            schoolProfile = schoolProfile,
+            initialStudent = modalState.absenSholatInitialStudent,
+            onSaveRecord = { st, dateKey, waktu, status, disciplineTag, notes, inputMethod ->
+                viewModel.saveSholatRecord(
+                    student = st,
+                    dateKey = dateKey,
+                    waktu = waktu,
+                    status = status,
+                    disciplineTag = disciplineTag,
+                    notes = notes,
+                    inputMethod = inputMethod
+                )
+            },
+            onBulkMarkJamaah = { targets, dateKey, waktu, onResult ->
+                viewModel.markUnmarkedSholatAsJamaah(
+                    students = targets,
+                    dateKey = dateKey,
+                    waktu = waktu,
+                    onComplete = onResult
+                )
+            },
+            onDeleteRecord = { rec -> viewModel.deleteSholatRecord(rec) },
+            onDismiss = {
+                modalState.showAbsenSholatSheet = false
+                modalState.absenSholatInitialStudent = null
             }
         )
     }

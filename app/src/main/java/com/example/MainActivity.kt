@@ -1288,6 +1288,11 @@ private fun WaliAsuhCareAppContent(
                                         androidx.compose.ui.graphics.Color(0xFFFEF3C7),
                                         androidx.compose.ui.graphics.Color(0xFF92400E)
                                     )
+                                    com.example.data.model.DeletionLog.CATEGORY_SHOLAT -> Triple(
+                                        if (s.isEnglish) "Prayer" else "Sholat",
+                                        androidx.compose.ui.graphics.Color(0xFFD1FAE5),
+                                        androidx.compose.ui.graphics.Color(0xFF065F46)
+                                    )
                                     else -> Triple(
                                         if (s.isEnglish) "Medical" else "Berobat",
                                         androidx.compose.ui.graphics.Color(0xFFFEE2E2),

@@ -34,6 +34,7 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -456,6 +457,45 @@ object PocketBaseSyncManager {
                 service.deleteRecord("mengaji_records", PocketBaseIdCodec.toPbId(recordId))
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteMengajiRecord ke PocketBase", e)
+            }
+        }
+
+    // --- Absen Sholat 5 Waktu ---
+    suspend fun uploadSingleSholatRecord(context: Context, record: SholatRecord) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbSholatRecordDto.fromDomain(record)
+                upsertSingleDto(service, "sholat_records", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleSholatRecord ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSholatRecords(context: Context, records: List<SholatRecord>) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context) || records.isEmpty()) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val pairs = records.map { rec ->
+                    val dto = PbSholatRecordDto.fromDomain(rec)
+                    dto.id!! to dto
+                }
+                upsertBatchOrFallback(service, "sholat_records", pairs)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSholatRecords ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteSholatRecord(context: Context, recordId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("sholat_records", PocketBaseIdCodec.toPbId(recordId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteSholatRecord ke PocketBase", e)
             }
         }
 
@@ -1472,6 +1512,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_records", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_sessions", filter) }
+            runCatching { deleteCollectionByFilter(service, "sholat_records", filter) }
             runCatching { deleteCollectionByFilter(service, "mengaji_records", filter) }
             runCatching { deleteCollectionByFilter(service, "medical_records", filter) }
             runCatching { deleteCollectionByFilter(service, "haid_records", filter) }
@@ -1606,6 +1647,27 @@ object PocketBaseSyncManager {
 
         runCatching { syncFastingSessionsMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncFastingRecordsMerged(service, cleanSchoolId, filter, repository, deletedPuasaIds) }
+    }
+
+    suspend fun syncSholatOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+
+        val mergedLogs = runCatching {
+            syncDeletionLogsMerged(service, cleanSchoolId, filter, repository, null)
+        }.getOrDefault(repository.getDeletionLogsBySchoolList(cleanSchoolId))
+        val deletedSholatIds = mergedLogs
+            .filter { it.category == DeletionLog.CATEGORY_SHOLAT && it.recordId > 0L }
+            .map { it.recordId }
+            .toSet()
+
+        runCatching { syncSholatRecordsMerged(service, cleanSchoolId, filter, repository, deletedSholatIds) }
     }
 
     suspend fun syncShiftMessagesOnlineQuietly(
@@ -2354,6 +2416,60 @@ object PocketBaseSyncManager {
         }
     }
 
+    private suspend fun syncSholatRecordsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository,
+        deletedRecordIds: Set<Long> = emptySet()
+    ) {
+        val localRecordsAll = repository.getSholatRecordsBySchoolList(cleanSchoolId)
+        if (deletedRecordIds.isNotEmpty()) {
+            localRecordsAll.filter { it.id in deletedRecordIds }.forEach {
+                repository.deleteSholatRecord(it)
+            }
+        }
+        val localRecords = localRecordsAll.filter { it.id !in deletedRecordIds }
+
+        val remoteRes = fetchAllPages { page ->
+            service.listSholatRecords(page = page, perPage = 500, filter = filter)
+        }
+        val remoteDtos = remoteRes.getOrNull() ?: return
+        val remoteRecords = remoteDtos
+            .map { it.toDomainModel(cleanSchoolId) }
+            .filter { it.id !in deletedRecordIds }
+
+        val localById = localRecords.associateBy { it.id }
+        val remoteById = remoteRecords.associateBy { it.id }
+        val dirtyRemoteIds = remoteDtos.mapNotNull { dto ->
+            val rawNik = dto.studentNik.orEmpty()
+            val cleanedNik = com.example.util.StudentCsvParser.cleanDigitsOnly(rawNik)
+            val resolvedId = PocketBaseIdCodec.resolveLocalId(dto.localId, dto.id)
+            if (rawNik != cleanedNik && resolvedId !in deletedRecordIds) resolvedId else null
+        }.toSet()
+
+        val toInsertLocal = remoteRecords.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllSholatRecords(toInsertLocal)
+        }
+
+        val toPushRemote = remoteRecords.filter { it.id in dirtyRemoteIds } + localRecords.filter { loc ->
+            if (loc.id in dirtyRemoteIds) return@filter false
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { rec ->
+                val dto = PbSholatRecordDto.fromDomain(rec)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "sholat_records", pairs)
+        }
+    }
+
     private suspend fun syncShiftMessagesMerged(
         service: PocketBaseService,
         cleanSchoolId: String,
@@ -2572,6 +2688,10 @@ object PocketBaseSyncManager {
                 .filter { it.category == DeletionLog.CATEGORY_MENGAJI && it.recordId > 0L }
                 .map { it.recordId }
                 .toSet()
+            val deletedSholatIds = mergedDeletionLogs
+                .filter { it.category == DeletionLog.CATEGORY_SHOLAT && it.recordId > 0L }
+                .map { it.recordId }
+                .toSet()
 
             // 3. Sinkronkan Rekam Medis & Kontrol (medical_records) - Merge by timestamp
             var recordCount = 0
@@ -2680,6 +2800,11 @@ object PocketBaseSyncManager {
             // 7. Sinkronkan Riwayat Mengaji Berkelanjutan (mengaji_records)
             runCatching {
                 syncMengajiRecordsMerged(service, cleanSchoolId, filter, repository, deletedMengajiIds)
+            }
+
+            // 7b. Sinkronkan Absen Sholat 5 Waktu (sholat_records)
+            runCatching {
+                syncSholatRecordsMerged(service, cleanSchoolId, filter, repository, deletedSholatIds)
             }
 
             // 8. Sinkronkan Sesi & Daftar Hadir Kunjungan Orang Tua (visit_sessions & visit_records)

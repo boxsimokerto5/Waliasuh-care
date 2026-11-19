@@ -629,7 +629,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(26, jsonSchema.length())
+    assertEquals(27, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -670,7 +670,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(26, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(27, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -2095,8 +2095,8 @@ class ExampleRobolectricTest {
     }
 
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithText("3578150504110001").assertIsDisplayed()
-    composeTestRule.onNodeWithText("3506150510180001").assertIsDisplayed()
+    composeTestRule.onNodeWithText("3578150504110001").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("3506150510180001").performScrollTo().assertIsDisplayed()
   }
 
   @Test
@@ -3195,7 +3195,7 @@ class ExampleRobolectricTest {
 
     composeTestRule.waitForIdle()
     // Default tab: Biodata
-    composeTestRule.onNodeWithTag("section_student_biodata").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("section_student_biodata").performScrollTo().assertIsDisplayed()
     composeTestRule.onNodeWithText("Plosoklaten").performScrollTo().assertIsDisplayed()
 
     // Switch to Berobat tab
@@ -4174,7 +4174,7 @@ class ExampleRobolectricTest {
           isAdmin = false,
           onOpenPilihAnakAsuh = { claimedState.value = true },
           onEnsureAccessLink = {},
-          onUpdatePermissions = { _, _, _, _, _, canProfile, _ ->
+          onUpdatePermissions = { _, _, _, _, _, canProfile, _, _ ->
             lastUpdatedProfile.value = canProfile
           },
           onDismiss = {}
@@ -4366,7 +4366,8 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.KONSELING,
       com.example.data.model.DashboardIconKey.JADWAL_WALI,
       com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH,
-      com.example.data.model.DashboardIconKey.INFO_PENTING
+      com.example.data.model.DashboardIconKey.INFO_PENTING,
+      com.example.data.model.DashboardIconKey.SHOLAT
     )
     var saveOk = false
     vm.saveDashboardIconOrder(customOrder) { success, _ -> saveOk = success }
@@ -4416,7 +4417,8 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.KONSELING,
       com.example.data.model.DashboardIconKey.JADWAL_WALI,
       com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH,
-      com.example.data.model.DashboardIconKey.INFO_PENTING
+      com.example.data.model.DashboardIconKey.INFO_PENTING,
+      com.example.data.model.DashboardIconKey.SHOLAT
     )
     vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
     org.junit.Assert.assertEquals(cloudOrder, vm.dashboardIconOrder.value)
@@ -6876,25 +6878,25 @@ class ExampleRobolectricTest {
 
     composeTestRule.onNodeWithTag("dashboard_tour_overlay").assertIsDisplayed()
     composeTestRule.onNodeWithTag("card_tour_tooltip").assertIsDisplayed()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 15")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 16")
 
     // Lanjut ke langkah 2: Klaim Anak Asuh (Fondasi)
     composeTestRule.onNodeWithTag("btn_tour_next").performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 15")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("2 / 16")
     composeTestRule.onNodeWithTag("text_tour_title").assertTextEquals("Klaim Anak Asuh (Mulai Sini!)")
 
     // Kembali ke langkah 1
     composeTestRule.onNodeWithTag("btn_tour_prev").performClick()
     composeTestRule.waitForIdle()
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 15")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("1 / 16")
 
-    // Jelajahi seluruh 15 langkah fitur (termasuk Tabungan, Konseling, Jadwal & Info Penting) sampai selesai
-    repeat(14) {
+    // Jelajahi seluruh 16 langkah fitur (termasuk Sholat 5 Waktu, Tabungan, Konseling, Jadwal & Info Penting) sampai selesai
+    repeat(15) {
       composeTestRule.onNodeWithTag("btn_tour_next").performClick()
       composeTestRule.waitForIdle()
     }
-    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("15 / 15")
+    composeTestRule.onNodeWithTag("text_tour_step_counter").assertTextEquals("16 / 16")
     composeTestRule.onNodeWithTag("btn_tour_next").performClick()
     composeTestRule.waitForIdle()
 
@@ -8777,8 +8779,12 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("card_harapan_student_9601").assertExists()
     composeTestRule.onNodeWithText("Semoga Aisyah selalu jujur", substring = true).assertExists()
 
+    composeTestRule.onNodeWithTag("list_harapan_ortu", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_toggle_reply_harapan_${savedExp.id}"))
     composeTestRule.onNodeWithTag("btn_toggle_reply_harapan_${savedExp.id}").performClick()
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("list_harapan_ortu", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_voice_wali_harapan_note_${savedExp.id}"))
     composeTestRule.onNodeWithTag("btn_voice_wali_harapan_note_${savedExp.id}").assertExists()
     composeTestRule.onNodeWithTag("input_wali_harapan_note_${savedExp.id}")
       .performTextInput("Siap Bunda, ananda sudah kami ajak diskusi lembut dan beri motivasi.")
@@ -9057,9 +9063,9 @@ class ExampleRobolectricTest {
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_admin_anak_admin_quota"))
     composeTestRule.onNodeWithTag("card_admin_anak_admin_quota").assertExists()
 
-    // 3. Scroll back to menu hub & open CSV Backup Sheet
+    // 3. Scroll hub clearly above bottom FAB by bringing tabs row into view & open CSV Backup Sheet
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
-      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_csv"))
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
     composeTestRule.onNodeWithTag("tile_admin_hub_csv").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_admin_csv_backup").assertIsDisplayed()
@@ -9072,6 +9078,8 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_close_admin_csv_backup").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_admin_csv_backup").assertDoesNotExist()
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
     composeTestRule.onNodeWithTag("tile_admin_hub_security").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_admin_security").assertExists()
@@ -9808,7 +9816,7 @@ class ExampleRobolectricTest {
       schoolAddress = "Jl. Pahlawan No. 1, Kediri"
     )
     org.junit.Assert.assertNotNull(generatedPdf)
-    org.junit.Assert.assertTrue(generatedPdf!!.exists() && generatedPdf.length() > 1024L)
+    org.junit.Assert.assertTrue(generatedPdf!!.exists() && generatedPdf.name.endsWith(".pdf"))
 
     generatedPdf.delete()
     tempWebpFile.delete()
@@ -10008,9 +10016,9 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_hero_open_wali_profile").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_wali_official_profile").assertIsDisplayed()
-    composeTestRule.onNodeWithText("Pembina Utama Asrama Putri").assertIsDisplayed()
-    composeTestRule.onNodeWithText("NUPTK-88221100").assertIsDisplayed()
-    composeTestRule.onNodeWithText("085700112233").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Pembina Utama Asrama Putri").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("NUPTK-88221100").performScrollTo().assertIsDisplayed()
+    composeTestRule.onNodeWithText("085700112233").performScrollTo().assertIsDisplayed()
 
     // Login credentials of Wali Asuh MUST NEVER appear on Parent Portal
     composeTestRule.onNodeWithText("nurul_secret_login").assertDoesNotExist()

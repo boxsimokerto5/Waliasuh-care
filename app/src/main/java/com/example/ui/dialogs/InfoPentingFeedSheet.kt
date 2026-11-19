@@ -75,6 +75,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -1065,7 +1066,7 @@ private fun CommentedPostContextCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 8.dp)
-            .heightIn(max = 104.dp)
+            .heightIn(max = 140.dp)
             .testTag("card_comment_post_context"),
         shape = RoundedCornerShape(12.dp),
         color = Color(0xFFF0FDFA),
@@ -1091,9 +1092,11 @@ private fun CommentedPostContextCard(
                         AsyncImage(
                             model = ImageRequest.Builder(context)
                                 .data(resolvedMediaUrl)
-                                .crossfade(true)
+                                .crossfade(false)
                                 .build(),
                             imageLoader = gifLoader,
+                            placeholder = ColorPainter(Color(0xFFCCFBF1)),
+                            error = ColorPainter(Color(0xFFCCFBF1)),
                             contentDescription = post.title.ifBlank {
                                 if (isEn) "Commented image preview" else "Pratinjau gambar yang dikomentari"
                             },

@@ -30,6 +30,7 @@ import com.example.data.dao.TabunganTransactionDao
 import com.example.data.dao.InfoPentingCommentDao
 import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
+import com.example.data.dao.SholatRecordDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
@@ -45,6 +46,7 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
+import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
@@ -76,7 +78,8 @@ class HealthRepository(
     private val infoPentingPostDao: InfoPentingPostDao? = null,
     private val infoPentingReactionDao: InfoPentingReactionDao? = null,
     private val infoPentingCommentDao: InfoPentingCommentDao? = null,
-    private val parentExpectationDao: ParentExpectationDao? = null
+    private val parentExpectationDao: ParentExpectationDao? = null,
+    private val sholatRecordDao: SholatRecordDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -113,6 +116,8 @@ class HealthRepository(
         waliShiftCodeDao?.getAllShiftCodes() ?: emptyFlow()
     val allWaliScheduleEntries: Flow<List<WaliScheduleEntry>> =
         waliScheduleEntryDao?.getAllScheduleEntries() ?: emptyFlow()
+    val allSholatRecords: Flow<List<SholatRecord>> =
+        sholatRecordDao?.getAllRecords() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -773,4 +778,43 @@ class HealthRepository(
 
     suspend fun getAllInfoPentingCommentsIncludingDeletedList(): List<InfoPentingComment> =
         infoPentingCommentDao?.getAllCommentsIncludingDeletedList() ?: emptyList()
+
+    // --- Absen Sholat 5 Waktu ---
+    suspend fun insertSholatRecord(record: SholatRecord): Long =
+        sholatRecordDao?.insert(record) ?: 0L
+
+    suspend fun insertAllSholatRecords(records: List<SholatRecord>) {
+        sholatRecordDao?.insertAll(records)
+    }
+
+    suspend fun getAllSholatRecordsList(): List<SholatRecord> =
+        sholatRecordDao?.getAllRecordsList() ?: emptyList()
+
+    suspend fun getSholatRecordsBySchoolList(schoolId: String): List<SholatRecord> =
+        sholatRecordDao?.getRecordsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getSholatRecordById(id: Long): SholatRecord? =
+        sholatRecordDao?.getById(id)
+
+    suspend fun getSholatRecordByStudentDateWaktu(
+        studentId: Long,
+        dateKey: String,
+        waktu: String
+    ): SholatRecord? = sholatRecordDao?.getByStudentDateWaktu(studentId, dateKey, waktu)
+
+    suspend fun updateSholatRecord(record: SholatRecord) {
+        sholatRecordDao?.update(record)
+    }
+
+    suspend fun deleteSholatRecord(record: SholatRecord) {
+        sholatRecordDao?.delete(record)
+    }
+
+    suspend fun deleteSholatRecordById(id: Long) {
+        sholatRecordDao?.deleteById(id)
+    }
+
+    suspend fun deleteSholatRecordsBySchool(schoolId: String) {
+        sholatRecordDao?.deleteBySchoolId(schoolId)
+    }
 }

@@ -158,7 +158,7 @@ fun StudentIdCardPreview(
                                 colors = listOf(startColor, midColor, endColor)
                             )
                         )
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
@@ -386,11 +386,11 @@ fun StudentIdCardPreview(
                                 )
                             }
 
-                            Spacer(modifier = Modifier.height(3.dp))
+                            Spacer(modifier = Modifier.height(2.dp))
 
                             Box(
                                 modifier = Modifier
-                                    .size(66.dp)
+                                    .size(56.dp)
                                     .clip(RoundedCornerShape(8.dp))
                                     .background(Color.White)
                                     .border(1.2.dp, accentColor, RoundedCornerShape(8.dp))
@@ -411,12 +411,12 @@ fun StudentIdCardPreview(
                                 }
                             }
 
-                            Spacer(modifier = Modifier.height(2.dp))
+                            Spacer(modifier = Modifier.height(1.dp))
 
                             Text(
                                 text = "SCAN QR NIK",
                                 color = Color(0xFF64748B),
-                                fontSize = 5.9.sp,
+                                fontSize = 5.8.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 0.5.sp,
                                 textAlign = TextAlign.Center,

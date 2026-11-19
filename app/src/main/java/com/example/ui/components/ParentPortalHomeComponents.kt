@@ -27,6 +27,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalHospital
@@ -66,6 +67,10 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.WaliAccount
@@ -550,9 +555,11 @@ fun ParentSwipeableHighlightsSection(
     tabunganBalance: Long,
     messages: List<ParentMessage>,
     expectations: List<ParentExpectation> = emptyList(),
+    sholatRecords: List<SholatRecord> = emptyList(),
     isEn: Boolean,
     lang: AppLanguage,
     onOpenMengaji: () -> Unit,
+    onOpenSholat: () -> Unit = {},
     onOpenTabungan: () -> Unit,
     onOpenMedical: () -> Unit,
     onOpenFasting: () -> Unit,
@@ -561,6 +568,67 @@ fun ParentSwipeableHighlightsSection(
     onOpenHarapan: () -> Unit = {}
 ) {
     val cards = buildList<ParentHighlightCardData> {
+        if (link?.canViewSholat == true) {
+            val todayKey = SholatHelper.todayDateKey()
+            val todayRecords = sholatRecords.filter { it.dateKey == todayKey }
+            val byWaktu = todayRecords.associateBy { SholatWaktu.fromCode(it.waktu) }
+            val stripText = SholatWaktu.entries.joinToString(" • ") { w ->
+                val badge = byWaktu[w]?.let { SholatStatus.fromCode(it.status).shortCode } ?: "·"
+                "${w.shortCode}:$badge"
+            }
+            val curMonthKey = SholatHelper.todayDateKey().substring(0, 7)
+            val monthRecords = sholatRecords.filter {
+                SholatHelper.monthKeyFromDateKey(it.dateKey) == curMonthKey
+            }
+            val wajibEligible = monthRecords.count {
+                SholatStatus.fromCode(it.status) != SholatStatus.UDZUR_HAID
+            }
+            val jamaahMonthCount = monthRecords.count {
+                SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH
+            }
+            val pct = if (wajibEligible > 0) ((jamaahMonthCount * 100f) / wajibEligible).toInt() else 0
+            val todayHasUdzurHaid = todayRecords.any {
+                SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID
+            }
+            add(
+                ParentHighlightCardData(
+                    id = "hl_sholat",
+                    badge = if (isEn) "5-Time Prayers Today" else "Pantauan Sholat 5 Waktu",
+                    title = if (todayRecords.isNotEmpty()) {
+                        if (isEn) "${todayRecords.size}/5 Prayers Logged Today" else "${todayRecords.size}/5 Waktu Tercatat Hari Ini"
+                    } else if (monthRecords.isNotEmpty()) {
+                        if (isEn) "$pct% Jamaah This Month" else "$pct% Disiplin Jamaah Bulan Ini"
+                    } else {
+                        if (isEn) "5-Time Prayer Monitor" else "Pantauan Sholat Harian"
+                    },
+                    mainValue = stripText,
+                    detailLine = when {
+                        todayHasUdzurHaid -> if (isEn) {
+                            "Udzur Syar'i (Haid) recorded today • Monthly Jamaah: $pct%"
+                        } else {
+                            "Hari ini berstatus Udzur Syar'i (Haid) • Jamaah bulan ini: $pct%"
+                        }
+                        monthRecords.isNotEmpty() -> if (isEn) {
+                            "$jamaahMonthCount Jamaah out of $wajibEligible obligations ($pct%)"
+                        } else {
+                            "$jamaahMonthCount kali berjamaah dari $wajibEligible kewajiban ($pct%)"
+                        }
+                        else -> if (isEn) {
+                            "Subuh, Dzuhur, Ashar, Maghrib, and Isya updates appear here."
+                        } else {
+                            "Kehadiran Subuh, Dzuhur, Ashar, Maghrib & Isya ananda tampil otomatis."
+                        }
+                    },
+                    footerAction = if (isEn) "View Prayer Log" else "Lihat Pantauan Sholat",
+                    icon = Icons.Default.AutoAwesome,
+                    gradientColors = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1)),
+                    accentColor = Color(0xFF0F766E),
+                    badgeBg = Color(0xFF0D9488),
+                    onClick = onOpenSholat
+                )
+            )
+        }
+
         if (link?.canViewMengaji == true) {
             val latest = mengajiRecords.firstOrNull()
             val fluency = latest?.let { MengajiHelper.fluencyLabel(it.fluencyStatus, isEn) }

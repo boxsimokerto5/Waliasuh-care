@@ -21,6 +21,7 @@ data class DeletionLog(
         const val CATEGORY_MENGAJI = "MENGAJI"
         const val CATEGORY_PUASA = "PUASA"
         const val CATEGORY_BEROBAT = "BEROBAT"
+        const val CATEGORY_SHOLAT = "SHOLAT"
         const val CATEGORY_PARENT_MESSAGE = "PARENT_MESSAGE"
         const val CATEGORY_PARENT_ACCESS = "PARENT_ACCESS"
     }

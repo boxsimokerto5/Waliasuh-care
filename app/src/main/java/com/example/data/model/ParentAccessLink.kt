@@ -23,6 +23,7 @@ data class ParentAccessLink(
     val canViewHaid: Boolean = true,
     val canViewProfile: Boolean = true,
     val canViewTabungan: Boolean = false,
+    val canViewSholat: Boolean = true,
     val schoolId: String = "SRT1-KDR",
     val deletionRequested: Boolean = false,
     val deletionReason: String = "",

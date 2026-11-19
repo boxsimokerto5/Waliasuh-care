@@ -195,6 +195,7 @@ object NotificationHelper {
                 com.example.data.model.DeletionLog.CATEGORY_MENGAJI -> "Mengaji"
                 com.example.data.model.DeletionLog.CATEGORY_PUASA -> if (isEn) "Fasting" else "Puasa"
                 com.example.data.model.DeletionLog.CATEGORY_BEROBAT -> if (isEn) "Medical" else "Berobat"
+                com.example.data.model.DeletionLog.CATEGORY_SHOLAT -> if (isEn) "Prayer Attendance" else "Absen Sholat"
                 else -> cat
             }
 

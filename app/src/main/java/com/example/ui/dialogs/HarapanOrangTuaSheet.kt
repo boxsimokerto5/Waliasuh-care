@@ -371,7 +371,8 @@ fun HarapanOrangTuaSheet(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f, fill = false)
-                        .heightIn(min = 200.dp, max = 460.dp),
+                        .heightIn(min = 200.dp, max = 460.dp)
+                        .testTag("list_harapan_ortu"),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (scopedStudents.isEmpty()) {

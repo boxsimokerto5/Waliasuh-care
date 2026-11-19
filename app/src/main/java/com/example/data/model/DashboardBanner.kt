@@ -194,6 +194,13 @@ enum class DashboardBannerFeatureTarget(
         groupId = "Mengaji",
         groupEn = "Recitation"
     ),
+    FEATURE_ABSEN_SHOLAT(
+        key = "FEATURE_ABSEN_SHOLAT",
+        labelId = "Absen Sholat 5 Waktu & Laporan",
+        labelEn = "5 Daily Prayers Attendance",
+        groupId = "Sholat 5 Waktu",
+        groupEn = "5 Daily Prayers"
+    ),
 
     // Pesan Shift
     FEATURE_PESAN_HUB(

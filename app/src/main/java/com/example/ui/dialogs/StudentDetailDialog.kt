@@ -40,6 +40,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -49,6 +50,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.HistoryEdu
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.NightsStay
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -93,15 +95,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
+import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.SchoolProfile
+import com.example.data.model.SholatDisciplineTag
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
 import com.example.ui.components.StudentLargeProfilePhoto
 import com.example.util.DateUtils
+import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
 import com.example.util.i18n.LocalAppStrings
@@ -110,6 +119,7 @@ import java.util.Calendar
 enum class StudentDetailTab {
     BIODATA,
     MENGAJI,
+    SHOLAT,
     BEROBAT,
     PUASA
 }
@@ -123,13 +133,17 @@ fun StudentDetailDialog(
     waliName: String = "Wali Asuh",
     mengajiRecords: List<MengajiRecord> = emptyList(),
     fastingRecords: List<FastingRecord> = emptyList(),
+    sholatRecords: List<SholatRecord> = emptyList(),
+    haidRecords: List<HaidRecord> = emptyList(),
     initialTab: StudentDetailTab = StudentDetailTab.BIODATA,
     onInputMengaji: ((ChildStudent) -> Unit)? = null,
+    onInputSholat: ((ChildStudent) -> Unit)? = null,
     onPrintKartuMengaji: ((ChildStudent) -> Unit)? = null,
     onEditStudent: ((ChildStudent) -> Unit)? = null,
     onDeleteMengajiRecord: ((MengajiRecord) -> Unit)? = null,
     onDeleteMedicalRecord: ((MedicalRecord) -> Unit)? = null,
     onDeleteFastingRecord: ((FastingRecord) -> Unit)? = null,
+    onDeleteSholatRecord: ((SholatRecord) -> Unit)? = null,
     isUploadingPhoto: Boolean = false,
     onUploadStudentPhoto: ((ChildStudent, Uri, (Boolean, String) -> Unit) -> Unit)? = null,
     onRemoveStudentPhoto: ((ChildStudent, (Boolean, String) -> Unit) -> Unit)? = null,
@@ -153,8 +167,20 @@ fun StudentDetailDialog(
     var pendingDeleteMengaji by remember { mutableStateOf<MengajiRecord?>(null) }
     var pendingDeleteMedical by remember { mutableStateOf<MedicalRecord?>(null) }
     var pendingDeleteFasting by remember { mutableStateOf<FastingRecord?>(null) }
+    var pendingDeleteSholat by remember { mutableStateOf<SholatRecord?>(null) }
     val orderedMengajiRecords = remember(mengajiRecords, student) {
         MengajiHelper.recordsForStudent(mengajiRecords, student)
+    }
+    val orderedSholatRecords = remember(sholatRecords, student) {
+        SholatHelper.recordsForStudent(sholatRecords, student)
+    }
+    val currentSholatMonthKey = remember { SholatHelper.todayDateKey().substring(0, 7) }
+    val sholatAnalytics = remember(student, orderedSholatRecords, currentSholatMonthKey) {
+        SholatHelper.computeStudentAnalytics(
+            students = listOf(student),
+            records = orderedSholatRecords,
+            monthKey = currentSholatMonthKey
+        ).first()
     }
     val orderedFastingRecords = remember(fastingRecords, student) {
         val cleanStudentNik = StudentCsvParser.cleanDigitsOnly(student.nik)
@@ -194,6 +220,7 @@ fun StudentDetailDialog(
     val cleanNoKk = remember(student.noKk) { StudentCsvParser.cleanDigitsOnly(student.noKk) }
 
     val emeraldPrimary = Color(0xFF047857)
+    val sholatTeal = Color(0xFF0F766E)
     val medicalSky = Color(0xFF0369A1)
     val fastingAmber = Color(0xFFB45309)
 
@@ -451,6 +478,15 @@ fun StudentDetailDialog(
                         countBadge = orderedMengajiRecords.size,
                         modifier = Modifier.testTag("tab_student_detail_mengaji"),
                         onClick = { selectedTab = StudentDetailTab.MENGAJI }
+                    )
+                    SlimCategoryTabPill(
+                        label = if (isEn) "Prayers" else "Sholat",
+                        icon = Icons.Default.AutoAwesome,
+                        selected = selectedTab == StudentDetailTab.SHOLAT,
+                        accentColor = sholatTeal,
+                        countBadge = orderedSholatRecords.size,
+                        modifier = Modifier.testTag("tab_student_detail_sholat"),
+                        onClick = { selectedTab = StudentDetailTab.SHOLAT }
                     )
                     SlimCategoryTabPill(
                         label = if (isEn) "Medical" else "Berobat",
@@ -1316,6 +1352,307 @@ fun StudentDetailDialog(
                                     }
                                 }
                             }
+                            StudentDetailTab.SHOLAT -> {
+                                val todayActiveHaid = remember(student, haidRecords) {
+                                    SholatHelper.findActiveHaidOnDate(
+                                        student = student,
+                                        haidRecords = haidRecords,
+                                        dateKey = SholatHelper.todayDateKey()
+                                    )
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AutoAwesome,
+                                            contentDescription = null,
+                                            tint = sholatTeal,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isEn) {
+                                                "5-Time Prayer History (${orderedSholatRecords.size})"
+                                            } else {
+                                                "Pantauan Sholat 5 Waktu (${orderedSholatRecords.size})"
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                        if (onInputSholat != null) {
+                                            FilledTonalButton(
+                                                onClick = { onInputSholat(student) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                modifier = Modifier
+                                                    .height(34.dp)
+                                                    .testTag("btn_student_detail_input_sholat")
+                                            ) {
+                                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(if (isEn) "Absen" else "Catat", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                            }
+                                        }
+                                        OutlinedButton(
+                                            onClick = {
+                                                val file = PdfReportGenerator.generateSholatStudentReportPdf(
+                                                    context = context,
+                                                    schoolProfile = schoolProfile,
+                                                    student = student,
+                                                    sholatRecords = orderedSholatRecords,
+                                                    monthKey = currentSholatMonthKey,
+                                                    waliName = waliName
+                                                )
+                                                if (file != null) {
+                                                    PdfReportGenerator.shareSholatPdf(
+                                                        context = context,
+                                                        pdfFile = file,
+                                                        subject = if (isEn) "Prayer Report: ${student.name}" else "Rapor Sholat: ${student.name}",
+                                                        text = if (isEn) "Attached 5-time prayer report for ${student.name}." else "Terlampir PDF Rapor Sholat 5 Waktu ${student.name}."
+                                                    )
+                                                } else {
+                                                    Toast.makeText(
+                                                        context,
+                                                        if (isEn) "Unable to create Sholat PDF" else "Gagal membuat PDF Rapor Sholat",
+                                                        Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            },
+                                            shape = RoundedCornerShape(8.dp),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier
+                                                .height(34.dp)
+                                                .testTag("btn_student_detail_sholat_pdf")
+                                        ) {
+                                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(14.dp), tint = sholatTeal)
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("PDF", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = sholatTeal)
+                                        }
+                                    }
+                                }
+
+                                // Ringkasan KPI bulan berjalan
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    FastingStatMiniPill(
+                                        label = "Jamaah",
+                                        count = sholatAnalytics.jamaahCount,
+                                        bgColor = Color(0xFFDCFCE7),
+                                        textColor = Color(0xFF166534),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FastingStatMiniPill(
+                                        label = "Munfarid",
+                                        count = sholatAnalytics.munfaridCount,
+                                        bgColor = Color(0xFFFEF3C7),
+                                        textColor = Color(0xFF92400E),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FastingStatMiniPill(
+                                        label = if (isEn) "Excused" else "Udzur/Izin",
+                                        count = sholatAnalytics.udzurHaidCount + sholatAnalytics.sakitCount + sholatAnalytics.izinCount,
+                                        bgColor = Color(0xFFFCE7F3),
+                                        textColor = Color(0xFF9D174D),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FastingStatMiniPill(
+                                        label = "Alfa",
+                                        count = sholatAnalytics.alfaCount,
+                                        bgColor = Color(0xFFFEE2E2),
+                                        textColor = Color(0xFFDC2626),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = sholatTeal.copy(alpha = 0.08f),
+                                    border = BorderStroke(1.dp, sholatTeal.copy(alpha = 0.25f)),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 7.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Discipline (${SholatHelper.formatMonthKeyDisplay(currentSholatMonthKey, true)})"
+                                            } else {
+                                                "Disiplin Jamaah (${SholatHelper.formatMonthKeyDisplay(currentSholatMonthKey, false)})"
+                                            },
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = sholatTeal
+                                        )
+                                        Text(
+                                            text = "${sholatAnalytics.jamaahRatePercent}% • ${sholatAnalytics.subuhJamaahCount} Subuh",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = sholatTeal
+                                        )
+                                    }
+                                }
+
+                                if (todayActiveHaid != null) {
+                                    Surface(
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = Color(0xFFFDF2F8),
+                                        border = BorderStroke(1.dp, Color(0xFFFBCFE8)),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Active haid recorded (Day ${todayActiveHaid.durationDays}) — automatically respected as Udzur Syar'i."
+                                            } else {
+                                                "Sedang tercatat masa haid aktif (Hari ke-${todayActiveHaid.durationDays}) — otomatis berstatus Udzur Syar'i (Haid)."
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF9D174D),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                        )
+                                    }
+                                }
+
+                                if (orderedSholatRecords.isEmpty()) {
+                                    EmptyTabStateCard(
+                                        icon = Icons.Default.AutoAwesome,
+                                        accentColor = sholatTeal,
+                                        title = if (isEn) "No 5-Time Prayer History Yet" else "Belum Ada Catatan Sholat 5 Waktu",
+                                        subtitle = if (isEn) {
+                                            "Record daily Subuh, Dzuhur, Ashar, Maghrib, and Isya attendance via the Absen Sholat menu."
+                                        } else {
+                                            "Catat kehadiran Subuh, Dzuhur, Ashar, Maghrib & Isya melalui menu Absen Sholat di beranda."
+                                        },
+                                        modifier = Modifier.testTag("empty_student_sholat_state")
+                                    )
+                                } else {
+                                    val groupedByDate = remember(orderedSholatRecords) {
+                                        orderedSholatRecords.groupBy { it.dateKey }.entries.sortedByDescending { it.key }
+                                    }
+                                    groupedByDate.forEach { (dateKey, dayRecords) ->
+                                        val byWaktu = dayRecords.associateBy { SholatWaktu.fromCode(it.waktu) }
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .border(
+                                                    1.dp,
+                                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f),
+                                                    RoundedCornerShape(10.dp)
+                                                )
+                                                .testTag("student_sholat_day_$dateKey")
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                verticalArrangement = Arrangement.spacedBy(7.dp)
+                                            ) {
+                                                Text(
+                                                    text = SholatHelper.formatDateKeyDisplay(dateKey, isEn),
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                ) {
+                                                    SholatWaktu.entries.forEach { w ->
+                                                        val rec = byWaktu[w]
+                                                        val st = rec?.let { SholatStatus.fromCode(it.status) }
+                                                        val (bg, fg) = if (st != null) sholatStatusColors(st) else Color(0xFFF1F5F9) to Color(0xFF94A3B8)
+                                                        Column(
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .background(bg)
+                                                                .padding(horizontal = 3.dp, vertical = 5.dp),
+                                                            horizontalAlignment = Alignment.CenterHorizontally
+                                                        ) {
+                                                            Text(
+                                                                text = w.shortCode,
+                                                                fontSize = 9.5.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = fg
+                                                            )
+                                                            Text(
+                                                                text = st?.shortCode ?: "•",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.ExtraBold,
+                                                                color = fg
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                dayRecords.sortedBy { SholatWaktu.fromCode(it.waktu).ordinal }.forEach { rec ->
+                                                    val w = SholatWaktu.fromCode(rec.waktu)
+                                                    val st = SholatStatus.fromCode(rec.status)
+                                                    val tag = SholatDisciplineTag.fromCode(rec.disciplineTag)
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Column(modifier = Modifier.weight(1f)) {
+                                                            val tagSuffix = if (tag != SholatDisciplineTag.NONE) " • ${tag.label(isEn)}" else ""
+                                                            Text(
+                                                                text = "${w.label(isEn)}: ${st.label(isEn)}$tagSuffix",
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.SemiBold,
+                                                                color = MaterialTheme.colorScheme.onSurface
+                                                            )
+                                                            if (rec.notes.isNotBlank() || rec.recordedBy.isNotBlank()) {
+                                                                Text(
+                                                                    text = listOfNotNull(
+                                                                        rec.notes.takeIf { it.isNotBlank() },
+                                                                        rec.recordedBy.takeIf { it.isNotBlank() }?.let { "Wali: $it" }
+                                                                    ).joinToString(" • "),
+                                                                    fontSize = 10.sp,
+                                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                    maxLines = 2,
+                                                                    overflow = TextOverflow.Ellipsis
+                                                                )
+                                                            }
+                                                        }
+                                                        if (onDeleteSholatRecord != null) {
+                                                            IconButton(
+                                                                onClick = { pendingDeleteSholat = rec },
+                                                                modifier = Modifier.testTag("btn_delete_sholat_${rec.id}")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.DeleteOutline,
+                                                                    contentDescription = if (isEn) "Delete prayer record" else "Hapus catatan sholat",
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                    modifier = Modifier.size(18.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1521,6 +1858,52 @@ fun StudentDetailDialog(
             },
             dismissButton = {
                 TextButton(onClick = { pendingDeleteFasting = null }) {
+                    Text(if (isEn) "Cancel" else "Batal")
+                }
+            }
+        )
+    }
+
+    pendingDeleteSholat?.let { target ->
+        val waktuLabel = SholatWaktu.fromCode(target.waktu).label(isEn)
+        val statusLabel = SholatStatus.fromCode(target.status).label(isEn)
+        AlertDialog(
+            onDismissRequest = { pendingDeleteSholat = null },
+            title = {
+                Text(
+                    text = if (isEn) "Delete Prayer Record?" else "Hapus Catatan Sholat?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEn) {
+                        "Are you sure you want to delete $waktuLabel ($statusLabel) on ${target.dateKey} for ${student.name}?"
+                    } else {
+                        "Yakin ingin menghapus catatan sholat $waktuLabel ($statusLabel) tanggal ${target.dateKey} milik ${student.name}?"
+                    },
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteSholatRecord?.invoke(target)
+                        pendingDeleteSholat = null
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Prayer record deleted" else "Catatan sholat dihapus & rekan Wali Asuh diberi notifikasi",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier.testTag("btn_confirm_delete_student_history")
+                ) {
+                    Text(if (isEn) "Delete" else "Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeleteSholat = null }) {
                     Text(if (isEn) "Cancel" else "Batal")
                 }
             }

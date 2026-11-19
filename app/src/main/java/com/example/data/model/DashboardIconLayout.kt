@@ -11,6 +11,7 @@ enum class DashboardIconKey(val key: String) {
     HAID("HAID"),
     PESAN("PESAN"),
     MENGAJI("MENGAJI"),
+    SHOLAT("SHOLAT"),
     TABUNGAN("TABUNGAN"),
     KONSELING("KONSELING"),
     JADWAL_WALI("JADWAL_WALI"),

@@ -32,6 +32,11 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.SholatDisciplineTag
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -124,7 +129,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.infoPentingPostDao(),
             db.infoPentingReactionDao(),
             db.infoPentingCommentDao(),
-            db.parentExpectationDao()
+            db.parentExpectationDao(),
+            db.sholatRecordDao()
         )
     }
 
@@ -1631,6 +1637,199 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // Multi-tenant isolated Absen Sholat 5 Waktu records:
+    val sholatRecords: StateFlow<List<SholatRecord>> = combine(
+        repository.allSholatRecords,
+        _schoolProfile,
+        _currentUserRole
+    ) { records, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            records
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            records.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun syncSholatOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncSholatOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun saveSholatRecord(
+        student: ChildStudent,
+        dateKey: String,
+        waktu: SholatWaktu,
+        status: SholatStatus,
+        disciplineTag: SholatDisciplineTag = SholatDisciplineTag.NONE,
+        notes: String = "",
+        inputMethod: String = SholatHelper.METHOD_MANUAL,
+        onComplete: (Boolean, SholatRecord?) -> Unit = { _, _ -> }
+    ) {
+        if (_currentUserRole.value == UserRole.PARENT || _currentUserRole.value == UserRole.NOT_LOGGED_IN) {
+            onComplete(false, null)
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val activeSchool = student.schoolId.ifBlank {
+                _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            }
+            val cleanDateKey = dateKey.trim().ifBlank { SholatHelper.todayDateKey(now) }
+            val existing = repository.getSholatRecordByStudentDateWaktu(student.id, cleanDateKey, waktu.code)
+            val recordId = SholatHelper.deterministicId(activeSchool, student.id, cleanDateKey, waktu)
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            val resolvedJenjang = FastingJenjangHelper.resolveJenjang(student)
+            val signerName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val signerUser = _currentUsername.value.orEmpty().trim()
+            val safeDiscipline = if (status == SholatStatus.JAMAAH) disciplineTag.code else ""
+
+            val record = SholatRecord(
+                id = recordId,
+                dateKey = cleanDateKey,
+                dateMillis = SholatHelper.startOfDayMillis(cleanDateKey),
+                waktu = waktu.code,
+                status = status.code,
+                disciplineTag = safeDiscipline,
+                studentId = student.id,
+                studentName = student.name,
+                studentNik = cleanNik,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                studentJenjang = resolvedJenjang,
+                notes = notes.trim(),
+                inputMethod = inputMethod.ifBlank { SholatHelper.METHOD_MANUAL },
+                recordedBy = signerName,
+                recordedByUsername = signerUser,
+                schoolId = activeSchool,
+                createdAt = existing?.createdAt ?: now,
+                updatedAt = now
+            )
+            repository.insertSholatRecord(record)
+            onComplete(true, record)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleSholatRecord(getApplication(), record)
+            }
+        }
+    }
+
+    fun markUnmarkedSholatAsJamaah(
+        students: List<ChildStudent>,
+        dateKey: String,
+        waktu: SholatWaktu,
+        autoApplyUdzurHaidForActiveFemale: Boolean = true,
+        notes: String = "",
+        onComplete: (jamaahSavedCount: Int, autoHaidCount: Int) -> Unit = { _, _ -> }
+    ) {
+        if (_currentUserRole.value == UserRole.PARENT || _currentUserRole.value == UserRole.NOT_LOGGED_IN) {
+            onComplete(0, 0)
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val cleanDateKey = dateKey.trim().ifBlank { SholatHelper.todayDateKey(now) }
+            val activeSchoolDefault = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val existingForSchool = repository.getSholatRecordsBySchoolList(activeSchoolDefault)
+            val existingMatrix = SholatHelper.buildDailyMatrix(existingForSchool, cleanDateKey)
+            val haidForSchool = if (autoApplyUdzurHaidForActiveFemale) {
+                repository.getHaidRecordsBySchoolList(activeSchoolDefault)
+            } else {
+                emptyList()
+            }
+
+            val signerName = _waliName.value.trim().ifBlank { "Wali Asuh" }
+            val signerUser = _currentUsername.value.orEmpty().trim()
+            val dayMillis = SholatHelper.startOfDayMillis(cleanDateKey)
+
+            val batch = mutableListOf<SholatRecord>()
+            var jamaahCount = 0
+            var haidCount = 0
+
+            students.forEach { st ->
+                val already = existingMatrix[st.id]?.get(waktu)
+                if (already == null) {
+                    val activeSchool = st.schoolId.ifBlank { activeSchoolDefault }
+                    val activeHaid = if (autoApplyUdzurHaidForActiveFemale) {
+                        SholatHelper.findActiveHaidOnDate(st, haidForSchool, cleanDateKey)
+                    } else {
+                        null
+                    }
+                    val targetStatus = if (activeHaid != null) {
+                        haidCount++
+                        SholatStatus.UDZUR_HAID
+                    } else {
+                        jamaahCount++
+                        SholatStatus.JAMAAH
+                    }
+                    val method = if (activeHaid != null) SholatHelper.METHOD_AUTO_HAID else SholatHelper.METHOD_BULK_JAMAAH
+                    val recordId = SholatHelper.deterministicId(activeSchool, st.id, cleanDateKey, waktu)
+                    batch.add(
+                        SholatRecord(
+                            id = recordId,
+                            dateKey = cleanDateKey,
+                            dateMillis = dayMillis,
+                            waktu = waktu.code,
+                            status = targetStatus.code,
+                            disciplineTag = "",
+                            studentId = st.id,
+                            studentName = st.name,
+                            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(st.nik),
+                            studentNis = st.nis,
+                            studentClass = st.classGrade,
+                            studentDorm = st.dormitory,
+                            studentJenjang = FastingJenjangHelper.resolveJenjang(st),
+                            notes = notes.trim(),
+                            inputMethod = method,
+                            recordedBy = signerName,
+                            recordedByUsername = signerUser,
+                            schoolId = activeSchool,
+                            createdAt = now,
+                            updatedAt = now
+                        )
+                    )
+                }
+            }
+
+            if (batch.isNotEmpty()) {
+                repository.insertAllSholatRecords(batch)
+            }
+            onComplete(jamaahCount, haidCount)
+            if (batch.isNotEmpty() && !isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSholatRecords(getApplication(), batch)
+            }
+        }
+    }
+
+    fun deleteSholatRecord(record: SholatRecord) {
+        if (_currentUserRole.value == UserRole.PARENT || _currentUserRole.value == UserRole.NOT_LOGGED_IN) {
+            return
+        }
+        viewModelScope.launch {
+            val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            val waktuLabel = SholatWaktu.fromCode(record.waktu).label(false)
+            val statusLabel = SholatStatus.fromCode(record.status).label(false)
+            val summary = "$waktuLabel • $statusLabel (${record.dateKey})"
+            val log = createAndRecordDeletionLog(
+                category = DeletionLog.CATEGORY_SHOLAT,
+                studentId = record.studentId,
+                studentName = record.studentName,
+                studentClass = record.studentClass,
+                recordId = record.id,
+                deletedSummary = summary,
+                schoolId = activeSchool
+            )
+            repository.deleteSholatRecord(record)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteSholatRecord(getApplication(), record.id)
+                PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), log)
+            }
+        }
+    }
+
     fun syncShiftMessagesOnlineQuietly() {
         if (isUnitTestEnvironment()) return
         val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
@@ -1815,6 +2014,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewFasting = true,
                 canViewHaid = true,
                 canViewProfile = true,
+                canViewSholat = true,
                 schoolId = activeSchool,
                 studentPhotoUrl = student.photoUrl,
                 studentPhotoFallbackUrl = student.photoFallbackUrl,
@@ -1974,6 +2174,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         canHaid: Boolean = link.canViewHaid,
         canProfile: Boolean = link.canViewProfile,
         canTabungan: Boolean = link.canViewTabungan,
+        canSholat: Boolean = link.canViewSholat,
         onComplete: () -> Unit = {}
     ) {
         viewModelScope.launch {
@@ -1984,6 +2185,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewHaid = canHaid,
                 canViewProfile = canProfile,
                 canViewTabungan = canTabungan,
+                canViewSholat = canSholat,
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateParentAccessLink(updated)

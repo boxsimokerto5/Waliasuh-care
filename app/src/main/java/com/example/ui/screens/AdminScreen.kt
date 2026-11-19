@@ -204,6 +204,8 @@ fun AdminScreen(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
+    val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
@@ -2646,6 +2648,8 @@ fun AdminScreen(
             waliName = schoolProfile.adminName.ifBlank { waliName },
             mengajiRecords = MengajiHelper.recordsForStudent(mengajiRecords, student),
             fastingRecords = fastingRecords,
+            sholatRecords = sholatRecords,
+            haidRecords = haidRecords,
             onInputMengaji = { target ->
                 selectedDetailStudent = null
                 studentForMengajiInput = target
@@ -2661,6 +2665,7 @@ fun AdminScreen(
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
+            onDeleteSholatRecord = { rec -> viewModel.deleteSholatRecord(rec) },
             isUploadingPhoto = isUploadingStudentPhoto,
             onUploadStudentPhoto = { target, uri, cb ->
                 viewModel.uploadStudentProfilePhoto(target, uri, cb)

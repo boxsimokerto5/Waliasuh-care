@@ -82,6 +82,8 @@ fun StudentsScreen(
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
+    val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     var showAddStudentDialog by remember { mutableStateOf(false) }
     var showCardGeneratorSheet by remember { mutableStateOf(false) }
@@ -356,6 +358,8 @@ fun StudentsScreen(
             waliName = waliName,
             mengajiRecords = studentMengaji,
             fastingRecords = fastingRecords,
+            sholatRecords = sholatRecords,
+            haidRecords = haidRecords,
             onInputMengaji = { target ->
                 selectedStudentForDetail = null
                 studentForMengajiInput = target
@@ -371,6 +375,7 @@ fun StudentsScreen(
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
+            onDeleteSholatRecord = { rec -> viewModel.deleteSholatRecord(rec) },
             isUploadingPhoto = isUploadingStudentPhoto,
             onUploadStudentPhoto = { target, uri, cb ->
                 viewModel.uploadStudentProfilePhoto(target, uri, cb)

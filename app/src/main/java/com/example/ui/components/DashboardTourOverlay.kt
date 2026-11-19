@@ -93,6 +93,7 @@ enum class TourTargetId {
     ICON_HAID,
     ICON_PESAN,
     ICON_MENGAJI,
+    ICON_SHOLAT,
     ICON_TABUNGAN,
     ICON_KONSELING,
     ICON_JADWAL_WALI,
@@ -109,6 +110,7 @@ fun DashboardIconKey.toTourTargetId(): TourTargetId = when (this) {
     DashboardIconKey.HAID -> TourTargetId.ICON_HAID
     DashboardIconKey.PESAN -> TourTargetId.ICON_PESAN
     DashboardIconKey.MENGAJI -> TourTargetId.ICON_MENGAJI
+    DashboardIconKey.SHOLAT -> TourTargetId.ICON_SHOLAT
     DashboardIconKey.TABUNGAN -> TourTargetId.ICON_TABUNGAN
     DashboardIconKey.KONSELING -> TourTargetId.ICON_KONSELING
     DashboardIconKey.JADWAL_WALI -> TourTargetId.ICON_JADWAL_WALI
@@ -288,6 +290,19 @@ fun buildDashboardTourSteps(isEn: Boolean): List<DashboardTourStep> {
             accentColor = Color(0xFF047857),
             iconRes = R.drawable.img_menu_mengaji,
             dashboardIconKey = DashboardIconKey.MENGAJI
+        ),
+        DashboardTourStep(
+            targetId = TourTargetId.ICON_SHOLAT,
+            chapter = if (isEn) "Worship" else "Ibadah",
+            title = if (isEn) "5 Daily Prayers Attendance" else "Absen Sholat 5 Waktu",
+            description = if (isEn) {
+                "Mark Fajr to Isha congregation attendance in 1 tap, auto-detect active period Udzur, print PDF & sync to Parents."
+            } else {
+                "Catat absen Subuh–Isya 1 ketuk, otomatis deteksi Udzur Haid, ekspor PDF & langsung terhubung ke Portal Ortu."
+            },
+            accentColor = Color(0xFF059669),
+            iconRes = R.drawable.img_menu_sholat,
+            dashboardIconKey = DashboardIconKey.SHOLAT
         ),
         DashboardTourStep(
             targetId = TourTargetId.ICON_TABUNGAN,

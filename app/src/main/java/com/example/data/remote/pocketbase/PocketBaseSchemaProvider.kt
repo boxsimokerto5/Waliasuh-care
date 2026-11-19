@@ -32,7 +32,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.47.0 • 25 Koleksi Multi-Tenant + Channel Info-Info Penting Global (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.48.0 • 27 Koleksi Multi-Tenant + Absen Sholat 5 Waktu & Info-Info Penting Global (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -376,6 +376,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("can_view_haid", "bool"),
                 PbFieldDef("can_view_profile", "bool"),
                 PbFieldDef("can_view_tabungan", "bool"),
+                PbFieldDef("can_view_sholat", "bool"),
                 PbFieldDef("deletion_requested", "bool"),
                 PbFieldDef("deletion_reason", "text"),
                 PbFieldDef("deletion_requested_at", "number"),
@@ -730,6 +731,34 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_iic_post ON important_info_comments (post_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "sholat_records",
+            description = "Absensi sholat wajib 5 waktu (Subuh, Dzuhur, Ashar, Maghrib, Isya) per siswa & tanggal",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("date_key", "text"),
+                PbFieldDef("date_millis", "number"),
+                PbFieldDef("waktu", "text"),
+                PbFieldDef("status", "text"),
+                PbFieldDef("discipline_tag", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nik", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("student_jenjang", "text"),
+                PbFieldDef("notes", "text"),
+                PbFieldDef("input_method", "text"),
+                PbFieldDef("recorded_by", "text"),
+                PbFieldDef("recorded_by_username", "text"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_sholat_school_date ON sholat_records (school_id, date_key)")
         )
     )
 

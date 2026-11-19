@@ -40,6 +40,11 @@ import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.DayShiftBreakdown
 import com.example.data.model.PinnedTaskItem
+import com.example.data.model.SholatDisciplineTag
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
 import com.example.data.model.WaliShiftCode
@@ -4600,6 +4605,763 @@ object PdfReportGenerator {
                 Intent.createChooser(
                     shareIntent,
                     if (isEn) "Share Work Schedule PDF" else "Bagikan PDF Jadwal Wali Asuh"
+                )
+            )
+        } catch (e: Exception) {
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
+     * Membuat dokumen PDF Rekapitulasi Absensi Sholat 5 Waktu Sekolah / Asrama
+     * (mendukung mode Harian per S·D·A·M·I maupun mode Rekap Bulanan per siswa).
+     */
+    fun generateSholatRecapPdf(
+        context: Context,
+        schoolProfile: SchoolProfile,
+        students: List<ChildStudent>,
+        sholatRecords: List<SholatRecord>,
+        periodLabel: String,
+        dateKeyOrMonthKey: String,
+        isMonthly: Boolean,
+        waliName: String = "Wali Asuh"
+    ): File? {
+        return try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var currentPage: PdfDocument.Page? = null
+
+            renderSholatRecapPages(
+                context = context,
+                schoolProfile = schoolProfile,
+                students = students,
+                sholatRecords = sholatRecords,
+                periodLabel = periodLabel,
+                dateKeyOrMonthKey = dateKeyOrMonthKey,
+                isMonthly = isMonthly,
+                waliName = waliName,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, num).create()
+                    currentPage = document.startPage(pageInfo)
+                    currentPage!!.canvas
+                },
+                finishCanvas = {
+                    currentPage?.let {
+                        document.finishPage(it)
+                        currentPage = null
+                    }
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanKey = dateKeyOrMonthKey.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val file = File(outputDir, "Rekap_Sholat_${if (isMonthly) "Bulanan" else "Harian"}_$cleanKey.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    internal fun renderSholatRecapPages(
+        context: Context,
+        schoolProfile: SchoolProfile,
+        students: List<ChildStudent>,
+        sholatRecords: List<SholatRecord>,
+        periodLabel: String,
+        dateKeyOrMonthKey: String,
+        isMonthly: Boolean,
+        waliName: String = "Wali Asuh",
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCanvas: () -> Unit = {}
+    ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val pageWidth = 595
+        val pageHeight = 842
+        val marginX = 32f
+        val contentRight = pageWidth - marginX
+        val tableWidth = contentRight - marginX
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+
+        var currentY = 34f
+        currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = UNIT_BIMBINGAN_SPIRITUAL
+            )
+
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 12f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(
+                if (isEn) {
+                    if (isMonthly) "MONTHLY 5 DAILY PRAYERS ATTENDANCE RECAP" else "DAILY 5 DAILY PRAYERS ATTENDANCE RECAP"
+                } else {
+                    if (isMonthly) "REKAPITULASI BULANAN ABSENSI SHOLAT 5 WAKTU" else "REKAPITULASI HARIAN ABSENSI SHOLAT 5 WAKTU"
+                },
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            currentY += 13f
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(5, 150, 105)
+            canvas.drawText(
+                (if (isEn) "PERIOD: " else "PERIODE: ") + periodLabel.uppercase(Locale.getDefault()),
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+            currentY += 14f
+
+            val scopedRecords = if (isMonthly) {
+                sholatRecords.filter { it.dateKey.startsWith(dateKeyOrMonthKey) }
+            } else {
+                sholatRecords.filter { it.dateKey == dateKeyOrMonthKey }
+            }
+            val orderedStudents = students.sortedBy { it.name.lowercase() }
+            val studentIds = orderedStudents.map { it.id }.toSet()
+            val relevantRecords = scopedRecords.filter {
+                it.studentId in studentIds || orderedStudents.any { st -> SholatHelper.matchesStudent(it, st) }
+            }
+
+            val totalJamaah = relevantRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
+            val totalMunfarid = relevantRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.MUNFARID }
+            val totalHaid = relevantRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID }
+            val totalSakitIzin = relevantRecords.count {
+                val st = SholatStatus.fromCode(it.status)
+                st == SholatStatus.SAKIT || st == SholatStatus.IZIN
+            }
+            val totalAlfa = relevantRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.ALFA }
+            val wajibDenom = (relevantRecords.size - totalHaid).coerceAtLeast(0)
+            val jamaahPct = if (wajibDenom > 0) ((totalJamaah * 100f) / wajibDenom).toInt().coerceIn(0, 100) else 0
+
+            // Summary KPI Banner
+            val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(236, 253, 245)
+            canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(167, 243, 208)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            val kpiItems = listOf(
+                (if (isEn) "Students" else "Siswa") to "${orderedStudents.size}",
+                "Jamaah %" to "$jamaahPct%",
+                "Jamaah" to "$totalJamaah",
+                "Munfarid" to "$totalMunfarid",
+                (if (isEn) "Udzur" else "Haid") to "$totalHaid",
+                (if (isEn) "Sick/Ex" else "S/I") to "$totalSakitIzin",
+                "Alfa" to "$totalAlfa"
+            )
+            val kpiColW = tableWidth / kpiItems.size
+            kpiItems.forEachIndexed { idx, (lbl, v) ->
+                val cx = marginX + idx * kpiColW + kpiColW / 2f
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 7.5f
+                paint.color = Color.rgb(6, 95, 70)
+                canvas.drawText(lbl, cx, currentY + 15f, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 11f
+                paint.color = if (lbl == "Alfa" && totalAlfa > 0) Color.rgb(185, 28, 28) else Color.rgb(15, 23, 42)
+                canvas.drawText(v, cx, currentY + 32f, paint)
+            }
+            paint.textAlign = Paint.Align.LEFT
+            currentY += 52f
+
+            fun startNewPageWithSubtitle() {
+                finishCanvas()
+                pageNumber++
+                canvas = startNewCanvas(pageNumber)
+                currentY = 34f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 9f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText(
+                    "${if (isEn) "Prayer Attendance Recap" else "Rekap Sholat"} ($periodLabel) • Hal. $pageNumber",
+                    marginX,
+                    currentY,
+                    paint
+                )
+                currentY += 14f
+            }
+
+            fun statusColor(st: SholatStatus): Int = when (st) {
+                SholatStatus.JAMAAH -> Color.rgb(21, 128, 61)
+                SholatStatus.MUNFARID -> Color.rgb(3, 105, 161)
+                SholatStatus.UDZUR_HAID -> Color.rgb(190, 24, 93)
+                SholatStatus.SAKIT -> Color.rgb(180, 83, 9)
+                SholatStatus.IZIN -> Color.rgb(109, 40, 217)
+                SholatStatus.ALFA -> Color.rgb(185, 28, 28)
+            }
+
+            if (!isMonthly) {
+                // Daily Matrix: No | Nama | Kelas/Asrama | S | D | A | M | I | Ket
+                val colWidths = floatArrayOf(24f, 155f, 105f, 34f, 34f, 34f, 34f, 34f, tableWidth - 454f)
+                val headers = listOf("No", if (isEn) "Student" else "Nama Siswa", if (isEn) "Class / Dorm" else "Kelas / Asrama", "S", "D", "A", "M", "I", if (isEn) "Notes" else "Ket")
+
+                fun drawDailyHeader(yPos: Float): Float {
+                    val h = 20f
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.rgb(15, 118, 110)
+                    canvas.drawRect(marginX, yPos, contentRight, yPos + h, paint)
+                    var cx = marginX
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 8f
+                    paint.color = Color.WHITE
+                    headers.forEachIndexed { i, title ->
+                        if (i in 3..7 || i == 0) {
+                            paint.textAlign = Paint.Align.CENTER
+                            canvas.drawText(title, cx + colWidths[i] / 2f, yPos + 13.5f, paint)
+                        } else {
+                            paint.textAlign = Paint.Align.LEFT
+                            canvas.drawText(title, cx + 4f, yPos + 13.5f, paint)
+                        }
+                        cx += colWidths[i]
+                    }
+                    paint.textAlign = Paint.Align.LEFT
+                    return yPos + h
+                }
+
+                currentY = drawDailyHeader(currentY)
+                val dailyMatrix = SholatHelper.buildDailyMatrix(relevantRecords, dateKeyOrMonthKey)
+                val rowH = 18f
+
+                orderedStudents.forEachIndexed { idx, st ->
+                    if (currentY + rowH > pageHeight - 110f) {
+                        startNewPageWithSubtitle()
+                        currentY = drawDailyHeader(currentY)
+                    }
+                    val stMap = dailyMatrix[st.id].orEmpty()
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+
+                    var cx = marginX
+                    paint.textSize = 7.8f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(51, 65, 85)
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("${idx + 1}", cx + colWidths[0] / 2f, currentY + 12.5f, paint)
+                    cx += colWidths[0]
+
+                    paint.textAlign = Paint.Align.LEFT
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = Color.rgb(15, 23, 42)
+                    val clippedName = TextUtils.ellipsize(st.name, TextPaint(paint), colWidths[1] - 8f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(clippedName, cx + 4f, currentY + 12.5f, paint)
+                    cx += colWidths[1]
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(71, 85, 105)
+                    val dormClass = listOf(st.classGrade, st.dormitory).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "-" }
+                    val clippedDorm = TextUtils.ellipsize(dormClass, TextPaint(paint), colWidths[2] - 8f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(clippedDorm, cx + 4f, currentY + 12.5f, paint)
+                    cx += colWidths[2]
+
+                    val notesParts = mutableListOf<String>()
+                    SholatWaktu.entries.forEachIndexed { wIdx, w ->
+                        val rec = stMap[w]
+                        paint.textAlign = Paint.Align.CENTER
+                        if (rec != null) {
+                            val stEnum = SholatStatus.fromCode(rec.status)
+                            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                            paint.color = statusColor(stEnum)
+                            canvas.drawText(stEnum.shortCode, cx + colWidths[3 + wIdx] / 2f, currentY + 12.5f, paint)
+                            if (rec.notes.isNotBlank()) notesParts.add("${w.shortCode}:${rec.notes}")
+                        } else {
+                            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                            paint.color = Color.rgb(148, 163, 184)
+                            canvas.drawText("-", cx + colWidths[3 + wIdx] / 2f, currentY + 12.5f, paint)
+                        }
+                        cx += colWidths[3 + wIdx]
+                    }
+
+                    paint.textAlign = Paint.Align.LEFT
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(71, 85, 105)
+                    val noteSummary = notesParts.joinToString("; ").ifBlank {
+                        val logged = stMap.size
+                        "$logged/5"
+                    }
+                    val clippedNote = TextUtils.ellipsize(noteSummary, TextPaint(paint), colWidths[8] - 6f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(clippedNote, cx + 4f, currentY + 12.5f, paint)
+
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.5f
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+                    paint.style = Paint.Style.FILL
+                    currentY += rowH
+                }
+
+                currentY += 8f
+                paint.textSize = 7.5f
+                paint.color = Color.rgb(71, 85, 105)
+                canvas.drawText(
+                    if (isEn) {
+                        "Legend: S=Fajr D=Dhuhr A=Asr M=Maghrib I=Isha | J=Congregation M=Individual H=Period Excused S=Sick I=Excused A=Absent"
+                    } else {
+                        "Keterangan: S=Subuh D=Dzuhur A=Ashar M=Maghrib I=Isya | J=Jamaah M=Munfarid H=Udzur Haid S=Sakit I=Izin A=Alfa"
+                    },
+                    marginX,
+                    currentY,
+                    paint
+                )
+                currentY += 12f
+            } else {
+                // Monthly Matrix: No | Nama | Kelas | Total | Jam | Munf | Haid | S/I | Alfa | %Jam
+                val colWidths = floatArrayOf(24f, 150f, 95f, 36f, 36f, 36f, 36f, 36f, 36f, tableWidth - 485f)
+                val headers = listOf(
+                    "No",
+                    if (isEn) "Student" else "Nama Siswa",
+                    if (isEn) "Class/Dorm" else "Kelas/Asrama",
+                    "Tot",
+                    "Jam",
+                    "Munf",
+                    "Haid",
+                    "S/I",
+                    "Alfa",
+                    "%Jam"
+                )
+
+                fun drawMonthlyHeader(yPos: Float): Float {
+                    val h = 20f
+                    paint.style = Paint.Style.FILL
+                    paint.color = Color.rgb(15, 118, 110)
+                    canvas.drawRect(marginX, yPos, contentRight, yPos + h, paint)
+                    var cx = marginX
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 7.8f
+                    paint.color = Color.WHITE
+                    headers.forEachIndexed { i, title ->
+                        if (i == 1 || i == 2) {
+                            paint.textAlign = Paint.Align.LEFT
+                            canvas.drawText(title, cx + 4f, yPos + 13.5f, paint)
+                        } else {
+                            paint.textAlign = Paint.Align.CENTER
+                            canvas.drawText(title, cx + colWidths[i] / 2f, yPos + 13.5f, paint)
+                        }
+                        cx += colWidths[i]
+                    }
+                    paint.textAlign = Paint.Align.LEFT
+                    return yPos + h
+                }
+
+                currentY = drawMonthlyHeader(currentY)
+                val analytics = SholatHelper.computeStudentAnalytics(orderedStudents, relevantRecords, dateKeyOrMonthKey)
+                val rowH = 18f
+
+                analytics.forEachIndexed { idx, row ->
+                    if (currentY + rowH > pageHeight - 110f) {
+                        startNewPageWithSubtitle()
+                        currentY = drawMonthlyHeader(currentY)
+                    }
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+
+                    var cx = marginX
+                    paint.textSize = 7.8f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(51, 65, 85)
+                    paint.textAlign = Paint.Align.CENTER
+                    canvas.drawText("${idx + 1}", cx + colWidths[0] / 2f, currentY + 12.5f, paint)
+                    cx += colWidths[0]
+
+                    paint.textAlign = Paint.Align.LEFT
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = Color.rgb(15, 23, 42)
+                    val clippedName = TextUtils.ellipsize(row.student.name, TextPaint(paint), colWidths[1] - 8f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(clippedName, cx + 4f, currentY + 12.5f, paint)
+                    cx += colWidths[1]
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(71, 85, 105)
+                    val dormClass = listOf(row.student.classGrade, row.student.dormitory).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "-" }
+                    val clippedDorm = TextUtils.ellipsize(dormClass, TextPaint(paint), colWidths[2] - 8f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(clippedDorm, cx + 4f, currentY + 12.5f, paint)
+                    cx += colWidths[2]
+
+                    val nums = listOf(
+                        row.totalLogged,
+                        row.jamaahCount,
+                        row.munfaridCount,
+                        row.udzurHaidCount,
+                        row.sakitCount + row.izinCount,
+                        row.alfaCount
+                    )
+                    nums.forEachIndexed { nIdx, value ->
+                        paint.textAlign = Paint.Align.CENTER
+                        paint.typeface = Typeface.create(
+                            Typeface.DEFAULT,
+                            if (nIdx == 1 || (nIdx == 5 && value > 0)) Typeface.BOLD else Typeface.NORMAL
+                        )
+                        paint.color = when {
+                            nIdx == 1 && value > 0 -> Color.rgb(21, 128, 61)
+                            nIdx == 3 && value > 0 -> Color.rgb(190, 24, 93)
+                            nIdx == 5 && value > 0 -> Color.rgb(185, 28, 28)
+                            else -> Color.rgb(30, 41, 59)
+                        }
+                        canvas.drawText(value.toString(), cx + colWidths[3 + nIdx] / 2f, currentY + 12.5f, paint)
+                        cx += colWidths[3 + nIdx]
+                    }
+
+                    paint.textAlign = Paint.Align.CENTER
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = if (row.jamaahRatePercent >= 80) Color.rgb(5, 150, 105) else Color.rgb(15, 23, 42)
+                    canvas.drawText("${row.jamaahRatePercent}%", cx + colWidths[9] / 2f, currentY + 12.5f, paint)
+                    paint.textAlign = Paint.Align.LEFT
+
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.5f
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+                    paint.style = Paint.Style.FILL
+                    currentY += rowH
+                }
+                currentY += 12f
+            }
+
+            if (currentY > pageHeight - 135f) {
+                startNewPageWithSubtitle()
+            }
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            finishCanvas()
+    }
+
+    /**
+     * Membuat dokumen PDF Rapor Absensi Sholat 5 Waktu Per Siswa untuk periode bulanan.
+     */
+    fun generateSholatStudentReportPdf(
+        context: Context,
+        schoolProfile: SchoolProfile,
+        student: ChildStudent,
+        sholatRecords: List<SholatRecord>,
+        monthKey: String,
+        waliName: String = "Wali Asuh"
+    ): File? {
+        return try {
+            val document = PdfDocument()
+            val pageWidth = 595
+            val pageHeight = 842
+            var currentPage: PdfDocument.Page? = null
+
+            renderSholatStudentReportPages(
+                context = context,
+                schoolProfile = schoolProfile,
+                student = student,
+                sholatRecords = sholatRecords,
+                monthKey = monthKey,
+                waliName = waliName,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(pageWidth, pageHeight, num).create()
+                    currentPage = document.startPage(pageInfo)
+                    currentPage!!.canvas
+                },
+                finishCanvas = {
+                    currentPage?.let {
+                        document.finishPage(it)
+                        currentPage = null
+                    }
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanStudent = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val cleanMonth = monthKey.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+            val file = File(outputDir, "Rapor_Sholat_${cleanStudent}_$cleanMonth.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            document.close()
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    internal fun renderSholatStudentReportPages(
+        context: Context,
+        schoolProfile: SchoolProfile,
+        student: ChildStudent,
+        sholatRecords: List<SholatRecord>,
+        monthKey: String,
+        waliName: String = "Wali Asuh",
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCanvas: () -> Unit = {}
+    ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val pageWidth = 595
+        val pageHeight = 842
+        val marginX = 35f
+        val contentRight = pageWidth - marginX
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+
+        var currentY = 34f
+        currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = UNIT_BIMBINGAN_SPIRITUAL
+            )
+
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 12f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(
+                if (isEn) "STUDENT 5 DAILY PRAYERS REPORT" else "RAPOR PEMBINAAN SHOLAT 5 WAKTU ANAK ASUH",
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            currentY += 13f
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(5, 150, 105)
+            val periodDisplay = SholatHelper.formatMonthKeyDisplay(monthKey, isEn)
+            canvas.drawText(
+                (if (isEn) "MONTH: " else "BULAN: ") + periodDisplay.uppercase(Locale.getDefault()),
+                pageWidth / 2f,
+                currentY,
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+            currentY += 14f
+
+            currentY = drawStudentBio(canvas, paint, pageWidth, currentY, student, isEn)
+
+            val studentRecords = SholatHelper.recordsForStudent(sholatRecords, student)
+                .filter { it.dateKey.startsWith(monthKey) }
+            val stats = SholatHelper.computeStudentAnalytics(listOf(student), studentRecords, monthKey).first()
+
+            val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(236, 253, 245)
+            canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(167, 243, 208)
+            paint.strokeWidth = 1f
+            canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+            paint.style = Paint.Style.FILL
+
+            val kpis = listOf(
+                "Jamaah %" to "${stats.jamaahRatePercent}%",
+                "Jamaah" to "${stats.jamaahCount}",
+                "Subuh Jam." to "${stats.subuhJamaahCount}",
+                "Munfarid" to "${stats.munfaridCount}",
+                "Udzur Haid" to "${stats.udzurHaidCount}",
+                "Sakit/Izin" to "${stats.sakitCount + stats.izinCount}",
+                "Alfa" to "${stats.alfaCount}"
+            )
+            val colW = (contentRight - marginX) / kpis.size
+            kpis.forEachIndexed { idx, (lbl, v) ->
+                val cx = marginX + idx * colW + colW / 2f
+                paint.textAlign = Paint.Align.CENTER
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 7.3f
+                paint.color = Color.rgb(6, 95, 70)
+                canvas.drawText(lbl, cx, currentY + 15f, paint)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 10.5f
+                paint.color = if (lbl == "Alfa" && stats.alfaCount > 0) Color.rgb(185, 28, 28) else Color.rgb(15, 23, 42)
+                canvas.drawText(v, cx, currentY + 32f, paint)
+            }
+            paint.textAlign = Paint.Align.LEFT
+            currentY += 54f
+
+            val dateGroups = studentRecords.groupBy { it.dateKey }.toSortedMap()
+            val tWidths = floatArrayOf(100f, 52f, 52f, 52f, 52f, 52f, (contentRight - marginX) - 360f)
+            val tHeaders = listOf(
+                if (isEn) "Date" else "Tanggal",
+                SholatWaktu.SUBUH.label(isEn),
+                SholatWaktu.DZUHUR.label(isEn),
+                SholatWaktu.ASHAR.label(isEn),
+                SholatWaktu.MAGHRIB.label(isEn),
+                SholatWaktu.ISYA.label(isEn),
+                if (isEn) "Supervisor Notes" else "Catatan Pembina"
+            )
+
+            fun drawTableHeader(yPos: Float): Float {
+                val h = 20f
+                paint.style = Paint.Style.FILL
+                paint.color = Color.rgb(15, 118, 110)
+                canvas.drawRect(marginX, yPos, contentRight, yPos + h, paint)
+                var cx = marginX
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8f
+                paint.color = Color.WHITE
+                tHeaders.forEachIndexed { i, title ->
+                    if (i in 1..5) {
+                        paint.textAlign = Paint.Align.CENTER
+                        canvas.drawText(title, cx + tWidths[i] / 2f, yPos + 13.5f, paint)
+                    } else {
+                        paint.textAlign = Paint.Align.LEFT
+                        canvas.drawText(title, cx + 5f, yPos + 13.5f, paint)
+                    }
+                    cx += tWidths[i]
+                }
+                paint.textAlign = Paint.Align.LEFT
+                return yPos + h
+            }
+
+            if (dateGroups.isEmpty()) {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText(
+                    if (isEn) "No prayer attendance logs recorded for this month." else "Belum ada catatan absensi sholat pada bulan ini.",
+                    marginX,
+                    currentY + 12f,
+                    paint
+                )
+                currentY += 32f
+            } else {
+                currentY = drawTableHeader(currentY)
+                val rowH = 18f
+                dateGroups.entries.forEachIndexed { idx, (dateKey, dayList) ->
+                    if (currentY + rowH > pageHeight - 125f) {
+                        finishCanvas()
+                        pageNumber++
+                        canvas = startNewCanvas(pageNumber)
+                        currentY = 34f
+                        currentY = drawTableHeader(currentY)
+                    }
+
+                    val byWaktu = dayList.associateBy { SholatWaktu.fromCode(it.waktu) }
+                    paint.style = Paint.Style.FILL
+                    paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+
+                    var cx = marginX
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 7.8f
+                    paint.color = Color.rgb(15, 23, 42)
+                    canvas.drawText(SholatHelper.formatDateKeyDisplay(dateKey, isEn), cx + 5f, currentY + 12.5f, paint)
+                    cx += tWidths[0]
+
+                    val dayNotes = mutableListOf<String>()
+                    SholatWaktu.entries.forEachIndexed { wIdx, w ->
+                        val rec = byWaktu[w]
+                        paint.textAlign = Paint.Align.CENTER
+                        if (rec != null) {
+                            val stEnum = SholatStatus.fromCode(rec.status)
+                            val tag = SholatDisciplineTag.fromCode(rec.disciplineTag)
+                            val cellLabel = when {
+                                stEnum == SholatStatus.JAMAAH && tag == SholatDisciplineTag.MASBUK -> "J*"
+                                stEnum == SholatStatus.JAMAAH && tag == SholatDisciplineTag.SAF_DEPAN -> "J+"
+                                else -> stEnum.shortCode
+                            }
+                            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                            paint.color = when (stEnum) {
+                                SholatStatus.JAMAAH -> Color.rgb(21, 128, 61)
+                                SholatStatus.MUNFARID -> Color.rgb(3, 105, 161)
+                                SholatStatus.UDZUR_HAID -> Color.rgb(190, 24, 93)
+                                SholatStatus.SAKIT -> Color.rgb(180, 83, 9)
+                                SholatStatus.IZIN -> Color.rgb(109, 40, 217)
+                                SholatStatus.ALFA -> Color.rgb(185, 28, 28)
+                            }
+                            canvas.drawText(cellLabel, cx + tWidths[1 + wIdx] / 2f, currentY + 12.5f, paint)
+                            if (rec.notes.isNotBlank()) dayNotes.add("${w.shortCode}:${rec.notes}")
+                        } else {
+                            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                            paint.color = Color.rgb(148, 163, 184)
+                            canvas.drawText("-", cx + tWidths[1 + wIdx] / 2f, currentY + 12.5f, paint)
+                        }
+                        cx += tWidths[1 + wIdx]
+                    }
+
+                    paint.textAlign = Paint.Align.LEFT
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(71, 85, 105)
+                    val noteText = dayNotes.joinToString("; ").ifBlank { "-" }
+                    val clippedNote = TextUtils.ellipsize(noteText, TextPaint(paint), tWidths[6] - 8f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(clippedNote, cx + 5f, currentY + 12.5f, paint)
+
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(226, 232, 240)
+                    paint.strokeWidth = 0.5f
+                    canvas.drawRect(marginX, currentY, contentRight, currentY + rowH, paint)
+                    paint.style = Paint.Style.FILL
+                    currentY += rowH
+                }
+                currentY += 8f
+                paint.textSize = 7.4f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText(
+                    if (isEn) {
+                        "J=Congregation (J+=Front Row, J*=Masbuq) • M=Individual • H=Period Excused • S=Sick • I=Excused • A=Absent"
+                    } else {
+                        "J=Jamaah (J+=Saf Depan, J*=Masbuk) • M=Munfarid • H=Udzur Syar'i (Haid) • S=Sakit • I=Izin • A=Alfa"
+                    },
+                    marginX,
+                    currentY,
+                    paint
+                )
+                currentY += 12f
+            }
+
+            if (currentY > pageHeight - 135f) {
+                finishCanvas()
+                pageNumber++
+                canvas = startNewCanvas(pageNumber)
+                currentY = 34f
+            }
+            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            finishCanvas()
+    }
+
+    fun shareSholatPdf(
+        context: Context,
+        pdfFile: File,
+        subject: String,
+        text: String
+    ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val s = AppLanguageManager.getStrings(context).report
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                pdfFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    if (isEn) "Share Prayer Attendance PDF" else "Bagikan PDF Absensi Sholat"
                 )
             )
         } catch (e: Exception) {

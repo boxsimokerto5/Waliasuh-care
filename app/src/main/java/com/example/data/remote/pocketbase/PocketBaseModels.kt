@@ -25,6 +25,10 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -1102,6 +1106,7 @@ data class PbParentAccessLinkDto(
     @Json(name = "can_view_haid") val canViewHaid: Boolean? = null,
     @Json(name = "can_view_profile") val canViewProfile: Boolean? = null,
     @Json(name = "can_view_tabungan") val canViewTabungan: Boolean? = null,
+    @Json(name = "can_view_sholat") val canViewSholat: Boolean? = null,
     @Json(name = "deletion_requested") val deletionRequested: Boolean? = null,
     @Json(name = "deletion_reason") val deletionReason: String? = null,
     @Json(name = "deletion_requested_at") val deletionRequestedAt: Long? = null,
@@ -1132,6 +1137,7 @@ data class PbParentAccessLinkDto(
             canViewHaid = canViewHaid ?: true,
             canViewProfile = canViewProfile ?: true,
             canViewTabungan = canViewTabungan ?: false,
+            canViewSholat = canViewSholat ?: true,
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
             deletionRequested = deletionRequested ?: false,
             deletionReason = deletionReason.orEmpty(),
@@ -1169,6 +1175,7 @@ data class PbParentAccessLinkDto(
                 canViewHaid = model.canViewHaid,
                 canViewProfile = model.canViewProfile,
                 canViewTabungan = model.canViewTabungan,
+                canViewSholat = model.canViewSholat,
                 deletionRequested = model.deletionRequested,
                 deletionReason = model.deletionReason,
                 deletionRequestedAt = model.deletionRequestedAt,
@@ -2038,3 +2045,96 @@ data class PbInfoPentingCommentDto(
         }
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class PbSholatRecordDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "date_key") val dateKey: String = "",
+    @Json(name = "date_millis") val dateMillis: Long? = null,
+    @Json(name = "waktu") val waktu: String = SholatWaktu.DZUHUR.code,
+    @Json(name = "status") val status: String = SholatStatus.JAMAAH.code,
+    @Json(name = "discipline_tag") val disciplineTag: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "student_jenjang") val studentJenjang: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "input_method") val inputMethod: String? = null,
+    @Json(name = "recorded_by") val recordedBy: String? = null,
+    @Json(name = "recorded_by_username") val recordedByUsername: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): SholatRecord {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        val safeDateKey = dateKey.trim().ifBlank { SholatHelper.todayDateKey(dateMillis ?: now) }
+        val resolvedWaktu = SholatWaktu.fromCode(waktu)
+        val rawId = PocketBaseIdCodec.resolveLocalId(localId, id)
+        val safeId = if (rawId > 0L) rawId else SholatHelper.deterministicId(resolvedSchool, studentId, safeDateKey, resolvedWaktu)
+        return SholatRecord(
+            id = safeId,
+            dateKey = safeDateKey,
+            dateMillis = dateMillis?.takeIf { it > 0L } ?: SholatHelper.startOfDayMillis(safeDateKey),
+            waktu = resolvedWaktu.code,
+            status = SholatStatus.fromCode(status).code,
+            disciplineTag = disciplineTag.orEmpty().trim(),
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            studentJenjang = studentJenjang.orEmpty(),
+            notes = notes.orEmpty(),
+            inputMethod = inputMethod?.takeIf { it.isNotBlank() } ?: SholatHelper.METHOD_MANUAL,
+            recordedBy = recordedBy?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            recordedByUsername = recordedByUsername.orEmpty(),
+            schoolId = resolvedSchool,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: SholatRecord): PbSholatRecordDto {
+            val resolvedSchool = model.schoolId.ifBlank { "SRT1-KDR" }
+            val resolvedWaktu = SholatWaktu.fromCode(model.waktu)
+            val safeId = if (model.id > 0L) model.id else SholatHelper.deterministicId(
+                resolvedSchool,
+                model.studentId,
+                model.dateKey,
+                resolvedWaktu
+            )
+            return PbSholatRecordDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = resolvedSchool,
+                dateKey = model.dateKey,
+                dateMillis = model.dateMillis,
+                waktu = resolvedWaktu.code,
+                status = SholatStatus.fromCode(model.status).code,
+                disciplineTag = model.disciplineTag,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                studentJenjang = model.studentJenjang,
+                notes = model.notes,
+                inputMethod = model.inputMethod,
+                recordedBy = model.recordedBy,
+                recordedByUsername = model.recordedByUsername,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+

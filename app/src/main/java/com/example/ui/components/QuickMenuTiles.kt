@@ -108,6 +108,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_mengaji,
             tileBg = Color(0xFFD1FAE5)
         )
+        DashboardIconKey.SHOLAT -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "5 Prayers" else "Absen Sholat",
+            imageRes = R.drawable.img_menu_sholat,
+            tileBg = Color(0xFFD1FAE5)
+        )
         DashboardIconKey.TABUNGAN -> DashboardIconUiMeta(
             key = key,
             title = if (isEn) "Savings" else "Tabungan",
@@ -199,6 +205,7 @@ fun QuickMenuTiles(
     onOpenInputMengaji: () -> Unit = {},
     onOpenPilihAnakAsuh: () -> Unit = {},
     onOpenInfoPenting: () -> Unit = {},
+    onOpenAbsenSholat: () -> Unit = {},
     todayPlansCount: Int = 0,
     inpatientCount: Int = 0,
     studentsCount: Int = 0,
@@ -213,6 +220,8 @@ fun QuickMenuTiles(
     todayFastingCount: Int = 0,
     mengajiTodayCount: Int = 0,
     mengajiTotalCount: Int = 0,
+    sholatTodayCount: Int = 0,
+    activeSholatWaktuLabel: String = "",
     visitSessionsCount: Int = 0,
     todayVisitsCount: Int = 0,
     unreadParentMessagesCount: Int = 0,
@@ -351,6 +360,21 @@ fun QuickMenuTiles(
                     badgeBg = Color(0xFF047857),
                     testTag = "category_mengaji",
                     onClick = { onOpenCategoryHub(DashboardCategoryHub.MENGAJI) }
+                )
+            }
+            DashboardIconKey.SHOLAT -> {
+                val sholatBadge = when {
+                    sholatTodayCount > 0 && activeSholatWaktuLabel.isNotBlank() -> "$activeSholatWaktuLabel • $sholatTodayCount"
+                    sholatTodayCount > 0 -> "$sholatTodayCount"
+                    activeSholatWaktuLabel.isNotBlank() -> activeSholatWaktuLabel
+                    else -> "5 Waktu"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = sholatBadge,
+                    badgeBg = Color(0xFF059669),
+                    testTag = "tile_absen_sholat",
+                    onClick = onOpenAbsenSholat
                 )
             }
             DashboardIconKey.TABUNGAN -> {

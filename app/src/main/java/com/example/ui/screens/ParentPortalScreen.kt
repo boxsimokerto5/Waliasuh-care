@@ -26,14 +26,17 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
@@ -45,6 +48,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VolunteerActivism
@@ -107,6 +111,12 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
+import com.example.data.model.SchoolProfile
+import com.example.data.model.SholatDisciplineTag
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.WaliAccount
@@ -123,7 +133,9 @@ import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.ui.dialogs.DeleteParentAccountDialog
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.ui.dialogs.WaliOfficialProfileSheet
+import com.example.ui.dialogs.sholatStatusColors
 import com.example.util.DateUtils
+import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
@@ -136,6 +148,7 @@ private enum class ParentPortalTab(
 ) {
     HOME("Ringkasan", "Overview", Icons.Default.Home, "parent_tab_home"),
     PROFILE("Profil Anak", "Profile", Icons.Default.Badge, "parent_tab_profile"),
+    SHOLAT("Sholat 5 Waktu", "Prayers", Icons.Default.AutoAwesome, "parent_tab_sholat"),
     MENGAJI("Mengaji", "Mengaji", Icons.AutoMirrored.Filled.MenuBook, "parent_tab_mengaji"),
     MEDICAL("Riwayat Sakit", "Medical", Icons.Default.LocalHospital, "parent_tab_medical"),
     FASTING("Puasa", "Fasting", Icons.Default.NightlightRound, "parent_tab_fasting"),
@@ -159,6 +172,7 @@ fun ParentPortalScreen(
     val students by viewModel.students.collectAsStateWithLifecycle()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val medicalRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
@@ -232,6 +246,7 @@ fun ParentPortalScreen(
         buildList {
             add(ParentPortalTab.HOME)
             if (activeLink?.canViewProfile == true) add(ParentPortalTab.PROFILE)
+            if (activeLink?.canViewSholat == true) add(ParentPortalTab.SHOLAT)
             if (activeLink?.canViewMengaji == true) add(ParentPortalTab.MENGAJI)
             if (activeLink?.canViewMedical == true) add(ParentPortalTab.MEDICAL)
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
@@ -271,6 +286,14 @@ fun ParentPortalScreen(
             mengajiRecords.filter { it.studentId == resolvedStudentId }.sortedByDescending { it.sessionDate }
         }
     }
+    val studentSholat = remember(sholatRecords, student, resolvedStudentId) {
+        if (student != null) {
+            SholatHelper.recordsForStudent(sholatRecords, student)
+        } else {
+            sholatRecords.filter { it.studentId == resolvedStudentId }
+                .sortedWith(compareByDescending<SholatRecord> { it.dateKey }.thenByDescending { it.updatedAt })
+        }
+    }
     val studentMedical = remember(medicalRecords, resolvedStudentId) {
         medicalRecords.filter { it.studentId == resolvedStudentId }.sortedByDescending { it.planDate }
     }
@@ -299,12 +322,15 @@ fun ParentPortalScreen(
     LaunchedEffect(Unit) {
         viewModel.syncParentRelationsOnlineQuietly()
         viewModel.syncTabunganOnlineQuietly()
+        viewModel.syncSholatOnlineQuietly()
     }
 
     LaunchedEffect(currentTab) {
         if (currentTab == ParentPortalTab.TABUNGAN) {
             viewModel.syncParentRelationsOnlineQuietly()
             viewModel.syncTabunganOnlineQuietly()
+        } else if (currentTab == ParentPortalTab.SHOLAT) {
+            viewModel.syncSholatOnlineQuietly()
         }
     }
 
@@ -545,6 +571,7 @@ fun ParentPortalScreen(
                         schoolName = resolvedSchoolName,
                         isFemaleStudent = isFemaleStudent,
                         mengajiRecords = studentMengaji,
+                        sholatRecords = studentSholat,
                         medicalRecords = studentMedical,
                         fastingRecords = studentFasting,
                         haidRecords = studentHaid,
@@ -594,6 +621,13 @@ fun ParentPortalScreen(
                             }
                         } else null,
                         onPreviewPhoto = { showPhotoPreview = true }
+                    )
+                    ParentPortalTab.SHOLAT -> ParentSholatContent(
+                        student = student,
+                        records = studentSholat,
+                        haidRecords = studentHaid,
+                        schoolProfile = schoolProfile,
+                        waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
                     )
                     ParentPortalTab.MENGAJI -> ParentMengajiContent(records = studentMengaji)
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(records = studentMedical)
@@ -704,6 +738,7 @@ private fun ParentOverviewContent(
     schoolName: String,
     isFemaleStudent: Boolean,
     mengajiRecords: List<MengajiRecord>,
+    sholatRecords: List<SholatRecord> = emptyList(),
     medicalRecords: List<MedicalRecord>,
     fastingRecords: List<FastingRecord>,
     haidRecords: List<HaidRecord>,
@@ -726,6 +761,7 @@ private fun ParentOverviewContent(
         link,
         isFemaleStudent,
         mengajiRecords.size,
+        sholatRecords,
         medicalRecords.size,
         fastingRecords.size,
         haidRecords,
@@ -745,6 +781,23 @@ private fun ParentOverviewContent(
                         softBg = Color(0xFFEEF2FF),
                         testTag = "card_parent_summary_profile",
                         onClick = { onOpenTab(ParentPortalTab.PROFILE) }
+                    )
+                )
+            }
+            if (link?.canViewSholat == true) {
+                val todayKey = SholatHelper.todayDateKey()
+                val todayPrayerCount = sholatRecords.count { it.dateKey == todayKey }
+                add(
+                    ParentMenuTileSpec(
+                        id = "sholat",
+                        title = if (isEn) "5 Prayers" else "Pantauan Sholat",
+                        imageRes = R.drawable.img_menu_sholat,
+                        accentColor = Color(0xFF0F766E),
+                        softBg = Color(0xFFF0FDFA),
+                        badgeText = if (todayPrayerCount > 0) "$todayPrayerCount/5" else if (sholatRecords.isNotEmpty()) "${sholatRecords.size}" else null,
+                        badgeColor = Color(0xFF0D9488),
+                        testTag = "card_parent_summary_sholat",
+                        onClick = { onOpenTab(ParentPortalTab.SHOLAT) }
                     )
                 )
             }
@@ -853,36 +906,36 @@ private fun ParentOverviewContent(
         }
     }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(vertical = 14.dp),
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 14.dp)
+            .testTag("scroll_parent_home"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        item {
-            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                val hasHeroPhoto = !(student?.photoUrl.isNullOrBlank() &&
-                    student?.photoFallbackUrl.isNullOrBlank() &&
-                    link?.studentPhotoUrl.isNullOrBlank() &&
-                    link?.studentPhotoFallbackUrl.isNullOrBlank())
-                ParentGreetingHeroCard(
-                    student = student,
-                    link = link,
-                    unreadMessageCount = unreadMessageCount,
-                    isEn = isEn,
-                    onOpenChat = { onOpenTab(ParentPortalTab.MESSAGES) },
-                    onOpenProfile = if (link?.canViewProfile == true) {
-                        { onOpenTab(ParentPortalTab.PROFILE) }
-                    } else null,
-                    onAvatarClick = if (hasHeroPhoto) onPreviewPhoto else null,
-                    waliAccount = waliAccount,
-                    schoolName = schoolName,
-                    onOpenWaliProfile = onOpenWaliProfile
-                )
-            }
+        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+            val hasHeroPhoto = !(student?.photoUrl.isNullOrBlank() &&
+                student?.photoFallbackUrl.isNullOrBlank() &&
+                link?.studentPhotoUrl.isNullOrBlank() &&
+                link?.studentPhotoFallbackUrl.isNullOrBlank())
+            ParentGreetingHeroCard(
+                student = student,
+                link = link,
+                unreadMessageCount = unreadMessageCount,
+                isEn = isEn,
+                onOpenChat = { onOpenTab(ParentPortalTab.MESSAGES) },
+                onOpenProfile = if (link?.canViewProfile == true) {
+                    { onOpenTab(ParentPortalTab.PROFILE) }
+                } else null,
+                onAvatarClick = if (hasHeroPhoto) onPreviewPhoto else null,
+                waliAccount = waliAccount,
+                schoolName = schoolName,
+                onOpenWaliProfile = onOpenWaliProfile
+            )
         }
 
         if (link?.deletionRequested == true) {
-            item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -947,44 +1000,40 @@ private fun ParentOverviewContent(
                         }
                     }
                 }
-            }
         }
 
-        item {
-            Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-                ParentSuperAppIconGrid(
-                    tiles = menuTiles,
-                    isEn = isEn
-                )
-            }
-        }
-
-        item {
-            ParentSwipeableHighlightsSection(
-                link = link,
-                isFemaleStudent = isFemaleStudent,
-                mengajiRecords = mengajiRecords,
-                medicalRecords = medicalRecords,
-                fastingRecords = fastingRecords,
-                haidRecords = haidRecords,
-                tabunganTransactions = tabunganTransactions,
-                tabunganBalance = tabunganBalance,
-                messages = messages,
-                expectations = expectations,
-                isEn = isEn,
-                lang = lang,
-                onOpenMengaji = { onOpenTab(ParentPortalTab.MENGAJI) },
-                onOpenTabungan = { onOpenTab(ParentPortalTab.TABUNGAN) },
-                onOpenMedical = { onOpenTab(ParentPortalTab.MEDICAL) },
-                onOpenFasting = { onOpenTab(ParentPortalTab.FASTING) },
-                onOpenHaid = { onOpenTab(ParentPortalTab.HAID) },
-                onOpenMessages = { onOpenTab(ParentPortalTab.MESSAGES) },
-                onOpenHarapan = { onOpenTab(ParentPortalTab.HARAPAN) }
+        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+            ParentSuperAppIconGrid(
+                tiles = menuTiles,
+                isEn = isEn
             )
         }
 
+        ParentSwipeableHighlightsSection(
+            link = link,
+            isFemaleStudent = isFemaleStudent,
+            mengajiRecords = mengajiRecords,
+            medicalRecords = medicalRecords,
+            fastingRecords = fastingRecords,
+            haidRecords = haidRecords,
+            tabunganTransactions = tabunganTransactions,
+            tabunganBalance = tabunganBalance,
+            messages = messages,
+            expectations = expectations,
+            sholatRecords = sholatRecords,
+            isEn = isEn,
+            lang = lang,
+            onOpenMengaji = { onOpenTab(ParentPortalTab.MENGAJI) },
+            onOpenSholat = { onOpenTab(ParentPortalTab.SHOLAT) },
+            onOpenTabungan = { onOpenTab(ParentPortalTab.TABUNGAN) },
+            onOpenMedical = { onOpenTab(ParentPortalTab.MEDICAL) },
+            onOpenFasting = { onOpenTab(ParentPortalTab.FASTING) },
+            onOpenHaid = { onOpenTab(ParentPortalTab.HAID) },
+            onOpenMessages = { onOpenTab(ParentPortalTab.MESSAGES) },
+            onOpenHarapan = { onOpenTab(ParentPortalTab.HARAPAN) }
+        )
+
         if (link != null && !link.deletionRequested && onOpenRequestDeleteAccount != null) {
-            item {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1036,7 +1085,6 @@ private fun ParentOverviewContent(
                             )
                         }
                     }
-                }
             }
         }
     }
@@ -1709,6 +1757,386 @@ private fun PortalModuleSummaryCard(
                 Text(subtitle, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = accentColor, modifier = Modifier.size(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun ParentSholatContent(
+    student: ChildStudent?,
+    records: List<SholatRecord>,
+    haidRecords: List<HaidRecord>,
+    schoolProfile: SchoolProfile,
+    waliName: String
+) {
+    val context = LocalContext.current
+    val s = LocalAppStrings.current
+    val isEn = s.isEnglish
+    val currentMonthKey = remember { SholatHelper.todayDateKey().substring(0, 7) }
+    val todayKey = remember { SholatHelper.todayDateKey() }
+    val todayRecords = remember(records, todayKey) { records.filter { it.dateKey == todayKey } }
+    val todayByWaktu = remember(todayRecords) { todayRecords.associateBy { SholatWaktu.fromCode(it.waktu) } }
+
+    val analytics = remember(student, records, currentMonthKey) {
+        if (student != null) {
+            SholatHelper.computeStudentAnalytics(
+                students = listOf(student),
+                records = records,
+                monthKey = currentMonthKey
+            ).first()
+        } else {
+            val monthRows = records.filter { SholatHelper.monthKeyFromDateKey(it.dateKey) == currentMonthKey }
+            val j = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
+            val m = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.MUNFARID }
+            val u = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID }
+            val sk = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.SAKIT }
+            val iz = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.IZIN }
+            val al = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.ALFA }
+            val ms = monthRows.count { SholatDisciplineTag.fromCode(it.disciplineTag) == SholatDisciplineTag.MASBUK }
+            val sd = monthRows.count { SholatDisciplineTag.fromCode(it.disciplineTag) == SholatDisciplineTag.SAF_DEPAN }
+            val sbJ = monthRows.count { it.waktu == SholatWaktu.SUBUH.code && it.status == SholatStatus.JAMAAH.code }
+            val denom = j + m + sk + iz + al
+            val rate = if (denom > 0) ((j * 100f) / denom).toInt() else 0
+            com.example.data.model.SholatStudentAnalytics(
+                student = ChildStudent(name = "Ananda", nis = "", gender = "L", age = 12, dormitory = "", classGrade = ""),
+                totalLogged = monthRows.size,
+                jamaahCount = j,
+                munfaridCount = m,
+                udzurHaidCount = u,
+                sakitCount = sk,
+                izinCount = iz,
+                alfaCount = al,
+                masbukCount = ms,
+                safDepanCount = sd,
+                subuhJamaahCount = sbJ,
+                jamaahRatePercent = rate
+            )
+        }
+    }
+
+    val isActiveHaidToday = remember(student, haidRecords, todayKey) {
+        if (student != null) {
+            SholatHelper.findActiveHaidOnDate(student, haidRecords, todayKey) != null
+        } else {
+            haidRecords.any { it.isActive }
+        }
+    }
+
+    val groupedByDate = remember(records) {
+        records.groupBy { it.dateKey }.entries.sortedByDescending { it.key }
+    }
+
+    fun formatRespectfulStatus(status: SholatStatus): String {
+        return if (status == SholatStatus.UDZUR_HAID) {
+            if (isEn) "Udzur Syar'i (Haid)" else "Udzur Syar'i (Haid)"
+        } else {
+            status.label(isEn)
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("parent_sholat_list"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("parent_sholat_content"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDFA)),
+                border = BorderStroke(1.dp, Color(0xFF99F6E4))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = if (isEn) "Today's 5 Daily Prayers" else "Pantauan Sholat Hari Ini",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0F766E)
+                            )
+                            Text(
+                                text = SholatHelper.formatDateKeyDisplay(todayKey, isEn),
+                                fontSize = 11.5.sp,
+                                color = Color(0xFF115E59)
+                            )
+                        }
+                        if (student != null) {
+                            OutlinedButton(
+                                onClick = {
+                                    val file = PdfReportGenerator.generateSholatStudentReportPdf(
+                                        context = context,
+                                        schoolProfile = schoolProfile,
+                                        student = student,
+                                        sholatRecords = records,
+                                        monthKey = currentMonthKey,
+                                        waliName = waliName.ifBlank { "Wali Asuh" }
+                                    )
+                                    if (file != null) {
+                                        PdfReportGenerator.shareSholatPdf(
+                                            context = context,
+                                            pdfFile = file,
+                                            subject = if (isEn) "Prayer Report: ${student.name}" else "Rapor Sholat: ${student.name}",
+                                            text = if (isEn) "Attached 5-time prayer report for ${student.name}." else "Terlampir PDF Rapor Sholat 5 Waktu ${student.name}."
+                                        )
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Unable to create Sholat PDF" else "Gagal membuat PDF Rapor Sholat",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFF0F766E)),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier
+                                    .heightIn(min = 40.dp)
+                                    .testTag("btn_parent_sholat_pdf")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = null,
+                                    tint = Color(0xFF0F766E),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = if (isEn) "PDF Report" else "Rapor PDF",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F766E)
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        SholatWaktu.entries.forEach { w ->
+                            val rec = todayByWaktu[w]
+                            val st = rec?.let { SholatStatus.fromCode(it.status) }
+                            val (bg, fg) = if (st != null) sholatStatusColors(st) else Color.White to Color(0xFF94A3B8)
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(bg)
+                                    .padding(horizontal = 4.dp, vertical = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = w.shortCode,
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = fg
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = st?.shortCode ?: "•",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = fg
+                                )
+                                Text(
+                                    text = when (st) {
+                                        SholatStatus.JAMAAH -> "Jamaah"
+                                        SholatStatus.MUNFARID -> "Sendiri"
+                                        SholatStatus.UDZUR_HAID -> "Udzur"
+                                        SholatStatus.SAKIT -> "Sakit"
+                                        SholatStatus.IZIN -> "Izin"
+                                        SholatStatus.ALFA -> "Alfa"
+                                        null -> if (isEn) "Pending" else "Belum"
+                                    },
+                                    fontSize = 9.sp,
+                                    color = fg,
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+
+                    if (isActiveHaidToday) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFFDF2F8),
+                            border = BorderStroke(1.dp, Color(0xFFFBCFE8)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = if (isEn) {
+                                    "Ananda is currently on her menstrual period — respected as Udzur Syar'i (Haid)."
+                                } else {
+                                    "Ananda sedang berada dalam masa haid — status otomatis dicatat sebagai Udzur Syar'i (Haid)."
+                                },
+                                fontSize = 11.5.sp,
+                                color = Color(0xFF9D174D),
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "Monthly Discipline (${SholatHelper.formatMonthKeyDisplay(currentMonthKey, true)})"
+                            } else {
+                                "Statistik Bulan ${SholatHelper.formatMonthKeyDisplay(currentMonthKey, false)}"
+                            },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFDCFCE7)
+                        ) {
+                            Text(
+                                text = "${analytics.jamaahRatePercent}% Jamaah",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF166534),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val exc = analytics.udzurHaidCount + analytics.sakitCount + analytics.izinCount
+                        listOf<Triple<String, Int, Pair<Color, Color>>>(
+                            Triple("Jamaah", analytics.jamaahCount, Color(0xFFDCFCE7) to Color(0xFF166534)),
+                            Triple("Subuh J", analytics.subuhJamaahCount, Color(0xFFE0F2FE) to Color(0xFF0369A1)),
+                            Triple("Munfarid", analytics.munfaridCount, Color(0xFFFEF3C7) to Color(0xFF92400E)),
+                            Triple("Udzur", exc, Color(0xFFFCE7F3) to Color(0xFF9D174D)),
+                            Triple("Alfa", analytics.alfaCount, Color(0xFFFEE2E2) to Color(0xFFDC2626))
+                        ).forEach { (lbl, cnt, col) ->
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(9.dp))
+                                    .background(col.first)
+                                    .padding(horizontal = 4.dp, vertical = 6.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(cnt.toString(), fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = col.second)
+                                Text(lbl, fontSize = 9.5.sp, fontWeight = FontWeight.SemiBold, color = col.second, maxLines = 1)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (groupedByDate.isEmpty()) {
+            item {
+                ParentEmptyNotice(
+                    if (isEn) "No 5-time prayer attendance logs yet." else "Belum ada catatan sholat 5 waktu dari pembina."
+                )
+            }
+        } else {
+            items(groupedByDate, key = { "psholat_${it.key}" }) { (dateKey, dayRecords) ->
+                val byWaktu = dayRecords.associateBy { SholatWaktu.fromCode(it.waktu) }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, Color(0xFF99F6E4))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = SholatHelper.formatDateKeyDisplay(dateKey, isEn),
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0F766E)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            SholatWaktu.entries.forEach { w ->
+                                val rec = byWaktu[w]
+                                val st = rec?.let { SholatStatus.fromCode(it.status) }
+                                val (bg, fg) = if (st != null) sholatStatusColors(st) else Color(0xFFF1F5F9) to Color(0xFF94A3B8)
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(bg)
+                                        .padding(horizontal = 3.dp, vertical = 5.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(w.shortCode, fontSize = 9.5.sp, fontWeight = FontWeight.Bold, color = fg)
+                                    Text(st?.shortCode ?: "•", fontSize = 11.5.sp, fontWeight = FontWeight.ExtraBold, color = fg)
+                                }
+                            }
+                        }
+
+                        dayRecords.sortedBy { SholatWaktu.fromCode(it.waktu).ordinal }.forEach { rec ->
+                            val w = SholatWaktu.fromCode(rec.waktu)
+                            val st = SholatStatus.fromCode(rec.status)
+                            val tag = SholatDisciplineTag.fromCode(rec.disciplineTag)
+                            val tagText = if (tag != SholatDisciplineTag.NONE) " (${tag.label(isEn)})" else ""
+                            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(
+                                    text = "${w.label(isEn)}: ${formatRespectfulStatus(st)}$tagText",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                val noteLine = listOfNotNull(
+                                    rec.notes.takeIf { it.isNotBlank() },
+                                    rec.recordedBy.takeIf { it.isNotBlank() }?.let { "${if (isEn) "Caregiver" else "Pembina"}: $it" }
+                                ).joinToString(" • ")
+                                if (noteLine.isNotBlank()) {
+                                    Text(
+                                        text = noteLine,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }
