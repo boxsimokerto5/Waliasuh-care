@@ -37,3 +37,10 @@
 -keep class io.appmetrica.analytics.** { *; }
 -dontwarn io.appmetrica.analytics.**
 
+# Liftoff Monetize (Vungle)
+-keep class com.vungle.ads.** { *; }
+-dontwarn com.vungle.ads.**
+-keep class com.iab.omid.library.vungle.** { *; }
+-dontwarn com.iab.omid.library.vungle.**
+
+

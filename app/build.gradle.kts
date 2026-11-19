@@ -148,7 +148,7 @@ dependencies {
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
 
-  // TopOn (AnyThink) SDK & Meta Audience Network Adapter (New TopOn Platform - TPN)
+  // TopOn (AnyThink) SDK & Mediation Adapters (Meta, Yandex, Liftoff/Vungle) (New TopOn Platform - TPN)
   implementation("com.anythink.sdk:core-tpn:6.4.88")
   implementation("com.anythink.sdk:interstitial-tpn:6.4.88")
   implementation("com.anythink.sdk:rewardedvideo-tpn:6.4.88")
@@ -156,4 +156,6 @@ dependencies {
   implementation("com.facebook.android:audience-network-sdk:6.19.0")
   implementation("com.anythink.sdk:adapter-tpn-yandex:6.4.88.1")
   implementation("com.yandex.android:mobileads:7.12.0")
+  implementation("com.anythink.sdk:adapter-tpn-vungle:6.4.88.5")
+  implementation("com.vungle:vungle-ads:7.8.0")
 }

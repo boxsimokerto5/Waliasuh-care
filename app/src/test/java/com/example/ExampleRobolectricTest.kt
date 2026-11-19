@@ -9329,6 +9329,26 @@ class ExampleRobolectricTest {
   }
 
   @Test
+  fun `verify TopOn mediation bundles Liftoff Vungle adapter cleanly`() {
+    val vungleInitCls = Class.forName("com.anythink.network.vungle.VungleATInitManager")
+    val getInstanceMethod = vungleInitCls.getMethod("getInstance")
+    val vungleInitInstance = getInstanceMethod.invoke(null)
+    org.junit.Assert.assertNotNull(vungleInitInstance)
+
+    val networkVersionMethod = vungleInitCls.getMethod("getNetworkVersion")
+    val vungleVersion = networkVersionMethod.invoke(vungleInitInstance) as? String
+    org.junit.Assert.assertFalse(vungleVersion.isNullOrBlank())
+
+    val vungleInterstitialCls = Class.forName("com.anythink.network.vungle.VungleATInterstitialAdapter")
+    val vungleRewardCls = Class.forName("com.anythink.network.vungle.VungleATRewardedVideoAdapter")
+    org.junit.Assert.assertNotNull(vungleInterstitialCls)
+    org.junit.Assert.assertNotNull(vungleRewardCls)
+
+    val vungleSdkVersion = com.vungle.ads.VungleAds.getSdkVersion()
+    org.junit.Assert.assertTrue(vungleSdkVersion.isNotBlank())
+  }
+
+  @Test
   fun `verify ParentPortalScreen account deletion requires Wali Asuh approval before permanent removal`() = kotlinx.coroutines.runBlocking {
     val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
     val db = com.example.data.database.AppDatabase.getDatabase(context)
