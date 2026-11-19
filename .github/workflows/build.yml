@@ -54,6 +54,9 @@ jobs:
             grep -q "^POCKETBASE_URL=" .env && sed -i "s|^POCKETBASE_URL=.*|POCKETBASE_URL=$SECRET_POCKETBASE_URL|" .env || echo "POCKETBASE_URL=$SECRET_POCKETBASE_URL" >> .env
           fi
           sed -i 's|^POCKETBASE_URL=$|POCKETBASE_URL=https://waliasuh.areksurabaya.my.id|' .env
+          sed -i 's|^POCKETBASE_URL=POCKETBASE_URL_DEFAULT_VALUE$|POCKETBASE_URL=https://waliasuh.areksurabaya.my.id|' .env
+          sed -i 's|^SUPABASE_KEY=$|SUPABASE_KEY=your_supabase_anon_key|' .env
+          sed -i 's|^SUPABASE_URL=$|SUPABASE_URL=https://your-project.supabase.co|' .env
 
       - name: Make Gradle Wrapper Executable
         run: |
