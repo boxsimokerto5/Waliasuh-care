@@ -111,6 +111,7 @@ import com.example.ui.components.DashboardCategoryHub
 import com.example.ui.components.DashboardModalState
 import com.example.ui.components.DashboardTourOverlay
 import com.example.ui.components.FaskesBadge
+import com.example.ui.components.InpatientStudentsStrip
 import com.example.ui.components.QuickMenuTiles
 import com.example.ui.components.ShiftMessageDetailSheet
 import com.example.ui.components.StatusBadge
@@ -1262,6 +1263,26 @@ fun DashboardScreen(
                     }
                 }
 
+                if (inpatientRecords.isNotEmpty()) {
+                    item {
+                        InpatientStudentsStrip(
+                            records = inpatientRecords,
+                            onRecordClick = { rec ->
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedInpatientRecordForDetail = rec
+                            },
+                            onOpenAllInpatients = {
+                                TopOnAdManager.onUserActionClick(context)
+                                if (inpatientRecords.size == 1) {
+                                    selectedInpatientRecordForDetail = inpatientRecords.first()
+                                } else {
+                                    inpatientPickerForFaskes = (if (isEn) "All Facilities" else "Semua Faskes") to inpatientRecords
+                                }
+                            }
+                        )
+                    }
+                }
+
                 if (todayShiftMessages.isNotEmpty()) {
                     item {
                         TodayShiftMessagesStrip(
@@ -1960,14 +1981,19 @@ fun DashboardScreen(
                                 )
                                 Text(
                                     text = buildString {
-                                        append(rec.diagnosis.ifBlank { rec.complaint })
-                                        if (rec.inpatientRoom.isNotBlank()) {
-                                            append(if (isEn) " • Room ${rec.inpatientRoom}" else " • Ruang ${rec.inpatientRoom}")
+                                        if (rec.faskes.isNotBlank()) {
+                                            append(rec.faskes)
+                                            append(" • ")
                                         }
+                                        if (rec.inpatientRoom.isNotBlank()) {
+                                            append(if (isEn) "Room ${rec.inpatientRoom}" else "Kamar ${rec.inpatientRoom}")
+                                            append(" • ")
+                                        }
+                                        append(rec.diagnosis.ifBlank { rec.complaint })
                                     },
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
+                                    maxLines = 2,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }

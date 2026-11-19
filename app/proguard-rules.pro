@@ -29,14 +29,6 @@
 -keep class com.facebook.ads.** { *; }
 -dontwarn com.facebook.ads.**
 
-# Yandex Mobile Ads & AppMetrica
--keep class com.yandex.mobile.ads.** { *; }
--dontwarn com.yandex.mobile.ads.**
--keep class com.yandex.metrica.** { *; }
--dontwarn com.yandex.metrica.**
--keep class io.appmetrica.analytics.** { *; }
--dontwarn io.appmetrica.analytics.**
-
 # Liftoff Monetize (Vungle)
 -keep class com.vungle.ads.** { *; }
 -dontwarn com.vungle.ads.**

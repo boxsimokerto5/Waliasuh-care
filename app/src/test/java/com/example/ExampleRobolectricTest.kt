@@ -6730,7 +6730,7 @@ class ExampleRobolectricTest {
           1 -> com.example.ui.dialogs.InputKonselingDialog(
             claimedStudents = emptyList(),
             onOpenPilihAnakAsuh = {},
-            onSave = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+            onSave = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
             onDismiss = {}
           )
           2 -> com.example.ui.dialogs.InputKonselingDialog(
@@ -6738,7 +6738,7 @@ class ExampleRobolectricTest {
             initialStudent = student,
             recordToEdit = activeSession,
             onOpenPilihAnakAsuh = {},
-            onSave = { _, _, _, _, _, title, _, _, _, _, _, _, existing ->
+            onSave = { _, _, _, _, _, title, _, _, _, _, _, _, _, _, existing ->
               if (existing != null) savedTitle = title
             },
             onDismiss = {}
@@ -7327,7 +7327,7 @@ class ExampleRobolectricTest {
           claimedStudents = listOf(student),
           initialStudent = student,
           onOpenPilihAnakAsuh = {},
-          onSave = { _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
+          onSave = { _, _, _, _, _, _, _, _, _, _, _, _, _, _, _ -> },
           onDismiss = {}
         )
       }
@@ -9311,26 +9311,26 @@ class ExampleRobolectricTest {
   }
 
   @Test
-  fun `verify TopOn mediation bundles both Meta Audience Network and Yandex Ads adapters cleanly`() {
-    val yandexInitCls = Class.forName("com.anythink.network.yandex.YandexATInitManager")
-    val getInstanceMethod = yandexInitCls.getMethod("getInstance")
-    val yandexInitInstance = getInstanceMethod.invoke(null)
-    org.junit.Assert.assertNotNull(yandexInitInstance)
-
-    val networkVersionMethod = yandexInitCls.getMethod("getNetworkVersion")
-    val yandexVersion = networkVersionMethod.invoke(yandexInitInstance) as? String
-    org.junit.Assert.assertFalse(yandexVersion.isNullOrBlank())
-
-    val yandexInterstitialCls = Class.forName("com.anythink.network.yandex.YandexATInterstitialAdapter")
-    val yandexRewardCls = Class.forName("com.anythink.network.yandex.YandexATRewardedVideoAdapter")
-    org.junit.Assert.assertNotNull(yandexInterstitialCls)
-    org.junit.Assert.assertNotNull(yandexRewardCls)
-
+  fun `verify TopOn mediation bundles Meta Audience Network adapter cleanly without Yandex`() {
     val metaInitCls = Class.forName("com.anythink.network.facebook.FacebookATInitManager")
-    org.junit.Assert.assertNotNull(metaInitCls)
+    val getInstanceMethod = metaInitCls.getMethod("getInstance")
+    val metaInitInstance = getInstanceMethod.invoke(null)
+    org.junit.Assert.assertNotNull(metaInitInstance)
 
-    val mobileAdsVersion = com.yandex.mobile.ads.common.MobileAds.libraryVersion
-    org.junit.Assert.assertTrue(mobileAdsVersion.isNotBlank())
+    val networkVersionMethod = metaInitCls.getMethod("getNetworkVersion")
+    val metaVersion = networkVersionMethod.invoke(metaInitInstance) as? String
+    org.junit.Assert.assertFalse(metaVersion.isNullOrBlank())
+
+    val metaInterstitialCls = Class.forName("com.anythink.network.facebook.FacebookATInterstitialAdapter")
+    val metaRewardCls = Class.forName("com.anythink.network.facebook.FacebookATRewardedVideoAdapter")
+    org.junit.Assert.assertNotNull(metaInterstitialCls)
+    org.junit.Assert.assertNotNull(metaRewardCls)
+
+    val hasYandexAdapter = runCatching {
+      Class.forName("com.anythink.network.yandex.YandexATInitManager")
+    }.isSuccess
+    org.junit.Assert.assertFalse(hasYandexAdapter)
+
     org.junit.Assert.assertEquals("h6af3e64badfd8", com.example.util.TopOnAdManager.getAppId())
     org.junit.Assert.assertEquals("n6af3e7b1e288d", com.example.util.TopOnAdManager.getInterstitialPlacementId())
     org.junit.Assert.assertEquals("n6af3e88b080a6", com.example.util.TopOnAdManager.getRewardPlacementId())
