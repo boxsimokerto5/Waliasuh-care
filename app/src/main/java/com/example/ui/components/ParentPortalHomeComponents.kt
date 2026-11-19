@@ -209,28 +209,26 @@ fun ParentGreetingHeroCard(
                     val heroPhotoUrl = student?.photoUrl?.takeIf { it.isNotBlank() } ?: link?.studentPhotoUrl.orEmpty()
                     val heroPhotoFallbackUrl = student?.photoFallbackUrl?.takeIf { it.isNotBlank() }
                         ?: link?.studentPhotoFallbackUrl.orEmpty()
-                    Box(
+                    val hasHeroPhoto = heroPhotoUrl.isNotBlank() || heroPhotoFallbackUrl.isNotBlank()
+                    StudentLargeProfilePhoto(
+                        name = studentName,
+                        gender = student?.gender ?: "L",
+                        photoUrl = heroPhotoUrl,
+                        photoFallbackUrl = heroPhotoFallbackUrl,
+                        showZoomBadge = hasHeroPhoto,
+                        shape = RoundedCornerShape(16.dp),
+                        borderColor = Color.White.copy(alpha = 0.78f),
+                        placeholderAvatarSize = 58.dp,
                         modifier = Modifier
-                            .size(58.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, Color.White.copy(alpha = 0.7f), CircleShape)
+                            .width(92.dp)
+                            .height(112.dp)
                             .let { mod ->
                                 if (onAvatarClick != null) {
                                     mod.clickable(onClick = onAvatarClick).testTag("btn_hero_student_avatar")
                                 } else mod
                             }
-                            .padding(2.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        StudentAvatar(
-                            name = studentName,
-                            gender = student?.gender ?: "L",
-                            size = 52.dp,
-                            photoUrl = heroPhotoUrl,
-                            photoFallbackUrl = heroPhotoFallbackUrl
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
+                    )
+                    Spacer(modifier = Modifier.width(14.dp))
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(2.dp)

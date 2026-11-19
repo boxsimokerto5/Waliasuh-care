@@ -9657,21 +9657,27 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
+    // Hero card on Parent Portal home shows large child portrait
+    composeTestRule.onNodeWithTag("btn_hero_student_avatar").assertIsDisplayed()
+
     // Open Profil Anak from overview grid
     composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("card_parent_profile_photo_header").assertIsDisplayed()
 
-    // Tap avatar to open full-screen preview dialog
-    composeTestRule.onNodeWithTag("btn_parent_preview_student_photo").performClick()
+    // Tap large student photo showcase to open full-screen preview dialog
+    composeTestRule.onNodeWithTag("btn_parent_preview_student_photo").assertIsDisplayed().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("dialog_student_photo_preview").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_close_student_photo_preview").performClick()
     composeTestRule.waitForIdle()
 
-    // Verify Wali Asuh StudentDetailDialog quick photo manager
+    // Verify Wali Asuh StudentDetailDialog shows large photo showcase between Biodata tabs and Identitas Kependudukan & Sekolah
     showParentMode = false
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("card_student_detail_large_photo").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("img_student_detail_large_photo").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_student_large_photo_manage").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_student_photo_action").assertIsDisplayed().performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("dialog_student_photo_manager").assertIsDisplayed()

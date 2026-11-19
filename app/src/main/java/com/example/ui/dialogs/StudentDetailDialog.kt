@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,6 +66,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -96,6 +98,7 @@ import com.example.data.model.SchoolProfile
 import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
+import com.example.ui.components.StudentLargeProfilePhoto
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
@@ -490,6 +493,105 @@ fun StudentDetailDialog(
                     ) {
                         when (currentTab) {
                             StudentDetailTab.BIODATA -> {
+                                // Kartu Foto Profil Besar Siswa (antara blok kategori Biodata & Identitas Kependudukan)
+                                val hasDetailPhoto = student.photoUrl.isNotBlank() || student.photoFallbackUrl.isNotBlank()
+                                Card(
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    ),
+                                    shape = RoundedCornerShape(14.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .border(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                            RoundedCornerShape(14.dp)
+                                        )
+                                        .testTag("card_student_detail_large_photo")
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.AddAPhoto,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Text(
+                                                    text = if (isEn) "Student Profile Photo" else "Foto Profil Siswa",
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 12.5.sp,
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            if (onUploadStudentPhoto != null) {
+                                                Surface(
+                                                    onClick = { showPhotoManager = true },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                                                    border = BorderStroke(
+                                                        1.dp,
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                    ),
+                                                    modifier = Modifier.testTag("btn_student_large_photo_manage")
+                                                ) {
+                                                    Text(
+                                                        text = if (hasDetailPhoto) {
+                                                            if (isEn) "Change Photo" else "Ganti Foto"
+                                                        } else {
+                                                            if (isEn) "Upload Photo" else "Unggah Foto"
+                                                        },
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        StudentLargeProfilePhoto(
+                                            name = student.name,
+                                            gender = student.gender,
+                                            photoUrl = student.photoUrl,
+                                            photoFallbackUrl = student.photoFallbackUrl,
+                                            emptyHint = if (isEn) {
+                                                "No student profile photo uploaded yet"
+                                            } else {
+                                                "Belum ada foto profil siswa"
+                                            },
+                                            showZoomBadge = hasDetailPhoto,
+                                            shape = RoundedCornerShape(12.dp),
+                                            borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                            placeholderAvatarSize = 96.dp,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(196.dp)
+                                                .let { mod ->
+                                                    when {
+                                                        hasDetailPhoto -> mod.clickable { showPhotoPreview = true }
+                                                        onUploadStudentPhoto != null -> mod.clickable { showPhotoManager = true }
+                                                        else -> mod
+                                                    }
+                                                }
+                                                .testTag("img_student_detail_large_photo")
+                                        )
+                                    }
+                                }
+
                                 // Kartu 1: Identitas Kependudukan & Akademik Lengkap
                                 Card(
                                     colors = CardDefaults.cardColors(

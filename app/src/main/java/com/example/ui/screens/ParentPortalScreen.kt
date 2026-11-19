@@ -117,6 +117,7 @@ import com.example.ui.components.ParentSwipeableHighlightsSection
 import com.example.ui.components.StatusBadge
 import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
+import com.example.ui.components.StudentLargeProfilePhoto
 import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.ui.dialogs.DeleteParentAccountDialog
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
@@ -1111,48 +1112,31 @@ private fun ParentProfileContent(
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Box(
+                        StudentLargeProfilePhoto(
+                            name = student?.name ?: link?.studentName ?: "Ananda",
+                            gender = student?.gender ?: "L",
+                            photoUrl = profilePhotoUrl,
+                            photoFallbackUrl = profilePhotoFallbackUrl,
+                            emptyHint = if (isEn) {
+                                "Student profile photo not uploaded yet"
+                            } else {
+                                "Foto profil ananda belum diunggah"
+                            },
+                            showZoomBadge = hasProfilePhoto,
+                            shape = RoundedCornerShape(16.dp),
+                            borderColor = Color.White.copy(alpha = 0.65f),
+                            placeholderAvatarSize = 98.dp,
                             modifier = Modifier
-                                .size(98.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.22f))
+                                .fillMaxWidth()
+                                .height(225.dp)
                                 .let { mod ->
                                     if (onPreviewPhoto != null) {
                                         mod.clickable(onClick = onPreviewPhoto).testTag("btn_parent_preview_student_photo")
                                     } else mod
                                 }
-                                .padding(3.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            StudentAvatar(
-                                name = student?.name ?: link?.studentName ?: "Ananda",
-                                gender = student?.gender ?: "L",
-                                size = 92.dp,
-                                photoUrl = profilePhotoUrl,
-                                photoFallbackUrl = profilePhotoFallbackUrl
-                            )
-                            if (hasProfilePhoto) {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = Color(0xFF312E81),
-                                    border = BorderStroke(1.5.dp, Color.White),
-                                    modifier = Modifier
-                                        .align(Alignment.BottomEnd)
-                                        .size(28.dp)
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Icon(
-                                            imageVector = Icons.Default.ZoomIn,
-                                            contentDescription = if (isEn) "Zoom photo" else "Perbesar foto",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                        )
                         Text(
                             text = student?.name ?: link?.studentName ?: "-",
                             fontSize = 17.sp,
