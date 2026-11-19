@@ -7,6 +7,7 @@ import android.graphics.Paint
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -599,7 +600,10 @@ class SholatFeatureRobolectricTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("parent_sholat_content").assertIsDisplayed()
         composeTestRule.onNodeWithTag("btn_parent_sholat_pdf").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Udzur Syar'i (Haid)").assertExists()
+        composeTestRule.onNodeWithTag("parent_sholat_list")
+            .performScrollToNode(hasText("Udzur Syar'i (Haid)", substring = true))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("Udzur Syar'i (Haid)", substring = true).assertExists()
 
         vm.logout()
         db.sholatRecordDao().deleteById(rec.id)
@@ -687,22 +691,36 @@ class SholatFeatureRobolectricTest {
 
         composeTestRule.onNodeWithTag("category_hub_overlay_sholat").assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_sholat_hub_info").assertExists()
+        composeTestRule.onNodeWithTag("list_category_hub_content")
+            .performScrollToNode(hasTestTag("card_sholat_totals"))
         composeTestRule.onNodeWithTag("card_sholat_totals").assertExists()
-        composeTestRule.onNodeWithTag("tile_sholat_scan_qr").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("list_category_hub_content")
+            .performScrollToNode(hasTestTag("tile_sholat_scan_qr"))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("tile_sholat_scan_qr").performClick()
         composeTestRule.waitForIdle()
         assertEquals(0, capturedTab)
         assertTrue(capturedScanner)
 
-        composeTestRule.onNodeWithTag("tile_sholat_pantauan").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("list_category_hub_content")
+            .performScrollToNode(hasTestTag("tile_sholat_pantauan"))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("tile_sholat_pantauan").performClick()
         composeTestRule.waitForIdle()
         assertEquals(1, capturedTab)
         assertEquals(false, capturedScanner)
 
-        composeTestRule.onNodeWithTag("tile_sholat_akses_ortu").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("list_category_hub_content")
+            .performScrollToNode(hasTestTag("tile_sholat_akses_ortu"))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("tile_sholat_akses_ortu").performClick()
         composeTestRule.waitForIdle()
         assertTrue(openedParentAccess)
 
-        composeTestRule.onNodeWithTag("card_sholat_student_505").performScrollTo().performClick()
+        composeTestRule.onNodeWithTag("list_category_hub_content")
+            .performScrollToNode(hasTestTag("card_sholat_student_505"))
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("card_sholat_student_505").performClick()
         composeTestRule.waitForIdle()
         assertEquals(505L, capturedStudent?.id)
         assertEquals("MINE", capturedScope)

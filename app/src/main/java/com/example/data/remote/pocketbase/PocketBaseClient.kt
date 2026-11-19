@@ -256,6 +256,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-date_key,-updated_at"
     ): Response<PbListResponse<PbSholatRecordDto>>
 
+    // --- Galeri Wali Asuh (Relay R2 & Simpan ke Galeri Ortu) ---
+    @GET("api/collections/wali_gallery_posts/records")
+    suspend fun listWaliGalleryPosts(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbWaliGalleryPostDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

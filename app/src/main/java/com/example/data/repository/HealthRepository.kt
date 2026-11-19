@@ -31,6 +31,8 @@ import com.example.data.dao.InfoPentingCommentDao
 import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
+import com.example.data.dao.WaliGalleryLocalSaveDao
+import com.example.data.dao.WaliGalleryPostDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
@@ -51,6 +53,8 @@ import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliGalleryLocalSave
+import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliShiftCode
 
@@ -79,7 +83,9 @@ class HealthRepository(
     private val infoPentingReactionDao: InfoPentingReactionDao? = null,
     private val infoPentingCommentDao: InfoPentingCommentDao? = null,
     private val parentExpectationDao: ParentExpectationDao? = null,
-    private val sholatRecordDao: SholatRecordDao? = null
+    private val sholatRecordDao: SholatRecordDao? = null,
+    private val waliGalleryPostDao: WaliGalleryPostDao? = null,
+    private val waliGalleryLocalSaveDao: WaliGalleryLocalSaveDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -118,6 +124,10 @@ class HealthRepository(
         waliScheduleEntryDao?.getAllScheduleEntries() ?: emptyFlow()
     val allSholatRecords: Flow<List<SholatRecord>> =
         sholatRecordDao?.getAllRecords() ?: emptyFlow()
+    val allWaliGalleryPosts: Flow<List<WaliGalleryPost>> =
+        waliGalleryPostDao?.getAllActivePosts() ?: emptyFlow()
+    val allWaliGalleryLocalSaves: Flow<List<WaliGalleryLocalSave>> =
+        waliGalleryLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -816,5 +826,45 @@ class HealthRepository(
 
     suspend fun deleteSholatRecordsBySchool(schoolId: String) {
         sholatRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    // --- Galeri Wali Asuh (Relay Sementara + Simpan ke Galeri HP Orang Tua) ---
+    suspend fun insertWaliGalleryPost(post: WaliGalleryPost): Long =
+        waliGalleryPostDao?.insert(post) ?: 0L
+
+    suspend fun insertAllWaliGalleryPosts(posts: List<WaliGalleryPost>) {
+        waliGalleryPostDao?.insertAll(posts)
+    }
+
+    suspend fun updateWaliGalleryPost(post: WaliGalleryPost) {
+        waliGalleryPostDao?.update(post)
+    }
+
+    suspend fun getWaliGalleryPostById(id: Long): WaliGalleryPost? =
+        waliGalleryPostDao?.getById(id)
+
+    suspend fun getAllWaliGalleryPostsIncludingDeletedList(): List<WaliGalleryPost> =
+        waliGalleryPostDao?.getAllPostsIncludingDeletedList() ?: emptyList()
+
+    suspend fun getActiveWaliGalleryPostsBySchoolList(schoolId: String): List<WaliGalleryPost> =
+        waliGalleryPostDao?.getActivePostsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteWaliGalleryPostById(id: Long) {
+        waliGalleryPostDao?.deleteById(id)
+    }
+
+    suspend fun deleteWaliGalleryPostsBySchool(schoolId: String) {
+        waliGalleryPostDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun upsertWaliGalleryLocalSave(save: WaliGalleryLocalSave) {
+        waliGalleryLocalSaveDao?.upsert(save)
+    }
+
+    suspend fun getWaliGalleryLocalSave(postId: Long): WaliGalleryLocalSave? =
+        waliGalleryLocalSaveDao?.getByPostId(postId)
+
+    suspend fun deleteWaliGalleryLocalSave(postId: Long) {
+        waliGalleryLocalSaveDao?.deleteByPostId(postId)
     }
 }

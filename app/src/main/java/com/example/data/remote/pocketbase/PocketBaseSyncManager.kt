@@ -43,9 +43,12 @@ import com.example.data.model.UploadedInfoPentingMedia
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliGalleryHelper
+import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliShiftCode
 import com.example.data.repository.HealthRepository
+import com.example.util.WaliGalleryMediaHelper
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
 import kotlinx.coroutines.Dispatchers
@@ -1507,6 +1510,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "deletion_logs", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_expectations", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
+            runCatching { deleteCollectionByFilter(service, "wali_gallery_posts", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
@@ -1722,6 +1726,15 @@ object PocketBaseSyncManager {
         runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds) }
         runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds) }
         runCatching { syncParentExpectationsMerged(service, cleanSchoolId, filter, repository) }
+        runCatching {
+            syncWaliGalleryMerged(
+                service = service,
+                schoolId = cleanSchoolId,
+                filter = filter,
+                repository = repository,
+                pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
+            )
+        }
     }
 
     suspend fun syncTabunganOnlineQuietly(
@@ -2833,6 +2846,15 @@ object PocketBaseSyncManager {
             runCatching {
                 syncParentExpectationsMerged(service, cleanSchoolId, filter, repository)
             }
+            runCatching {
+                syncWaliGalleryMerged(
+                    service = service,
+                    schoolId = cleanSchoolId,
+                    filter = filter,
+                    repository = repository,
+                    pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
+                )
+            }
 
             // 10. Sinkronkan Tabungan Pribadi Wali Asuh & Log Audit (tabungan_logs & tabungan_transactions)
             runCatching {
@@ -3701,6 +3723,297 @@ object PocketBaseSyncManager {
         } catch (e: Exception) {
             Log.e(TAG, "Error uploadWaliProfilePhotoToCloud", e)
             Result.failure(e)
+        }
+    }
+
+    // --- Galeri Wali Asuh (Relay PocketBase + Cloudflare R2 Sementara -> Galeri HP Orang Tua) ---
+
+    suspend fun uploadWaliGalleryPostWithPhoto(
+        context: Context,
+        draftPost: WaliGalleryPost,
+        imageUri: Uri
+    ): Result<WaliGalleryPost> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+
+        val compressed = WaliGalleryMediaHelper.compressGalleryPhotoBytes(context, imageUri)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Unable to read selected image." else "Gagal membaca foto yang dipilih.")
+            )
+
+        val safeId = if (draftPost.id > 0L) draftPost.id else generateCloudSafeId()
+        val pbId = PocketBaseIdCodec.toPbId(safeId)
+        val filename = "galeri_${safeId}.webp"
+        val cleanSchool = draftPost.schoolId.trim().ifBlank { "SRT1-KDR" }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
+
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("id", pbId)
+            .addFormDataPart("local_id", safeId.toString())
+            .addFormDataPart("school_id", cleanSchool)
+            .addFormDataPart("wali_username", draftPost.waliUsername)
+            .addFormDataPart("wali_name", draftPost.waliName)
+            .addFormDataPart("caption", draftPost.caption)
+            .addFormDataPart("activity_tag", draftPost.activityTag)
+            .addFormDataPart("target_scope", draftPost.targetScope)
+            .addFormDataPart("target_student_ids_csv", draftPost.targetStudentIdsCsv)
+            .addFormDataPart("retention_days", draftPost.retentionDays.toString())
+            .addFormDataPart("expires_at", draftPost.expiresAt.toString())
+            .addFormDataPart("expected_recipient_count", draftPost.expectedRecipientCount.toString())
+            .addFormDataPart("downloaded_by_csv", draftPost.downloadedByCsv)
+            .addFormDataPart("is_media_purged_from_server", "false")
+            .addFormDataPart("is_deleted", "false")
+            .addFormDataPart("created_at", draftPost.createdAt.toString())
+            .addFormDataPart("updated_at", draftPost.updatedAt.toString())
+            .addFormDataPart("photo_file", filename, compressed.toRequestBody("image/webp".toMediaType()))
+            .build()
+
+        val postRequest = Request.Builder()
+            .url("$baseUrl/api/collections/wali_gallery_posts/records")
+            .post(multipart)
+            .build()
+
+        return@withContext try {
+            var responseCode = 0
+            var responseRaw = ""
+            var wasSuccess = false
+
+            client.newCall(postRequest).execute().use { resp ->
+                responseCode = resp.code
+                responseRaw = resp.body?.string().orEmpty()
+                wasSuccess = resp.isSuccessful
+            }
+
+            if (responseCode == 404) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Collection 'wali_gallery_posts' is not synced on server yet. Run Sync Schema in Superadmin."
+                        } else {
+                            "Koleksi 'wali_gallery_posts' belum disinkronkan di server. Jalankan Sync Skema di Superadmin terlebih dahulu."
+                        }
+                    )
+                )
+            }
+
+            if (!wasSuccess) {
+                val errMsg = parsePocketBaseUploadError(responseRaw, responseCode, isEn)
+                return@withContext Result.failure(
+                    Exception(if (isEn) "Failed to upload photo: $errMsg" else "Gagal mengunggah foto ke R2/PocketBase: $errMsg")
+                )
+            }
+
+            val json = JSONObject(responseRaw)
+            val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "wali_gallery_posts").ifBlank { "wali_gallery_posts" }
+            val uploadedFilename = when {
+                json.has("photo_file") && json.optJSONArray("photo_file") != null -> {
+                    json.optJSONArray("photo_file")?.optString(0, "").orEmpty()
+                }
+                else -> json.optString("photo_file", "")
+            }.trim()
+
+            if (uploadedFilename.isBlank()) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Column 'photo_file' on wali_gallery_posts is not active yet. Run Sync Schema."
+                        } else {
+                            "Kolom 'photo_file' pada wali_gallery_posts belum aktif di server. Jalankan Sync Skema di Superadmin."
+                        }
+                    )
+                )
+            }
+
+            val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+            val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+            val finalized = draftPost.copy(
+                id = safeId,
+                schoolId = cleanSchool,
+                photoUrl = cdnUrl,
+                photoFallbackUrl = fallbackUrl,
+                pbRecordId = recordId,
+                pbCollectionId = collectionId,
+                pbFilename = uploadedFilename,
+                isMediaPurgedFromServer = false
+            )
+            uploadSingleWaliGalleryPost(context, finalized)
+            Result.success(finalized)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadWaliGalleryPostWithPhoto", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun uploadSingleWaliGalleryPost(context: Context, post: WaliGalleryPost): Boolean =
+        withContext(Dispatchers.IO) {
+            val service = PocketBaseClient.getService(context) ?: return@withContext false
+            val dto = PbWaliGalleryPostDto.fromDomain(post)
+            upsertSingleDto(service, "wali_gallery_posts", dto.id!!, dto)
+        }
+
+    /**
+     * Menghapus file foto sementara dari PocketBase & Cloudflare R2 (PATCH photo_file = null)
+     * agar ruang penyimpanan server tetap hemat setelah orang tua mengunduh ke galeri HP.
+     */
+    suspend fun purgeWaliGalleryServerMedia(
+        context: Context,
+        post: WaliGalleryPost
+    ): Result<WaliGalleryPost> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val purgedLocal = post.copy(
+            photoUrl = "",
+            photoFallbackUrl = "",
+            pbFilename = "",
+            isMediaPurgedFromServer = true,
+            updatedAt = maxOf(now, post.updatedAt + 1L)
+        )
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.success(purgedLocal)
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.success(purgedLocal)
+        }
+        val pbId = WaliGalleryHelper.resolveRecordPbId(post)
+        val payload = JSONObject().apply {
+            put("photo_file", JSONObject.NULL)
+            put("photo_url", "")
+            put("photo_fallback_url", "")
+            put("pb_filename", "")
+            put("is_media_purged_from_server", true)
+            put("updated_at", purgedLocal.updatedAt)
+        }
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val request = Request.Builder()
+            .url("$baseUrl/api/collections/wali_gallery_posts/records/$pbId")
+            .patch(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        return@withContext runCatching {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful && resp.code != 404) {
+                    error("HTTP ${resp.code}: ${resp.body?.string().orEmpty()}")
+                }
+            }
+            purgedLocal
+        }
+    }
+
+    suspend fun deleteRemoteWaliGalleryPost(context: Context, post: WaliGalleryPost): Boolean =
+        withContext(Dispatchers.IO) {
+            val service = PocketBaseClient.getService(context) ?: return@withContext false
+            val pbId = WaliGalleryHelper.resolveRecordPbId(post)
+            val resp = runCatching { service.deleteRecord("wali_gallery_posts", pbId) }.getOrNull()
+            resp != null && (resp.isSuccessful || resp.code() == 404)
+        }
+
+    private suspend fun syncWaliGalleryMerged(
+        service: PocketBaseService,
+        schoolId: String,
+        filter: String,
+        repository: HealthRepository,
+        pbBaseUrl: String
+    ) {
+        val localPosts = repository.getAllWaliGalleryPostsIncludingDeletedList()
+            .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
+        val remoteRes = fetchAllPages { page ->
+            service.listWaliGalleryPosts(page = page, perPage = 500, filter = filter)
+        }
+        val remotePosts = remoteRes.getOrNull()
+            ?.map { it.toDomainModel(schoolId, pbBaseUrl) }
+            ?: return
+
+        val localById = localPosts.associateBy { it.id }
+        val remoteById = remotePosts.associateBy { it.id }
+
+        val mergedRemoteToLocal = remotePosts.map { rem ->
+            val loc = localById[rem.id]
+            if (loc == null) {
+                rem
+            } else {
+                val mergedDownloaded = (WaliGalleryHelper.parseRecipientKeys(loc.downloadedByCsv) +
+                    WaliGalleryHelper.parseRecipientKeys(rem.downloadedByCsv)).sorted().joinToString(",")
+                val newest = if (rem.updatedAt >= loc.updatedAt) rem else loc
+                val isPurged = loc.isMediaPurgedFromServer || rem.isMediaPurgedFromServer
+                newest.copy(
+                    downloadedByCsv = mergedDownloaded,
+                    isMediaPurgedFromServer = isPurged,
+                    photoUrl = if (isPurged) "" else newest.photoUrl,
+                    photoFallbackUrl = if (isPurged) "" else newest.photoFallbackUrl,
+                    pbFilename = if (isPurged) "" else newest.pbFilename
+                )
+            }
+        }
+        if (mergedRemoteToLocal.isNotEmpty()) {
+            repository.insertAllWaliGalleryPosts(mergedRemoteToLocal)
+        }
+
+        val toPush = localPosts.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null ||
+                loc.updatedAt > rem.updatedAt ||
+                (WaliGalleryHelper.parseRecipientKeys(loc.downloadedByCsv) -
+                    WaliGalleryHelper.parseRecipientKeys(rem.downloadedByCsv)).isNotEmpty()
+        }.map { loc ->
+            val rem = remoteById[loc.id]
+            val mergedDownloaded = if (rem != null) {
+                (WaliGalleryHelper.parseRecipientKeys(loc.downloadedByCsv) +
+                    WaliGalleryHelper.parseRecipientKeys(rem.downloadedByCsv)).sorted().joinToString(",")
+            } else loc.downloadedByCsv
+            loc.copy(downloadedByCsv = mergedDownloaded)
+        }
+        if (toPush.isNotEmpty()) {
+            val pairs = toPush.map { p ->
+                val dto = PbWaliGalleryPostDto.fromDomain(p)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "wali_gallery_posts", pairs)
+        }
+    }
+
+    suspend fun syncWaliGalleryOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+        val baseUrl = PocketBaseConfig.getBaseUrl(context)
+
+        runCatching { syncWaliGalleryMerged(service, cleanSchoolId, filter, repository, baseUrl) }
+
+        // Pembersihan otomatis file server (PocketBase + R2) untuk postingan yang sudah kedaluwarsa
+        // atau sudah selesai diunduh oleh seluruh orang tua target.
+        val activePosts = repository.getActiveWaliGalleryPostsBySchoolList(cleanSchoolId)
+        val now = System.currentTimeMillis()
+        for (post in activePosts) {
+            if (WaliGalleryHelper.shouldAutoPurgeServerMedia(post, now)) {
+                val purged = purgeWaliGalleryServerMedia(context, post).getOrNull()
+                if (purged != null) {
+                    repository.updateWaliGalleryPost(purged)
+                }
+            }
         }
     }
 }

@@ -32,7 +32,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.48.0 • 27 Koleksi Multi-Tenant + Absen Sholat 5 Waktu & Info-Info Penting Global (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.49.0 • 28 Koleksi Multi-Tenant + Galeri Wali Asuh (Relay R2 & Simpan Galeri Ortu) (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -759,6 +759,41 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_sholat_school_date ON sholat_records (school_id, date_key)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "wali_gallery_posts",
+            description = "Galeri Wali Asuh untuk Portal Orang Tua (Relay sementara PocketBase + Cloudflare R2 sebelum tersimpan di galeri HP Ortu)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("wali_username", "text"),
+                PbFieldDef("wali_name", "text"),
+                PbFieldDef("caption", "text"),
+                PbFieldDef("activity_tag", "text"),
+                PbFieldDef("target_scope", "text"),
+                PbFieldDef("target_student_ids_csv", "text"),
+                PbFieldDef("photo_url", "text"),
+                PbFieldDef("photo_fallback_url", "text"),
+                PbFieldDef("pb_record_id", "text"),
+                PbFieldDef("pb_collection_id", "text"),
+                PbFieldDef("pb_filename", "text"),
+                PbFieldDef("retention_days", "number"),
+                PbFieldDef("expires_at", "number"),
+                PbFieldDef("expected_recipient_count", "number"),
+                PbFieldDef("downloaded_by_csv", "text"),
+                PbFieldDef("is_media_purged_from_server", "bool"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef(
+                    name = "photo_file",
+                    type = "file",
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
+                ),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_wgp_school ON wali_gallery_posts (school_id, wali_username)")
         )
     )
 

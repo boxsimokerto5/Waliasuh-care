@@ -98,6 +98,7 @@ import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatHelper
 import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
+import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
 import com.example.data.model.WaliShiftCode
@@ -178,6 +179,7 @@ import com.example.ui.dialogs.StudentDetailDialog
 import com.example.ui.dialogs.TabunganHistoryLogsSheet
 import com.example.ui.dialogs.TabunganStudentDetailSheet
 import com.example.ui.dialogs.TabunganStudentListSheet
+import com.example.ui.dialogs.WaliGallerySheet
 import com.example.ui.theme.StatusDeparted
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
@@ -251,6 +253,8 @@ fun DashboardScreen(
     val unreadInfoPentingCount by viewModel.unreadInfoPentingCount.collectAsStateWithLifecycle()
     val isPublishingInfoPenting by viewModel.isPublishingInfoPenting.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
+    val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
+    val isPublishingGalleryPost by viewModel.isPublishingGalleryPost.collectAsStateWithLifecycle()
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
     val canManageSchedule = isAdminUser || isAnakSuperAdmin || isAnakAdminSekolah
 
@@ -334,6 +338,16 @@ fun DashboardScreen(
             viewModel.syncSholatOnlineQuietly()
         }
     }
+    LaunchedEffect(
+        modalState.activeCategoryHub,
+        modalState.showWaliGallerySheet
+    ) {
+        if (modalState.activeCategoryHub == DashboardCategoryHub.ORANG_TUA ||
+            modalState.showWaliGallerySheet
+        ) {
+            viewModel.syncWaliGalleryOnlineQuietly()
+        }
+    }
     val tabunganTotals = remember(tabunganTransactions) {
         TabunganHelper.computeAggregateTotals(tabunganTransactions)
     }
@@ -353,6 +367,17 @@ fun DashboardScreen(
     val myFosterParentExpectations = remember(parentExpectations, myFosterStudentIds, isAdminUser) {
         if (isAdminUser && myFosterStudentIds.isEmpty()) parentExpectations
         else parentExpectations.filter { it.studentId in myFosterStudentIds }
+    }
+    val myWaliGalleryPostsCount = remember(waliGalleryPosts, currentUsername, waliName, isAdminUser) {
+        waliGalleryPosts.count { post ->
+            !post.isDeleted && (
+                isAdminUser || WaliGalleryHelper.matchesWaliOwner(
+                    post = post,
+                    waliUsername = currentUsername.orEmpty(),
+                    waliName = waliName
+                )
+            )
+        }
     }
     val unreadParentMessagesCount = remember(myFosterParentMessages) {
         myFosterParentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
@@ -1470,6 +1495,8 @@ fun DashboardScreen(
                     modalState.showPesanOrtuSheet = true
                 },
                 onOpenHarapanOrtu = { modalState.showHarapanOrtuSheet = true },
+                waliGalleryPostsCount = myWaliGalleryPostsCount,
+                onOpenWaliGallery = { modalState.showWaliGallerySheet = true },
                 tabunganTransactions = tabunganTransactions,
                 tabunganLogs = tabunganLogs,
                 claimedFosterStudents = myFosterStudents,
@@ -2695,6 +2722,39 @@ fun DashboardScreen(
                 modalState.showPesanOrtuSheet = true
             },
             onDismiss = { modalState.showHarapanOrtuSheet = false }
+        )
+    }
+
+    // Modal Hubungan Orang Tua 6: Galeri Wali Asuh (Relay Foto Sementara PocketBase/Cloudflare R2 -> Auto-Save Galeri HP Ortu)
+    if (modalState.showWaliGallerySheet) {
+        val targetStudentsForGallery = remember(myFosterStudents, students, isAdminUser) {
+            if (isAdminUser && myFosterStudents.isEmpty()) students else myFosterStudents
+        }
+        WaliGallerySheet(
+            posts = waliGalleryPosts,
+            myStudents = targetStudentsForGallery,
+            currentWaliUsername = currentUsername.orEmpty(),
+            currentWaliName = waliName,
+            isAdminOrSuper = isAdminUser,
+            isPublishing = isPublishingGalleryPost,
+            onPublishPost = { imageUri, caption, activityTag, targetScope, selectedStudentIds, retentionDays, onDone ->
+                viewModel.publishWaliGalleryPost(
+                    imageUri = imageUri,
+                    caption = caption,
+                    activityTag = activityTag,
+                    targetScope = targetScope,
+                    selectedStudentIds = selectedStudentIds,
+                    retentionDays = retentionDays,
+                    onResult = onDone
+                )
+            },
+            onPurgeServerMedia = { post, onDone ->
+                viewModel.purgeWaliGalleryServerMediaNow(post, onDone)
+            },
+            onDeletePost = { post, onDone ->
+                viewModel.deleteWaliGalleryPost(post, onDone)
+            },
+            onDismiss = { modalState.showWaliGallerySheet = false }
         )
     }
 

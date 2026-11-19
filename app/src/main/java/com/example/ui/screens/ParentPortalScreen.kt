@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Verified
@@ -120,6 +121,9 @@ import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliGalleryHelper
+import com.example.data.model.WaliGalleryLocalSave
+import com.example.data.model.WaliGalleryPost
 import com.example.ui.HealthViewModel
 import com.example.ui.components.ParentGreetingHeroCard
 import com.example.ui.components.ParentMenuTileSpec
@@ -154,6 +158,7 @@ private enum class ParentPortalTab(
     FASTING("Puasa", "Fasting", Icons.Default.NightlightRound, "parent_tab_fasting"),
     HAID("Riwayat Haid", "Haid Cycle", Icons.Default.Favorite, "parent_tab_haid"),
     TABUNGAN("Tabungan", "Savings", Icons.Default.AccountBalanceWallet, "parent_tab_tabungan"),
+    GALLERY("Galeri Wali", "Gallery", Icons.Default.PhotoLibrary, "parent_tab_gallery"),
     HARAPAN("Harapan", "Hopes", Icons.Default.VolunteerActivism, "parent_tab_harapan"),
     MESSAGES("Pesan", "Messages", Icons.Default.ChatBubbleOutline, "parent_tab_messages")
 }
@@ -179,6 +184,10 @@ fun ParentPortalScreen(
     val tabunganRecords by viewModel.parentTabunganTransactions.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
+    val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
+    val waliGalleryLocalSaves by viewModel.waliGalleryLocalSaves.collectAsStateWithLifecycle()
+    val parentGalleryAutoSaveEnabled by viewModel.parentGalleryAutoSaveEnabled.collectAsStateWithLifecycle()
+    val isSavingGalleryMedia by viewModel.isSavingGalleryMedia.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isCurrentParentAccountDeleted by viewModel.isCurrentParentAccountDeleted.collectAsStateWithLifecycle()
@@ -252,6 +261,7 @@ fun ParentPortalScreen(
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
             if (isFemaleStudent && activeLink?.canViewHaid == true) add(ParentPortalTab.HAID)
             if (activeLink?.canViewTabungan == true) add(ParentPortalTab.TABUNGAN)
+            add(ParentPortalTab.GALLERY)
             add(ParentPortalTab.HARAPAN)
             add(ParentPortalTab.MESSAGES)
         }
@@ -318,11 +328,29 @@ fun ParentPortalScreen(
     val unreadFromWaliCount = remember(threadMessages) {
         threadMessages.count { !it.isReadByParent && !it.senderRole.equals("PARENT", ignoreCase = true) }
     }
+    val parentGalleryPosts = remember(waliGalleryPosts, student, activeLink, assignedWaliUsername, assignedWaliName) {
+        waliGalleryPosts.filter { post ->
+            WaliGalleryHelper.matchesParentStudent(
+                post = post,
+                student = student,
+                link = activeLink,
+                assignedWaliUsername = assignedWaliUsername,
+                assignedWaliName = assignedWaliName
+            )
+        }.sortedByDescending { it.createdAt }
+    }
+    val localSavesByPostId = remember(waliGalleryLocalSaves) {
+        waliGalleryLocalSaves.associateBy { it.postId }
+    }
+    val galleryRecipientKey = remember(resolvedStudentId, activeLink) {
+        WaliGalleryHelper.buildParentRecipientKey(resolvedStudentId, activeLink?.username.orEmpty())
+    }
 
     LaunchedEffect(Unit) {
         viewModel.syncParentRelationsOnlineQuietly()
         viewModel.syncTabunganOnlineQuietly()
         viewModel.syncSholatOnlineQuietly()
+        viewModel.syncWaliGalleryOnlineQuietly()
     }
 
     LaunchedEffect(currentTab) {
@@ -331,6 +359,8 @@ fun ParentPortalScreen(
             viewModel.syncTabunganOnlineQuietly()
         } else if (currentTab == ParentPortalTab.SHOLAT) {
             viewModel.syncSholatOnlineQuietly()
+        } else if (currentTab == ParentPortalTab.GALLERY) {
+            viewModel.syncWaliGalleryOnlineQuietly()
         }
     }
 
@@ -579,6 +609,8 @@ fun ParentPortalScreen(
                         tabunganBalance = tabunganTotals.totalBalance,
                         messages = threadMessages,
                         expectations = studentExpectations,
+                        galleryPosts = parentGalleryPosts,
+                        localSavesByPostId = localSavesByPostId,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
@@ -636,6 +668,57 @@ fun ParentPortalScreen(
                     ParentPortalTab.TABUNGAN -> ParentTabunganContent(
                         transactions = sortedTabungan,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
+                    )
+                    ParentPortalTab.GALLERY -> ParentGalleryContent(
+                        posts = parentGalleryPosts,
+                        localSavesByPostId = localSavesByPostId,
+                        waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+                        autoSaveEnabled = parentGalleryAutoSaveEnabled,
+                        isSavingMedia = isSavingGalleryMedia,
+                        onToggleAutoSave = { enabled ->
+                            viewModel.setParentGalleryAutoSaveEnabled(enabled)
+                        },
+                        onSavePostToDevice = { post, silentAuto ->
+                            viewModel.saveGalleryPostToParentDevice(
+                                post = post,
+                                recipientKey = galleryRecipientKey,
+                                silentAuto = silentAuto
+                            ) { _, msg ->
+                                if (!silentAuto) {
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onSaveAllPending = { pendingPosts ->
+                            viewModel.saveAllPendingGalleryPostsToDevice(
+                                posts = pendingPosts,
+                                recipientKey = galleryRecipientKey
+                            ) { savedCount, failCount ->
+                                val msg = when {
+                                    savedCount > 0 && failCount == 0 -> if (isEn) {
+                                        "$savedCount photo(s) saved permanently to Phone Gallery!"
+                                    } else {
+                                        "$savedCount foto berhasil disimpan permanen ke Galeri HP!"
+                                    }
+                                    savedCount > 0 -> if (isEn) {
+                                        "$savedCount saved, $failCount failed."
+                                    } else {
+                                        "$savedCount tersimpan, $failCount gagal."
+                                    }
+                                    failCount > 0 -> if (isEn) {
+                                        "Failed to download photos."
+                                    } else {
+                                        "Gagal mengunduh foto ke galeri."
+                                    }
+                                    else -> if (isEn) {
+                                        "All photos are already in your Phone Gallery."
+                                    } else {
+                                        "Semua foto sudah ada di Galeri HP Anda."
+                                    }
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     )
                     ParentPortalTab.HARAPAN -> ParentHarapanContent(
                         student = student,
@@ -746,6 +829,8 @@ private fun ParentOverviewContent(
     tabunganBalance: Long,
     messages: List<ParentMessage>,
     expectations: List<ParentExpectation>,
+    galleryPosts: List<WaliGalleryPost> = emptyList(),
+    localSavesByPostId: Map<Long, WaliGalleryLocalSave> = emptyMap(),
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit,
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
@@ -767,6 +852,8 @@ private fun ParentOverviewContent(
         haidRecords,
         tabunganTransactions.size,
         expectations.size,
+        galleryPosts,
+        localSavesByPostId,
         unreadMessageCount,
         isEn
     ) {
@@ -877,6 +964,27 @@ private fun ParentOverviewContent(
                     )
                 )
             }
+            val unsavedGalleryCount = galleryPosts.count { post ->
+                !post.isMediaPurgedFromServer && localSavesByPostId[post.id] == null &&
+                    (post.photoUrl.isNotBlank() || post.photoFallbackUrl.isNotBlank())
+            }
+            add(
+                ParentMenuTileSpec(
+                    id = "gallery",
+                    title = if (isEn) "Wali Gallery" else "Galeri Wali Asuh",
+                    imageRes = R.drawable.img_menu_kunjungan,
+                    accentColor = Color(0xFF0F766E),
+                    softBg = Color(0xFFF0FDFA),
+                    badgeText = when {
+                        unsavedGalleryCount > 0 -> "$unsavedGalleryCount ${if (isEn) "New" else "Baru"}"
+                        galleryPosts.isNotEmpty() -> "${galleryPosts.size}"
+                        else -> null
+                    },
+                    badgeColor = if (unsavedGalleryCount > 0) Color(0xFFDC2626) else Color(0xFF0F766E),
+                    testTag = "card_parent_summary_gallery",
+                    onClick = { onOpenTab(ParentPortalTab.GALLERY) }
+                )
+            )
             add(
                 ParentMenuTileSpec(
                     id = "harapan",

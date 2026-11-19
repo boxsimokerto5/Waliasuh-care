@@ -1209,7 +1209,9 @@ internal fun LazyListScope.orangTuaCategoryItems(
     onOpenKartuAksesOrtu: () -> Unit,
     onOpenPilihanAksesOrtu: () -> Unit,
     onOpenPesanOrtu: () -> Unit,
-    onOpenHarapanOrtu: () -> Unit = {}
+    onOpenHarapanOrtu: () -> Unit = {},
+    waliGalleryPostsCount: Int = 0,
+    onOpenWaliGallery: () -> Unit = {}
 ) {
     val unreadParentCount = parentMessages.count { !it.isReadByWali && it.senderRole.equals("PARENT", ignoreCase = true) }
     val unreadExpectationCount = parentExpectations.count { !it.isReadByWali }
@@ -1314,7 +1316,23 @@ internal fun LazyListScope.orangTuaCategoryItems(
                     testTag = "tile_harapan_ortu",
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.weight(1f))
+                CartoonMenuCard(
+                    title = if (isEn) "Caregiver Gallery" else "Galeri Wali Asuh",
+                    subtitle = if (isEn) "Activity Photos • Auto-Save to Parent Gallery" else "Foto Kegiatan • Estafet ke Galeri HP Ortu",
+                    imageRes = R.drawable.img_menu_kunjungan,
+                    badgeText = if (waliGalleryPostsCount > 0) {
+                        "$waliGalleryPostsCount ${if (isEn) "Photos" else "Foto"}"
+                    } else {
+                        if (isEn) "Relay R2" else "Estafet R2"
+                    },
+                    badgeBg = Color(0xFFCCFBF1),
+                    badgeColor = Color(0xFF0F766E),
+                    bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFF99F6E4),
+                    onClick = onOpenWaliGallery,
+                    testTag = "tile_galeri_wali_asuh",
+                    modifier = Modifier.weight(1f)
+                )
             }
         }
     }

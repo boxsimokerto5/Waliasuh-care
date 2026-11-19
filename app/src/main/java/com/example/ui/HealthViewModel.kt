@@ -45,6 +45,9 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliGalleryHelper
+import com.example.data.model.WaliGalleryLocalSave
+import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
 import com.example.data.model.WaliShiftCode
@@ -58,6 +61,7 @@ import com.example.data.repository.HealthRepository
 import com.example.util.DateUtils
 import com.example.util.NotificationHelper
 import com.example.util.PasswordGenerator
+import com.example.util.WaliGalleryMediaHelper
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
 import kotlinx.coroutines.Dispatchers
@@ -130,7 +134,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.infoPentingReactionDao(),
             db.infoPentingCommentDao(),
             db.parentExpectationDao(),
-            db.sholatRecordDao()
+            db.sholatRecordDao(),
+            db.waliGalleryPostDao(),
+            db.waliGalleryLocalSaveDao()
         )
     }
 
@@ -7167,6 +7173,341 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 PocketBaseSyncManager.uploadSingleInfoPentingComment(getApplication(), deleted)
             }
             onResult(true, if (isEn) "Comment deleted." else "Komentar dihapus.")
+        }
+    }
+
+    // --- Galeri Wali Asuh (Relay PocketBase + Cloudflare R2 Sementara -> Galeri HP Orang Tua) ---
+
+    private val galleryPrefs = application.getSharedPreferences("waliasuh_gallery_prefs", Context.MODE_PRIVATE)
+    private val _parentGalleryAutoSaveEnabled = MutableStateFlow(
+        galleryPrefs.getBoolean("parent_auto_save_gallery", true)
+    )
+    val parentGalleryAutoSaveEnabled: StateFlow<Boolean> = _parentGalleryAutoSaveEnabled.asStateFlow()
+
+    fun setParentGalleryAutoSaveEnabled(enabled: Boolean) {
+        _parentGalleryAutoSaveEnabled.value = enabled
+        galleryPrefs.edit().putBoolean("parent_auto_save_gallery", enabled).apply()
+    }
+
+    private val _isPublishingGalleryPost = MutableStateFlow(false)
+    val isPublishingGalleryPost: StateFlow<Boolean> = _isPublishingGalleryPost.asStateFlow()
+
+    private val _isSavingGalleryMedia = MutableStateFlow(false)
+    val isSavingGalleryMedia: StateFlow<Boolean> = _isSavingGalleryMedia.asStateFlow()
+
+    val waliGalleryPosts: StateFlow<List<WaliGalleryPost>> = combine(
+        repository.allWaliGalleryPosts,
+        _schoolProfile,
+        _currentUserRole
+    ) { posts, profile, role ->
+        val active = posts.filter { !it.isDeleted }
+        if (role == UserRole.SUPERADMIN) {
+            active
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            active.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val waliGalleryLocalSaves: StateFlow<List<WaliGalleryLocalSave>> =
+        repository.allWaliGalleryLocalSaves
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun syncWaliGalleryOnlineQuietly() {
+        if (isUnitTestEnvironment()) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            PocketBaseSyncManager.syncWaliGalleryOnlineQuietly(getApplication(), activeSchool, repository)
+        }
+    }
+
+    fun publishWaliGalleryPost(
+        imageUri: Uri,
+        caption: String,
+        activityTag: String = WaliGalleryHelper.TAG_KEGIATAN,
+        targetScope: String = WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
+        selectedStudentIds: Set<Long> = emptySet(),
+        retentionDays: Int = WaliGalleryHelper.DEFAULT_RETENTION_DAYS,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanScope = if (targetScope.equals(WaliGalleryHelper.SCOPE_SPECIFIC_STUDENTS, ignoreCase = true)) {
+            WaliGalleryHelper.SCOPE_SPECIFIC_STUDENTS
+        } else {
+            WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS
+        }
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        val currentUsername = _currentUsername.value?.trim().orEmpty()
+        val currentWaliName = when (_currentUserRole.value) {
+            UserRole.ADMIN -> _schoolProfile.value.adminName.ifBlank { "Admin Sekolah" }
+            UserRole.SUPERADMIN -> "Superadmin"
+            else -> _waliName.value.trim().ifBlank { "Wali Asuh" }
+        }
+
+        val myStudents = students.value.filter { isStudentClaimedByCurrentWali(it) }
+        val targetIds = if (cleanScope == WaliGalleryHelper.SCOPE_SPECIFIC_STUDENTS) {
+            selectedStudentIds.filter { it > 0L }.toSet()
+        } else {
+            myStudents.map { it.id }.filter { it > 0L }.toSet()
+        }
+
+        if (cleanScope == WaliGalleryHelper.SCOPE_SPECIFIC_STUDENTS && targetIds.isEmpty()) {
+            onResult(
+                false,
+                if (isEn) "Select at least 1 foster student first." else "Pilih minimal 1 siswa terlebih dahulu."
+            )
+            return
+        }
+
+        val linksByStudent = parentAccessLinks.value
+            .filter { it.schoolId.equals(activeSchool, ignoreCase = true) }
+            .associateBy { it.studentId }
+        val activeParentRecipients = targetIds.count { sid -> linksByStudent.containsKey(sid) }
+        val expectedRecipients = if (activeParentRecipients > 0) activeParentRecipients else targetIds.size
+
+        viewModelScope.launch {
+            _isPublishingGalleryPost.value = true
+            try {
+                val now = System.currentTimeMillis()
+                val safeDays = retentionDays.coerceIn(1, 90)
+                val postId = PocketBaseSyncManager.generateCloudSafeId()
+                val draftPost = WaliGalleryPost(
+                    id = postId,
+                    schoolId = activeSchool,
+                    waliUsername = currentUsername,
+                    waliName = currentWaliName,
+                    caption = caption.trim(),
+                    activityTag = activityTag.trim().uppercase().ifBlank { WaliGalleryHelper.TAG_KEGIATAN },
+                    targetScope = cleanScope,
+                    targetStudentIdsCsv = WaliGalleryHelper.formatIdCsv(targetIds),
+                    retentionDays = safeDays,
+                    expiresAt = now + safeDays * WaliGalleryHelper.DAY_MILLIS,
+                    expectedRecipientCount = expectedRecipients,
+                    downloadedByCsv = "",
+                    isMediaPurgedFromServer = false,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+
+                val finalPost = if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                    val uploadRes = PocketBaseSyncManager.uploadWaliGalleryPostWithPhoto(
+                        context = getApplication(),
+                        draftPost = draftPost,
+                        imageUri = imageUri
+                    )
+                    if (uploadRes.isFailure) {
+                        val err = uploadRes.exceptionOrNull()?.message
+                            ?: if (isEn) "Failed to upload photo." else "Gagal mengunggah foto ke server."
+                        onResult(false, err)
+                        return@launch
+                    }
+                    uploadRes.getOrThrow()
+                } else {
+                    draftPost.copy(
+                        photoUrl = imageUri.toString(),
+                        pbRecordId = PocketBaseIdCodec.toPbId(postId),
+                        pbCollectionId = "wali_gallery_posts"
+                    )
+                }
+
+                repository.insertWaliGalleryPost(finalPost)
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Photo posted! Parents with matching foster caregiver can auto-save it to their phone gallery."
+                    } else {
+                        "Foto berhasil diposting ke Galeri Wali Asuh! Orang tua terkait akan langsung menerimanya."
+                    }
+                )
+            } catch (e: Exception) {
+                onResult(false, e.message ?: if (isEn) "Failed to post photo." else "Gagal memposting foto.")
+            } finally {
+                _isPublishingGalleryPost.value = false
+            }
+        }
+    }
+
+    fun purgeWaliGalleryServerMediaNow(
+        post: WaliGalleryPost,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val res = if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.purgeWaliGalleryServerMedia(getApplication(), post)
+            } else {
+                Result.success(
+                    post.copy(
+                        photoUrl = "",
+                        photoFallbackUrl = "",
+                        pbFilename = "",
+                        isMediaPurgedFromServer = true,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+            if (res.isSuccess) {
+                repository.updateWaliGalleryPost(res.getOrThrow())
+                onResult(
+                    true,
+                    if (isEn) "Temporary server/R2 photo file cleared to save quota."
+                    else "File foto sementara di PocketBase/R2 berhasil dibersihkan untuk menghemat penyimpanan."
+                )
+            } else {
+                onResult(
+                    false,
+                    res.exceptionOrNull()?.message
+                        ?: if (isEn) "Failed to clean server file." else "Gagal membersihkan file server."
+                )
+            }
+        }
+    }
+
+    fun deleteWaliGalleryPost(
+        post: WaliGalleryPost,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val deleted = post.copy(
+                photoUrl = "",
+                photoFallbackUrl = "",
+                pbFilename = "",
+                isMediaPurgedFromServer = true,
+                isDeleted = true,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateWaliGalleryPost(deleted)
+            repository.deleteWaliGalleryLocalSave(post.id)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteWaliGalleryPost(getApplication(), post)
+            }
+            onResult(true, if (isEn) "Gallery post deleted." else "Postingan galeri dihapus.")
+        }
+    }
+
+    fun saveGalleryPostToParentDevice(
+        post: WaliGalleryPost,
+        recipientKey: String,
+        silentAuto: Boolean = false,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        if (post.isMediaPurgedFromServer || (post.photoUrl.isBlank() && post.photoFallbackUrl.isBlank())) {
+            if (!silentAuto) {
+                onResult(
+                    false,
+                    if (isEn) "Media is no longer stored on server." else "Foto sementara di server sudah dibersihkan."
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            val existingSave = repository.getWaliGalleryLocalSave(post.id)
+            if (existingSave != null && WaliGalleryMediaHelper.isLocalSaveAccessible(getApplication(), existingSave.localGalleryUri)) {
+                if (!silentAuto) {
+                    onResult(true, if (isEn) "Already saved in phone gallery." else "Foto sudah tersimpan di Galeri HP Anda.")
+                }
+                return@launch
+            }
+
+            if (!silentAuto) _isSavingGalleryMedia.value = true
+            try {
+                val saveRes = WaliGalleryMediaHelper.savePostPhotoToParentGallery(getApplication(), post)
+                if (saveRes.isFailure) {
+                    if (!silentAuto) {
+                        onResult(
+                            false,
+                            saveRes.exceptionOrNull()?.message
+                                ?: if (isEn) "Failed to save to phone gallery." else "Gagal menyimpan ke Galeri HP."
+                        )
+                    }
+                    return@launch
+                }
+
+                val saved = saveRes.getOrThrow()
+                repository.upsertWaliGalleryLocalSave(saved)
+
+                val latestPost = repository.getWaliGalleryPostById(post.id) ?: post
+                val nextCsv = WaliGalleryHelper.mergeDownloadedRecipient(latestPost.downloadedByCsv, recipientKey)
+                val now = System.currentTimeMillis()
+                var updatedPost = latestPost.copy(
+                    downloadedByCsv = nextCsv,
+                    updatedAt = maxOf(now, latestPost.updatedAt + 1L)
+                )
+                repository.updateWaliGalleryPost(updatedPost)
+
+                if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                    PocketBaseSyncManager.uploadSingleWaliGalleryPost(getApplication(), updatedPost)
+                    if (WaliGalleryHelper.shouldAutoPurgeServerMedia(updatedPost, now)) {
+                        val purged = PocketBaseSyncManager.purgeWaliGalleryServerMedia(getApplication(), updatedPost).getOrNull()
+                        if (purged != null) {
+                            updatedPost = purged
+                            repository.updateWaliGalleryPost(purged)
+                        }
+                    }
+                }
+
+                if (!silentAuto) {
+                    onResult(
+                        true,
+                        if (isEn) "Saved permanently to Pictures/WaliAsuhCare!"
+                        else "Foto tersimpan permanen di Galeri HP (Pictures/WaliAsuhCare)!"
+                    )
+                }
+            } finally {
+                if (!silentAuto) _isSavingGalleryMedia.value = false
+            }
+        }
+    }
+
+    fun saveAllPendingGalleryPostsToDevice(
+        posts: List<WaliGalleryPost>,
+        recipientKey: String,
+        onResult: (Int, Int) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            _isSavingGalleryMedia.value = true
+            var savedCount = 0
+            var failCount = 0
+            try {
+                for (post in posts) {
+                    if (post.isMediaPurgedFromServer || (post.photoUrl.isBlank() && post.photoFallbackUrl.isBlank())) {
+                        continue
+                    }
+                    val existing = repository.getWaliGalleryLocalSave(post.id)
+                    if (existing != null && WaliGalleryMediaHelper.isLocalSaveAccessible(getApplication(), existing.localGalleryUri)) {
+                        continue
+                    }
+                    val saveRes = WaliGalleryMediaHelper.savePostPhotoToParentGallery(getApplication(), post)
+                    if (saveRes.isSuccess) {
+                        savedCount++
+                        repository.upsertWaliGalleryLocalSave(saveRes.getOrThrow())
+                        val latestPost = repository.getWaliGalleryPostById(post.id) ?: post
+                        val now = System.currentTimeMillis()
+                        var updatedPost = latestPost.copy(
+                            downloadedByCsv = WaliGalleryHelper.mergeDownloadedRecipient(latestPost.downloadedByCsv, recipientKey),
+                            updatedAt = maxOf(now, latestPost.updatedAt + 1L)
+                        )
+                        repository.updateWaliGalleryPost(updatedPost)
+                        if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                            PocketBaseSyncManager.uploadSingleWaliGalleryPost(getApplication(), updatedPost)
+                            if (WaliGalleryHelper.shouldAutoPurgeServerMedia(updatedPost, now)) {
+                                PocketBaseSyncManager.purgeWaliGalleryServerMedia(getApplication(), updatedPost).getOrNull()?.let { purged ->
+                                    updatedPost = purged
+                                    repository.updateWaliGalleryPost(purged)
+                                }
+                            }
+                        }
+                    } else {
+                        failCount++
+                    }
+                }
+                onResult(savedCount, failCount)
+            } finally {
+                _isSavingGalleryMedia.value = false
+            }
         }
     }
 }

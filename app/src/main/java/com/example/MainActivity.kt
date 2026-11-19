@@ -265,6 +265,7 @@ private fun WaliAsuhCareAppContent(
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
+    val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
     val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
@@ -341,6 +342,16 @@ private fun WaliAsuhCareAppContent(
             viewModel.syncSholatOnlineQuietly()
         }
     }
+    LaunchedEffect(
+        dashboardModalState.activeCategoryHub,
+        dashboardModalState.showWaliGallerySheet
+    ) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.ORANG_TUA ||
+            dashboardModalState.showWaliGallerySheet
+        ) {
+            viewModel.syncWaliGalleryOnlineQuietly()
+        }
+    }
     val myFosterStudents = remember(students, waliName, currentUsername) {
         students.filter { viewModel.isStudentClaimedByCurrentWali(it) }
     }
@@ -355,6 +366,18 @@ private fun WaliAsuhCareAppContent(
         val isAdminRole = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.SUPERADMIN
         if (isAdminRole && myFosterStudentIds.isEmpty()) parentExpectations
         else parentExpectations.filter { it.studentId in myFosterStudentIds }
+    }
+    val myWaliGalleryPostsCount = remember(waliGalleryPosts, currentUsername, waliName, currentUserRole) {
+        val isAdminRole = currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.SUPERADMIN
+        waliGalleryPosts.count { post ->
+            !post.isDeleted && (
+                isAdminRole || com.example.data.model.WaliGalleryHelper.matchesWaliOwner(
+                    post = post,
+                    waliUsername = currentUsername.orEmpty(),
+                    waliName = waliName
+                )
+            )
+        }
     }
     val inpatientCount = remember(allRecords) {
         allRecords.count { it.isInpatient && it.status != "CANCELLED" }
@@ -798,6 +821,11 @@ private fun WaliAsuhCareAppContent(
                 onOpenHarapanOrtu = {
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.showHarapanOrtuSheet = true
+                },
+                waliGalleryPostsCount = myWaliGalleryPostsCount,
+                onOpenWaliGallery = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showWaliGallerySheet = true
                 },
                 tabunganTransactions = tabunganTransactions,
                 tabunganLogs = tabunganLogs,

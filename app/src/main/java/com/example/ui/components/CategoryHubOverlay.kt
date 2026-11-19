@@ -138,6 +138,8 @@ fun CategoryHubOverlay(
     onOpenPilihanAksesOrtu: () -> Unit = {},
     onOpenPesanOrtu: () -> Unit = {},
     onOpenHarapanOrtu: () -> Unit = {},
+    waliGalleryPostsCount: Int = 0,
+    onOpenWaliGallery: () -> Unit = {},
     tabunganTransactions: List<TabunganTransaction> = emptyList(),
     tabunganLogs: List<TabunganLog> = emptyList(),
     claimedFosterStudents: List<ChildStudent> = emptyList(),
@@ -619,7 +621,9 @@ fun CategoryHubOverlay(
                                     onOpenKartuAksesOrtu = onOpenKartuAksesOrtu,
                                     onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu,
                                     onOpenPesanOrtu = onOpenPesanOrtu,
-                                    onOpenHarapanOrtu = onOpenHarapanOrtu
+                                    onOpenHarapanOrtu = onOpenHarapanOrtu,
+                                    waliGalleryPostsCount = waliGalleryPostsCount,
+                                    onOpenWaliGallery = onOpenWaliGallery
                                 )
                                 DashboardCategoryHub.TABUNGAN -> tabunganCategoryItems(
                                     isEn = isEn,

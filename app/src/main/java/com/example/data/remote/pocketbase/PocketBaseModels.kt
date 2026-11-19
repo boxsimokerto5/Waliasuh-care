@@ -36,6 +36,8 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
+import com.example.data.model.WaliGalleryHelper
+import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
 import com.example.data.model.WaliShiftCode
@@ -2137,4 +2139,119 @@ data class PbSholatRecordDto(
         }
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class PbWaliGalleryPostDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "collectionId") val collectionId: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "wali_username") val waliUsername: String? = null,
+    @Json(name = "wali_name") val waliName: String? = null,
+    @Json(name = "caption") val caption: String? = null,
+    @Json(name = "activity_tag") val activityTag: String? = null,
+    @Json(name = "target_scope") val targetScope: String? = null,
+    @Json(name = "target_student_ids_csv") val targetStudentIdsCsv: String? = null,
+    @Json(name = "photo_url") val photoUrl: String? = null,
+    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null,
+    @Json(name = "pb_record_id") val pbRecordId: String? = null,
+    @Json(name = "pb_collection_id") val pbCollectionId: String? = null,
+    @Json(name = "pb_filename") val pbFilename: String? = null,
+    @Json(name = "photo_file") val photoFile: String? = null,
+    @Json(name = "retention_days") val retentionDays: Int? = null,
+    @Json(name = "expires_at") val expiresAt: Long? = null,
+    @Json(name = "expected_recipient_count") val expectedRecipientCount: Int? = null,
+    @Json(name = "downloaded_by_csv") val downloadedByCsv: String? = null,
+    @Json(name = "is_media_purged_from_server") val isMediaPurgedFromServer: Boolean? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(
+        fallbackSchoolId: String = "SRT1-KDR",
+        pbBaseUrl: String = DashboardBannerItem.DEFAULT_POCKETBASE_BASE_URL
+    ): WaliGalleryPost {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        val purged = isMediaPurgedFromServer ?: false
+        val recId = pbRecordId.orEmpty().trim().ifBlank { id.orEmpty().trim() }
+        val colId = pbCollectionId.orEmpty().trim().ifBlank { collectionId.orEmpty().trim() }.ifBlank { "wali_gallery_posts" }
+        val file = pbFilename.orEmpty().trim().ifBlank { photoFile.orEmpty().trim() }
+        val resolvedPrimary = if (purged) "" else {
+            photoUrl?.takeIf { it.isNotBlank() } ?: run {
+                if (recId.isNotBlank() && file.isNotBlank()) {
+                    DashboardBannerItem.buildR2CdnUrl(colId, recId, file)
+                } else ""
+            }
+        }
+        val resolvedFallback = if (purged) "" else {
+            photoFallbackUrl?.takeIf { it.isNotBlank() } ?: run {
+                if (recId.isNotBlank() && file.isNotBlank()) {
+                    DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, file)
+                } else ""
+            }
+        }
+        val resolvedDays = (retentionDays ?: WaliGalleryHelper.DEFAULT_RETENTION_DAYS).coerceIn(1, 90)
+        val created = createdAt?.takeIf { it > 0L } ?: now
+        return WaliGalleryPost(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = resolvedSchool,
+            waliUsername = waliUsername.orEmpty().trim(),
+            waliName = waliName?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            caption = caption.orEmpty().trim(),
+            activityTag = activityTag?.trim()?.uppercase()?.ifBlank { WaliGalleryHelper.TAG_KEGIATAN }
+                ?: WaliGalleryHelper.TAG_KEGIATAN,
+            targetScope = targetScope?.trim()?.uppercase()?.ifBlank { WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS }
+                ?: WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
+            targetStudentIdsCsv = targetStudentIdsCsv.orEmpty().trim(),
+            photoUrl = resolvedPrimary,
+            photoFallbackUrl = resolvedFallback,
+            pbRecordId = recId,
+            pbCollectionId = if (recId.isNotBlank()) colId else "",
+            pbFilename = if (purged) "" else file,
+            retentionDays = resolvedDays,
+            expiresAt = expiresAt?.takeIf { it > 0L } ?: (created + resolvedDays * WaliGalleryHelper.DAY_MILLIS),
+            expectedRecipientCount = (expectedRecipientCount ?: 0).coerceAtLeast(0),
+            downloadedByCsv = downloadedByCsv.orEmpty().trim(),
+            isMediaPurgedFromServer = purged,
+            isDeleted = isDeleted ?: false,
+            createdAt = created,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: WaliGalleryPost): PbWaliGalleryPostDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "wali_gallery:${model.schoolId}:${model.waliUsername}:${model.createdAt}"
+            )
+            val pbId = model.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
+            return PbWaliGalleryPostDto(
+                id = pbId,
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                waliUsername = model.waliUsername,
+                waliName = model.waliName,
+                caption = model.caption,
+                activityTag = model.activityTag,
+                targetScope = model.targetScope,
+                targetStudentIdsCsv = model.targetStudentIdsCsv,
+                photoUrl = if (model.isMediaPurgedFromServer) "" else model.photoUrl,
+                photoFallbackUrl = if (model.isMediaPurgedFromServer) "" else model.photoFallbackUrl,
+                pbRecordId = pbId,
+                pbCollectionId = model.pbCollectionId.ifBlank { "wali_gallery_posts" },
+                pbFilename = if (model.isMediaPurgedFromServer) "" else model.pbFilename,
+                retentionDays = model.retentionDays,
+                expiresAt = model.expiresAt,
+                expectedRecipientCount = model.expectedRecipientCount,
+                downloadedByCsv = model.downloadedByCsv,
+                isMediaPurgedFromServer = model.isMediaPurgedFromServer,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
 

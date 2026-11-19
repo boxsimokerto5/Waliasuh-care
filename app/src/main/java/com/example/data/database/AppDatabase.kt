@@ -38,6 +38,8 @@ import com.example.data.dao.InfoPentingCommentDao
 import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
+import com.example.data.dao.WaliGalleryLocalSaveDao
+import com.example.data.dao.WaliGalleryPostDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
 import com.example.data.model.DeletionLog
@@ -58,6 +60,8 @@ import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.WaliGalleryLocalSave
+import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliShiftCode
 
@@ -87,9 +91,11 @@ import com.example.data.model.WaliShiftCode
         InfoPentingPost::class,
         InfoPentingReaction::class,
         InfoPentingComment::class,
-        SholatRecord::class
+        SholatRecord::class,
+        WaliGalleryPost::class,
+        WaliGalleryLocalSave::class
     ],
-    version = 31,
+    version = 32,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -118,6 +124,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun infoPentingReactionDao(): InfoPentingReactionDao
     abstract fun infoPentingCommentDao(): InfoPentingCommentDao
     abstract fun sholatRecordDao(): SholatRecordDao
+    abstract fun waliGalleryPostDao(): WaliGalleryPostDao
+    abstract fun waliGalleryLocalSaveDao(): WaliGalleryLocalSaveDao
 
     companion object {
         @Volatile
@@ -792,6 +800,48 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_31_32 = object : androidx.room.migration.Migration(31, 32) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS wali_gallery_posts (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        waliUsername TEXT NOT NULL DEFAULT '',
+                        waliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        caption TEXT NOT NULL DEFAULT '',
+                        activityTag TEXT NOT NULL DEFAULT 'KEGIATAN',
+                        targetScope TEXT NOT NULL DEFAULT 'ALL_MY_STUDENTS',
+                        targetStudentIdsCsv TEXT NOT NULL DEFAULT '',
+                        photoUrl TEXT NOT NULL DEFAULT '',
+                        photoFallbackUrl TEXT NOT NULL DEFAULT '',
+                        pbRecordId TEXT NOT NULL DEFAULT '',
+                        pbCollectionId TEXT NOT NULL DEFAULT '',
+                        pbFilename TEXT NOT NULL DEFAULT '',
+                        retentionDays INTEGER NOT NULL DEFAULT 14,
+                        expiresAt INTEGER NOT NULL DEFAULT 0,
+                        expectedRecipientCount INTEGER NOT NULL DEFAULT 0,
+                        downloadedByCsv TEXT NOT NULL DEFAULT '',
+                        isMediaPurgedFromServer INTEGER NOT NULL DEFAULT 0,
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS wali_gallery_local_saves (
+                        postId INTEGER PRIMARY KEY NOT NULL,
+                        localGalleryUri TEXT NOT NULL DEFAULT '',
+                        displayFileName TEXT NOT NULL DEFAULT '',
+                        savedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -823,7 +873,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_27_28,
                         MIGRATION_28_29,
                         MIGRATION_29_30,
-                        MIGRATION_30_31
+                        MIGRATION_30_31,
+                        MIGRATION_31_32
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
