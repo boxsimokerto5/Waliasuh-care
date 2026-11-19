@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Warning
@@ -168,6 +169,7 @@ import com.example.ui.dialogs.PetugasJamIniDialog
 import com.example.ui.dialogs.RekapIzinJadwalSheet
 import com.example.ui.dialogs.SchedulePinChip
 import com.example.ui.dialogs.StudentDetailDialog
+import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.ui.dialogs.openJadwalExternalUrl
 import com.example.ui.dialogs.parseJadwalShiftColor
 import com.example.util.PdfReportGenerator
@@ -3535,6 +3537,9 @@ fun WaliAccountCardItem(
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     var passwordVisible by remember { mutableStateOf(false) }
+    var showPhotoZoom by remember { mutableStateOf(false) }
+    val hasPhoto = account.hasProfilePhoto()
+    val avatarGender = if (account.dormitory.contains("putri", ignoreCase = true)) "P" else "L"
 
     val isGuruNgaji = account.isGuruNgaji()
     val isAnakAdmin = account.isAnakAdminSekolah()
@@ -3639,28 +3644,62 @@ fun WaliAccountCardItem(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
-                            .background(dormAccentColor.copy(alpha = 0.12f)),
+                            .background(dormAccentColor.copy(alpha = 0.12f))
+                            .let { mod ->
+                                if (hasPhoto) mod.clickable { showPhotoZoom = true } else mod
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Person,
-                            contentDescription = null,
-                            tint = dormAccentColor,
-                            modifier = Modifier.size(24.dp)
+                        StudentAvatar(
+                            name = account.name,
+                            gender = avatarGender,
+                            size = 46.dp,
+                            photoUrl = account.photoUrl,
+                            photoFallbackUrl = account.photoFallbackUrl
                         )
                     }
 
                     Spacer(modifier = Modifier.width(10.dp))
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = account.name,
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = account.name,
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (hasPhoto) {
+                                Icon(
+                                    imageVector = Icons.Default.Verified,
+                                    contentDescription = if (isEn) "Profile photo uploaded" else "Foto profil terisi",
+                                    tint = Color(0xFF047857),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                        if (account.titlePosition.isNotBlank() || account.employeeCode.isNotBlank()) {
+                            val titleLine = listOfNotNull(
+                                account.titlePosition.takeIf { it.isNotBlank() },
+                                account.employeeCode.takeIf { it.isNotBlank() }?.let { "ID: $it" }
+                            ).joinToString(" • ")
+                            Text(
+                                text = titleLine,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = dormAccentColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                         if (account.phone.isNotBlank()) {
                             Text(
                                 text = if (isGuruNgaji) {
@@ -3684,6 +3723,17 @@ fun WaliAccountCardItem(
                             )
                         }
                     }
+                }
+
+                if (showPhotoZoom && hasPhoto) {
+                    StudentPhotoPreviewDialog(
+                        studentName = account.name,
+                        gender = avatarGender,
+                        subtitle = "${account.effectiveTitle(isEn)} • $schoolName",
+                        photoUrl = account.photoUrl,
+                        photoFallbackUrl = account.photoFallbackUrl,
+                        onDismiss = { showPhotoZoom = false }
+                    )
                 }
 
                 // Kotak Kredensial Login (Username & Password Acak)

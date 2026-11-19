@@ -4837,6 +4837,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val _isUploadingStudentPhoto = MutableStateFlow(false)
     val isUploadingStudentPhoto: StateFlow<Boolean> = _isUploadingStudentPhoto.asStateFlow()
 
+    private val _isUploadingWaliPhoto = MutableStateFlow(false)
+    val isUploadingWaliPhoto: StateFlow<Boolean> = _isUploadingWaliPhoto.asStateFlow()
+
     // Add student
     fun addStudent(
         name: String,
@@ -6071,10 +6074,74 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // --- Ganti Password Mandiri oleh Wali Asuh (Tersinkronisasi ke Admin Sekolah) ---
-    fun updateWaliSelfPassword(
+    private suspend fun resolveCurrentWaliAccountForSession(): WaliAccount? {
+        val username = _currentUsername.value?.trim().orEmpty()
+        var account: WaliAccount? = currentWaliAccount.value
+        if (account == null && username.isNotBlank()) {
+            account = repository.getWaliAccountByUsername(username)
+        }
+        if (account == null) {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val all = repository.getWaliAccountsBySchoolList(activeSchool)
+                .ifEmpty { repository.getAllWaliAccountsList() }
+            account = all.firstOrNull {
+                (username.isNotBlank() && it.username.equals(username, ignoreCase = true)) ||
+                    it.name.equals(_waliName.value, ignoreCase = true) ||
+                    it.username.equals(_waliName.value, ignoreCase = true)
+            }
+        }
+        return account
+    }
+
+    private suspend fun propagateWaliNameUpdate(
+        oldName: String,
+        account: WaliAccount
+    ) {
+        val newName = account.name.trim()
+        if (newName.isBlank() || newName == oldName.trim()) return
+        val schoolId = account.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+        val cleanUser = account.username.trim()
+
+        val schoolStudents = repository.getStudentsBySchoolList(schoolId)
+        val affectedStudents = schoolStudents.filter { st ->
+            (cleanUser.isNotBlank() && st.assignedWaliUsername.equals(cleanUser, ignoreCase = true)) ||
+                (oldName.isNotBlank() && st.assignedWaliName.equals(oldName, ignoreCase = true))
+        }.map { it.copy(assignedWaliName = newName, assignedWaliUsername = it.assignedWaliUsername.ifBlank { cleanUser }) }
+        if (affectedStudents.isNotEmpty()) {
+            repository.insertAllStudents(affectedStudents)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadStudents(getApplication(), affectedStudents)
+            }
+        }
+
+        val links = repository.getParentAccessLinksBySchoolList(schoolId)
+        val now = System.currentTimeMillis()
+        val affectedLinks = links.filter { lk ->
+            (cleanUser.isNotBlank() && lk.assignedWaliUsername.equals(cleanUser, ignoreCase = true)) ||
+                (oldName.isNotBlank() && lk.assignedWaliName.equals(oldName, ignoreCase = true))
+        }.map { lk ->
+            lk.copy(
+                assignedWaliName = newName,
+                assignedWaliUsername = lk.assignedWaliUsername.ifBlank { cleanUser },
+                updatedAt = now
+            )
+        }
+        if (affectedLinks.isNotEmpty()) {
+            repository.insertAllParentAccessLinks(affectedLinks)
+            if (!isUnitTestEnvironment()) {
+                affectedLinks.forEach { PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), it) }
+            }
+        }
+    }
+
+    // --- Edit Profil & Ganti Password Mandiri oleh Wali Asuh (Tersinkronisasi ke Admin & Portal Orang Tua) ---
+    fun updateWaliSelfProfile(
         newName: String,
-        newPassword: String,
+        newPhone: String = "",
+        newTitlePosition: String = "",
+        newEmployeeCode: String = "",
+        newBio: String = "",
+        newPassword: String? = null,
         onResult: (Boolean, String) -> Unit
     ) {
         viewModelScope.launch {
@@ -6091,31 +6158,32 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 return@launch
             }
             val s = AppLanguageManager.getStrings(getApplication()).nav
-            val cleanPass = newPassword.trim()
-            if (cleanPass.length < 6) {
+            val cleanPass = newPassword?.trim()
+            if (!cleanPass.isNullOrEmpty() && cleanPass.length < 6) {
                 onResult(false, s.vmPasswordMinError)
                 return@launch
             }
 
             val cleanName = newName.trim().ifBlank { _waliName.value }
-            val username = _currentUsername.value
+            val cleanPhone = newPhone.trim()
+            val cleanTitle = newTitlePosition.trim()
+            val cleanEmployeeCode = newEmployeeCode.trim()
+            val cleanBio = newBio.trim()
+            val now = System.currentTimeMillis()
 
-            var account: WaliAccount? = null
-            if (!username.isNullOrBlank()) {
-                account = repository.getWaliAccountByUsername(username)
-            }
-            if (account == null) {
-                val all = repository.getAllWaliAccountsList()
-                account = all.firstOrNull {
-                    it.name.equals(_waliName.value, ignoreCase = true) ||
-                    it.username.equals(_waliName.value, ignoreCase = true)
-                }
-            }
+            val account = resolveCurrentWaliAccountForSession()
 
             if (account != null) {
+                val oldName = account.name
+                val resolvedPass = if (!cleanPass.isNullOrEmpty()) cleanPass else account.password
                 val updated = account.copy(
                     name = cleanName,
-                    password = cleanPass
+                    phone = cleanPhone,
+                    titlePosition = cleanTitle,
+                    employeeCode = cleanEmployeeCode,
+                    bio = cleanBio,
+                    password = resolvedPass,
+                    profileUpdatedAt = now
                 )
                 repository.updateWaliAccount(updated)
                 _waliName.value = cleanName
@@ -6127,20 +6195,35 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         .putString("saved_username", updated.username)
                         .apply()
                 }
-                onResult(true, s.vmPasswordUpdatedSuccess)
+                propagateWaliNameUpdate(oldName, updated)
+                val successMsg = if (!cleanPass.isNullOrEmpty()) {
+                    if (isEn) "Profile & password updated and synced!" else "Profil & kata sandi berhasil diperbarui dan disinkronkan!"
+                } else {
+                    if (isEn) "Caregiver profile updated & synced to Admin and Parent Portal!" else "Profil pembina berhasil diperbarui & tersinkron ke Admin serta Portal Orang Tua!"
+                }
+                onResult(true, successMsg)
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
                 }
             } else {
+                val resolvedPass = if (!cleanPass.isNullOrEmpty()) cleanPass else {
+                    onResult(false, s.vmPasswordMinError)
+                    return@launch
+                }
                 val defaultSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                 val generatedUser = cleanName.lowercase().replace(" ", "").filter { it.isLetterOrDigit() }.ifBlank { "wali" }
                 val newAcc = WaliAccount(
                     id = PocketBaseSyncManager.generateCloudSafeId(),
                     name = cleanName,
                     username = generatedUser,
-                    password = cleanPass,
+                    password = resolvedPass,
                     dormitory = "Asrama Putra",
-                    schoolId = defaultSchool
+                    phone = cleanPhone,
+                    schoolId = defaultSchool,
+                    titlePosition = cleanTitle,
+                    employeeCode = cleanEmployeeCode,
+                    bio = cleanBio,
+                    profileUpdatedAt = now
                 )
                 val insertedId = repository.insertWaliAccount(newAcc)
                 _waliName.value = cleanName
@@ -6156,6 +6239,145 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(newAcc.copy(id = insertedId)))
                 }
             }
+        }
+    }
+
+    // --- Ganti Password Mandiri oleh Wali Asuh (Tersinkronisasi ke Admin Sekolah) ---
+    fun updateWaliSelfPassword(
+        newName: String,
+        newPassword: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        viewModelScope.launch {
+            val existing = resolveCurrentWaliAccountForSession()
+            val cleanPass = newPassword.trim()
+            val s = AppLanguageManager.getStrings(getApplication()).nav
+            if (cleanPass.length < 6) {
+                onResult(false, s.vmPasswordMinError)
+                return@launch
+            }
+            updateWaliSelfProfile(
+                newName = newName,
+                newPhone = existing?.phone.orEmpty(),
+                newTitlePosition = existing?.titlePosition.orEmpty(),
+                newEmployeeCode = existing?.employeeCode.orEmpty(),
+                newBio = existing?.bio.orEmpty(),
+                newPassword = cleanPass,
+                onResult = onResult
+            )
+        }
+    }
+
+    fun uploadWaliProfilePhoto(
+        imageUri: android.net.Uri,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val isEn = AppLanguageManager.getStrings(context).isEnglish
+            val account = resolveCurrentWaliAccountForSession()
+            if (account == null) {
+                onResult(
+                    false,
+                    if (isEn) "Wali account not found for active session." else "Akun Wali Asuh aktif tidak ditemukan."
+                )
+                return@launch
+            }
+            _isUploadingWaliPhoto.value = true
+            try {
+                val resolvedPair: Pair<String, String>? = if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(context)) {
+                    val cloudRes = PocketBaseSyncManager.uploadWaliProfilePhotoToCloud(
+                        context = context,
+                        account = account,
+                        imageUri = imageUri
+                    )
+                    if (cloudRes.isFailure) {
+                        val msg = cloudRes.exceptionOrNull()?.message ?: if (isEn) {
+                            "Failed to upload caregiver profile photo."
+                        } else {
+                            "Gagal mengunggah foto profil Wali Asuh."
+                        }
+                        onResult(false, msg)
+                        return@launch
+                    }
+                    val uploaded = cloudRes.getOrNull()!!
+                    uploaded.cdnUrl to uploaded.fallbackUrl
+                } else {
+                    val bytes = withContext(Dispatchers.IO) {
+                        PocketBaseSyncManager.compressStudentPhotoBytes(context, imageUri)
+                            ?: runCatching {
+                                context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+                            }.getOrNull()
+                    }
+                    if (bytes == null || bytes.isEmpty()) {
+                        onResult(
+                            false,
+                            if (isEn) "Unable to read selected photo." else "Gagal membaca foto yang dipilih."
+                        )
+                        return@launch
+                    }
+                    val localPath = withContext(Dispatchers.IO) {
+                        PocketBaseSyncManager.saveWaliPhotoLocally(context, account.id, bytes)
+                    } ?: imageUri.toString()
+                    localPath to localPath
+                }
+
+                if (resolvedPair == null) {
+                    onResult(false, if (isEn) "Failed to save photo." else "Gagal menyimpan foto.")
+                    return@launch
+                }
+                val (primaryUrl, fallbackUrl) = resolvedPair
+                val updated = account.copy(
+                    photoUrl = primaryUrl,
+                    photoFallbackUrl = fallbackUrl,
+                    profileUpdatedAt = System.currentTimeMillis()
+                )
+                repository.updateWaliAccount(updated)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadWaliAccounts(context, listOf(updated))
+                }
+                onResult(
+                    true,
+                    if (isEn) {
+                        "Caregiver photo updated & synced to Admin and Parent Portal!"
+                    } else {
+                        "Foto profil berhasil diunggah & tampil di Portal Orang Tua!"
+                    }
+                )
+            } finally {
+                _isUploadingWaliPhoto.value = false
+            }
+        }
+    }
+
+    fun removeWaliProfilePhoto(
+        targetAccount: WaliAccount? = null,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val isEn = AppLanguageManager.getStrings(context).isEnglish
+            val account = targetAccount ?: resolveCurrentWaliAccountForSession()
+            if (account == null) {
+                onResult(false, if (isEn) "Wali account not found." else "Akun Wali Asuh tidak ditemukan.")
+                return@launch
+            }
+            val updated = account.copy(
+                photoUrl = "",
+                photoFallbackUrl = "",
+                profileUpdatedAt = System.currentTimeMillis()
+            )
+            repository.updateWaliAccount(updated)
+            withContext(Dispatchers.IO) {
+                PocketBaseSyncManager.clearLocalWaliPhotos(context, updated.id)
+            }
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadWaliAccounts(context, listOf(updated))
+            }
+            onResult(
+                true,
+                if (isEn) "Profile photo removed." else "Foto profil berhasil dihapus."
+            )
         }
     }
 

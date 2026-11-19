@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Swipe
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -67,6 +68,7 @@ import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.WaliAccount
 import com.example.util.DateUtils
 import com.example.util.i18n.AppLanguage
 
@@ -104,14 +106,18 @@ fun ParentGreetingHeroCard(
     isEn: Boolean,
     onOpenChat: () -> Unit,
     onOpenProfile: (() -> Unit)? = null,
-    onAvatarClick: (() -> Unit)? = null
+    onAvatarClick: (() -> Unit)? = null,
+    waliAccount: WaliAccount? = null,
+    schoolName: String = "",
+    onOpenWaliProfile: (() -> Unit)? = null
 ) {
     val studentName = student?.name ?: link?.studentName.orEmpty().ifBlank { "Ananda" }
     val parentName = link?.parentName?.ifBlank { student?.motherName.orEmpty() }.orEmpty()
     val classGrade = student?.classGrade ?: link?.studentClass ?: "-"
     val dorm = student?.dormitory ?: link?.studentDorm ?: "-"
     val room = student?.roomNumber?.takeIf { it.isNotBlank() }
-    val waliName = student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
+    val waliName = waliAccount?.name?.takeIf { it.isNotBlank() }
+        ?: student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
         ?: link?.assignedWaliName.orEmpty()
 
     ElevatedCard(
@@ -261,48 +267,112 @@ fun ParentGreetingHeroCard(
                     }
                 }
 
-                // Frosted Wali Asuh bar with quick chat button
+                // Frosted Wali Asuh bar with real caregiver photo, verified badge & quick chat button
                 Surface(
                     shape = RoundedCornerShape(14.dp),
                     color = Color.White.copy(alpha = 0.14f),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
+                    val waliPhotoUrl = waliAccount?.photoUrl.orEmpty()
+                    val waliPhotoFallback = waliAccount?.photoFallbackUrl.orEmpty()
+                    val hasWaliIdentity = waliName.isNotBlank() || waliAccount != null
+                    val waliAvatarGender = if (
+                        (waliAccount?.dormitory ?: dorm).contains("putri", ignoreCase = true)
+                    ) "P" else "L"
+
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 10.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Box(
+                        Row(
                             modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.2f)),
-                            contentAlignment = Alignment.Center
+                                .weight(1f)
+                                .clip(RoundedCornerShape(10.dp))
+                                .let { mod ->
+                                    if (onOpenWaliProfile != null && hasWaliIdentity) {
+                                        mod.clickable(onClick = onOpenWaliProfile)
+                                            .testTag("btn_hero_open_wali_profile")
+                                    } else mod
+                                }
+                                .padding(end = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(9.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
-                                fontSize = 10.sp,
-                                color = Color(0xFFE0E7FF)
-                            )
-                            Text(
-                                text = waliName.ifBlank { if (isEn) "Not assigned yet" else "Belum ditentukan" },
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (hasWaliIdentity) {
+                                    StudentAvatar(
+                                        name = waliName.ifBlank { "Wali" },
+                                        gender = waliAvatarGender,
+                                        size = 38.dp,
+                                        photoUrl = waliPhotoUrl,
+                                        photoFallbackUrl = waliPhotoFallback
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.width(9.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
+                                        fontSize = 10.sp,
+                                        color = Color(0xFFE0E7FF)
+                                    )
+                                    if (waliAccount != null) {
+                                        Icon(
+                                            imageVector = Icons.Default.Verified,
+                                            contentDescription = if (isEn) "Verified" else "Terverifikasi",
+                                            tint = Color(0xFF6EE7B7),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = waliName.ifBlank { if (isEn) "Not assigned yet" else "Belum ditentukan" },
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (hasWaliIdentity) {
+                                    val subLine = waliAccount?.let { acc ->
+                                        val parts = listOfNotNull(
+                                            acc.effectiveTitle(isEn),
+                                            acc.employeeCode.takeIf { it.isNotBlank() }?.let { "ID: $it" }
+                                        )
+                                        parts.joinToString(" • ")
+                                    }?.takeIf { it.isNotBlank() } ?: if (onOpenWaliProfile != null) {
+                                        if (isEn) "Tap for verified profile" else "Ketuk lihat profil resmi"
+                                    } else ""
+                                    if (subLine.isNotBlank()) {
+                                        Text(
+                                            text = subLine,
+                                            fontSize = 10.sp,
+                                            color = Color(0xFFDDD6FE),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
                         }
                         Surface(
                             shape = RoundedCornerShape(10.dp),

@@ -269,6 +269,7 @@ private fun WaliAsuhCareAppContent(
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
+    val currentWaliAccount by viewModel.currentWaliAccount.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val isAnakAdminSekolah by viewModel.isAnakAdminSekolah.collectAsStateWithLifecycle()
     val canManageMainSchedule = currentUserRole == UserRole.ADMIN ||
@@ -372,7 +373,11 @@ private fun WaliAsuhCareAppContent(
                     currentScreen = WaliNavScreen.PROFIL
                 },
                 isDoctorIcon = currentScreen == WaliNavScreen.TINDAKAN,
-                schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
+                schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
+                waliName = currentWaliAccount?.name?.ifBlank { waliName } ?: waliName,
+                waliPhotoUrl = currentWaliAccount?.photoUrl.orEmpty(),
+                waliPhotoFallbackUrl = currentWaliAccount?.photoFallbackUrl.orEmpty(),
+                waliDormitory = currentWaliAccount?.dormitory.orEmpty()
             )
         },
         bottomBar = {

@@ -9807,5 +9807,224 @@ class ExampleRobolectricTest {
     generatedPdf.delete()
     tempWebpFile.delete()
   }
+
+  @Test
+  fun `verify WaliAccount self profile update syncs to Room student links and PocketBase DTO while preserving password`() = kotlinx.coroutines.runBlocking {
+    val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(context)
+    val vm = com.example.ui.HealthViewModel(context)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val wali = com.example.data.model.WaliAccount(
+      id = 980101L,
+      name = "Ustadz Ahmad Awal",
+      username = "ahmad_wali_test",
+      password = "KeepSecretPass99",
+      dormitory = "Asrama Putra",
+      phone = "081111222333",
+      schoolId = activeSchool,
+      role = com.example.data.model.WaliAccount.ROLE_WALI
+    )
+    db.waliAccountDao().insert(wali)
+
+    val student = com.example.data.model.ChildStudent(
+      id = 980102L,
+      name = "Fajar Ramadhan",
+      nis = "102980102",
+      gender = "L",
+      age = 13,
+      dormitory = "Asrama Putra",
+      classGrade = "VII-B",
+      assignedWaliUsername = "ahmad_wali_test",
+      assignedWaliName = "Ustadz Ahmad Awal",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val link = com.example.data.model.ParentAccessLink(
+      id = 980103L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      parentName = "IBU FAJAR",
+      parentPhone = "081299887766",
+      username = "ortu_fajar_9801",
+      password = "ParentPass123",
+      assignedWaliUsername = "ahmad_wali_test",
+      assignedWaliName = "Ustadz Ahmad Awal",
+      canViewProfile = true,
+      schoolId = activeSchool
+    )
+    db.parentAccessLinkDao().insert(link)
+
+    val loginRes = vm.executeLogin("ahmad_wali_test", "KeepSecretPass99")
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessWali)
+
+    var callbackOk: Boolean? = null
+    vm.updateWaliSelfProfile(
+      newName = "Ustadz Ahmad Fauzi, M.Pd",
+      newPhone = "081234567890",
+      newTitlePosition = "Koordinator Pembina Asrama Putra",
+      newEmployeeCode = "NIP-19900412-007",
+      newBio = "Mendampingi kesehatan, adab, dan hafalan santri setiap hari.",
+      newPassword = null
+    ) { ok, _ ->
+      callbackOk = ok
+    }
+
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (callbackOk != null) break
+      kotlinx.coroutines.delay(25)
+    }
+    assertEquals(true, callbackOk)
+
+    val updatedWali = db.waliAccountDao().getByUsername("ahmad_wali_test")
+    org.junit.Assert.assertNotNull(updatedWali)
+    assertEquals("Ustadz Ahmad Fauzi, M.Pd", updatedWali!!.name)
+    assertEquals("KeepSecretPass99", updatedWali.password)
+    assertEquals("081234567890", updatedWali.phone)
+    assertEquals("Koordinator Pembina Asrama Putra", updatedWali.titlePosition)
+    assertEquals("NIP-19900412-007", updatedWali.employeeCode)
+    assertEquals("Mendampingi kesehatan, adab, dan hafalan santri setiap hari.", updatedWali.bio)
+    org.junit.Assert.assertTrue(updatedWali.profileUpdatedAt > 0L)
+
+    // Assigned wali name should propagate to both ChildStudent and ParentAccessLink
+    val updatedStudent = db.childStudentDao().getById(student.id)
+    assertEquals("Ustadz Ahmad Fauzi, M.Pd", updatedStudent?.assignedWaliName)
+    val updatedLink = db.parentAccessLinkDao().getByUsername("ortu_fajar_9801")
+    assertEquals("Ustadz Ahmad Fauzi, M.Pd", updatedLink?.assignedWaliName)
+
+    // Verify PocketBase DTO round-trip preserves all caregiver legitimacy fields
+    val withPhoto = updatedWali.copy(
+      photoUrl = "https://cdn.example.com/wali/ahmad.webp",
+      photoFallbackUrl = "https://pb.example.com/api/files/wali_accounts/abc/ahmad.webp"
+    )
+    val dto = com.example.data.remote.pocketbase.PbWaliAccountDto.fromDomain(withPhoto)
+    val roundTrip = dto.toDomainModel()
+    assertEquals(withPhoto.photoUrl, roundTrip.photoUrl)
+    assertEquals(withPhoto.photoFallbackUrl, roundTrip.photoFallbackUrl)
+    assertEquals(withPhoto.titlePosition, roundTrip.titlePosition)
+    assertEquals(withPhoto.employeeCode, roundTrip.employeeCode)
+    assertEquals(withPhoto.bio, roundTrip.bio)
+    assertEquals(withPhoto.profileUpdatedAt, roundTrip.profileUpdatedAt)
+
+    vm.logout()
+    db.parentAccessLinkDao().delete(updatedLink ?: link)
+    db.childStudentDao().delete(updatedStudent ?: student)
+    db.waliAccountDao().delete(updatedWali)
+  }
+
+  @Test
+  fun `verify ParentPortalScreen displays Wali Asuh official legitimacy card and sheet without leaking credentials`() = kotlinx.coroutines.runBlocking {
+    val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+    val db = com.example.data.database.AppDatabase.getDatabase(context)
+    val vm = com.example.ui.HealthViewModel(context)
+    val activeSchool = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+    val wali = com.example.data.model.WaliAccount(
+      id = 980201L,
+      name = "Ustadzah Nurul Hidayah, S.Pd",
+      username = "nurul_secret_login",
+      password = "SecretWaliPassword88",
+      dormitory = "Asrama Putri",
+      phone = "085700112233",
+      schoolId = activeSchool,
+      role = com.example.data.model.WaliAccount.ROLE_WALI,
+      titlePosition = "Pembina Utama Asrama Putri",
+      employeeCode = "NUPTK-88221100",
+      bio = "Menjaga amanah pembinaan karakter dan kesehatan santriwati.",
+      profileUpdatedAt = System.currentTimeMillis()
+    )
+    db.waliAccountDao().insert(wali)
+
+    val student = com.example.data.model.ChildStudent(
+      id = 980202L,
+      name = "Aisyah Humaira",
+      nis = "102980202",
+      gender = "P",
+      age = 14,
+      dormitory = "Asrama Putri",
+      classGrade = "VIII-C",
+      assignedWaliUsername = "nurul_secret_login",
+      assignedWaliName = "Ustadzah Nurul Hidayah, S.Pd",
+      schoolId = activeSchool
+    )
+    db.childStudentDao().insert(student)
+
+    val link = com.example.data.model.ParentAccessLink(
+      id = 980203L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      parentName = "IBU AISYAH",
+      parentPhone = "085799887766",
+      username = "ortu_aisyah_9802",
+      password = "ParentPass999",
+      assignedWaliUsername = "nurul_secret_login",
+      assignedWaliName = "Ustadzah Nurul Hidayah, S.Pd",
+      canViewProfile = true,
+      schoolId = activeSchool
+    )
+    db.parentAccessLinkDao().insert(link)
+
+    val loginRes = vm.executeLogin("ortu_aisyah_9802", "ParentPass999")
+    org.junit.Assert.assertTrue(loginRes is com.example.ui.LoginResult.SuccessParent)
+
+    for (attempt in 1..25) {
+      org.robolectric.shadows.ShadowLooper.idleMainLooper()
+      if (vm.activeParentAccessLink.value != null && vm.waliAccounts.value.any { it.id == wali.id }) break
+      kotlinx.coroutines.delay(30)
+    }
+
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    composeTestRule.setContent {
+      androidx.compose.runtime.CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.screens.ParentPortalScreen(
+          viewModel = vm,
+          onLogout = {}
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Hero card shows caregiver name, title & clickable official profile button
+    composeTestRule.onNodeWithTag("btn_hero_open_wali_profile").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Ustadzah Nurul Hidayah, S.Pd").assertIsDisplayed()
+
+    // 2. Tap caregiver section in Hero card -> opens Official Legitimacy Sheet
+    composeTestRule.onNodeWithTag("btn_hero_open_wali_profile").performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("sheet_wali_official_profile").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Pembina Utama Asrama Putri").assertIsDisplayed()
+    composeTestRule.onNodeWithText("NUPTK-88221100").assertIsDisplayed()
+    composeTestRule.onNodeWithText("085700112233").assertIsDisplayed()
+
+    // Login credentials of Wali Asuh MUST NEVER appear on Parent Portal
+    composeTestRule.onNodeWithText("nurul_secret_login").assertDoesNotExist()
+    composeTestRule.onNodeWithText("SecretWaliPassword88").assertDoesNotExist()
+
+    composeTestRule.onNodeWithTag("btn_close_wali_official_profile").performClick()
+    composeTestRule.waitForIdle()
+
+    // 3. Open Profil Anak tab -> shows Verified Caregiver Card
+    composeTestRule.onNodeWithTag("card_parent_summary_profile").performScrollTo().performClick()
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("parent_profile_content")
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_parent_wali_legitimacy"))
+    composeTestRule.onNodeWithTag("card_parent_wali_legitimacy").assertIsDisplayed()
+
+    vm.logout()
+    db.parentAccessLinkDao().delete(link)
+    db.childStudentDao().delete(student)
+    db.waliAccountDao().delete(wali)
+    Unit
+  }
 }
 

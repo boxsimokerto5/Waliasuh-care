@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.ZoomIn
@@ -107,6 +108,7 @@ import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
 import com.example.ui.components.ParentGreetingHeroCard
 import com.example.ui.components.ParentMenuTileSpec
@@ -118,6 +120,7 @@ import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.ui.dialogs.DeleteParentAccountDialog
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
+import com.example.ui.dialogs.WaliOfficialProfileSheet
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
 import com.example.util.i18n.AppLanguage
@@ -160,6 +163,7 @@ fun ParentPortalScreen(
     val tabunganRecords by viewModel.parentTabunganTransactions.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
+    val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isCurrentParentAccountDeleted by viewModel.isCurrentParentAccountDeleted.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
@@ -200,7 +204,23 @@ fun ParentPortalScreen(
     val resolvedPhotoFallbackUrl = remember(student, activeLink) {
         student?.photoFallbackUrl?.takeIf { it.isNotBlank() } ?: activeLink?.studentPhotoFallbackUrl.orEmpty()
     }
+    val assignedWaliUsername = remember(student, activeLink) {
+        student?.assignedWaliUsername?.ifBlank { activeLink?.assignedWaliUsername.orEmpty() }
+            ?: activeLink?.assignedWaliUsername.orEmpty()
+    }
+    val assignedWaliName = remember(student, activeLink) {
+        student?.assignedWaliName?.ifBlank { activeLink?.assignedWaliName.orEmpty() }
+            ?: activeLink?.assignedWaliName.orEmpty()
+    }
+    val assignedWaliAccount = remember(waliAccounts, assignedWaliUsername, assignedWaliName) {
+        waliAccounts.firstOrNull { acc ->
+            (assignedWaliUsername.isNotBlank() && acc.username.equals(assignedWaliUsername, ignoreCase = true)) ||
+                (assignedWaliName.isNotBlank() && acc.name.equals(assignedWaliName, ignoreCase = true))
+        }
+    }
+    val resolvedSchoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
     var showPhotoPreview by remember { mutableStateOf(false) }
+    var showWaliProfileSheet by remember { mutableStateOf(false) }
 
     val isFemaleStudent = remember(student) {
         student != null && StudentClassifier.isFemaleStudent(student)
@@ -519,6 +539,8 @@ fun ParentPortalScreen(
                     ParentPortalTab.HOME -> ParentOverviewContent(
                         student = student,
                         link = activeLink,
+                        waliAccount = assignedWaliAccount,
+                        schoolName = resolvedSchoolName,
                         isFemaleStudent = isFemaleStudent,
                         mengajiRecords = studentMengaji,
                         medicalRecords = studentMedical,
@@ -543,11 +565,19 @@ fun ParentPortalScreen(
                                 }
                             }
                         } else null,
-                        onPreviewPhoto = { showPhotoPreview = true }
+                        onPreviewPhoto = { showPhotoPreview = true },
+                        onOpenWaliProfile = { showWaliProfileSheet = true }
                     )
                     ParentPortalTab.PROFILE -> ParentProfileContent(
                         student = student,
                         link = activeLink,
+                        waliAccount = assignedWaliAccount,
+                        schoolName = resolvedSchoolName,
+                        onOpenWaliProfile = { showWaliProfileSheet = true },
+                        onOpenWaliChat = {
+                            val idx = visibleTabs.indexOf(ParentPortalTab.MESSAGES)
+                            if (idx >= 0) selectedTabIndex = idx
+                        },
                         onOpenChangePassword = if (activeLink != null) {
                             { showChangePasswordSheet = true }
                         } else null,
@@ -569,8 +599,7 @@ fun ParentPortalScreen(
                     ParentPortalTab.HAID -> ParentHaidContent(records = studentHaid)
                     ParentPortalTab.TABUNGAN -> ParentTabunganContent(
                         transactions = sortedTabungan,
-                        waliName = student?.assignedWaliName?.ifBlank { activeLink?.assignedWaliName.orEmpty() }
-                            ?: activeLink?.assignedWaliName.orEmpty()
+                        waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
                     )
                     ParentPortalTab.HARAPAN -> ParentHarapanContent(
                         student = student,
@@ -601,7 +630,9 @@ fun ParentPortalScreen(
                     ParentPortalTab.MESSAGES -> ParentChatContent(
                         student = student,
                         link = activeLink,
+                        waliAccount = assignedWaliAccount,
                         messages = threadMessages,
+                        onOpenWaliProfile = { showWaliProfileSheet = true },
                         onSend = { msgText ->
                             val target = student
                             if (target != null) {
@@ -631,8 +662,7 @@ fun ParentPortalScreen(
             viewModel = viewModel,
             link = currentActiveLink,
             studentName = student?.name ?: currentActiveLink.studentName,
-            assignedWaliName = student?.assignedWaliName?.ifBlank { currentActiveLink.assignedWaliName }
-                ?: currentActiveLink.assignedWaliName,
+            assignedWaliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
             onDismiss = { showDeleteAccountSheet = false }
         )
     }
@@ -649,12 +679,27 @@ fun ParentPortalScreen(
             onDismiss = { showPhotoPreview = false }
         )
     }
+    if (showWaliProfileSheet) {
+        WaliOfficialProfileSheet(
+            waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+            waliAccount = assignedWaliAccount,
+            schoolName = resolvedSchoolName,
+            dormitory = student?.dormitory ?: currentActiveLink?.studentDorm.orEmpty(),
+            onOpenChat = {
+                val idx = visibleTabs.indexOf(ParentPortalTab.MESSAGES)
+                if (idx >= 0) selectedTabIndex = idx
+            },
+            onDismiss = { showWaliProfileSheet = false }
+        )
+    }
 }
 
 @Composable
 private fun ParentOverviewContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
+    waliAccount: WaliAccount?,
+    schoolName: String,
     isFemaleStudent: Boolean,
     mengajiRecords: List<MengajiRecord>,
     medicalRecords: List<MedicalRecord>,
@@ -668,7 +713,8 @@ private fun ParentOverviewContent(
     onOpenTab: (ParentPortalTab) -> Unit,
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
     onCancelDeletionRequest: (() -> Unit)? = null,
-    onPreviewPhoto: (() -> Unit)? = null
+    onPreviewPhoto: (() -> Unit)? = null,
+    onOpenWaliProfile: (() -> Unit)? = null
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -825,7 +871,10 @@ private fun ParentOverviewContent(
                     onOpenProfile = if (link?.canViewProfile == true) {
                         { onOpenTab(ParentPortalTab.PROFILE) }
                     } else null,
-                    onAvatarClick = if (hasHeroPhoto) onPreviewPhoto else null
+                    onAvatarClick = if (hasHeroPhoto) onPreviewPhoto else null,
+                    waliAccount = waliAccount,
+                    schoolName = schoolName,
+                    onOpenWaliProfile = onOpenWaliProfile
                 )
             }
         }
@@ -1002,6 +1051,10 @@ private fun maskIdNumber(raw: String): String {
 private fun ParentProfileContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
+    waliAccount: WaliAccount?,
+    schoolName: String,
+    onOpenWaliProfile: (() -> Unit)? = null,
+    onOpenWaliChat: (() -> Unit)? = null,
     onOpenChangePassword: (() -> Unit)? = null,
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
     onCancelDeletionRequest: (() -> Unit)? = null,
@@ -1260,9 +1313,172 @@ private fun ParentProfileContent(
                     )
                     ParentProfileRow(
                         if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
-                        student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }?.ifBlank { "-" }
-                            ?: link?.assignedWaliName?.ifBlank { "-" } ?: "-"
+                        waliAccount?.name?.ifBlank {
+                            student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
+                                ?: link?.assignedWaliName.orEmpty()
+                        }?.ifBlank { "-" } ?: "-"
                     )
+                }
+            }
+        }
+
+        // Kartu Legalitas Resmi Wali Asuh Pembina
+        item {
+            val waliDisplayName = waliAccount?.name?.takeIf { it.isNotBlank() }
+                ?: student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
+                ?: link?.assignedWaliName.orEmpty()
+            val waliDorm = waliAccount?.dormitory?.takeIf { it.isNotBlank() }
+                ?: student?.dormitory ?: link?.studentDorm.orEmpty()
+            val waliAvatarGender = if (waliDorm.contains("putri", ignoreCase = true)) "P" else "L"
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .let { mod -> if (onOpenWaliProfile != null) mod.clickable(onClick = onOpenWaliProfile) else mod }
+                    .testTag("card_parent_wali_legitimacy"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Verified,
+                                contentDescription = null,
+                                tint = Color(0xFF047857),
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Text(
+                                text = if (isEn) "Verified Foster Caregiver" else "Profil Resmi Wali Asuh",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF047857)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color(0xFFECFDF5)
+                        ) {
+                            Text(
+                                text = if (isEn) "Verified" else "Terverifikasi",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF047857),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        StudentAvatar(
+                            name = waliDisplayName.ifBlank { "Wali" },
+                            gender = waliAvatarGender,
+                            size = 56.dp,
+                            photoUrl = waliAccount?.photoUrl.orEmpty(),
+                            photoFallbackUrl = waliAccount?.photoFallbackUrl.orEmpty()
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = waliDisplayName.ifBlank { if (isEn) "Not assigned yet" else "Belum ditentukan" },
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = buildString {
+                                    append(waliAccount?.effectiveTitle(isEn) ?: if (isEn) "Foster Caregiver" else "Wali Asuh Pembina")
+                                    if (waliDorm.isNotBlank()) append(" • $waliDorm")
+                                },
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            val codePhone = listOfNotNull(
+                                waliAccount?.employeeCode?.takeIf { it.isNotBlank() }?.let { "ID: $it" },
+                                waliAccount?.phone?.takeIf { it.isNotBlank() }?.let { "WA: $it" }
+                            )
+                            if (codePhone.isNotEmpty()) {
+                                Text(
+                                    text = codePhone.joinToString(" • "),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF047857)
+                                )
+                            }
+                        }
+                    }
+
+                    if (!waliAccount?.bio.isNullOrBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color(0xFFF0FDF4),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "\"${waliAccount?.bio}\"",
+                                fontSize = 11.5.sp,
+                                color = Color(0xFF065F46),
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (onOpenWaliProfile != null) {
+                            OutlinedButton(
+                                onClick = onOpenWaliProfile,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFF047857)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_parent_open_wali_legitimacy")
+                            ) {
+                                Text(
+                                    text = if (isEn) "Official Card" else "Kartu Resmi",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF047857)
+                                )
+                            }
+                        }
+                        if (onOpenWaliChat != null) {
+                            Button(
+                                onClick = onOpenWaliChat,
+                                shape = RoundedCornerShape(10.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3730A3)),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_parent_profile_chat_wali")
+                            ) {
+                                Text(
+                                    text = if (isEn) "Message" else "Hubungi",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1829,7 +2045,9 @@ private fun ParentHaidContent(records: List<HaidRecord>) {
 private fun ParentChatContent(
     student: ChildStudent?,
     link: ParentAccessLink?,
+    waliAccount: WaliAccount?,
     messages: List<ParentMessage>,
+    onOpenWaliProfile: (() -> Unit)? = null,
     onSend: (String) -> Unit,
     onDeleteMessage: (ParentMessage) -> Unit
 ) {
@@ -1841,23 +2059,72 @@ private fun ParentChatContent(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        val waliDisplay = student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
+        val waliDisplay = waliAccount?.name?.takeIf { it.isNotBlank() }
+            ?: student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
             ?: link?.assignedWaliName.orEmpty()
+        val waliAvatarGender = if (
+            (waliAccount?.dormitory ?: student?.dormitory ?: link?.studentDorm.orEmpty()).contains("putri", ignoreCase = true)
+        ) "P" else "L"
         Surface(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .let { mod ->
+                    if (onOpenWaliProfile != null) mod.clickable(onClick = onOpenWaliProfile) else mod
+                }
+                .testTag("header_parent_chat_wali")
         ) {
-            Text(
-                text = if (isEn) {
-                    "Chat with ${waliDisplay.ifBlank { "Foster Caregiver" }}"
-                } else {
-                    "Percakapan dengan ${waliDisplay.ifBlank { "Wali Asuh" }}"
-                },
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                StudentAvatar(
+                    name = waliDisplay.ifBlank { "Wali" },
+                    gender = waliAvatarGender,
+                    size = 34.dp,
+                    photoUrl = waliAccount?.photoUrl.orEmpty(),
+                    photoFallbackUrl = waliAccount?.photoFallbackUrl.orEmpty()
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = waliDisplay.ifBlank { if (isEn) "Foster Caregiver" else "Wali Asuh" },
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (waliAccount != null) {
+                            Icon(
+                                imageVector = Icons.Default.Verified,
+                                contentDescription = if (isEn) "Verified" else "Terverifikasi",
+                                tint = Color(0xFF047857),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = buildString {
+                            append(waliAccount?.effectiveTitle(isEn) ?: if (isEn) "Foster Caregiver" else "Wali Asuh Pembina")
+                            if (onOpenWaliProfile != null) {
+                                append(" • ")
+                                append(if (isEn) "Tap for official profile" else "Ketuk lihat profil resmi")
+                            }
+                        },
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
         }
 
         ParentChatMessagesList(

@@ -398,7 +398,13 @@ data class PbWaliAccountDto(
     @Json(name = "dormitory") val dormitory: String? = null,
     @Json(name = "phone") val phone: String? = null,
     @Json(name = "role") val role: String? = null,
-    @Json(name = "created_at") val createdAt: Long? = null
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "photo_url") val photoUrl: String? = null,
+    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null,
+    @Json(name = "title_position") val titlePosition: String? = null,
+    @Json(name = "employee_code") val employeeCode: String? = null,
+    @Json(name = "bio") val bio: String? = null,
+    @Json(name = "profile_updated_at") val profileUpdatedAt: Long? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): WaliAccount {
         val resolvedRole = role?.trim()?.uppercase()?.ifBlank { WaliAccount.ROLE_WALI }
@@ -412,7 +418,13 @@ data class PbWaliAccountDto(
             phone = phone ?: "",
             createdAt = createdAt?.takeIf { it > 0L } ?: System.currentTimeMillis(),
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
-            role = resolvedRole
+            role = resolvedRole,
+            photoUrl = photoUrl?.trim().orEmpty(),
+            photoFallbackUrl = photoFallbackUrl?.trim().orEmpty(),
+            titlePosition = titlePosition?.trim().orEmpty(),
+            employeeCode = employeeCode?.trim().orEmpty(),
+            bio = bio?.trim().orEmpty(),
+            profileUpdatedAt = profileUpdatedAt ?: 0L
         )
     }
 
@@ -431,7 +443,13 @@ data class PbWaliAccountDto(
                 dormitory = model.dormitory,
                 phone = model.phone,
                 role = model.role.trim().uppercase().ifBlank { WaliAccount.ROLE_WALI },
-                createdAt = model.createdAt
+                createdAt = model.createdAt,
+                photoUrl = model.photoUrl.trim(),
+                photoFallbackUrl = model.photoFallbackUrl.trim(),
+                titlePosition = model.titlePosition.trim(),
+                employeeCode = model.employeeCode.trim(),
+                bio = model.bio.trim(),
+                profileUpdatedAt = model.profileUpdatedAt
             )
         }
     }

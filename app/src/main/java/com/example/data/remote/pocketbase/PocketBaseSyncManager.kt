@@ -3397,4 +3397,185 @@ object PocketBaseSyncManager {
             Result.failure(e)
         }
     }
+
+    fun saveWaliPhotoLocally(context: Context, accountId: Long, webpBytes: ByteArray): String? {
+        return runCatching {
+            val dir = java.io.File(context.filesDir, "wali_photos")
+            if (!dir.exists()) dir.mkdirs()
+            dir.listFiles()?.forEach { f ->
+                if (f.name.startsWith("wali_${accountId}_")) {
+                    f.delete()
+                }
+            }
+            val dest = java.io.File(dir, "wali_${accountId}_${System.currentTimeMillis()}.webp")
+            dest.writeBytes(webpBytes)
+            Uri.fromFile(dest).toString()
+        }.getOrNull()
+    }
+
+    fun clearLocalWaliPhotos(context: Context, accountId: Long) {
+        runCatching {
+            val dir = java.io.File(context.filesDir, "wali_photos")
+            if (dir.exists()) {
+                dir.listFiles()?.forEach { f ->
+                    if (f.name.startsWith("wali_${accountId}_")) {
+                        f.delete()
+                    }
+                }
+            }
+        }
+    }
+
+    suspend fun uploadWaliProfilePhotoToCloud(
+        context: Context,
+        account: WaliAccount,
+        imageUri: Uri
+    ): Result<UploadedStudentPhoto> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+
+        val compressed = compressStudentPhotoBytes(context, imageUri)
+            ?: return@withContext Result.failure(
+                Exception(if (isEn) "Unable to read selected image." else "Gagal membaca foto yang dipilih.")
+            )
+
+        val now = System.currentTimeMillis()
+        val safeId = if (account.id > 0L) account.id else PocketBaseIdCodec.stablePositiveHash(
+            "${account.schoolId}:${account.username}"
+        )
+        val pbId = PocketBaseIdCodec.toPbId(safeId)
+        val filename = "wali_${safeId}_${now}.webp"
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(90, TimeUnit.SECONDS)
+            .writeTimeout(90, TimeUnit.SECONDS)
+            .build()
+
+        val patchBody = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart(
+                "photo_file",
+                filename,
+                compressed.toRequestBody("image/webp".toMediaType())
+            )
+            .build()
+
+        val patchRequest = Request.Builder()
+            .url("$baseUrl/api/collections/wali_accounts/records/$pbId")
+            .patch(patchBody)
+            .build()
+
+        return@withContext try {
+            var responseRaw = ""
+            var responseCode = 0
+            var wasSuccess = false
+
+            client.newCall(patchRequest).execute().use { resp ->
+                responseCode = resp.code
+                responseRaw = resp.body?.string().orEmpty()
+                wasSuccess = resp.isSuccessful
+            }
+
+            if (responseCode == 404) {
+                val activeSchool = account.schoolId.ifBlank { "SRT1-KDR" }
+                val createBody = MultipartBody.Builder()
+                    .setType(MultipartBody.FORM)
+                    .addFormDataPart("id", pbId)
+                    .addFormDataPart("local_id", safeId.toString())
+                    .addFormDataPart("school_id", activeSchool)
+                    .addFormDataPart("name", account.name)
+                    .addFormDataPart("username", account.username)
+                    .addFormDataPart("password", account.password)
+                    .addFormDataPart("dormitory", account.dormitory)
+                    .addFormDataPart("phone", account.phone)
+                    .addFormDataPart("role", account.role.ifBlank { WaliAccount.ROLE_WALI })
+                    .addFormDataPart("created_at", account.createdAt.toString())
+                    .addFormDataPart("title_position", account.titlePosition)
+                    .addFormDataPart("employee_code", account.employeeCode)
+                    .addFormDataPart("bio", account.bio)
+                    .addFormDataPart("profile_updated_at", now.toString())
+                    .addFormDataPart(
+                        "photo_file",
+                        filename,
+                        compressed.toRequestBody("image/webp".toMediaType())
+                    )
+                    .build()
+                val postRequest = Request.Builder()
+                    .url("$baseUrl/api/collections/wali_accounts/records")
+                    .post(createBody)
+                    .build()
+                client.newCall(postRequest).execute().use { postResp ->
+                    responseCode = postResp.code
+                    responseRaw = postResp.body?.string().orEmpty()
+                    wasSuccess = postResp.isSuccessful
+                }
+            }
+
+            if (!wasSuccess) {
+                Log.e(TAG, "Wali photo upload HTTP $responseCode: $responseRaw")
+                val errMsg = parsePocketBaseUploadError(responseRaw, responseCode, isEn)
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) "Failed to upload caregiver photo: $errMsg"
+                        else "Gagal mengunggah foto profil Wali Asuh: $errMsg"
+                    )
+                )
+            }
+
+            val json = JSONObject(responseRaw)
+            val recordId = json.optString("id", "").trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "wali_accounts").ifBlank { "wali_accounts" }
+            val uploadedFilename = when {
+                json.has("photo_file") && json.optJSONArray("photo_file") != null -> {
+                    json.optJSONArray("photo_file")?.optString(0, "").orEmpty()
+                }
+                else -> json.optString("photo_file", "")
+            }.trim()
+
+            if (uploadedFilename.isBlank()) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Server has not synced 'photo_file' column on wali_accounts yet. Run Sync Schema in Superadmin."
+                        } else {
+                            "Kolom 'photo_file' pada wali_accounts belum aktif di server. Jalankan Sync Skema di Superadmin terlebih dahulu."
+                        }
+                    )
+                )
+            }
+
+            val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+            val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+
+            val updatedAccount = account.copy(
+                id = safeId,
+                photoUrl = cdnUrl,
+                photoFallbackUrl = fallbackUrl,
+                profileUpdatedAt = now
+            )
+            uploadWaliAccounts(context, listOf(updatedAccount))
+            clearLocalWaliPhotos(context, safeId)
+
+            Result.success(
+                UploadedStudentPhoto(
+                    cdnUrl = cdnUrl,
+                    fallbackUrl = fallbackUrl
+                )
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadWaliProfilePhotoToCloud", e)
+            Result.failure(e)
+        }
+    }
 }

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExitToApp
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
@@ -44,12 +45,15 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.OndemandVideo
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.SupportAgent
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
+import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.FaskesReferralSheet
@@ -57,6 +61,7 @@ import com.example.ui.dialogs.MonthlyReportDialog
 import com.example.ui.dialogs.ProfileLegalBottomSheet
 import com.example.ui.dialogs.ProfileLegalSheetType
 import com.example.ui.dialogs.RewardAdDeclarationDialog
+import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.util.TopOnAdManager
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -120,6 +125,7 @@ fun ProfileScreen(
     val isSwitchingSchool by viewModel.isSwitchingSchool.collectAsStateWithLifecycle()
     val currentWaliAccount by viewModel.currentWaliAccount.collectAsStateWithLifecycle()
     var showEditAccountDialog by remember { mutableStateOf(false) }
+    var showWaliPhotoPreview by remember { mutableStateOf(false) }
 
     LaunchedEffect(isAnakSuperAdmin) {
         if (isAnakSuperAdmin) {
@@ -170,6 +176,146 @@ fun ProfileScreen(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+
+            if (!isAnakSuperAdmin) {
+                item {
+                    val acc = currentWaliAccount
+                    val displayName = acc?.name?.ifBlank { waliName } ?: waliName
+                    val displayTitle = acc?.effectiveTitle(isEn) ?: if (isEn) "Foster Caregiver" else "Wali Asuh Pembina"
+                    val photoUrl = acc?.photoUrl.orEmpty()
+                    val photoFallbackUrl = acc?.photoFallbackUrl.orEmpty()
+                    val hasPhoto = photoUrl.isNotBlank() || photoFallbackUrl.isNotBlank()
+                    val avatarGender = if (acc?.dormitory?.contains("putri", ignoreCase = true) == true) "P" else "L"
+
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_wali_profile_summary"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(CircleShape)
+                                        .let { mod ->
+                                            if (hasPhoto) mod.clickable { showWaliPhotoPreview = true } else mod
+                                        },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    StudentAvatar(
+                                        name = displayName,
+                                        gender = avatarGender,
+                                        size = 64.dp,
+                                        photoUrl = photoUrl,
+                                        photoFallbackUrl = photoFallbackUrl
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = displayName,
+                                            fontSize = 15.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
+                                        )
+                                        Icon(
+                                            imageVector = Icons.Default.Verified,
+                                            contentDescription = if (isEn) "Verified Caregiver" else "Pembina Terverifikasi",
+                                            tint = Color(0xFF047857),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = buildString {
+                                            append(displayTitle)
+                                            if (!acc?.dormitory.isNullOrBlank()) {
+                                                append(" • ${acc?.dormitory}")
+                                            }
+                                        },
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    val metaParts = listOfNotNull(
+                                        acc?.employeeCode?.takeIf { it.isNotBlank() }?.let { "ID: $it" },
+                                        acc?.phone?.takeIf { it.isNotBlank() }?.let { "WA: $it" }
+                                    )
+                                    if (metaParts.isNotEmpty()) {
+                                        Text(
+                                            text = metaParts.joinToString(" • "),
+                                            fontSize = 11.sp,
+                                            color = WaliPrimary,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (!acc?.bio.isNullOrBlank()) {
+                                Text(
+                                    text = "\"${acc?.bio}\"",
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    showEditAccountDialog = true
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, WaliPrimary.copy(alpha = 0.6f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("btn_open_edit_wali_profile")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = null,
+                                    tint = WaliPrimary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (isEn) "Edit Profile, Photo & Password" else "Edit Profil, Foto & Kata Sandi",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = WaliPrimary
+                                )
+                            }
+                        }
+                    }
                 }
             }
 
@@ -238,13 +384,13 @@ fun ProfileScreen(
 
             item {
                 MenuSettingCard(
-                    title = if (isEn) "Account & Password" else "Akun & Kata Sandi",
+                    title = if (isEn) "Profile, Photo & Password" else "Profil, Foto & Kata Sandi",
                     subtitle = if (isAnakSuperAdmin) {
                         if (isEn) "System special account (anaksuperadmin)" else "Akun khusus sistem (anaksuperadmin)"
                     } else if (isEn) {
-                        "Account profile & change login password"
+                        "Upload photo, bio, contact & change login password"
                     } else {
-                        "Profil akun & ganti kata sandi login"
+                        "Foto profil, biodata pembina, kontak & ganti sandi login"
                     },
                     icon = Icons.Default.AccountCircle,
                     iconBg = Color(0xFFE2E8F0),
@@ -653,6 +799,18 @@ fun ProfileScreen(
             currentWaliName = waliName,
             schoolName = schoolProfile.schoolName,
             onDismiss = { showEditAccountDialog = false }
+        )
+    }
+
+    if (showWaliPhotoPreview && currentWaliAccount?.hasProfilePhoto() == true) {
+        val acc = currentWaliAccount!!
+        StudentPhotoPreviewDialog(
+            studentName = acc.name.ifBlank { waliName },
+            gender = if (acc.dormitory.contains("putri", ignoreCase = true)) "P" else "L",
+            subtitle = "${acc.effectiveTitle(isEn)} • ${schoolProfile.schoolName}",
+            photoUrl = acc.photoUrl,
+            photoFallbackUrl = acc.photoFallbackUrl,
+            onDismiss = { showWaliPhotoPreview = false }
         )
     }
 

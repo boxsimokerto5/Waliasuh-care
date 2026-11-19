@@ -315,11 +315,21 @@ fun GuruNgajiScreen(
                                     .size(48.dp)
                                     .testTag("btn_guru_ngaji_profile")
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Lock,
-                                    contentDescription = if (isEn) "Change Password" else "Ganti Kata Sandi",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                if (currentAccount?.hasProfilePhoto() == true) {
+                                    StudentAvatar(
+                                        name = currentAccount.name.ifBlank { waliName },
+                                        gender = "L",
+                                        size = 32.dp,
+                                        photoUrl = currentAccount.photoUrl,
+                                        photoFallbackUrl = currentAccount.photoFallbackUrl
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = if (isEn) "Profile, Photo & Password" else "Profil, Foto & Kata Sandi",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                             IconButton(
                                 onClick = { showLogoutDialog = true },

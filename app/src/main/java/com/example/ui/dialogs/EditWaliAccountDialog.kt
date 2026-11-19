@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Lock
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WorkOutline
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -77,6 +79,8 @@ fun EditWaliAccountDialog(
     var selectedDormitory by remember { mutableStateOf(account.dormitory) }
     var selectedRole by remember { mutableStateOf(account.role.ifBlank { WaliAccount.ROLE_WALI }) }
     var phone by remember { mutableStateOf(account.phone) }
+    var titlePosition by remember { mutableStateOf(account.titlePosition) }
+    var employeeCode by remember { mutableStateOf(account.employeeCode) }
     var password by remember { mutableStateOf(account.password) }
     var passwordVisible by remember { mutableStateOf(true) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
@@ -302,6 +306,41 @@ fun EditWaliAccountDialog(
                     shape = RoundedCornerShape(10.dp)
                 )
 
+                // Jabatan & NIP/ID Pembina (Opsional)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = titlePosition,
+                        onValueChange = { titlePosition = it },
+                        label = { Text(if (isEn) "Title / Role" else "Jabatan") },
+                        placeholder = { Text(if (isEn) "Caregiver" else "Pembina") },
+                        leadingIcon = {
+                            Icon(Icons.Default.WorkOutline, contentDescription = null, tint = WaliPrimary)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("edit_wali_title"),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                    OutlinedTextField(
+                        value = employeeCode,
+                        onValueChange = { employeeCode = it },
+                        label = { Text("NIP / ID") },
+                        placeholder = { Text("Opsional") },
+                        leadingIcon = {
+                            Icon(Icons.Default.Badge, contentDescription = null, tint = WaliPrimary)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("edit_wali_employee_code"),
+                        singleLine = true,
+                        shape = RoundedCornerShape(10.dp)
+                    )
+                }
+
                 // Password
                 Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Row(
@@ -387,7 +426,10 @@ fun EditWaliAccountDialog(
                                         dormitory = selectedDormitory,
                                         phone = phone.trim(),
                                         password = password.trim(),
-                                        role = selectedRole
+                                        role = selectedRole,
+                                        titlePosition = titlePosition.trim(),
+                                        employeeCode = employeeCode.trim(),
+                                        profileUpdatedAt = System.currentTimeMillis()
                                     )
                                 )
                             }

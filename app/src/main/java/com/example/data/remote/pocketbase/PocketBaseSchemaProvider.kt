@@ -138,7 +138,7 @@ object PocketBaseSchemaProvider {
         ),
         PocketBaseCollectionMeta(
             collectionName = "wali_accounts",
-            description = "Akun login Wali Asuh & Guru Ngaji serta sinkronisasi kata sandi",
+            description = "Akun login & profil resmi Wali Asuh / Guru Ngaji (termasuk foto & legalitas akun)",
             multiTenantField = "school_id",
             fields = listOf(
                 PbFieldDef("local_id", "number"),
@@ -149,7 +149,19 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("dormitory", "text"),
                 PbFieldDef("phone", "text"),
                 PbFieldDef("role", "text"),
-                PbFieldDef("created_at", "number")
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("photo_url", "text"),
+                PbFieldDef("photo_fallback_url", "text"),
+                PbFieldDef("title_position", "text"),
+                PbFieldDef("employee_code", "text"),
+                PbFieldDef("bio", "text"),
+                PbFieldDef("profile_updated_at", "number"),
+                PbFieldDef(
+                    name = "photo_file",
+                    type = "file",
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
+                )
             ),
             indexes = listOf("CREATE INDEX idx_wa_school ON wali_accounts (school_id)")
         ),

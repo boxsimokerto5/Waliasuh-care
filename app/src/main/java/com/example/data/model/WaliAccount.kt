@@ -14,11 +14,22 @@ data class WaliAccount(
     val phone: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val schoolId: String = "SRT1-KDR",
-    val role: String = ROLE_WALI
+    val role: String = ROLE_WALI,
+    val photoUrl: String = "",
+    val photoFallbackUrl: String = "",
+    val titlePosition: String = "",
+    val employeeCode: String = "",
+    val bio: String = "",
+    val profileUpdatedAt: Long = 0L
 ) {
     fun isGuruNgaji(): Boolean = role.trim().equals(ROLE_GURU_NGAJI, ignoreCase = true)
 
     fun isAnakAdminSekolah(): Boolean = role.trim().equals(ROLE_WALI_ANAK_ADMIN, ignoreCase = true)
+
+    fun hasProfilePhoto(): Boolean = photoUrl.isNotBlank() || photoFallbackUrl.isNotBlank()
+
+    fun effectiveTitle(isEnglish: Boolean = false): String =
+        titlePosition.trim().ifBlank { roleLabel(isEnglish) }
 
     fun roleLabel(isEnglish: Boolean = false): String = when {
         isGuruNgaji() -> if (isEnglish) "Mengaji Teacher" else "Guru Ngaji"

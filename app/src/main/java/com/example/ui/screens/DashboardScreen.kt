@@ -213,6 +213,7 @@ fun DashboardScreen(
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
+    val currentWaliAccount by viewModel.currentWaliAccount.collectAsStateWithLifecycle()
     val activeHaidRecords by viewModel.activeHaidRecords.collectAsStateWithLifecycle()
     val suciRecords by viewModel.suciRecords.collectAsStateWithLifecycle()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
@@ -667,12 +668,23 @@ fun DashboardScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Person,
-                                            contentDescription = null,
-                                            tint = heroSubtitleColor,
-                                            modifier = Modifier.size(11.dp)
-                                        )
+                                        if (currentWaliAccount?.hasProfilePhoto() == true) {
+                                            val acc = currentWaliAccount!!
+                                            StudentAvatar(
+                                                name = acc.name.ifBlank { waliName },
+                                                gender = if (acc.dormitory.contains("putri", ignoreCase = true)) "P" else "L",
+                                                size = 18.dp,
+                                                photoUrl = acc.photoUrl,
+                                                photoFallbackUrl = acc.photoFallbackUrl
+                                            )
+                                        } else {
+                                            Icon(
+                                                imageVector = Icons.Default.Person,
+                                                contentDescription = null,
+                                                tint = heroSubtitleColor,
+                                                modifier = Modifier.size(11.dp)
+                                            )
+                                        }
                                         Text(
                                             text = "Wali: $waliName",
                                             fontSize = 11.sp,
