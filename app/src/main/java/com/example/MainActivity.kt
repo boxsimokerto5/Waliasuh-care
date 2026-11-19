@@ -264,6 +264,7 @@ private fun WaliAsuhCareAppContent(
     val konselingLogs by viewModel.konselingLogs.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
+    val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
@@ -328,6 +329,16 @@ private fun WaliAsuhCareAppContent(
             dashboardModalState.showImportJadwalMatriksDialog
         ) {
             viewModel.ensureSchoolShiftCodesSeeded(schoolProfile.tenantCode)
+        }
+    }
+    LaunchedEffect(
+        dashboardModalState.activeCategoryHub,
+        dashboardModalState.showAbsenSholatSheet
+    ) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.SHOLAT ||
+            dashboardModalState.showAbsenSholatSheet
+        ) {
+            viewModel.syncSholatOnlineQuietly()
         }
     }
     val myFosterStudents = remember(students, waliName, currentUsername) {
@@ -1022,6 +1033,15 @@ private fun WaliAsuhCareAppContent(
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
+                },
+                sholatRecords = sholatRecords,
+                onOpenAbsenSholatSheet = { tabIdx, autoScan, scopeFilter, targetStudent ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.absenSholatInitialTab = tabIdx
+                    dashboardModalState.absenSholatAutoOpenScanner = autoScan
+                    dashboardModalState.absenSholatInitialScope = scopeFilter
+                    dashboardModalState.absenSholatInitialStudent = targetStudent
+                    dashboardModalState.showAbsenSholatSheet = true
                 }
             )
         }

@@ -607,4 +607,104 @@ class SholatFeatureRobolectricTest {
         db.childStudentDao().delete(student)
         Unit
     }
+
+    @Test
+    fun `CategoryHubOverlay SHOLAT renders Tabungan-styled hub and routes actions`() {
+        val student = ChildStudent(
+            id = 505L,
+            name = "Bilal Al-Ghifari",
+            nis = "50501",
+            gender = "L",
+            age = 14,
+            dormitory = "Asrama Putra",
+            classGrade = "VIII-B",
+            schoolId = "SRT1-KDR"
+        )
+        val todayKey = SholatHelper.todayDateKey()
+        val activeWaktu = SholatHelper.detectActiveWaktu()
+        val rec = SholatRecord(
+            id = SholatHelper.deterministicId("SRT1-KDR", 505L, todayKey, activeWaktu),
+            dateKey = todayKey,
+            dateMillis = SholatHelper.startOfDayMillis(todayKey),
+            waktu = activeWaktu.code,
+            status = SholatStatus.JAMAAH.code,
+            studentId = 505L,
+            studentName = student.name,
+            studentClass = student.classGrade,
+            studentDorm = student.dormitory,
+            schoolId = "SRT1-KDR"
+        )
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        var capturedTab = -1
+        var capturedScanner = false
+        var capturedScope = ""
+        var capturedStudent: ChildStudent? = null
+        var openedParentAccess = false
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.components.CategoryHubOverlay(
+                    category = com.example.ui.components.DashboardCategoryHub.SHOLAT,
+                    schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", shortName = "SRT 1 Kediri", tenantCode = "SRT1-KDR"),
+                    activePlans = emptyList(),
+                    inpatientCount = 0,
+                    fastingSessions = emptyList(),
+                    fastingRecords = emptyList(),
+                    activeHaidRecords = emptyList(),
+                    suciRecords = emptyList(),
+                    shiftMessages = emptyList(),
+                    students = listOf(student),
+                    claimedFosterStudents = listOf(student),
+                    sholatRecords = listOf(rec),
+                    onDismiss = {},
+                    onNavigateToPlan = {},
+                    onNavigateToRecords = {},
+                    onOpenCreatePlan = {},
+                    onOpenDirectTreatment = {},
+                    onOpenFaskesInfo = {},
+                    onOpenInputPuasa = {},
+                    onOpenDaftarPuasa = {},
+                    onOpenChecklistPuasa = {},
+                    onOpenRankingPuasa = {},
+                    onOpenInputHaid = {},
+                    onOpenDaftarHaid = {},
+                    onOpenDaftarSuci = {},
+                    onOpenFiqihHaid = {},
+                    onOpenShiftMessages = {},
+                    onOpenCreateShiftMessage = {},
+                    onOpenShiftHistory = {},
+                    onOpenPilihanAksesOrtu = { openedParentAccess = true },
+                    onOpenAbsenSholatSheet = { tabIdx, autoScan, scope, target ->
+                        capturedTab = tabIdx
+                        capturedScanner = autoScan
+                        capturedScope = scope
+                        capturedStudent = target
+                    }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("category_hub_overlay_sholat").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_sholat_hub_info").assertExists()
+        composeTestRule.onNodeWithTag("card_sholat_totals").assertExists()
+        composeTestRule.onNodeWithTag("tile_sholat_scan_qr").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(0, capturedTab)
+        assertTrue(capturedScanner)
+
+        composeTestRule.onNodeWithTag("tile_sholat_pantauan").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(1, capturedTab)
+        assertEquals(false, capturedScanner)
+
+        composeTestRule.onNodeWithTag("tile_sholat_akses_ortu").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(openedParentAccess)
+
+        composeTestRule.onNodeWithTag("card_sholat_student_505").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(505L, capturedStudent?.id)
+        assertEquals("MINE", capturedScope)
+    }
 }

@@ -97,6 +97,9 @@ fun SholatAttendanceSheet(
     currentWaliName: String,
     schoolProfile: SchoolProfile,
     initialStudent: ChildStudent? = null,
+    initialTab: Int = 0,
+    initialScope: String = "ALL",
+    autoOpenScanner: Boolean = false,
     onSaveRecord: (
         student: ChildStudent,
         dateKey: String,
@@ -123,15 +126,15 @@ fun SholatAttendanceSheet(
     val emeraldDark = Color(0xFF065F46)
     val emeraldSoft = Color(0xFFECFDF5)
 
-    var selectedTab by remember { mutableIntStateOf(0) }
+    var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 2)) }
     var selectedDateKey by remember { mutableStateOf(SholatHelper.todayDateKey()) }
     var selectedMonthKey by remember { mutableStateOf(SholatHelper.monthKeyFromDateKey(SholatHelper.todayDateKey())) }
     var selectedWaktu by remember { mutableStateOf(SholatHelper.detectActiveWaktu()) }
-    var scopeFilter by remember { mutableStateOf("ALL") } // ALL, MINE, PUTRA, PUTRI
+    var scopeFilter by remember(initialScope) { mutableStateOf(initialScope) } // ALL, MINE, PUTRA, PUTRI
     var searchQuery by remember(initialStudent) {
         mutableStateOf(initialStudent?.name.orEmpty())
     }
-    var showBarcodeScanner by remember { mutableStateOf(false) }
+    var showBarcodeScanner by remember(autoOpenScanner) { mutableStateOf(autoOpenScanner) }
     var scannerFeedback by remember { mutableStateOf<ScannerFloatingFeedback?>(null) }
     var editingNoteTarget by remember { mutableStateOf<Pair<ChildStudent, SholatRecord?>?>(null) }
 

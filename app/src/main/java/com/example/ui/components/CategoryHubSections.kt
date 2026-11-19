@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
@@ -106,6 +107,10 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.PinnedTaskItem
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -120,6 +125,7 @@ import com.example.ui.dialogs.openJadwalExternalUrl
 import com.example.ui.dialogs.parseJadwalShiftColor
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
+import com.example.util.StudentClassifier
 
 internal fun LazyListScope.berobatCategoryItems(
     isEn: Boolean,
@@ -3289,3 +3295,577 @@ private fun DailyRosterGroupCard(
         }
     }
 }
+
+internal fun LazyListScope.sholatCategoryItems(
+    isEn: Boolean,
+    allStudents: List<ChildStudent>,
+    claimedStudents: List<ChildStudent>,
+    sholatRecords: List<SholatRecord>,
+    haidRecords: List<HaidRecord>,
+    onOpenAbsenSholatSheet: (tabIndex: Int, autoScanner: Boolean, scopeFilter: String, targetStudent: ChildStudent?) -> Unit,
+    onOpenPilihAnakAsuh: () -> Unit,
+    onOpenPilihanAksesOrtu: () -> Unit
+) {
+    val todayKey = SholatHelper.todayDateKey()
+    val activeWaktu = SholatHelper.detectActiveWaktu()
+    val dailyMatrix = SholatHelper.buildDailyMatrix(sholatRecords, todayKey)
+
+    val displayedStudents = claimedStudents
+        .distinctBy { it.id }
+        .sortedBy { it.name.lowercase() }
+
+    val activeWaktuRecords = allStudents.mapNotNull { st -> dailyMatrix[st.id]?.get(activeWaktu) }
+    val activeJamaah = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
+    val activeMunfarid = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.MUNFARID }
+    val activeUdzurIzin = activeWaktuRecords.count {
+        val status = SholatStatus.fromCode(it.status)
+        status == SholatStatus.UDZUR_HAID || status == SholatStatus.SAKIT || status == SholatStatus.IZIN
+    }
+    val activeAlfa = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.ALFA }
+    val activeBelum = (allStudents.size - activeWaktuRecords.size).coerceAtLeast(0)
+    val activeLoggedTotal = activeWaktuRecords.size
+    val activeUdzurHaidCount = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID }
+    val activeWajibDenom = (activeLoggedTotal - activeUdzurHaidCount).coerceAtLeast(0)
+    val activePct = if (activeWajibDenom > 0) {
+        ((activeJamaah * 100f) / activeWajibDenom).toInt().coerceIn(0, 100)
+    } else {
+        0
+    }
+
+    // 1. Kartu Info Sinkronisasi Orang Tua & Auto-Haid (Senada dengan Kartu Info Tabungan)
+    item(key = "hub_sholat_info") {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_sholat_hub_info"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+            border = BorderStroke(1.dp, Color(0xFFA7F3D0))
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFFD1FAE5)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = if (isEn) "Sholat Tracking Sync" else "Sinkronisasi Sholat",
+                        tint = Color(0xFF047857),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF059669)
+                        ) {
+                            Text(
+                                text = if (isEn) "AUTO-HAID & PARENT SYNC" else "AUTO-HAID & TERHUBUNG ORTU",
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF0F766E)
+                        ) {
+                            Text(
+                                text = activeWaktu.label(isEn).uppercase(),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (isEn) {
+                            "5 daily prayer logs sync to the Parent Portal (when enabled in Parent Access). Female students currently on active Haid are automatically marked Udzur Haid."
+                        } else {
+                            "Absensi sholat 5 waktu otomatis tersinkron ke Portal Orang Tua (bila dicentang di Izin Akses Ortu). Siswi yang sedang masa haid otomatis ditandai Udzur Haid."
+                        },
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = Color(0xFF065F46)
+                    )
+                }
+            }
+        }
+    }
+
+    // 2. Ringkasan Capaian Sholat Hari Ini (Senada dengan Kartu Total Saldo Tabungan)
+    item(key = "hub_sholat_totals") {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("card_sholat_totals"),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = if (isEn) {
+                                "Congregation Rate — ${activeWaktu.labelEn}"
+                            } else {
+                                "Capaian Jamaah — ${activeWaktu.labelId}"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = if (activeLoggedTotal > 0) "$activePct% ($activeJamaah/$activeLoggedTotal)" else "0% (0/${allStudents.size})",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF047857)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFECFDF5),
+                        modifier = Modifier.clickable {
+                            onOpenAbsenSholatSheet(0, false, "ALL", null)
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AccessTime,
+                                contentDescription = null,
+                                tint = Color(0xFF047857),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "${activeLoggedTotal}/${allStudents.size} ${if (isEn) "Logged" else "Terabsen"}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF065F46)
+                            )
+                        }
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    HubStatTile(
+                        value = "$activeJamaah",
+                        label = if (isEn) "Jamaah" else "Jamaah",
+                        bg = Color(0xFFDCFCE7),
+                        fg = Color(0xFF15803D),
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubStatTile(
+                        value = "${activeUdzurIzin + activeMunfarid}",
+                        label = if (isEn) "Udzur / Excused" else "Udzur / Izin",
+                        bg = Color(0xFFFEF3C7),
+                        fg = Color(0xFFB45309),
+                        modifier = Modifier.weight(1f)
+                    )
+                    HubStatTile(
+                        value = if (activeAlfa > 0) "$activeAlfa / $activeBelum" else "$activeBelum",
+                        label = if (activeAlfa > 0) {
+                            if (isEn) "Alfa / Unmarked" else "Alfa / Belum"
+                        } else {
+                            if (isEn) "Unmarked" else "Belum Absen"
+                        },
+                        bg = if (activeAlfa > 0) Color(0xFFFEE2E2) else Color(0xFFF1F5F9),
+                        fg = if (activeAlfa > 0) Color(0xFFDC2626) else Color(0xFF475569),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                // Strip ringkasan 5 waktu hari ini
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    SholatWaktu.entries.forEach { waktu ->
+                        val wCount = allStudents.count { st -> dailyMatrix[st.id]?.get(waktu) != null }
+                        val isCurrent = waktu == activeWaktu
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (isCurrent) Color(0xFF059669) else Color(0xFFF8FAFC),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isCurrent) Color(0xFF047857) else Color(0xFFE2E8F0)
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onOpenAbsenSholatSheet(0, false, "ALL", null) }
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 5.dp, horizontal = 2.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = waktu.label(isEn),
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isCurrent) Color.White else Color(0xFF334155),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "$wCount/${allStudents.size}",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (isCurrent) Color(0xFFD1FAE5) else Color(0xFF64748B),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 3. Grid 2x3 Kartu Menu Kartun (Gaya Seragam dengan Tabungan Anak Asuh)
+    item(key = "hub_sholat_grid") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Quick Check" else "Absen Cepat",
+                    subtitle = if (isEn) "5 Prayers & Bulk Jamaah" else "Tandai Jamaah & 5 Waktu",
+                    imageRes = R.drawable.img_menu_sholat,
+                    badgeText = activeWaktu.label(isEn),
+                    badgeBg = Color(0xFFDCFCE7),
+                    badgeColor = Color(0xFF15803D),
+                    bgGradient = listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFA7F3D0),
+                    onClick = { onOpenAbsenSholatSheet(0, false, "ALL", null) },
+                    testTag = "tile_sholat_absen_cepat",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Scan Card QR" else "Scan Kartu QR",
+                    subtitle = if (isEn) "Instant Barcode Check-in" else "Scan Barcode di Mushola",
+                    imageRes = R.drawable.img_menu_input_puasa,
+                    badgeText = "Scan QR",
+                    badgeBg = Color(0xFFCCFBF1),
+                    badgeColor = Color(0xFF0F766E),
+                    bgGradient = listOf(Color(0xFFF0FDFA), Color(0xFFCCFBF1).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFF99F6E4),
+                    onClick = { onOpenAbsenSholatSheet(0, true, "ALL", null) },
+                    testTag = "tile_sholat_scan_qr",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "My Foster Kids" else "Anak Binaan Saya",
+                    subtitle = if (isEn) "Filter My Claimed Group" else "Absen Khusus Anak Binaan",
+                    imageRes = R.drawable.img_menu_anak_asuh,
+                    badgeText = "${displayedStudents.size} ${if (isEn) "Kids" else "Anak"}",
+                    badgeBg = Color(0xFFFEF3C7),
+                    badgeColor = Color(0xFFB45309),
+                    bgGradient = listOf(Color(0xFFFFFBEB), Color(0xFFFEF3C7).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFFDE68A),
+                    onClick = {
+                        if (displayedStudents.isNotEmpty()) {
+                            onOpenAbsenSholatSheet(0, false, "MINE", null)
+                        } else {
+                            onOpenPilihAnakAsuh()
+                        }
+                    },
+                    testTag = "tile_sholat_anak_binaan",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Monitor & Praise" else "Pantauan & Pujian",
+                    subtitle = if (isEn) "Front Row & Follow-up" else "Pejuang Subuh & Pembinaan",
+                    imageRes = R.drawable.img_menu_ranking_puasa,
+                    badgeText = if (isEn) "Analytics" else "Pantauan",
+                    badgeBg = Color(0xFFE0E7FF),
+                    badgeColor = Color(0xFF4338CA),
+                    bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFC7D2FE),
+                    onClick = { onOpenAbsenSholatSheet(1, false, "ALL", null) },
+                    testTag = "tile_sholat_pantauan",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CartoonMenuCard(
+                    title = if (isEn) "Recap & Print PDF" else "Rekap & Cetak PDF",
+                    subtitle = if (isEn) "Daily, Monthly & Card PDF" else "Laporan Harian & Bulanan",
+                    imageRes = R.drawable.img_menu_daftar_puasa,
+                    badgeText = "PDF",
+                    badgeBg = Color(0xFFE0F2FE),
+                    badgeColor = Color(0xFF0369A1),
+                    bgGradient = listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFBAE6FD),
+                    onClick = { onOpenAbsenSholatSheet(2, false, "ALL", null) },
+                    testTag = "tile_sholat_rekap_pdf",
+                    modifier = Modifier.weight(1f)
+                )
+                CartoonMenuCard(
+                    title = if (isEn) "Parent Access" else "Izin Akses Ortu",
+                    subtitle = if (isEn) "Toggle Prayer Visibility" else "Centang Akses Portal Ortu",
+                    imageRes = R.drawable.img_menu_orang_tua,
+                    badgeText = if (isEn) "Checkbox" else "Centang",
+                    badgeBg = Color(0xFFEDE9FE),
+                    badgeColor = Color(0xFF6D28D9),
+                    bgGradient = listOf(Color(0xFFF5F3FF), Color(0xFFEDE9FE).copy(alpha = 0.6f)),
+                    borderColor = Color(0xFFDDD6FE),
+                    onClick = onOpenPilihanAksesOrtu,
+                    testTag = "tile_sholat_akses_ortu",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+    }
+
+    // 4. Daftar Sholat Anak Binaan Saya (Ketuk untuk Absen / Detail)
+    item(key = "hub_sholat_students_hdr") {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (isEn) "My Foster Kids Today (Tap to Mark)" else "Sholat Anak Binaan Saya (Ketuk untuk Absen)",
+                fontSize = 12.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (displayedStudents.isNotEmpty()) {
+                Text(
+                    text = "${displayedStudents.size} ${if (isEn) "Kids" else "Anak"}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF047857)
+                )
+            }
+        }
+    }
+
+    if (displayedStudents.isEmpty()) {
+        item(key = "hub_sholat_empty_claimed") {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("empty_sholat_no_claimed"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.PersonAdd,
+                        contentDescription = null,
+                        tint = Color(0xFF047857),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Text(
+                        text = if (isEn) "No Claimed Foster Students Yet" else "Belum Ada Anak Asuh Binaan Dipilih",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Text(
+                        text = if (isEn) {
+                            "Claim your foster students in Parent Connect to show their daily 5-prayer checklist here, or open all school students."
+                        } else {
+                            "Klaim anak binaan Anda di Hubungan Ortu agar daftar sholat 5 waktunya langsung tampil di sini, atau buka semua siswa sekolah."
+                        },
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(
+                        onClick = onOpenPilihAnakAsuh,
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF047857)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_sholat_open_pilih_anak")
+                    ) {
+                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) "Select Foster Students Now" else "Pilih Anak Asuh (Hubungan Ortu)",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    if (allStudents.isNotEmpty()) {
+                        OutlinedButton(
+                            onClick = { onOpenAbsenSholatSheet(0, false, "ALL", null) },
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFF047857)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_sholat_open_all_students")
+                        ) {
+                            Text(
+                                text = if (isEn) "Open All Students (${allStudents.size})" else "Buka Absen Semua Siswa (${allStudents.size})",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF047857)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        items(displayedStudents, key = { "hub_sholat_st_${it.id}" }) { student ->
+            val dayMap = dailyMatrix[student.id].orEmpty()
+            val activeRecord = dayMap[activeWaktu]
+            val activeStatus = activeRecord?.let { SholatStatus.fromCode(it.status) }
+            val activeHaid = SholatHelper.findActiveHaidOnDate(student, haidRecords, todayKey)
+
+            val (pillBg, pillFg, pillText) = when {
+                activeStatus == SholatStatus.JAMAAH -> Triple(Color(0xFFDCFCE7), Color(0xFF15803D), if (isEn) "Jamaah" else "Jamaah")
+                activeStatus == SholatStatus.MUNFARID -> Triple(Color(0xFFE0F2FE), Color(0xFF0369A1), "Munfarid")
+                activeStatus == SholatStatus.UDZUR_HAID || activeHaid != null -> Triple(Color(0xFFFCE7F3), Color(0xFFBE185D), if (isEn) "Udzur Haid" else "Udzur Haid")
+                activeStatus == SholatStatus.SAKIT -> Triple(Color(0xFFFEF3C7), Color(0xFFB45309), if (isEn) "Sick" else "Sakit")
+                activeStatus == SholatStatus.IZIN -> Triple(Color(0xFFEDE9FE), Color(0xFF6D28D9), if (isEn) "Excused" else "Izin")
+                activeStatus == SholatStatus.ALFA -> Triple(Color(0xFFFEE2E2), Color(0xFFDC2626), "Alfa")
+                else -> Triple(Color(0xFFF1F5F9), Color(0xFF64748B), if (isEn) "Unmarked" else "Belum")
+            }
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onOpenAbsenSholatSheet(0, false, "MINE", student) }
+                    .testTag("card_sholat_student_${student.id}"),
+                shape = RoundedCornerShape(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(
+                    1.dp,
+                    if (activeStatus == SholatStatus.JAMAAH) Color(0xFF86EFAC)
+                    else if (activeStatus == SholatStatus.ALFA) Color(0xFFFCA5A5)
+                    else MaterialTheme.colorScheme.outlineVariant
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = student.name,
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "${student.classGrade.ifBlank { "-" }} • ${student.dormitory.ifBlank { "-" }}",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        // Mini status 5 waktu (S D A M I) hari ini
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            SholatWaktu.entries.forEach { waktu ->
+                                val wRec = dayMap[waktu]
+                                val wStatus = wRec?.let { SholatStatus.fromCode(it.status) }
+                                val (dotBg, dotFg) = when (wStatus) {
+                                    SholatStatus.JAMAAH -> Color(0xFFDCFCE7) to Color(0xFF15803D)
+                                    SholatStatus.MUNFARID -> Color(0xFFE0F2FE) to Color(0xFF0369A1)
+                                    SholatStatus.UDZUR_HAID -> Color(0xFFFCE7F3) to Color(0xFFBE185D)
+                                    SholatStatus.SAKIT -> Color(0xFFFEF3C7) to Color(0xFFB45309)
+                                    SholatStatus.IZIN -> Color(0xFFEDE9FE) to Color(0xFF6D28D9)
+                                    SholatStatus.ALFA -> Color(0xFFFEE2E2) to Color(0xFFDC2626)
+                                    null -> Color(0xFFF1F5F9) to Color(0xFF94A3B8)
+                                }
+                                Surface(
+                                    shape = RoundedCornerShape(4.dp),
+                                    color = dotBg,
+                                    border = if (waktu == activeWaktu) BorderStroke(1.dp, Color(0xFF047857)) else null
+                                ) {
+                                    Text(
+                                        text = if (wStatus != null) "${waktu.shortCode}:${wStatus.shortCode}" else waktu.shortCode,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = dotFg,
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.End) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = pillBg
+                        ) {
+                            Text(
+                                text = pillText,
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = pillFg,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+                        Text(
+                            text = activeWaktu.label(isEn),
+                            fontSize = 9.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+

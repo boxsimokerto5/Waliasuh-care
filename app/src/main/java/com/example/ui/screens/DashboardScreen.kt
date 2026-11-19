@@ -324,6 +324,16 @@ fun DashboardScreen(
             viewModel.ensureSchoolShiftCodesSeeded(schoolProfile.tenantCode)
         }
     }
+    LaunchedEffect(
+        modalState.activeCategoryHub,
+        modalState.showAbsenSholatSheet
+    ) {
+        if (modalState.activeCategoryHub == DashboardCategoryHub.SHOLAT ||
+            modalState.showAbsenSholatSheet
+        ) {
+            viewModel.syncSholatOnlineQuietly()
+        }
+    }
     val tabunganTotals = remember(tabunganTransactions) {
         TabunganHelper.computeAggregateTotals(tabunganTransactions)
     }
@@ -501,8 +511,7 @@ fun DashboardScreen(
                     DashboardBannerFeatureTarget.FEATURE_PROFILE_PAGE -> onNavigateToProfile()
                     DashboardBannerFeatureTarget.FEATURE_INFO_PENTING -> modalState.showInfoPentingSheet = true
                     DashboardBannerFeatureTarget.FEATURE_ABSEN_SHOLAT -> {
-                        modalState.absenSholatInitialStudent = null
-                        modalState.showAbsenSholatSheet = true
+                        modalState.activeCategoryHub = DashboardCategoryHub.SHOLAT
                     }
                     null -> modalState.showPuskesmasInfoSheet = true
                 }
@@ -1148,8 +1157,7 @@ fun DashboardScreen(
                             },
                             onOpenAbsenSholat = {
                                 TopOnAdManager.onUserActionClick(context)
-                                modalState.absenSholatInitialStudent = null
-                                modalState.showAbsenSholatSheet = true
+                                modalState.activeCategoryHub = DashboardCategoryHub.SHOLAT
                             },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
@@ -1650,6 +1658,15 @@ fun DashboardScreen(
                             Toast.LENGTH_SHORT
                         ).show()
                     }
+                },
+                sholatRecords = sholatRecords,
+                onOpenAbsenSholatSheet = { tabIdx, autoScan, scopeFilter, targetStudent ->
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.absenSholatInitialTab = tabIdx
+                    modalState.absenSholatAutoOpenScanner = autoScan
+                    modalState.absenSholatInitialScope = scopeFilter
+                    modalState.absenSholatInitialStudent = targetStudent
+                    modalState.showAbsenSholatSheet = true
                 }
             )
         }
@@ -3219,6 +3236,9 @@ fun DashboardScreen(
             currentWaliName = waliName,
             schoolProfile = schoolProfile,
             initialStudent = modalState.absenSholatInitialStudent,
+            initialTab = modalState.absenSholatInitialTab,
+            initialScope = modalState.absenSholatInitialScope,
+            autoOpenScanner = modalState.absenSholatAutoOpenScanner,
             onSaveRecord = { st, dateKey, waktu, status, disciplineTag, notes, inputMethod ->
                 viewModel.saveSholatRecord(
                     student = st,
@@ -3242,6 +3262,9 @@ fun DashboardScreen(
             onDismiss = {
                 modalState.showAbsenSholatSheet = false
                 modalState.absenSholatInitialStudent = null
+                modalState.absenSholatInitialTab = 0
+                modalState.absenSholatInitialScope = "ALL"
+                modalState.absenSholatAutoOpenScanner = false
             }
         )
     }

@@ -28,7 +28,8 @@ enum class DashboardCategoryHub {
     ORANG_TUA,
     TABUNGAN,
     KONSELING,
-    JADWAL_WALI
+    JADWAL_WALI,
+    SHOLAT
 }
 
 @Stable
@@ -118,6 +119,9 @@ class DashboardModalState {
     // Modul Absen Sholat 5 Waktu
     var showAbsenSholatSheet by mutableStateOf(false)
     var absenSholatInitialStudent by mutableStateOf<ChildStudent?>(null)
+    var absenSholatInitialTab by mutableIntStateOf(0)
+    var absenSholatInitialScope by mutableStateOf("ALL")
+    var absenSholatAutoOpenScanner by mutableStateOf(false)
 }
 
 @Composable

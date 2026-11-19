@@ -71,6 +71,10 @@ import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftMessage
+import com.example.data.model.SholatHelper
+import com.example.data.model.SholatRecord
+import com.example.data.model.SholatStatus
+import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -173,7 +177,9 @@ fun CategoryHubOverlay(
     onOpenUploadJadwalCsv: () -> Unit = onOpenImportJadwalMatriks,
     onEditScheduleCell: (WaliScheduleEntry, Int) -> Unit = { _, _ -> },
     onShareJadwalWhatsapp: () -> Unit = {},
-    onExportJadwalMatriksPdf: () -> Unit = {}
+    onExportJadwalMatriksPdf: () -> Unit = {},
+    sholatRecords: List<SholatRecord> = emptyList(),
+    onOpenAbsenSholatSheet: (tabIndex: Int, autoScanner: Boolean, scopeFilter: String, targetStudent: ChildStudent?) -> Unit = { _, _, _, _ -> }
 ) {
     var lastCategory by remember { mutableStateOf(category) }
     var jadwalSearchQuery by remember(category) { mutableStateOf("") }
@@ -211,6 +217,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.TABUNGAN -> listOf(Color(0xFFB45309), Color(0xFF047857))
             DashboardCategoryHub.KONSELING -> listOf(Color(0xFF4C1D95), Color(0xFF6D28D9))
             DashboardCategoryHub.JADWAL_WALI -> listOf(Color(0xFF0F766E), Color(0xFF0369A1))
+            DashboardCategoryHub.SHOLAT -> listOf(Color(0xFF065F46), Color(0xFF059669))
         }
 
         val heroTitle = when (current) {
@@ -224,6 +231,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.TABUNGAN -> if (isEn) "Private Student Savings" else "Tabungan Anak Asuh"
             DashboardCategoryHub.KONSELING -> if (isEn) "Confidential Counseling" else "Konseling Rahasia Anak"
             DashboardCategoryHub.JADWAL_WALI -> if (isEn) "Wali Asuh Duty Roster" else "Jadwal Kerja Wali Asuh"
+            DashboardCategoryHub.SHOLAT -> if (isEn) "5 Daily Prayers Attendance" else "Absen Sholat 5 Waktu"
         }
 
         val heroSubtitle = when (current) {
@@ -296,6 +304,19 @@ fun CategoryHubOverlay(
                     "${WaliScheduleHelper.formatDateChipLabel(jadwalMonthKey, jadwalSelectedDay, false)} • $monthEntriesCount Personel"
                 }
             }
+            DashboardCategoryHub.SHOLAT -> {
+                val todayKey = SholatHelper.todayDateKey()
+                val activeWaktu = SholatHelper.detectActiveWaktu()
+                val todayWaktuRecords = sholatRecords.filter {
+                    it.dateKey == todayKey && SholatWaktu.fromCode(it.waktu) == activeWaktu
+                }
+                val jamaahCount = todayWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
+                if (isEn) {
+                    "${activeWaktu.labelEn} • $jamaahCount/${students.size} Congregation Today"
+                } else {
+                    "${activeWaktu.labelId} • $jamaahCount/${students.size} Jamaah Hari Ini"
+                }
+            }
         }
 
         val heroImage = when (current) {
@@ -309,6 +330,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.TABUNGAN -> R.drawable.img_menu_tabungan
             DashboardCategoryHub.KONSELING -> R.drawable.img_menu_konseling
             DashboardCategoryHub.JADWAL_WALI -> R.drawable.img_menu_jadwal
+            DashboardCategoryHub.SHOLAT -> R.drawable.img_menu_sholat
         }
 
         val contextPillText = schoolProfile.shortName
@@ -403,7 +425,7 @@ fun CategoryHubOverlay(
 
                             // Tombol Aksi Cepat Lingkaran di Kanan Atas
                             val quickActionIcon = when (current) {
-                                DashboardCategoryHub.KUNJUNGAN, DashboardCategoryHub.PUASA, DashboardCategoryHub.HAID, DashboardCategoryHub.MENGAJI -> Icons.Default.QrCodeScanner
+                                DashboardCategoryHub.KUNJUNGAN, DashboardCategoryHub.PUASA, DashboardCategoryHub.HAID, DashboardCategoryHub.MENGAJI, DashboardCategoryHub.SHOLAT -> Icons.Default.QrCodeScanner
                                 else -> Icons.Default.Add
                             }
                             val quickActionDesc = when (current) {
@@ -421,6 +443,7 @@ fun CategoryHubOverlay(
                                 } else {
                                     if (isEn) "Monthly Matrix" else "Matriks Jadwal Bulanan"
                                 }
+                                DashboardCategoryHub.SHOLAT -> if (isEn) "Scan Prayer Card QR" else "Scan Kartu Sholat"
                             }
                             Surface(
                                 shape = CircleShape,
@@ -444,6 +467,7 @@ fun CategoryHubOverlay(
                                                 if (canManageSchedule) onOpenImportJadwalMatriks()
                                                 else onOpenJadwalMatriks()
                                             }
+                                            DashboardCategoryHub.SHOLAT -> onOpenAbsenSholatSheet(0, true, "ALL", null)
                                         }
                                     }
                                     .testTag("btn_quick_action_category_hub")
@@ -655,6 +679,16 @@ fun CategoryHubOverlay(
                                     onEditCell = onEditScheduleCell,
                                     onShareDailyWhatsapp = onShareJadwalWhatsapp,
                                     onExportMatriksPdf = onExportJadwalMatriksPdf
+                                )
+                                DashboardCategoryHub.SHOLAT -> sholatCategoryItems(
+                                    isEn = isEn,
+                                    allStudents = students,
+                                    claimedStudents = claimedFosterStudents,
+                                    sholatRecords = sholatRecords,
+                                    haidRecords = activeHaidRecords + suciRecords,
+                                    onOpenAbsenSholatSheet = onOpenAbsenSholatSheet,
+                                    onOpenPilihAnakAsuh = onOpenPilihAnakAsuh,
+                                    onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu
                                 )
                             }
                         }
