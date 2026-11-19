@@ -10026,5 +10026,125 @@ class ExampleRobolectricTest {
     db.waliAccountDao().delete(wali)
     Unit
   }
+
+  @Test
+  fun `verify Konseling PDF wraps long summary intervention followUp and title completely without truncation`() {
+    val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+    val student = com.example.data.model.ChildStudent(
+      id = 995001L,
+      name = "Livia Putri Prameswari",
+      nis = "SRT-KED00-5153",
+      gender = "P",
+      age = 13,
+      dormitory = "Asrama Putri",
+      classGrade = "VII-4",
+      assignedWaliUsername = "ewahyudi",
+      assignedWaliName = "Eko Wahyudi",
+      schoolId = "SRT1-KDR"
+    )
+    val longSummaryTail = "TAIL_SUMMARY_LENGKAP_TIDAK_TERPOTONG"
+    val longActionTail = "TAIL_PENDAMPINGAN_LENGKAP"
+    val longFollowUpTail = "TAIL_TINDAK_LANJUT_LENGKAP"
+    val longTitleTail = "TAIL_JUDUL_LENGKAP"
+
+    val longRec = com.example.data.model.KonselingRecord(
+      id = 995010L,
+      studentId = student.id,
+      studentName = student.name,
+      studentNis = student.nis,
+      studentClass = student.classGrade,
+      studentDorm = student.dormitory,
+      ownerWaliUsername = "ewahyudi",
+      ownerWaliName = "Eko Wahyudi",
+      entryType = com.example.data.model.KonselingHelper.ENTRY_SESI,
+      topic = com.example.data.model.KonselingHelper.TOPIC_ADAPTASI,
+      moodLevel = com.example.data.model.KonselingHelper.MOOD_SEDIH,
+      urgencyLevel = com.example.data.model.KonselingHelper.URGENCY_RINGAN,
+      title = "Belum betah di asrama karena faktor keluarga dan lingkungan baru $longTitleTail",
+      summary = "Kemarin sempat cerita-cerita dengan dia bahwa Ayah dan Ibunya bercerai kemudian ayahnya menikah lagi dengan pasangan barunya sehingga anak merasa terabaikan di rumah dan membutuhkan perhatian emosional intensif $longSummaryTail",
+      intervention = "Dilakukan sesi konseling individual penuh empati, penguatan adaptasi kamar asrama bersama kakak pembina, dan pembiasaan aktivitas kelompok positif harian $longActionTail",
+      followUpPlan = "Jadwalkan observasi rutin tiga hari ke depan, evaluasi kenyamanan tidur asrama, serta komunikasi berkala dengan wali kelas $longFollowUpTail",
+      status = com.example.data.model.KonselingHelper.STATUS_DIPANTAU,
+      schoolId = "SRT1-KDR"
+    )
+
+    val drawnStudentTexts = mutableListOf<String>()
+    val studentBmps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKonselingStudentPages(
+      context = ctx,
+      student = student,
+      records = listOf(longRec),
+      waliName = "Eko Wahyudi",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        studentBmps.add(bmp)
+        object : android.graphics.Canvas(bmp) {
+          override fun drawText(text: String, x: Float, y: Float, paint: android.graphics.Paint) {
+            drawnStudentTexts.add(text)
+            super.drawText(text, x, y, paint)
+          }
+        }
+      }
+    )
+
+    val joinedStudentText = drawnStudentTexts.joinToString(" ")
+    org.junit.Assert.assertTrue(
+      "Summary tail must appear in full in per-student PDF: $joinedStudentText",
+      joinedStudentText.contains(longSummaryTail)
+    )
+    org.junit.Assert.assertTrue(
+      "Intervention tail must appear in full in per-student PDF",
+      joinedStudentText.contains(longActionTail)
+    )
+    org.junit.Assert.assertTrue(
+      "Follow-up tail must appear in full in per-student PDF",
+      joinedStudentText.contains(longFollowUpTail)
+    )
+    org.junit.Assert.assertTrue(
+      "Title tail must appear in full in per-student PDF",
+      joinedStudentText.contains(longTitleTail)
+    )
+    org.junit.Assert.assertFalse(
+      "No line in counseling student PDF should end with truncation ellipsis",
+      drawnStudentTexts.any { it.endsWith("...") || it.endsWith("\u2026") }
+    )
+    studentBmps.forEach { it.recycle() }
+
+    val drawnSummaryTexts = mutableListOf<String>()
+    val summaryBmps = mutableListOf<android.graphics.Bitmap>()
+    com.example.util.PdfReportGenerator.renderKonselingSummaryPages(
+      context = ctx,
+      students = listOf(student),
+      records = listOf(longRec),
+      waliName = "Eko Wahyudi",
+      schoolProfile = com.example.data.model.SchoolProfile(),
+      startNewCanvas = {
+        val bmp = android.graphics.Bitmap.createBitmap(595, 842, android.graphics.Bitmap.Config.ARGB_8888)
+        summaryBmps.add(bmp)
+        object : android.graphics.Canvas(bmp) {
+          override fun drawText(text: String, x: Float, y: Float, paint: android.graphics.Paint) {
+            drawnSummaryTexts.add(text)
+            super.drawText(text, x, y, paint)
+          }
+        }
+      }
+    )
+
+    val joinedSummaryText = drawnSummaryTexts.joinToString(" ")
+    org.junit.Assert.assertTrue(
+      "Summary tail must appear in full in counseling recap PDF",
+      joinedSummaryText.contains(longSummaryTail)
+    )
+    org.junit.Assert.assertTrue(
+      "Follow-up tail must appear in full in counseling recap PDF",
+      joinedSummaryText.contains(longFollowUpTail)
+    )
+    org.junit.Assert.assertFalse(
+      "No line in counseling recap PDF should end with truncation ellipsis",
+      drawnSummaryTexts.any { it.endsWith("...") || it.endsWith("\u2026") }
+    )
+    summaryBmps.forEach { it.recycle() }
+  }
 }
 

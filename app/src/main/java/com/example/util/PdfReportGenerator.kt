@@ -3526,28 +3526,75 @@ object PdfReportGenerator {
 
         val boxLeft = 35f
         val boxRight = pageWidth - 35f
+        val innerWidth = boxRight - boxLeft - 18f
+
+        fun wrapPdfLines(
+            text: String,
+            textPaint: Paint,
+            firstLineWidth: Float,
+            otherLinesWidth: Float = firstLineWidth
+        ): List<String> {
+            val normalized = text.replace("\r\n", "\n").trim()
+            if (normalized.isEmpty()) return listOf("-")
+            val result = mutableListOf<String>()
+            var isFirstOutputLine = true
+            val paragraphs = normalized.split("\n")
+            paragraphs.forEach { rawPara ->
+                val para = rawPara.trim()
+                if (para.isEmpty()) {
+                    if (result.isNotEmpty() && result.last().isNotEmpty()) {
+                        result.add("")
+                    }
+                    return@forEach
+                }
+                var remaining = para
+                while (remaining.isNotEmpty()) {
+                    val limitW = (if (isFirstOutputLine) firstLineWidth else otherLinesWidth).coerceAtLeast(32f)
+                    val fitCount = textPaint.breakText(remaining, true, limitW, null).coerceAtLeast(1)
+                    if (fitCount >= remaining.length) {
+                        result.add(remaining)
+                        remaining = ""
+                    } else {
+                        val breakAtSpace = remaining[fitCount].isWhitespace()
+                        val splitIdx = if (breakAtSpace) {
+                            fitCount
+                        } else {
+                            val lastSpace = remaining.lastIndexOf(' ', fitCount - 1)
+                            if (lastSpace > 0) lastSpace else fitCount
+                        }
+                        result.add(remaining.substring(0, splitIdx).trimEnd())
+                        remaining = remaining.substring(splitIdx).trimStart()
+                    }
+                    isFirstOutputLine = false
+                }
+            }
+            return if (result.isEmpty()) listOf("-") else result
+        }
+
+        val bannerText = if (isEn) {
+            "CONFIDENTIAL • STRICTLY VISIBLE ONLY TO OWNING CAREGIVER ($waliName)"
+        } else {
+            "RAHASIA • HANYA DILIHAT OLEH WALI ASUH BERSANGKUTAN ($waliName)"
+        }
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 9.2f
+        val bannerLines = wrapPdfLines(bannerText, paint, boxRight - boxLeft - 20f)
+        val bannerH = (bannerLines.size * 12f + 16f).coerceAtLeast(30f)
         paint.color = Color.rgb(245, 243, 255)
-        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
+        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 4f + bannerH), 6f, 6f, paint)
         paint.style = Paint.Style.STROKE
         paint.color = Color.rgb(124, 58, 237)
         paint.strokeWidth = 1.2f
-        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
+        canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 4f + bannerH), 6f, 6f, paint)
         paint.style = Paint.Style.FILL
         paint.textAlign = Paint.Align.CENTER
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textSize = 9.2f
         paint.color = Color.rgb(91, 33, 182)
-        canvas.drawText(
-            if (isEn) {
-                "CONFIDENTIAL • STRICTLY VISIBLE ONLY TO OWNING CAREGIVER ($waliName)"
-            } else {
-                "RAHASIA • HANYA DILIHAT OLEH WALI ASUH BERSANGKUTAN ($waliName)"
-            },
-            pageWidth / 2f,
-            currentY + 22f,
-            paint
-        )
-        currentY += 44f
+        var bannerTextY = currentY + 18f
+        bannerLines.forEach { line ->
+            canvas.drawText(line, pageWidth / 2f, bannerTextY, paint)
+            bannerTextY += 12f
+        }
+        currentY += bannerH + 14f
         paint.textAlign = Paint.Align.LEFT
 
         val studentRecs = records
@@ -3555,8 +3602,37 @@ object PdfReportGenerator {
             .sortedWith(compareByDescending<KonselingRecord> { it.sessionDate }.thenByDescending { it.createdAt })
         val stats = KonselingHelper.computeStudentStats(studentRecs, student)
 
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 10.5f
+        val studentTitleLines = wrapPdfLines(
+            "${student.name} (NIS: ${student.nis.ifBlank { "-" }})",
+            paint,
+            innerWidth
+        )
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.5f
+        val studentMetaLines = wrapPdfLines(
+            "${if (isEn) "Class" else "Kelas"}: ${student.classGrade.ifBlank { "-" }}  |  Asrama: ${student.dormitory.ifBlank { "-" }}  |  Wali Asuh: $waliName",
+            paint,
+            innerWidth
+        )
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8.8f
+        val studentStatsLines = wrapPdfLines(
+            if (isEn) {
+                "Total: ${stats.totalEntries}  •  Sessions: ${stats.sessionsCount}  •  Growth: ${stats.growthCount}  •  Follow-Up: ${stats.followUpCount}  •  Resolved: ${stats.completedCount}"
+            } else {
+                "Total: ${stats.totalEntries}  •  Sesi: ${stats.sessionsCount}  •  Perkembangan: ${stats.growthCount}  •  Pantau: ${stats.followUpCount}  •  Selesai: ${stats.completedCount}"
+            },
+            paint,
+            innerWidth
+        )
+
         val infoTop = currentY
-        val infoH = 66f
+        val infoH = 12f +
+            studentTitleLines.size * 13f + 2f +
+            studentMetaLines.size * 11.5f + 3f +
+            studentStatsLines.size * 12f + 6f
         paint.color = Color.rgb(248, 250, 252)
         canvas.drawRoundRect(RectF(boxLeft, infoTop, boxRight, infoTop + infoH), 6f, 6f, paint)
         paint.style = Paint.Style.STROKE
@@ -3565,33 +3641,43 @@ object PdfReportGenerator {
         canvas.drawRoundRect(RectF(boxLeft, infoTop, boxRight, infoTop + infoH), 6f, 6f, paint)
         paint.style = Paint.Style.FILL
 
+        var infoY = infoTop + 18f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 10.5f
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText("${student.name} (NIS: ${student.nis.ifBlank { "-" }})", boxLeft + 10f, infoTop + 19f, paint)
+        studentTitleLines.forEach { line ->
+            canvas.drawText(line, boxLeft + 10f, infoY, paint)
+            infoY += 13f
+        }
+        infoY += 2f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.textSize = 8.5f
         paint.color = Color.rgb(71, 85, 105)
-        canvas.drawText(
-            "${if (isEn) "Class" else "Kelas"}: ${student.classGrade.ifBlank { "-" }}  |  Asrama: ${student.dormitory.ifBlank { "-" }}  |  Wali Asuh: $waliName",
-            boxLeft + 10f,
-            infoTop + 35f,
-            paint
-        )
+        studentMetaLines.forEach { line ->
+            canvas.drawText(line, boxLeft + 10f, infoY, paint)
+            infoY += 11.5f
+        }
+        infoY += 3f
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 8.8f
         paint.color = Color.rgb(91, 33, 182)
-        canvas.drawText(
-            if (isEn) {
-                "Total: ${stats.totalEntries}  •  Sessions: ${stats.sessionsCount}  •  Growth: ${stats.growthCount}  •  Follow-Up: ${stats.followUpCount}  •  Resolved: ${stats.completedCount}"
-            } else {
-                "Total: ${stats.totalEntries}  •  Sesi: ${stats.sessionsCount}  •  Perkembangan: ${stats.growthCount}  •  Pantau: ${stats.followUpCount}  •  Selesai: ${stats.completedCount}"
-            },
-            boxLeft + 10f,
-            infoTop + 53f,
-            paint
-        )
+        studentStatsLines.forEach { line ->
+            canvas.drawText(line, boxLeft + 10f, infoY, paint)
+            infoY += 12f
+        }
         currentY = infoTop + infoH + 12f
+
+        fun startContinuationPage(contLabel: String) {
+            finishCurrentCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 38f
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 8.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText("$contLabel (${if (isEn) "Page" else "Hal."} $pageNumber)", boxLeft, currentY, paint)
+            currentY += 12f
+        }
 
         if (studentRecs.isEmpty()) {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
@@ -3605,75 +3691,206 @@ object PdfReportGenerator {
             )
             currentY += 32f
         } else {
-            studentRecs.forEachIndexed { idx, rec ->
-                val cardH = 82f
-                if (currentY + cardH > pageHeight - 130f) {
-                    finishCurrentCanvas()
-                    pageNumber++
-                    canvas = startNewCanvas(pageNumber)
-                    currentY = 40f
-                }
-                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(250, 245, 255)
-                canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + cardH), 6f, 6f, paint)
-                paint.style = Paint.Style.STROKE
-                paint.color = Color.rgb(221, 214, 254)
-                paint.strokeWidth = 0.9f
-                canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + cardH), 6f, 6f, paint)
-                paint.style = Paint.Style.FILL
+            val pageBottomLimit = pageHeight - 45f
+            val bodyLineH = 11.5f
 
+            data class StyledFieldRow(
+                val prefix: String,
+                val text: String,
+                val color: Int,
+                val isFirstInField: Boolean,
+                val extraGapAfter: Float = 0f
+            )
+
+            fun buildWrappedFieldRows(
+                prefix: String,
+                rawValue: String,
+                color: Int
+            ): List<StyledFieldRow> {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.3f
+                val prefixW = paint.measureText(prefix)
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8.3f
+                val lines = wrapPdfLines(
+                    text = rawValue.ifBlank { "-" },
+                    textPaint = paint,
+                    firstLineWidth = (innerWidth - prefixW).coerceAtLeast(120f),
+                    otherLinesWidth = innerWidth
+                )
+                return lines.mapIndexed { lineIdx, lineText ->
+                    StyledFieldRow(
+                        prefix = if (lineIdx == 0) prefix else "",
+                        text = lineText,
+                        color = color,
+                        isFirstInField = lineIdx == 0,
+                        extraGapAfter = if (lineIdx == lines.lastIndex) 3.5f else 0f
+                    )
+                }
+            }
+
+            studentRecs.forEachIndexed { idx, rec ->
                 val typeLabel = if (KonselingHelper.isGrowthEntry(rec.entryType)) {
                     if (isEn) "GROWTH" else "PERKEMBANGAN"
                 } else {
                     if (isEn) "SESSION" else "SESI KONSELING"
                 }
                 val statusLabel = KonselingHelper.formatStatusLabel(rec.status, isEn)
+                val dateStatusText = "${dateFmt.format(Date(rec.sessionDate))} • $statusLabel"
+
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                paint.textSize = 9.2f
-                paint.color = Color.rgb(76, 29, 149)
-                val headerText = "${idx + 1}. [$typeLabel] ${rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) }}"
-                canvas.drawText(
-                    TextUtils.ellipsize(headerText, TextPaint(paint), 365f, TextUtils.TruncateAt.END).toString(),
-                    boxLeft + 8f,
-                    currentY + 16f,
-                    paint
-                )
-                paint.textAlign = Paint.Align.RIGHT
                 paint.textSize = 8f
-                paint.color = if (KonselingHelper.isCompleted(rec.status)) Color.rgb(21, 128, 61) else Color.rgb(180, 83, 9)
-                canvas.drawText("${dateFmt.format(Date(rec.sessionDate))} • $statusLabel", boxRight - 8f, currentY + 16f, paint)
-                paint.textAlign = Paint.Align.LEFT
+                val dateStatusW = paint.measureText(dateStatusText)
+
+                paint.textSize = 9.2f
+                val headerText = "${idx + 1}. [$typeLabel] ${rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) }}"
+                val headerLines = wrapPdfLines(
+                    text = headerText,
+                    textPaint = paint,
+                    firstLineWidth = (innerWidth - dateStatusW - 12f).coerceAtLeast(120f),
+                    otherLinesWidth = innerWidth
+                )
 
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 paint.textSize = 8f
-                paint.color = Color.rgb(71, 85, 105)
-                val metaLine = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)}  |  Mood: ${KonselingHelper.formatMoodLabel(rec.moodLevel, isEn)}  |  Prioritas: ${KonselingHelper.formatUrgencyLabel(rec.urgencyLevel, isEn)}"
-                canvas.drawText(metaLine, boxLeft + 8f, currentY + 30f, paint)
+                val metaText = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)}  |  Mood: ${KonselingHelper.formatMoodLabel(rec.moodLevel, isEn)}  |  Prioritas: ${KonselingHelper.formatUrgencyLabel(rec.urgencyLevel, isEn)}"
+                val metaLines = wrapPdfLines(metaText, paint, innerWidth)
 
-                paint.color = Color.rgb(15, 23, 42)
-                val summaryLine = "${if (isEn) "Summary" else "Ringkasan"}: ${rec.summary.ifBlank { "-" }}"
-                canvas.drawText(
-                    TextUtils.ellipsize(summaryLine, TextPaint(paint), boxRight - boxLeft - 18f, TextUtils.TruncateAt.END).toString(),
-                    boxLeft + 8f,
-                    currentY + 45f,
-                    paint
-                )
-                val actionLine = "${if (isEn) "Action" else "Pendampingan"}: ${rec.intervention.ifBlank { "-" }}"
-                canvas.drawText(
-                    TextUtils.ellipsize(actionLine, TextPaint(paint), boxRight - boxLeft - 18f, TextUtils.TruncateAt.END).toString(),
-                    boxLeft + 8f,
-                    currentY + 58f,
-                    paint
-                )
+                val summaryPrefix = "${if (isEn) "Summary" else "Ringkasan"}: "
+                val actionPrefix = "${if (isEn) "Action" else "Pendampingan"}: "
                 val fuDateText = rec.followUpDate?.let { " (${dateFmt.format(Date(it))})" } ?: ""
-                val fuLine = "${if (isEn) "Follow-Up" else "Tindak Lanjut"}$fuDateText: ${rec.followUpPlan.ifBlank { "-" }}"
-                paint.color = Color.rgb(91, 33, 182)
-                canvas.drawText(
-                    TextUtils.ellipsize(fuLine, TextPaint(paint), boxRight - boxLeft - 18f, TextUtils.TruncateAt.END).toString(),
-                    boxLeft + 8f,
-                    currentY + 71f,
-                    paint
-                )
-                currentY += cardH + 7f
+                val fuPrefix = "${if (isEn) "Follow-Up" else "Tindak Lanjut"}$fuDateText: "
+
+                val fieldRows = buildList {
+                    addAll(buildWrappedFieldRows(summaryPrefix, rec.summary, Color.rgb(15, 23, 42)))
+                    addAll(buildWrappedFieldRows(actionPrefix, rec.intervention, Color.rgb(15, 23, 42)))
+                    addAll(buildWrappedFieldRows(fuPrefix, rec.followUpPlan, Color.rgb(91, 33, 182)))
+                }
+
+                val headerBlockH = headerLines.size * 12f + 2f + metaLines.size * 10.5f + 5f
+                val bodyBlockH = fieldRows.sumOf { (bodyLineH + it.extraGapAfter).toDouble() }.toFloat()
+                val totalCardH = 10f + headerBlockH + bodyBlockH + 6f
+                val maxSinglePageCardH = pageBottomLimit - 55f
+                val cardBg = if (idx % 2 == 0) Color.WHITE else Color.rgb(250, 245, 255)
+
+                fun drawCardFrame(topY: Float, bottomY: Float) {
+                    paint.style = Paint.Style.FILL
+                    paint.color = cardBg
+                    canvas.drawRoundRect(RectF(boxLeft, topY, boxRight, bottomY), 6f, 6f, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(221, 214, 254)
+                    paint.strokeWidth = 0.9f
+                    canvas.drawRoundRect(RectF(boxLeft, topY, boxRight, bottomY), 6f, 6f, paint)
+                    paint.style = Paint.Style.FILL
+                }
+
+                fun drawHeaderSection(startY: Float): Float {
+                    var y = startY + 15f
+                    paint.textAlign = Paint.Align.RIGHT
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 8f
+                    paint.color = if (KonselingHelper.isCompleted(rec.status)) Color.rgb(21, 128, 61) else Color.rgb(180, 83, 9)
+                    canvas.drawText(dateStatusText, boxRight - 8f, y, paint)
+                    paint.textAlign = Paint.Align.LEFT
+
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 9.2f
+                    paint.color = Color.rgb(76, 29, 149)
+                    headerLines.forEach { line ->
+                        canvas.drawText(line, boxLeft + 9f, y, paint)
+                        y += 12f
+                    }
+                    y += 1f
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.textSize = 8f
+                    paint.color = Color.rgb(71, 85, 105)
+                    metaLines.forEach { line ->
+                        canvas.drawText(line, boxLeft + 9f, y, paint)
+                        y += 10.5f
+                    }
+                    paint.color = Color.rgb(237, 233, 254)
+                    paint.strokeWidth = 0.7f
+                    canvas.drawLine(boxLeft + 9f, y - 5f, boxRight - 9f, y - 5f, paint)
+                    return y + 5f
+                }
+
+                fun drawFieldRow(row: StyledFieldRow, baselineY: Float) {
+                    paint.color = row.color
+                    paint.textSize = 8.3f
+                    var textStartX = boxLeft + 9f
+                    if (row.prefix.isNotEmpty()) {
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        canvas.drawText(row.prefix, textStartX, baselineY, paint)
+                        textStartX += paint.measureText(row.prefix)
+                    }
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    canvas.drawText(row.text, textStartX, baselineY, paint)
+                }
+
+                if (totalCardH <= maxSinglePageCardH) {
+                    if (currentY + totalCardH > pageBottomLimit) {
+                        startContinuationPage(
+                            if (isEn) "Confidential Counseling: ${student.name}" else "Catatan Konseling: ${student.name}"
+                        )
+                    }
+                    drawCardFrame(currentY, currentY + totalCardH)
+                    var rowY = drawHeaderSection(currentY)
+                    fieldRows.forEach { row ->
+                        drawFieldRow(row, rowY)
+                        rowY += bodyLineH + row.extraGapAfter
+                    }
+                    currentY += totalCardH + 7f
+                } else {
+                    // Ultra-long single entry: split gracefully across pages without clipping a single line
+                    if (currentY + headerBlockH + 40f > pageBottomLimit) {
+                        startContinuationPage(
+                            if (isEn) "Confidential Counseling: ${student.name}" else "Catatan Konseling: ${student.name}"
+                        )
+                    }
+                    var rowIndex = 0
+                    var isFirstSlice = true
+                    while (isFirstSlice || rowIndex < fieldRows.size) {
+                        val sliceTop = currentY
+                        val headerReserve = if (isFirstSlice) headerBlockH + 10f else 18f
+                        var simY = sliceTop + headerReserve
+                        var sliceEndIndex = rowIndex
+                        while (sliceEndIndex < fieldRows.size) {
+                            val step = bodyLineH + fieldRows[sliceEndIndex].extraGapAfter
+                            if (simY + step + 8f > pageBottomLimit && sliceEndIndex > rowIndex) break
+                            simY += step
+                            sliceEndIndex++
+                        }
+                        val sliceBottom = (simY + 4f).coerceAtMost(pageBottomLimit)
+                        drawCardFrame(sliceTop, sliceBottom)
+                        var drawY = if (isFirstSlice) {
+                            drawHeaderSection(sliceTop)
+                        } else {
+                            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                            paint.textSize = 7.8f
+                            paint.color = Color.rgb(109, 40, 217)
+                            canvas.drawText(
+                                "${idx + 1}. ${rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) }} (${if (isEn) "cont." else "lanjutan"})",
+                                boxLeft + 9f,
+                                sliceTop + 13f,
+                                paint
+                            )
+                            sliceTop + 26f
+                        }
+                        while (rowIndex < sliceEndIndex) {
+                            val row = fieldRows[rowIndex]
+                            drawFieldRow(row, drawY)
+                            drawY += bodyLineH + row.extraGapAfter
+                            rowIndex++
+                        }
+                        isFirstSlice = false
+                        currentY = sliceBottom + 7f
+                        if (rowIndex < fieldRows.size) {
+                            startContinuationPage(
+                                if (isEn) "Confidential Counseling: ${student.name}" else "Catatan Konseling: ${student.name}"
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -3769,6 +3986,36 @@ object PdfReportGenerator {
 
         val boxLeft = 35f
         val boxRight = pageWidth - 35f
+
+        fun wrapSummaryCellLines(text: String, cellPaint: Paint, maxWidth: Float): List<String> {
+            val normalized = text.replace("\r\n", "\n").trim()
+            if (normalized.isEmpty()) return listOf("-")
+            val result = mutableListOf<String>()
+            normalized.split("\n").forEach { rawPara ->
+                val para = rawPara.trim()
+                if (para.isEmpty()) return@forEach
+                var remaining = para
+                while (remaining.isNotEmpty()) {
+                    val count = cellPaint.breakText(remaining, true, maxWidth.coerceAtLeast(24f), null).coerceAtLeast(1)
+                    if (count >= remaining.length) {
+                        result.add(remaining)
+                        remaining = ""
+                    } else {
+                        val breakAtSpace = remaining[count].isWhitespace()
+                        val splitIdx = if (breakAtSpace) {
+                            count
+                        } else {
+                            val lastSpace = remaining.lastIndexOf(' ', count - 1)
+                            if (lastSpace > 0) lastSpace else count
+                        }
+                        result.add(remaining.substring(0, splitIdx).trimEnd())
+                        remaining = remaining.substring(splitIdx).trimStart()
+                    }
+                }
+            }
+            return if (result.isEmpty()) listOf("-") else result
+        }
+
         paint.color = Color.rgb(245, 243, 255)
         canvas.drawRoundRect(RectF(boxLeft, currentY + 4f, boxRight, currentY + 34f), 6f, 6f, paint)
         paint.style = Paint.Style.STROKE
@@ -3831,26 +4078,59 @@ object PdfReportGenerator {
             paint.textSize = 8f
             paint.color = Color.rgb(76, 29, 149)
             val tY = y + 15f
-            canvas.drawText("No", boxLeft + 6f, tY, paint)
-            canvas.drawText(if (isEn) "Date" else "Tanggal", boxLeft + 26f, tY, paint)
-            canvas.drawText(if (isEn) "Student" else "Nama Anak", boxLeft + 92f, tY, paint)
-            canvas.drawText(if (isEn) "Topic / Title" else "Topik & Judul", boxLeft + 212f, tY, paint)
-            canvas.drawText(if (isEn) "Mood" else "Kondisi", boxLeft + 365f, tY, paint)
-            canvas.drawText(if (isEn) "Status" else "Status", boxLeft + 445f, tY, paint)
+            canvas.drawText("No", boxLeft + 5f, tY, paint)
+            canvas.drawText(if (isEn) "Date" else "Tanggal", boxLeft + 25f, tY, paint)
+            canvas.drawText(if (isEn) "Student" else "Nama Anak", boxLeft + 88f, tY, paint)
+            canvas.drawText(if (isEn) "Topic, Title & Notes" else "Topik, Judul & Rincian", boxLeft + 184f, tY, paint)
+            canvas.drawText(if (isEn) "Mood" else "Kondisi", boxLeft + 388f, tY, paint)
+            canvas.drawText(if (isEn) "Status" else "Status", boxLeft + 455f, tY, paint)
             return y + h
         }
 
         val sortedRecords = records.sortedWith(compareByDescending<KonselingRecord> { it.sessionDate }.thenByDescending { it.createdAt })
         currentY = drawSummaryHeader(currentY)
-        val rowH = 22f
+        val pageBottomLimit = pageHeight - 45f
+        val lineH = 9.8f
+
         sortedRecords.forEachIndexed { idx, rec ->
-            if (currentY > pageHeight - 130f) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 7.8f
+            val nameLines = wrapSummaryCellLines(rec.studentName, paint, 90f)
+
+            val topicTitle = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)}: ${rec.title.ifBlank { "-" }}"
+            val titleLines = wrapSummaryCellLines(topicTitle, paint, 196f)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 7.3f
+            val detailLines = buildList {
+                if (rec.summary.isNotBlank()) {
+                    addAll(wrapSummaryCellLines("${if (isEn) "Summary" else "Ringkasan"}: ${rec.summary}", paint, 196f))
+                }
+                if (rec.intervention.isNotBlank()) {
+                    addAll(wrapSummaryCellLines("${if (isEn) "Action" else "Pendampingan"}: ${rec.intervention}", paint, 196f))
+                }
+                if (rec.followUpPlan.isNotBlank()) {
+                    addAll(wrapSummaryCellLines("${if (isEn) "Follow-Up" else "Tindak Lanjut"}: ${rec.followUpPlan}", paint, 196f))
+                }
+            }
+
+            paint.textSize = 7.6f
+            val moodLines = wrapSummaryCellLines(KonselingHelper.formatMoodLabel(rec.moodLevel, isEn), paint, 62f)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            val statusLines = wrapSummaryCellLines(KonselingHelper.formatStatusLabel(rec.status, isEn), paint, 64f)
+
+            val centerColLinesCount = titleLines.size + detailLines.size
+            val maxLines = maxOf(nameLines.size, centerColLinesCount, moodLines.size, statusLines.size, 1)
+            val rowH = maxOf(22f, maxLines * lineH + 10f)
+
+            if (currentY + rowH > pageBottomLimit && rowH <= (pageBottomLimit - 70f)) {
                 finishCurrentCanvas()
                 pageNumber++
                 canvas = startNewCanvas(pageNumber)
                 currentY = 40f
                 currentY = drawSummaryHeader(currentY)
             }
+
             val rTop = currentY
             paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
             canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
@@ -3860,41 +4140,50 @@ object PdfReportGenerator {
             canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowH, paint)
             paint.style = Paint.Style.FILL
 
-            val tY = rTop + 14.5f
+            val startTextY = rTop + 13f
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            paint.textSize = 7.8f
+            paint.textSize = 7.6f
             paint.color = Color.rgb(15, 23, 42)
-            canvas.drawText("${idx + 1}.", boxLeft + 6f, tY, paint)
-            canvas.drawText(dateFmt.format(Date(rec.sessionDate)), boxLeft + 26f, tY, paint)
+            canvas.drawText("${idx + 1}.", boxLeft + 5f, startTextY, paint)
+            canvas.drawText(dateFmt.format(Date(rec.sessionDate)), boxLeft + 25f, startTextY, paint)
+
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            canvas.drawText(
-                TextUtils.ellipsize(rec.studentName, TextPaint(paint), 112f, TextUtils.TruncateAt.END).toString(),
-                boxLeft + 92f,
-                tY,
-                paint
-            )
+            paint.textSize = 7.8f
+            var yName = startTextY
+            nameLines.forEach { l ->
+                canvas.drawText(l, boxLeft + 88f, yName, paint)
+                yName += lineH
+            }
+
+            var yCenter = startTextY
+            titleLines.forEach { l ->
+                canvas.drawText(l, boxLeft + 184f, yCenter, paint)
+                yCenter += lineH
+            }
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-            val topicTitle = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)}: ${rec.title}"
-            canvas.drawText(
-                TextUtils.ellipsize(topicTitle, TextPaint(paint), 146f, TextUtils.TruncateAt.END).toString(),
-                boxLeft + 212f,
-                tY,
-                paint
-            )
-            canvas.drawText(
-                TextUtils.ellipsize(KonselingHelper.formatMoodLabel(rec.moodLevel, isEn), TextPaint(paint), 74f, TextUtils.TruncateAt.END).toString(),
-                boxLeft + 365f,
-                tY,
-                paint
-            )
+            paint.textSize = 7.3f
+            paint.color = Color.rgb(51, 65, 85)
+            detailLines.forEach { l ->
+                canvas.drawText(l, boxLeft + 184f, yCenter, paint)
+                yCenter += lineH
+            }
+
+            paint.textSize = 7.6f
+            paint.color = Color.rgb(15, 23, 42)
+            var yMood = startTextY
+            moodLines.forEach { l ->
+                canvas.drawText(l, boxLeft + 388f, yMood, paint)
+                yMood += lineH
+            }
+
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.color = if (KonselingHelper.isCompleted(rec.status)) Color.rgb(21, 128, 61) else Color.rgb(180, 83, 9)
-            canvas.drawText(
-                TextUtils.ellipsize(KonselingHelper.formatStatusLabel(rec.status, isEn), TextPaint(paint), 74f, TextUtils.TruncateAt.END).toString(),
-                boxLeft + 445f,
-                tY,
-                paint
-            )
+            var yStatus = startTextY
+            statusLines.forEach { l ->
+                canvas.drawText(l, boxLeft + 455f, yStatus, paint)
+                yStatus += lineH
+            }
+
             currentY = rTop + rowH
         }
         currentY += 16f
