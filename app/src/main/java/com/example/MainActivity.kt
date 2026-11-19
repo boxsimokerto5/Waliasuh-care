@@ -64,8 +64,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -278,9 +280,11 @@ private fun WaliAsuhCareAppContent(
         currentUserRole == UserRole.SUPERADMIN ||
         isAnakSuperAdmin ||
         isAnakAdminSekolah
+    val mainCoroutineScope = rememberCoroutineScope()
     val dashboardModalState = rememberDashboardModalState()
     var readyMainTabunganSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
     var readyMainKonselingSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
+    var isGeneratingMainKonselingPdf by remember { mutableStateOf(false) }
     var readyMainJadwalPdf by remember { mutableStateOf<java.io.File?>(null) }
 
     LaunchedEffect(
@@ -903,21 +907,32 @@ private fun WaliAsuhCareAppContent(
                 },
                 onOpenKonselingPdfSummary = {
                     TopOnAdManager.onUserActionClick(context)
-                    val pdf = com.example.util.PdfReportGenerator.generateKonselingSummaryPdf(
-                        context = context,
-                        students = myFosterStudents,
-                        records = konselingRecords,
-                        waliName = waliName,
-                        schoolProfile = schoolProfile
-                    )
-                    if (pdf != null) {
-                        readyMainKonselingSummaryPdf = pdf
-                    } else {
+                    if (!isGeneratingMainKonselingPdf) {
+                        isGeneratingMainKonselingPdf = true
                         android.widget.Toast.makeText(
                             context,
-                            if (s.isEnglish) "Failed to generate confidential counseling PDF." else "Gagal membuat PDF rekap konseling rahasia.",
+                            if (s.isEnglish) "Preparing counseling PDF with photos..." else "Menyiapkan PDF konseling beserta foto...",
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
+                        mainCoroutineScope.launch {
+                            val pdf = com.example.util.PdfReportGenerator.generateKonselingSummaryPdfWithPhotos(
+                                context = context,
+                                students = myFosterStudents,
+                                records = konselingRecords,
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
+                            )
+                            isGeneratingMainKonselingPdf = false
+                            if (pdf != null) {
+                                readyMainKonselingSummaryPdf = pdf
+                            } else {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    if (s.isEnglish) "Failed to generate confidential counseling PDF." else "Gagal membuat PDF rekap konseling rahasia.",
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 },
                 jadwalMonthKey = dashboardModalState.jadwalSelectedMonthKey,

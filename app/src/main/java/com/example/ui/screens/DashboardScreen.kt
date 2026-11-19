@@ -70,8 +70,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -215,6 +217,7 @@ fun DashboardScreen(
     val context = LocalContext.current
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
+    val coroutineScope = rememberCoroutineScope()
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
@@ -399,6 +402,7 @@ fun DashboardScreen(
     var studentForPdfPrint by remember { mutableStateOf<ChildStudent?>(null) }
     var readyTabunganSummaryPdf by remember { mutableStateOf<File?>(null) }
     var readyKonselingSummaryPdf by remember { mutableStateOf<File?>(null) }
+    var isGeneratingKonselingPdf by remember { mutableStateOf(false) }
     var readyJadwalPdf by remember { mutableStateOf<File?>(null) }
     val todayMonthKey = remember { WaliScheduleHelper.currentMonthKey() }
     val todayDayOfMonth = remember { WaliScheduleHelper.currentDayOfMonth() }
@@ -1559,21 +1563,32 @@ fun DashboardScreen(
                 },
                 onOpenKonselingGuide = { modalState.showKonselingGuideDialog = true },
                 onOpenKonselingPdfSummary = {
-                    val pdf = PdfReportGenerator.generateKonselingSummaryPdf(
-                        context = context,
-                        students = myFosterStudents,
-                        records = konselingRecords,
-                        waliName = waliName,
-                        schoolProfile = schoolProfile
-                    )
-                    if (pdf != null) {
-                        readyKonselingSummaryPdf = pdf
-                    } else {
+                    if (!isGeneratingKonselingPdf) {
+                        isGeneratingKonselingPdf = true
                         Toast.makeText(
                             context,
-                            if (isEn) "Failed to generate confidential counseling PDF." else "Gagal membuat PDF rekap konseling rahasia.",
+                            if (isEn) "Preparing counseling PDF with photos..." else "Menyiapkan PDF konseling beserta foto...",
                             Toast.LENGTH_SHORT
                         ).show()
+                        coroutineScope.launch {
+                            val pdf = PdfReportGenerator.generateKonselingSummaryPdfWithPhotos(
+                                context = context,
+                                students = myFosterStudents,
+                                records = konselingRecords,
+                                waliName = waliName,
+                                schoolProfile = schoolProfile
+                            )
+                            isGeneratingKonselingPdf = false
+                            if (pdf != null) {
+                                readyKonselingSummaryPdf = pdf
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Failed to generate confidential counseling PDF." else "Gagal membuat PDF rekap konseling rahasia.",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                     }
                 },
                 jadwalMonthKey = modalState.jadwalSelectedMonthKey,
@@ -3091,6 +3106,63 @@ fun DashboardScreen(
         )
     }
 
+    DashboardKonselingAndSholatModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        currentUsername = currentUsername,
+        schoolProfile = schoolProfile,
+        students = students,
+        myFosterStudents = myFosterStudents,
+        konselingRecords = konselingRecords,
+        konselingLogs = konselingLogs,
+        sholatRecords = sholatRecords,
+        activeHaidRecords = activeHaidRecords,
+        suciRecords = suciRecords,
+        readyKonselingSummaryPdf = readyKonselingSummaryPdf,
+        onClearReadyKonselingSummaryPdf = { readyKonselingSummaryPdf = null }
+    )
+
+    DashboardJadwalAndInfoModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        currentUsername = currentUsername,
+        schoolProfile = schoolProfile,
+        waliAccounts = waliAccounts,
+        schoolShiftCodes = schoolShiftCodes,
+        schoolScheduleEntries = schoolScheduleEntries,
+        canManageSchedule = canManageSchedule,
+        isAnakSuperAdmin = isAnakSuperAdmin,
+        infoPentingPosts = infoPentingPosts,
+        infoPentingReactions = infoPentingReactions,
+        infoPentingComments = infoPentingComments,
+        isPublishingInfoPenting = isPublishingInfoPenting,
+        readyJadwalPdf = readyJadwalPdf,
+        onClearReadyJadwalPdf = { readyJadwalPdf = null }
+    )
+}
+
+@Composable
+private fun DashboardKonselingAndSholatModalsHost(
+    viewModel: HealthViewModel,
+    modalState: DashboardModalState,
+    waliName: String,
+    currentUsername: String?,
+    schoolProfile: com.example.data.model.SchoolProfile,
+    students: List<ChildStudent>,
+    myFosterStudents: List<ChildStudent>,
+    konselingRecords: List<com.example.data.model.KonselingRecord>,
+    konselingLogs: List<com.example.data.model.KonselingLog>,
+    sholatRecords: List<com.example.data.model.SholatRecord>,
+    activeHaidRecords: List<com.example.data.model.HaidRecord>,
+    suciRecords: List<com.example.data.model.HaidRecord>,
+    readyKonselingSummaryPdf: File?,
+    onClearReadyKonselingSummaryPdf: () -> Unit
+) {
+    val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
+
     // =====================================================================
     // MODUL KONSELING RAHASIA WALI ASUH (HANYA DILIHAT WALI BERSANGKUTAN)
     // =====================================================================
@@ -3104,7 +3176,7 @@ fun DashboardScreen(
                 modalState.showInputKonselingDialog = false
                 modalState.showPilihAnakAsuhSheet = true
             },
-            onSave = { student, entryType, topic, urgencyLevel, moodLevel, title, summary, intervention, followUpPlan, followUpDate, sessionDate, markCompleted, existingRecord ->
+            onSave = { student, entryType, topic, urgencyLevel, moodLevel, title, summary, intervention, followUpPlan, followUpDate, sessionDate, markCompleted, photoPaths, photoUrls, existingRecord ->
                 TopOnAdManager.onUserActionClick(context)
                 if (existingRecord == null) {
                     viewModel.saveKonselingRecord(
@@ -3119,7 +3191,9 @@ fun DashboardScreen(
                         followUpPlan = followUpPlan,
                         followUpDate = followUpDate,
                         sessionDate = sessionDate,
-                        markCompleted = markCompleted
+                        markCompleted = markCompleted,
+                        photoPaths = photoPaths,
+                        photoUrls = photoUrls
                     ) { ok, msg ->
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         if (ok) {
@@ -3141,7 +3215,9 @@ fun DashboardScreen(
                         followUpPlan = followUpPlan,
                         followUpDate = followUpDate,
                         sessionDate = sessionDate,
-                        markCompleted = markCompleted
+                        markCompleted = markCompleted,
+                        photoPaths = photoPaths,
+                        photoUrls = photoUrls
                     ) { ok, msg ->
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         if (ok) {
@@ -3282,7 +3358,7 @@ fun DashboardScreen(
 
     readyKonselingSummaryPdf?.let { file ->
         AlertDialog(
-            onDismissRequest = { readyKonselingSummaryPdf = null },
+            onDismissRequest = onClearReadyKonselingSummaryPdf,
             title = { Text(if (isEn) "Confidential Counseling PDF Ready" else "PDF Rekap Konseling Rahasia Siap") },
             text = {
                 Text(
@@ -3296,7 +3372,7 @@ fun DashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        readyKonselingSummaryPdf = null
+                        onClearReadyKonselingSummaryPdf()
                         PdfReportGenerator.openPdfFile(context, file)
                     }
                 ) {
@@ -3306,7 +3382,7 @@ fun DashboardScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        readyKonselingSummaryPdf = null
+                        onClearReadyKonselingSummaryPdf()
                         PdfReportGenerator.shareFastingPdf(
                             context = context,
                             pdfFile = file,
@@ -3362,25 +3438,6 @@ fun DashboardScreen(
             }
         )
     }
-
-    DashboardJadwalAndInfoModalsHost(
-        viewModel = viewModel,
-        modalState = modalState,
-        waliName = waliName,
-        currentUsername = currentUsername,
-        schoolProfile = schoolProfile,
-        waliAccounts = waliAccounts,
-        schoolShiftCodes = schoolShiftCodes,
-        schoolScheduleEntries = schoolScheduleEntries,
-        canManageSchedule = canManageSchedule,
-        isAnakSuperAdmin = isAnakSuperAdmin,
-        infoPentingPosts = infoPentingPosts,
-        infoPentingReactions = infoPentingReactions,
-        infoPentingComments = infoPentingComments,
-        isPublishingInfoPenting = isPublishingInfoPenting,
-        readyJadwalPdf = readyJadwalPdf,
-        onClearReadyJadwalPdf = { readyJadwalPdf = null }
-    )
 }
 
 @Composable

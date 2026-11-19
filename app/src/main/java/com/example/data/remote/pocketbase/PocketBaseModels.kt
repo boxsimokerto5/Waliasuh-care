@@ -1769,6 +1769,7 @@ data class PbKonselingRecordDto(
     @Json(name = "follow_up_date") val followUpDate: Long? = null,
     @Json(name = "status") val status: String? = null,
     @Json(name = "session_date") val sessionDate: Long? = null,
+    @Json(name = "photo_urls") val photoUrls: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1796,6 +1797,8 @@ data class PbKonselingRecordDto(
             followUpDate = followUpDate?.takeIf { it > 0L },
             status = status?.trim()?.uppercase()?.ifBlank { KonselingHelper.STATUS_DIPANTAU } ?: KonselingHelper.STATUS_DIPANTAU,
             sessionDate = resolvedSessionDate,
+            photoPaths = "",
+            photoUrls = photoUrls.orEmpty(),
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
             createdAt = createdAt?.takeIf { it > 0L } ?: resolvedSessionDate,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedSessionDate
@@ -1830,6 +1833,7 @@ data class PbKonselingRecordDto(
                 followUpDate = model.followUpDate ?: 0L,
                 status = model.status,
                 sessionDate = model.sessionDate,
+                photoUrls = model.photoUrls,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

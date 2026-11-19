@@ -26,6 +26,8 @@ data class KonselingRecord(
     val followUpDate: Long? = null,
     val status: String = KonselingHelper.STATUS_DIPANTAU, // DIPANTAU | SELESAI
     val sessionDate: Long = System.currentTimeMillis(),
+    val photoPaths: String = "",
+    val photoUrls: String = "",
     val schoolId: String = "SRT1-KDR",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()

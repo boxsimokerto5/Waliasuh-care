@@ -68,14 +68,23 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.data.model.ChildStudent
 import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
+import com.example.util.KonselingPhotoHelper
 import com.example.util.PdfReportGenerator
 import com.example.util.i18n.LocalAppStrings
+import kotlinx.coroutines.launch
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -96,6 +105,7 @@ fun KonselingStudentDetailSheet(
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     val lang = s.language
+    val coroutineScope = rememberCoroutineScope()
 
     val stats = remember(studentRecords, student) {
         KonselingHelper.computeStudentStats(studentRecords, student)
@@ -105,6 +115,8 @@ fun KonselingStudentDetailSheet(
     var selectedFilter by remember { mutableIntStateOf(0) }
     var recordToDelete by remember { mutableStateOf<KonselingRecord?>(null) }
     var readyPdfFile by remember { mutableStateOf<File?>(null) }
+    var isGeneratingPdf by remember { mutableStateOf(false) }
+    var previewPhotoModel by remember { mutableStateOf<Any?>(null) }
 
     val filteredRecords = remember(studentRecords, selectedFilter) {
         studentRecords
@@ -291,22 +303,28 @@ fun KonselingStudentDetailSheet(
                         Text(if (isEn) "Growth" else "Tumbuh", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                     OutlinedButton(
+                        enabled = !isGeneratingPdf,
                         onClick = {
-                            val pdf = PdfReportGenerator.generateKonselingStudentPdf(
-                                context = context,
-                                student = student,
-                                records = studentRecords,
-                                waliName = waliName,
-                                schoolProfile = schoolProfile
-                            )
-                            if (pdf != null) {
-                                readyPdfFile = pdf
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    if (isEn) "Failed to create PDF." else "Gagal membuat PDF konseling.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                            if (isGeneratingPdf) return@OutlinedButton
+                            isGeneratingPdf = true
+                            coroutineScope.launch {
+                                val pdf = PdfReportGenerator.generateKonselingStudentPdfWithPhotos(
+                                    context = context,
+                                    student = student,
+                                    records = studentRecords,
+                                    waliName = waliName,
+                                    schoolProfile = schoolProfile
+                                )
+                                isGeneratingPdf = false
+                                if (pdf != null) {
+                                    readyPdfFile = pdf
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Failed to create PDF." else "Gagal membuat PDF konseling.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
                             }
                         },
                         shape = RoundedCornerShape(10.dp),
@@ -315,9 +333,21 @@ fun KonselingStudentDetailSheet(
                             .height(40.dp)
                             .testTag("btn_konseling_detail_pdf")
                     ) {
-                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
+                        if (isGeneratingPdf) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(14.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
+                        }
                         Spacer(modifier = Modifier.width(3.dp))
-                        Text("PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text(
+                            text = if (isGeneratingPdf) "..." else "PDF",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
                     }
                 }
 
@@ -508,6 +538,75 @@ fun KonselingStudentDetailSheet(
                                         )
                                     }
 
+                                    val photoSlots = remember(rec.photoPaths, rec.photoUrls) {
+                                        KonselingPhotoHelper.extractSlots(rec)
+                                    }
+                                    if (photoSlots.isNotEmpty()) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 2.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.PhotoLibrary,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF6D28D9),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = if (isEn) {
+                                                        "Session Photos (${photoSlots.size})"
+                                                    } else {
+                                                        "Foto Dokumentasi (${photoSlots.size})"
+                                                    },
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF6D28D9)
+                                                )
+                                            }
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                photoSlots.forEachIndexed { idx, slot ->
+                                                    val model = slot.displayModel()
+                                                    if (model != null) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(72.dp)
+                                                                .clip(RoundedCornerShape(8.dp))
+                                                                .border(
+                                                                    1.dp,
+                                                                    Color(0xFFDDD6FE),
+                                                                    RoundedCornerShape(8.dp)
+                                                                )
+                                                                .clickable { previewPhotoModel = model }
+                                                                .testTag("img_konseling_detail_photo_${rec.id}_$idx")
+                                                        ) {
+                                                            AsyncImage(
+                                                                model = model,
+                                                                contentDescription = if (isEn) {
+                                                                    "Counseling photo ${idx + 1}"
+                                                                } else {
+                                                                    "Foto konseling ${idx + 1}"
+                                                                },
+                                                                contentScale = ContentScale.Crop,
+                                                                modifier = Modifier.matchParentSize()
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     // Row Actions Kompak
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
@@ -643,6 +742,37 @@ fun KonselingStudentDetailSheet(
                 }
             }
         )
+    }
+
+    previewPhotoModel?.let { model ->
+        Dialog(onDismissRequest = { previewPhotoModel = null }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    AsyncImage(
+                        model = model,
+                        contentDescription = if (isEn) "Counseling photo preview" else "Pratinjau foto konseling",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 200.dp, max = 440.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    )
+                    TextButton(
+                        onClick = { previewPhotoModel = null },
+                        modifier = Modifier.testTag("btn_close_konseling_detail_photo_preview")
+                    ) {
+                        Text(s.nav.close)
+                    }
+                }
+            }
+        }
     }
 }
 

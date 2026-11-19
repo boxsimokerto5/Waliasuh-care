@@ -2953,6 +2953,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         followUpDate: Long? = null,
         sessionDate: Long = System.currentTimeMillis(),
         markCompleted: Boolean = false,
+        photoPaths: String = "",
+        photoUrls: String = "",
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
@@ -3006,6 +3008,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 followUpDate = followUpDate,
                 status = resolvedStatus,
                 sessionDate = sessionDate,
+                photoPaths = photoPaths,
+                photoUrls = photoUrls,
                 schoolId = activeSchool,
                 createdAt = now,
                 updatedAt = now
@@ -3042,7 +3046,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (isEn) "Private counseling note saved (owner-only)." else "Catatan konseling rahasia berhasil disimpan (khusus Anda)."
             )
             if (!isUnitTestEnvironment()) {
-                PocketBaseSyncManager.uploadSingleKonselingRecord(getApplication(), newRecord)
+                val synced = PocketBaseSyncManager.uploadSingleKonselingRecordWithPhotos(getApplication(), newRecord)
+                if (synced.photoUrls != newRecord.photoUrls) {
+                    repository.updateKonselingRecord(synced)
+                }
                 PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
             }
         }
@@ -3061,6 +3068,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         followUpDate: Long? = existingRecord.followUpDate,
         sessionDate: Long = existingRecord.sessionDate,
         markCompleted: Boolean = KonselingHelper.isCompleted(existingRecord.status),
+        photoPaths: String = existingRecord.photoPaths,
+        photoUrls: String = existingRecord.photoUrls,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
@@ -3107,9 +3116,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 followUpDate = followUpDate,
                 status = resolvedStatus,
                 sessionDate = sessionDate,
+                photoPaths = photoPaths,
+                photoUrls = photoUrls,
                 updatedAt = now
             )
             repository.updateKonselingRecord(updated)
+            com.example.util.KonselingPhotoHelper.deleteRemovedLocalPhotos(
+                oldRecord = existingRecord,
+                newSlots = com.example.util.KonselingPhotoHelper.extractSlots(updated)
+            )
 
             val logEntry = KonselingLog(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
@@ -3130,7 +3145,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.insertKonselingLog(logEntry)
             onResult(true, if (isEn) "Counseling note updated." else "Catatan konseling rahasia berhasil diperbarui.")
             if (!isUnitTestEnvironment()) {
-                PocketBaseSyncManager.uploadSingleKonselingRecord(getApplication(), updated)
+                val synced = PocketBaseSyncManager.uploadSingleKonselingRecordWithPhotos(getApplication(), updated)
+                if (synced.photoUrls != updated.photoUrls) {
+                    repository.updateKonselingRecord(synced)
+                }
                 PocketBaseSyncManager.uploadSingleKonselingLog(getApplication(), logEntry)
             }
         }
@@ -3220,6 +3238,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val now = System.currentTimeMillis()
             val activeSchool = record.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             repository.deleteKonselingRecord(record)
+            com.example.util.KonselingPhotoHelper.extractSlots(record).forEach { slot ->
+                com.example.util.KonselingPhotoHelper.deleteLocalPhotoFile(slot.localPath)
+            }
 
             // Log audit PRIVAT internal konseling SAJA — TIDAK pernah mengirim DeletionLog publik sekolah
             val logEntry = KonselingLog(

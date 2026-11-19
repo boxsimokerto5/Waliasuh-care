@@ -4,9 +4,11 @@ import android.app.Activity
 import android.app.DatePickerDialog
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
@@ -36,8 +38,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
@@ -46,6 +50,7 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
@@ -54,6 +59,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,12 +91,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingRecord
 import com.example.util.DateUtils
+import com.example.util.KonselingPhotoHelper
+import com.example.util.KonselingPhotoSlot
 import com.example.util.i18n.LocalAppStrings
+import kotlinx.coroutines.launch
 import java.util.Calendar
 
 internal enum class KonselingVoiceField {
@@ -148,6 +160,8 @@ fun InputKonselingDialog(
         followUpDate: Long?,
         sessionDate: Long,
         markCompleted: Boolean,
+        photoPaths: String,
+        photoUrls: String,
         existingRecord: KonselingRecord?
     ) -> Unit,
     onDismiss: () -> Unit
@@ -251,6 +265,17 @@ fun InputKonselingDialog(
                 )
         )
     }
+    var photoSlots by remember(recordToEdit?.id) {
+        mutableStateOf(
+            recordToEdit?.let { KonselingPhotoHelper.extractSlots(it) } ?: emptyList()
+        )
+    }
+    var newlyCreatedPhotoPaths by remember(recordToEdit?.id) {
+        mutableStateOf<List<String>>(emptyList())
+    }
+    var isProcessingPhotos by remember { mutableStateOf(false) }
+    var previewPhotoSlot by remember { mutableStateOf<KonselingPhotoSlot?>(null) }
+    val coroutineScope = rememberCoroutineScope()
 
     val isGrowth = KonselingHelper.isGrowthEntry(entryType)
     val canSave = selectedStudent != null && (summaryText.isNotBlank() || titleText.isNotBlank())
@@ -304,6 +329,87 @@ fun InputKonselingDialog(
         }
     }
 
+    fun processPickedUris(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        val remaining = (KonselingPhotoHelper.MAX_PHOTOS - photoSlots.size).coerceAtLeast(0)
+        if (remaining <= 0) {
+            Toast.makeText(
+                context,
+                if (isEn) "Maximum 3 photos per session." else "Maksimal 3 foto per sesi konseling.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        val toProcess = uris.take(remaining)
+        if (uris.size > remaining) {
+            Toast.makeText(
+                context,
+                if (isEn) "Only $remaining photo slot(s) remaining (max 3)." else "Hanya $remaining slot foto tersisa (maksimal 3 foto).",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+        isProcessingPhotos = true
+        coroutineScope.launch {
+            val added = mutableListOf<KonselingPhotoSlot>()
+            for (uri in toProcess) {
+                val saved = KonselingPhotoHelper.compressAndSavePhoto(
+                    context = context,
+                    sourceUri = uri,
+                    idHint = selectedStudent?.id ?: 0L
+                )
+                if (saved != null) {
+                    added.add(KonselingPhotoSlot(localPath = saved.absolutePath, remoteUrl = ""))
+                }
+            }
+            if (added.isNotEmpty()) {
+                photoSlots = (photoSlots + added).take(KonselingPhotoHelper.MAX_PHOTOS)
+                newlyCreatedPhotoPaths = newlyCreatedPhotoPaths + added.map { it.localPath }
+            } else {
+                Toast.makeText(
+                    context,
+                    if (isEn) "Failed to process selected photo." else "Gagal memproses foto yang dipilih.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            isProcessingPhotos = false
+        }
+    }
+
+    val multiPhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(KonselingPhotoHelper.MAX_PHOTOS)
+    ) { uris ->
+        processPickedUris(uris)
+    }
+
+    val singlePhotoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) processPickedUris(listOf(uri))
+    }
+
+    fun openPhotoPicker() {
+        val remaining = KonselingPhotoHelper.MAX_PHOTOS - photoSlots.size
+        if (remaining <= 0) {
+            Toast.makeText(
+                context,
+                if (isEn) "Maximum 3 photos reached." else "Maksimal 3 foto sudah tercapai.",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+        val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        if (remaining >= 2) {
+            multiPhotoPickerLauncher.launch(request)
+        } else {
+            singlePhotoPickerLauncher.launch(request)
+        }
+    }
+
+    fun cleanupUnsavedPhotosAndDismiss() {
+        newlyCreatedPhotoPaths.forEach { KonselingPhotoHelper.deleteLocalPhotoFile(it) }
+        onDismiss()
+    }
+
     fun startVoiceInput(field: KonselingVoiceField) {
         activeVoiceField = field
         val prompt = when (field) {
@@ -342,7 +448,7 @@ fun InputKonselingDialog(
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { cleanupUnsavedPhotosAndDismiss() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
         dragHandle = null,
@@ -1100,6 +1206,171 @@ fun InputKonselingDialog(
                             }
                         }
 
+                        // Dokumentasi Foto Sesi Konseling via Android Photo Picker (Opsional, 1-3 Foto)
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = accentSoftBg.copy(alpha = 0.55f),
+                            border = BorderStroke(1.dp, accentBorder),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("card_konseling_photo_picker")
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.PhotoLibrary,
+                                            contentDescription = null,
+                                            tint = primaryAccent,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Counseling Photos (${photoSlots.size}/3)"
+                                                } else {
+                                                    "Foto Dokumentasi Konseling (${photoSlots.size}/3)"
+                                                },
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = primaryAccent
+                                            )
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Optional (1-3 photos via Photo Picker, attached to PDF)"
+                                                } else {
+                                                    "Opsional (1-3 foto via Photo Picker, otomatis terlampir di PDF)"
+                                                },
+                                                fontSize = 9.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    if (photoSlots.size < KonselingPhotoHelper.MAX_PHOTOS) {
+                                        OutlinedButton(
+                                            onClick = { openPhotoPicker() },
+                                            enabled = !isProcessingPhotos,
+                                            shape = RoundedCornerShape(9.dp),
+                                            border = BorderStroke(1.dp, primaryAccent.copy(alpha = 0.6f)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_pick_konseling_photos")
+                                        ) {
+                                            if (isProcessingPhotos) {
+                                                CircularProgressIndicator(
+                                                    modifier = Modifier.size(14.dp),
+                                                    strokeWidth = 2.dp,
+                                                    color = primaryAccent
+                                                )
+                                            } else {
+                                                Icon(
+                                                    imageVector = Icons.Default.AddPhotoAlternate,
+                                                    contentDescription = if (isEn) "Pick photos" else "Pilih foto",
+                                                    tint = primaryAccent,
+                                                    modifier = Modifier.size(15.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (isEn) "Pick Photo" else "Pilih Foto",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = primaryAccent
+                                            )
+                                        }
+                                    }
+                                }
+
+                                if (photoSlots.isNotEmpty()) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        photoSlots.forEachIndexed { idx, slot ->
+                                            val model = slot.displayModel()
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .aspectRatio(1.15f)
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                                    .border(
+                                                        1.dp,
+                                                        accentBorder,
+                                                        RoundedCornerShape(10.dp)
+                                                    )
+                                                    .clickable { previewPhotoSlot = slot }
+                                                    .testTag("thumb_konseling_photo_$idx")
+                                            ) {
+                                                if (model != null) {
+                                                    AsyncImage(
+                                                        model = model,
+                                                        contentDescription = if (isEn) "Counseling photo ${idx + 1}" else "Foto konseling ${idx + 1}",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.matchParentSize()
+                                                    )
+                                                }
+                                                Surface(
+                                                    shape = RoundedCornerShape(bottomEnd = 8.dp),
+                                                    color = Color.Black.copy(alpha = 0.62f),
+                                                    modifier = Modifier.align(Alignment.TopStart)
+                                                ) {
+                                                    Text(
+                                                        text = "${idx + 1}",
+                                                        fontSize = 9.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color.White,
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        val removedPath = slot.localPath
+                                                        photoSlots = photoSlots.filterIndexed { i, _ -> i != idx }
+                                                        if (removedPath in newlyCreatedPhotoPaths) {
+                                                            KonselingPhotoHelper.deleteLocalPhotoFile(removedPath)
+                                                            newlyCreatedPhotoPaths = newlyCreatedPhotoPaths - removedPath
+                                                        }
+                                                    },
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .size(28.dp)
+                                                        .padding(2.dp)
+                                                        .clip(CircleShape)
+                                                        .background(Color.Black.copy(alpha = 0.65f))
+                                                        .testTag("btn_remove_konseling_photo_$idx")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Close,
+                                                        contentDescription = if (isEn) "Remove photo ${idx + 1}" else "Hapus foto ${idx + 1}",
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        // Spacer slot kosong agar ukuran grid konsisten untuk 1 atau 2 foto
+                                        repeat((KonselingPhotoHelper.MAX_PHOTOS - photoSlots.size).coerceAtLeast(0)) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         // Toggle Tandai Selesai Kompak
                         Row(
                             modifier = Modifier
@@ -1128,7 +1399,7 @@ fun InputKonselingDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             OutlinedButton(
-                                onClick = onDismiss,
+                                onClick = { cleanupUnsavedPhotosAndDismiss() },
                                 shape = RoundedCornerShape(10.dp),
                                 modifier = Modifier
                                     .weight(0.38f)
@@ -1139,6 +1410,7 @@ fun InputKonselingDialog(
                             Button(
                                 onClick = {
                                     val st = selectedStudent ?: return@Button
+                                    val (packedPaths, packedUrls) = KonselingPhotoHelper.packSlots(photoSlots)
                                     onSave(
                                         st,
                                         entryType,
@@ -1152,10 +1424,12 @@ fun InputKonselingDialog(
                                         followUpDate,
                                         sessionDate,
                                         markCompleted,
+                                        packedPaths,
+                                        packedUrls,
                                         recordToEdit
                                     )
                                 },
-                                enabled = canSave,
+                                enabled = canSave && !isProcessingPhotos,
                                 shape = RoundedCornerShape(10.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = primaryAccent),
                                 modifier = Modifier
@@ -1179,6 +1453,41 @@ fun InputKonselingDialog(
                     }
                 }
                 Spacer(modifier = Modifier.height(6.dp))
+            }
+        }
+    }
+
+    previewPhotoSlot?.let { slot ->
+        val model = slot.displayModel()
+        if (model != null) {
+            Dialog(onDismissRequest = { previewPhotoSlot = null }) {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        AsyncImage(
+                            model = model,
+                            contentDescription = if (isEn) "Counseling photo preview" else "Pratinjau foto konseling",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 180.dp, max = 420.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                        )
+                        Button(
+                            onClick = { previewPhotoSlot = null },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        ) {
+                            Text(s.nav.close)
+                        }
+                    }
+                }
             }
         }
     }

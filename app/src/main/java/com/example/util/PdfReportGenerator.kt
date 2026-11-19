@@ -52,6 +52,8 @@ import com.example.data.model.WaliScheduleHelper
 import com.example.data.model.WaliShiftCode
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -3451,6 +3453,169 @@ object PdfReportGenerator {
         }
     }
 
+    private fun resolveKonselingPhotoFilesSync(
+        rec: KonselingRecord,
+        preloadedPhotos: Map<Long, List<File>>
+    ): List<File> {
+        val preloaded = preloadedPhotos[rec.id].orEmpty().filter { it.exists() && it.length() > 0L }
+        if (preloaded.isNotEmpty()) return preloaded.take(KonselingPhotoHelper.MAX_PHOTOS)
+        return KonselingPhotoHelper.extractSlots(rec).mapNotNull { slot ->
+            slot.localPath.takeIf { it.isNotBlank() }?.let { path ->
+                File(path).takeIf { it.exists() && it.length() > 0L }
+            }
+        }.take(KonselingPhotoHelper.MAX_PHOTOS)
+    }
+
+    private fun calculateKonselingPhotoBlockHeight(photoCount: Int): Float = when {
+        photoCount <= 0 -> 0f
+        photoCount == 1 -> 150f
+        photoCount == 2 -> 138f
+        else -> 118f
+    }
+
+    private fun drawKonselingPhotoGrid(
+        canvas: Canvas,
+        paint: Paint,
+        leftX: Float,
+        topY: Float,
+        innerWidth: Float,
+        photoFiles: List<File>,
+        isEn: Boolean
+    ): Float {
+        if (photoFiles.isEmpty()) return topY
+        val files = photoFiles.take(KonselingPhotoHelper.MAX_PHOTOS)
+        val count = files.size
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8f
+        paint.color = Color.rgb(91, 33, 182)
+        val headerLabel = if (isEn) {
+            "Photo Documentation ($count ${if (count == 1) "Photo" else "Photos"}):"
+        } else {
+            "Lampiran Dokumentasi ($count Foto):"
+        }
+        canvas.drawText(headerLabel, leftX, topY + 10f, paint)
+
+        val gridTop = topY + 15f
+        val (boxW, boxH, gap, startOffsetX) = when (count) {
+            1 -> {
+                val w = (innerWidth * 0.56f).coerceAtLeast(220f).coerceAtMost(innerWidth)
+                val offset = (innerWidth - w) / 2f
+                listOf(w, 128f, 0f, offset)
+            }
+            2 -> {
+                val g = 10f
+                val w = (innerWidth - g) / 2f
+                listOf(w, 116f, g, 0f)
+            }
+            else -> {
+                val g = 8f
+                val w = (innerWidth - g * 2f) / 3f
+                listOf(w, 96f, g, 0f)
+            }
+        }
+
+        val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        val captionH = 14f
+
+        files.forEachIndexed { idx, file ->
+            val cellLeft = leftX + startOffsetX + idx * (boxW + gap)
+            val cellRight = cellLeft + boxW
+            val cellBottom = gridTop + boxH
+
+            // Bingkai kartu foto lembut
+            paint.style = Paint.Style.FILL
+            paint.color = Color.rgb(248, 250, 252)
+            canvas.drawRoundRect(RectF(cellLeft, gridTop, cellRight, cellBottom), 5f, 5f, paint)
+
+            val imgAreaLeft = cellLeft + 3f
+            val imgAreaTop = gridTop + 3f
+            val imgAreaRight = cellRight - 3f
+            val imgAreaBottom = cellBottom - captionH - 2f
+            val availW = (imgAreaRight - imgAreaLeft).coerceAtLeast(10f)
+            val availH = (imgAreaBottom - imgAreaTop).coerceAtLeast(10f)
+
+            val bmp = KonselingPhotoHelper.decodePdfBitmap(file, maxDimension = 680)
+            if (bmp != null) {
+                try {
+                    val scale = minOf(availW / bmp.width.toFloat(), availH / bmp.height.toFloat())
+                    val drawW = bmp.width * scale
+                    val drawH = bmp.height * scale
+                    val drawLeft = imgAreaLeft + (availW - drawW) / 2f
+                    val drawTop = imgAreaTop + (availH - drawH) / 2f
+                    canvas.drawBitmap(
+                        bmp,
+                        null,
+                        RectF(drawLeft, drawTop, drawLeft + drawW, drawTop + drawH),
+                        bmpPaint
+                    )
+                } finally {
+                    bmp.recycle()
+                }
+            } else {
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                paint.textSize = 7f
+                paint.color = Color.rgb(148, 163, 184)
+                paint.textAlign = Paint.Align.CENTER
+                canvas.drawText(
+                    if (isEn) "Photo unavailable" else "Foto tidak tersedia",
+                    cellLeft + boxW / 2f,
+                    imgAreaTop + availH / 2f,
+                    paint
+                )
+                paint.textAlign = Paint.Align.LEFT
+            }
+
+            // Garis pemisah & label nomor foto
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(226, 232, 240)
+            paint.strokeWidth = 0.6f
+            canvas.drawLine(cellLeft, cellBottom - captionH, cellRight, cellBottom - captionH, paint)
+
+            paint.color = Color.rgb(203, 213, 225)
+            paint.strokeWidth = 0.8f
+            canvas.drawRoundRect(RectF(cellLeft, gridTop, cellRight, cellBottom), 5f, 5f, paint)
+
+            paint.style = Paint.Style.FILL
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 7f
+            paint.color = Color.rgb(71, 85, 105)
+            paint.textAlign = Paint.Align.CENTER
+            canvas.drawText(
+                if (isEn) "Photo ${idx + 1}" else "Foto ${idx + 1}",
+                cellLeft + boxW / 2f,
+                cellBottom - 4f,
+                paint
+            )
+            paint.textAlign = Paint.Align.LEFT
+        }
+
+        return gridTop + boxH + 6f
+    }
+
+    /**
+     * Membuat PDF Catatan Konseling Rahasia Per Anak (Hanya untuk Wali Asuh bersangkutan),
+     * termasuk mengunduh cache foto lampiran dari cloud terlebih dahulu bila diperlukan.
+     */
+    suspend fun generateKonselingStudentPdfWithPhotos(
+        context: Context,
+        student: ChildStudent,
+        records: List<KonselingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? = withContext(Dispatchers.IO) {
+        val studentRecs = records.filter { KonselingHelper.matchesStudent(it, student) }
+        val preloaded = KonselingPhotoHelper.preloadPhotosForPdfRecords(context, studentRecs)
+        generateKonselingStudentPdf(
+            context = context,
+            student = student,
+            records = records,
+            waliName = waliName,
+            schoolProfile = schoolProfile,
+            preloadedPhotos = preloaded
+        )
+    }
+
     /**
      * Membuat PDF Catatan Konseling Rahasia Per Anak (Hanya untuk Wali Asuh bersangkutan).
      */
@@ -3459,7 +3624,8 @@ object PdfReportGenerator {
         student: ChildStudent,
         records: List<KonselingRecord>,
         waliName: String = "Wali Asuh",
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        preloadedPhotos: Map<Long, List<File>> = emptyMap()
     ): File? {
         try {
             val document = PdfDocument()
@@ -3473,6 +3639,7 @@ object PdfReportGenerator {
                 records = records,
                 waliName = waliName,
                 schoolProfile = schoolProfile,
+                preloadedPhotos = preloadedPhotos,
                 pageWidth = pageWidth,
                 pageHeight = pageHeight,
                 startNewCanvas = { pageNum ->
@@ -3508,6 +3675,7 @@ object PdfReportGenerator {
         records: List<KonselingRecord>,
         waliName: String = "Wali Asuh",
         schoolProfile: SchoolProfile = SchoolProfile(),
+        preloadedPhotos: Map<Long, List<File>> = emptyMap(),
         pageWidth: Int = 595,
         pageHeight: Int = 842,
         startNewCanvas: (pageNumber: Int) -> Canvas,
@@ -3774,9 +3942,12 @@ object PdfReportGenerator {
                     addAll(buildWrappedFieldRows(fuPrefix, rec.followUpPlan, Color.rgb(91, 33, 182)))
                 }
 
+                val photoFiles = resolveKonselingPhotoFilesSync(rec, preloadedPhotos)
+                val photoBlockH = calculateKonselingPhotoBlockHeight(photoFiles.size)
+
                 val headerBlockH = headerLines.size * 12f + 2f + metaLines.size * 10.5f + 5f
                 val bodyBlockH = fieldRows.sumOf { (bodyLineH + it.extraGapAfter).toDouble() }.toFloat()
-                val totalCardH = 10f + headerBlockH + bodyBlockH + 6f
+                val totalCardH = 10f + headerBlockH + bodyBlockH + photoBlockH + 6f
                 val maxSinglePageCardH = pageBottomLimit - 55f
                 val cardBg = if (idx % 2 == 0) Color.WHITE else Color.rgb(250, 245, 255)
 
@@ -3846,9 +4017,20 @@ object PdfReportGenerator {
                         drawFieldRow(row, rowY)
                         rowY += bodyLineH + row.extraGapAfter
                     }
+                    if (photoFiles.isNotEmpty()) {
+                        drawKonselingPhotoGrid(
+                            canvas = canvas,
+                            paint = paint,
+                            leftX = boxLeft + 9f,
+                            topY = rowY - 4f,
+                            innerWidth = innerWidth,
+                            photoFiles = photoFiles,
+                            isEn = isEn
+                        )
+                    }
                     currentY += totalCardH + 7f
                 } else {
-                    // Ultra-long single entry: split gracefully across pages without clipping a single line
+                    // Ultra-long single entry: split gracefully across pages without clipping a single line or photo
                     if (currentY + headerBlockH + 40f > pageBottomLimit) {
                         startContinuationPage(
                             if (isEn) "Confidential Counseling: ${student.name}" else "Catatan Konseling: ${student.name}"
@@ -3897,6 +4079,34 @@ object PdfReportGenerator {
                             )
                         }
                     }
+                    if (photoFiles.isNotEmpty()) {
+                        val standalonePhotoCardH = 22f + photoBlockH + 6f
+                        if (currentY + standalonePhotoCardH > pageBottomLimit) {
+                            startContinuationPage(
+                                if (isEn) "Confidential Counseling: ${student.name}" else "Catatan Konseling: ${student.name}"
+                            )
+                        }
+                        drawCardFrame(currentY, currentY + standalonePhotoCardH)
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                        paint.textSize = 7.8f
+                        paint.color = Color.rgb(109, 40, 217)
+                        canvas.drawText(
+                            "${idx + 1}. ${rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) }} — ${if (isEn) "Attachments" else "Lampiran Foto"}",
+                            boxLeft + 9f,
+                            currentY + 13f,
+                            paint
+                        )
+                        drawKonselingPhotoGrid(
+                            canvas = canvas,
+                            paint = paint,
+                            leftX = boxLeft + 9f,
+                            topY = currentY + 18f,
+                            innerWidth = innerWidth,
+                            photoFiles = photoFiles,
+                            isEn = isEn
+                        )
+                        currentY += standalonePhotoCardH + 7f
+                    }
                 }
             }
         }
@@ -3912,6 +4122,28 @@ object PdfReportGenerator {
     }
 
     /**
+     * Membuat PDF Rekap Konseling Rahasia Seluruh Anak Binaan Wali Asuh Bersangkutan,
+     * lengkap dengan preload foto lampiran agar ikut tercetak rapi pada bagian lampiran PDF.
+     */
+    suspend fun generateKonselingSummaryPdfWithPhotos(
+        context: Context,
+        students: List<ChildStudent>,
+        records: List<KonselingRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? = withContext(Dispatchers.IO) {
+        val preloaded = KonselingPhotoHelper.preloadPhotosForPdfRecords(context, records)
+        generateKonselingSummaryPdf(
+            context = context,
+            students = students,
+            records = records,
+            waliName = waliName,
+            schoolProfile = schoolProfile,
+            preloadedPhotos = preloaded
+        )
+    }
+
+    /**
      * Membuat PDF Rekap Konseling Rahasia Seluruh Anak Binaan Wali Asuh Bersangkutan.
      */
     fun generateKonselingSummaryPdf(
@@ -3919,7 +4151,8 @@ object PdfReportGenerator {
         students: List<ChildStudent>,
         records: List<KonselingRecord>,
         waliName: String = "Wali Asuh",
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        preloadedPhotos: Map<Long, List<File>> = emptyMap()
     ): File? {
         try {
             val document = PdfDocument()
@@ -3933,6 +4166,7 @@ object PdfReportGenerator {
                 records = records,
                 waliName = waliName,
                 schoolProfile = schoolProfile,
+                preloadedPhotos = preloadedPhotos,
                 pageWidth = pageWidth,
                 pageHeight = pageHeight,
                 startNewCanvas = { pageNum ->
@@ -3968,6 +4202,7 @@ object PdfReportGenerator {
         records: List<KonselingRecord>,
         waliName: String = "Wali Asuh",
         schoolProfile: SchoolProfile = SchoolProfile(),
+        preloadedPhotos: Map<Long, List<File>> = emptyMap(),
         pageWidth: Int = 595,
         pageHeight: Int = 842,
         startNewCanvas: (pageNumber: Int) -> Canvas,
@@ -4109,6 +4344,7 @@ object PdfReportGenerator {
 
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             paint.textSize = 7.3f
+            val photoCount = resolveKonselingPhotoFilesSync(rec, preloadedPhotos).size
             val detailLines = buildList {
                 if (rec.summary.isNotBlank()) {
                     addAll(wrapSummaryCellLines("${if (isEn) "Summary" else "Ringkasan"}: ${rec.summary}", paint, 196f))
@@ -4118,6 +4354,14 @@ object PdfReportGenerator {
                 }
                 if (rec.followUpPlan.isNotBlank()) {
                     addAll(wrapSummaryCellLines("${if (isEn) "Follow-Up" else "Tindak Lanjut"}: ${rec.followUpPlan}", paint, 196f))
+                }
+                if (photoCount > 0) {
+                    val photoNote = if (isEn) {
+                        "Attachments: $photoCount photo(s) (see Photo Appendix below)"
+                    } else {
+                        "Lampiran: $photoCount foto dokumentasi (lihat Lampiran di bawah)"
+                    }
+                    addAll(wrapSummaryCellLines(photoNote, paint, 196f))
                 }
             }
 
@@ -4194,6 +4438,81 @@ object PdfReportGenerator {
             currentY = rTop + rowH
         }
         currentY += 16f
+
+        // Bagian Lampiran Foto Sesi Konseling yang Terstruktur Rapi
+        val recordsWithPhotos = sortedRecords.mapNotNull { rec ->
+            val files = resolveKonselingPhotoFilesSync(rec, preloadedPhotos)
+            if (files.isNotEmpty()) rec to files else null
+        }
+        if (recordsWithPhotos.isNotEmpty()) {
+            val sectionHeaderH = 26f
+            if (currentY + sectionHeaderH + 140f > pageBottomLimit) {
+                finishCurrentCanvas()
+                pageNumber++
+                canvas = startNewCanvas(pageNumber)
+                currentY = 40f
+            }
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 10f
+            paint.color = Color.rgb(76, 29, 149)
+            canvas.drawText(
+                if (isEn) {
+                    "COUNSELING SESSION PHOTO DOCUMENTATION APPENDIX"
+                } else {
+                    "LAMPIRAN FOTO DOKUMENTASI SESI KONSELING"
+                },
+                boxLeft,
+                currentY + 12f,
+                paint
+            )
+            currentY += 22f
+
+            val innerWidth = boxRight - boxLeft - 18f
+            recordsWithPhotos.forEachIndexed { photoIdx, (rec, photoFiles) ->
+                val photoBlockH = calculateKonselingPhotoBlockHeight(photoFiles.size)
+                val cardH = 30f + photoBlockH + 4f
+                if (currentY + cardH > pageBottomLimit) {
+                    finishCurrentCanvas()
+                    pageNumber++
+                    canvas = startNewCanvas(pageNumber)
+                    currentY = 40f
+                }
+
+                paint.style = Paint.Style.FILL
+                paint.color = if (photoIdx % 2 == 0) Color.WHITE else Color.rgb(250, 245, 255)
+                canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + cardH), 6f, 6f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(221, 214, 254)
+                paint.strokeWidth = 0.9f
+                canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + cardH), 6f, 6f, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.6f
+                paint.color = Color.rgb(76, 29, 149)
+                val sessionTitle = rec.title.ifBlank { KonselingHelper.formatTopicLabel(rec.topic, isEn) }
+                val cardHeaderText = "${photoIdx + 1}. ${rec.studentName} • ${dateFmt.format(Date(rec.sessionDate))} — $sessionTitle"
+                val truncatedHeader = TextUtils.ellipsize(
+                    cardHeaderText,
+                    TextPaint(paint),
+                    innerWidth,
+                    TextUtils.TruncateAt.END
+                ).toString()
+                canvas.drawText(truncatedHeader, boxLeft + 9f, currentY + 15f, paint)
+
+                drawKonselingPhotoGrid(
+                    canvas = canvas,
+                    paint = paint,
+                    leftX = boxLeft + 9f,
+                    topY = currentY + 22f,
+                    innerWidth = innerWidth,
+                    photoFiles = photoFiles,
+                    isEn = isEn
+                )
+                currentY += cardH + 8f
+            }
+            currentY += 8f
+        }
 
         if (currentY > pageHeight - 140f) {
             finishCurrentCanvas()

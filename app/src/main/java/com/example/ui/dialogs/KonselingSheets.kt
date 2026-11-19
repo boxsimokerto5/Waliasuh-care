@@ -77,6 +77,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.window.Dialog
+import coil.compose.AsyncImage
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.KonselingHelper
@@ -84,8 +89,10 @@ import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.SchoolProfile
 import com.example.util.DateUtils
+import com.example.util.KonselingPhotoHelper
 import com.example.util.PdfReportGenerator
 import com.example.util.i18n.LocalAppStrings
+import kotlinx.coroutines.launch
 import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -269,20 +276,35 @@ fun KonselingFollowUpSheet(
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                     }
+                                    val fuPhotoCount = remember(rec.photoPaths, rec.photoUrls) {
+                                        KonselingPhotoHelper.countPhotos(rec)
+                                    }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(13.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = rec.followUpDate?.let { DateUtils.formatShortDate(it, lang) }
-                                                    ?: DateUtils.formatShortDate(rec.sessionDate, lang),
-                                                fontSize = 10.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(Icons.Default.Schedule, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(13.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = rec.followUpDate?.let { DateUtils.formatShortDate(it, lang) }
+                                                        ?: DateUtils.formatShortDate(rec.sessionDate, lang),
+                                                    fontSize = 10.5.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            if (fuPhotoCount > 0) {
+                                                KonselingBadgePill(
+                                                    text = if (isEn) "$fuPhotoCount Photo" else "$fuPhotoCount Foto",
+                                                    bg = Color(0xFFEDE9FE),
+                                                    fg = Color(0xFF5B21B6)
+                                                )
+                                            }
                                         }
                                         Button(
                                             onClick = { onToggleStatus(rec) },
@@ -327,12 +349,15 @@ fun KonselingHistoryLogsSheet(
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     val lang = s.language
+    val coroutineScope = rememberCoroutineScope()
 
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
     var searchQuery by remember { mutableStateOf("") }
     var recordFilter by remember { mutableIntStateOf(0) } // 0=All, 1=Sesi, 2=Perkembangan, 3=Pantau, 4=Selesai
     var recordToDelete by remember { mutableStateOf<KonselingRecord?>(null) }
     var readyPdfFile by remember { mutableStateOf<File?>(null) }
+    var isGeneratingPdf by remember { mutableStateOf(false) }
+    var previewPhotoModel by remember { mutableStateOf<Any?>(null) }
 
     val filteredRecords = remember(records, searchQuery, recordFilter) {
         val q = searchQuery.trim().lowercase()
@@ -429,22 +454,28 @@ fun KonselingHistoryLogsSheet(
                     }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedButton(
+                            enabled = !isGeneratingPdf,
                             onClick = {
-                                val pdf = PdfReportGenerator.generateKonselingSummaryPdf(
-                                    context = context,
-                                    students = studentsForSummary,
-                                    records = records,
-                                    waliName = waliName,
-                                    schoolProfile = schoolProfile
-                                )
-                                if (pdf != null) {
-                                    readyPdfFile = pdf
-                                } else {
-                                    Toast.makeText(
-                                        context,
-                                        if (isEn) "Failed to generate recap PDF." else "Gagal membuat PDF rekap konseling.",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                if (isGeneratingPdf) return@OutlinedButton
+                                isGeneratingPdf = true
+                                coroutineScope.launch {
+                                    val pdf = PdfReportGenerator.generateKonselingSummaryPdfWithPhotos(
+                                        context = context,
+                                        students = studentsForSummary,
+                                        records = records,
+                                        waliName = waliName,
+                                        schoolProfile = schoolProfile
+                                    )
+                                    isGeneratingPdf = false
+                                    if (pdf != null) {
+                                        readyPdfFile = pdf
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Failed to generate recap PDF." else "Gagal membuat PDF rekap konseling.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
@@ -453,9 +484,16 @@ fun KonselingHistoryLogsSheet(
                                 .heightIn(min = 48.dp)
                                 .testTag("btn_konseling_history_pdf")
                         ) {
-                            Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
+                            if (isGeneratingPdf) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(14.dp),
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(15.dp))
+                            }
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
+                            Text(if (isGeneratingPdf) "..." else "PDF", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                         }
                         IconButton(
                             onClick = onDismiss,
@@ -592,6 +630,53 @@ fun KonselingHistoryLogsSheet(
                                                 overflow = TextOverflow.Ellipsis,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
+                                        }
+                                        val historyPhotos = remember(rec.photoPaths, rec.photoUrls) {
+                                            KonselingPhotoHelper.extractSlots(rec)
+                                        }
+                                        if (historyPhotos.isNotEmpty()) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .horizontalScroll(rememberScrollState()),
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.PhotoLibrary,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF6D28D9),
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                historyPhotos.forEachIndexed { idx, slot ->
+                                                    val model = slot.displayModel()
+                                                    if (model != null) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(52.dp)
+                                                                .clip(RoundedCornerShape(7.dp))
+                                                                .border(
+                                                                    1.dp,
+                                                                    Color(0xFFDDD6FE),
+                                                                    RoundedCornerShape(7.dp)
+                                                                )
+                                                                .clickable { previewPhotoModel = model }
+                                                                .testTag("img_konseling_history_photo_${rec.id}_$idx")
+                                                        ) {
+                                                            AsyncImage(
+                                                                model = model,
+                                                                contentDescription = if (isEn) {
+                                                                    "Counseling photo ${idx + 1}"
+                                                                } else {
+                                                                    "Foto konseling ${idx + 1}"
+                                                                },
+                                                                contentScale = ContentScale.Crop,
+                                                                modifier = Modifier.matchParentSize()
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -756,6 +841,37 @@ fun KonselingHistoryLogsSheet(
                 }
             }
         )
+    }
+
+    previewPhotoModel?.let { model ->
+        Dialog(onDismissRequest = { previewPhotoModel = null }) {
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surface
+            ) {
+                Column(
+                    modifier = Modifier.padding(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.End
+                ) {
+                    AsyncImage(
+                        model = model,
+                        contentDescription = if (isEn) "Counseling photo preview" else "Pratinjau foto konseling",
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 200.dp, max = 440.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    )
+                    TextButton(
+                        onClick = { previewPhotoModel = null },
+                        modifier = Modifier.testTag("btn_close_konseling_history_photo_preview")
+                    ) {
+                        Text(s.nav.close)
+                    }
+                }
+            }
+        }
     }
 }
 

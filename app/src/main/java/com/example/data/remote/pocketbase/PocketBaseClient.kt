@@ -311,14 +311,6 @@ interface PocketBaseService {
     ): Response<ResponseBody>
 
     // --- Saving Transactions (Tabungan Anak Asuh & Bukti Foto 3 Bulan) ---
-    @GET("api/collections/saving_transactions/records")
-    suspend fun listSavingTransactions(
-        @Query("page") page: Int = 1,
-        @Query("perPage") perPage: Int = 500,
-        @Query("filter") filter: String? = null,
-        @Query("sort") sort: String? = "-transaction_date,-created_at"
-    ): Response<PbListResponse<PbSavingTransactionDto>>
-
     @Multipart
     @POST("api/collections/saving_transactions/records")
     suspend fun createSavingTransactionMultipart(

@@ -20,7 +20,8 @@ data class PbFieldDef(
     val name: String,
     val type: String, // "text", "number", "bool", "file"
     val fileMaxSize: Long = 10_485_760L,
-    val fileMimeTypes: List<String> = listOf("image/jpeg", "image/png", "image/webp")
+    val fileMimeTypes: List<String> = listOf("image/jpeg", "image/png", "image/webp"),
+    val fileMaxSelect: Int = 1
 )
 
 data class PocketBaseCollectionMeta(
@@ -585,6 +586,14 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("follow_up_date", "number"),
                 PbFieldDef("status", "text"),
                 PbFieldDef("session_date", "number"),
+                PbFieldDef("photo_urls", "text"),
+                PbFieldDef(
+                    name = "photo_files",
+                    type = "file",
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp"),
+                    fileMaxSelect = 3
+                ),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),
@@ -884,7 +893,7 @@ object PocketBaseSchemaProvider {
                         .put("name", field.name)
                         .put("type", field.type)
                     if (field.type == "file") {
-                        obj.put("maxSelect", 1)
+                        obj.put("maxSelect", field.fileMaxSelect.coerceAtLeast(1))
                         obj.put("maxSize", field.fileMaxSize)
                         obj.put(
                             "mimeTypes",
@@ -1138,6 +1147,11 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
                         existingFieldNames.add(fName)
                         val tf = targetByName[fName]
                         if (tf != null && f.optString("type") == "file" && tf.optString("type") == "file") {
+                            val targetMaxSelect = tf.optInt("maxSelect", 1)
+                            if (f.optInt("maxSelect", 1) < targetMaxSelect) {
+                                f.put("maxSelect", targetMaxSelect)
+                                fileFieldUpdated = true
+                            }
                             val targetMax = tf.optLong("maxSize", 0L)
                             if (f.optLong("maxSize", 0L) < targetMax) {
                                 f.put("maxSize", targetMax)

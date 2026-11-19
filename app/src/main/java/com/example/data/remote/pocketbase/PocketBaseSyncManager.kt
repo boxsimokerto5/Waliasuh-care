@@ -1557,6 +1557,152 @@ object PocketBaseSyncManager {
         }
 
     // --- Konseling Rahasia Wali Asuh (Records & Logs) ---
+    suspend fun uploadSingleKonselingRecordWithPhotos(
+        context: Context,
+        rec: KonselingRecord
+    ): KonselingRecord = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext rec
+        val slots = com.example.util.KonselingPhotoHelper.extractSlots(rec)
+        val pendingLocalFiles = slots.mapNotNull { slot ->
+            if (slot.localPath.isNotBlank() && slot.remoteUrl.isBlank()) {
+                val f = java.io.File(slot.localPath)
+                if (f.exists() && f.length() > 0L) slot to f else null
+            } else null
+        }
+
+        if (pendingLocalFiles.isEmpty()) {
+            uploadSingleKonselingRecord(context, rec)
+            return@withContext rec
+        }
+
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            uploadSingleKonselingRecord(context, rec)
+            return@withContext rec
+        }
+
+        val safeId = if (rec.id > 0L) rec.id else PocketBaseIdCodec.stablePositiveHash(
+            "kons_rec:${rec.schoolId}:${rec.ownerWaliUsername}:${rec.studentId}:${rec.createdAt}"
+        )
+        val pbId = PocketBaseIdCodec.toPbId(safeId)
+
+        val uploadedRecord = runCatching {
+            val client = OkHttpClient.Builder()
+                .connectTimeout(20, TimeUnit.SECONDS)
+                .readTimeout(90, TimeUnit.SECONDS)
+                .writeTimeout(90, TimeUnit.SECONDS)
+                .build()
+
+            fun buildMultipart(includeId: Boolean): MultipartBody {
+                val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+                if (includeId) builder.addFormDataPart("id", pbId)
+                builder
+                    .addFormDataPart("local_id", safeId.toString())
+                    .addFormDataPart("school_id", rec.schoolId.ifBlank { "SRT1-KDR" })
+                    .addFormDataPart("student_id", rec.studentId.toString())
+                    .addFormDataPart("student_name", rec.studentName)
+                    .addFormDataPart("student_nis", rec.studentNis)
+                    .addFormDataPart("student_class", rec.studentClass)
+                    .addFormDataPart("student_dorm", rec.studentDorm)
+                    .addFormDataPart("owner_wali_username", rec.ownerWaliUsername)
+                    .addFormDataPart("owner_wali_name", rec.ownerWaliName)
+                    .addFormDataPart("is_confidential", rec.isConfidential.toString())
+                    .addFormDataPart("entry_type", rec.entryType)
+                    .addFormDataPart("topic", rec.topic)
+                    .addFormDataPart("urgency_level", rec.urgencyLevel)
+                    .addFormDataPart("mood_level", rec.moodLevel)
+                    .addFormDataPart("title", rec.title)
+                    .addFormDataPart("summary", rec.summary)
+                    .addFormDataPart("intervention", rec.intervention)
+                    .addFormDataPart("follow_up_plan", rec.followUpPlan)
+                    .addFormDataPart("follow_up_date", (rec.followUpDate ?: 0L).toString())
+                    .addFormDataPart("status", rec.status)
+                    .addFormDataPart("session_date", rec.sessionDate.toString())
+                    .addFormDataPart("photo_urls", rec.photoUrls)
+                    .addFormDataPart("created_at", rec.createdAt.toString())
+                    .addFormDataPart("updated_at", rec.updatedAt.toString())
+
+                pendingLocalFiles.forEachIndexed { idx, (_, file) ->
+                    val fname = "konseling_${safeId}_${System.currentTimeMillis()}_$idx.jpg"
+                    builder.addFormDataPart(
+                        "photo_files",
+                        fname,
+                        file.readBytes().toRequestBody("image/jpeg".toMediaType())
+                    )
+                }
+                return builder.build()
+            }
+
+            val patchReq = Request.Builder()
+                .url("$baseUrl/api/collections/konseling_records/records/$pbId")
+                .patch(buildMultipart(includeId = false))
+                .build()
+
+            var respCode = 0
+            var respBody = ""
+            var ok = false
+            client.newCall(patchReq).execute().use { resp ->
+                respCode = resp.code
+                respBody = resp.body?.string().orEmpty()
+                ok = resp.isSuccessful
+            }
+
+            if (!ok && respCode == 404) {
+                val postReq = Request.Builder()
+                    .url("$baseUrl/api/collections/konseling_records/records")
+                    .post(buildMultipart(includeId = true))
+                    .build()
+                client.newCall(postReq).execute().use { resp ->
+                    respCode = resp.code
+                    respBody = resp.body?.string().orEmpty()
+                    ok = resp.isSuccessful
+                }
+            }
+
+            if (!ok || respBody.isBlank()) return@runCatching null
+            val json = JSONObject(respBody)
+            val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "konseling_records").ifBlank { "konseling_records" }
+            val filenames = mutableListOf<String>()
+            val arr = json.optJSONArray("photo_files")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val fn = arr.optString(i, "").trim()
+                    if (fn.isNotBlank()) filenames.add(fn)
+                }
+            } else {
+                val single = json.optString("photo_files", "").trim()
+                if (single.isNotBlank()) filenames.add(single)
+            }
+            if (filenames.isEmpty()) return@runCatching null
+
+            // Ambil N nama file terbaru yang cocok untuk pending slots
+            val newUrls = filenames.takeLast(pendingLocalFiles.size).map { fn ->
+                DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, fn)
+                    .ifBlank { DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, fn) }
+            }
+            var pendingIdx = 0
+            val mergedSlots = slots.map { slot ->
+                if (slot.localPath.isNotBlank() && slot.remoteUrl.isBlank()) {
+                    val url = newUrls.getOrNull(pendingIdx++).orEmpty()
+                    slot.copy(remoteUrl = url)
+                } else {
+                    slot
+                }
+            }
+            val (packedPaths, packedUrls) = com.example.util.KonselingPhotoHelper.packSlots(mergedSlots)
+            rec.copy(photoPaths = packedPaths, photoUrls = packedUrls)
+        }.getOrNull()
+
+        if (uploadedRecord != null) {
+            uploadSingleKonselingRecord(context, uploadedRecord)
+            uploadedRecord
+        } else {
+            uploadSingleKonselingRecord(context, rec)
+            rec
+        }
+    }
+
     suspend fun uploadSingleKonselingRecord(context: Context, rec: KonselingRecord) =
         withContext(Dispatchers.IO) {
             if (!PocketBaseConfig.isConfigured(context)) return@withContext
@@ -2099,9 +2245,15 @@ object PocketBaseSyncManager {
         val localById = localRecs.associateBy { it.id }
         val remoteById = remoteRecs.associateBy { it.id }
 
-        val toInsertLocal = remoteRecs.filter { rem ->
+        val toInsertLocal = remoteRecs.mapNotNull { rem ->
             val loc = localById[rem.id]
-            loc == null || rem.updatedAt >= loc.updatedAt
+            if (loc == null || rem.updatedAt >= loc.updatedAt) {
+                if (loc != null && loc.photoPaths.isNotBlank()) {
+                    rem.copy(photoPaths = loc.photoPaths)
+                } else {
+                    rem
+                }
+            } else null
         }
         if (toInsertLocal.isNotEmpty()) {
             repository.insertAllKonselingRecords(toInsertLocal)
