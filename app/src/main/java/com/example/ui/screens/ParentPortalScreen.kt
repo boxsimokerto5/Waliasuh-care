@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -1125,12 +1126,13 @@ private fun ParentProfileContent(
                                 "Foto profil ananda belum diunggah"
                             },
                             showZoomBadge = hasProfilePhoto,
+                            contentScale = androidx.compose.ui.layout.ContentScale.Fit,
                             shape = RoundedCornerShape(16.dp),
-                            borderColor = Color.White.copy(alpha = 0.65f),
+                            borderColor = Color.White.copy(alpha = 0.78f),
                             placeholderAvatarSize = 98.dp,
                             modifier = Modifier
-                                .fillMaxWidth()
-                                .height(225.dp)
+                                .width(204.dp)
+                                .aspectRatio(3f / 4f)
                                 .let { mod ->
                                     if (onPreviewPhoto != null) {
                                         mod.clickable(onClick = onPreviewPhoto).testTag("btn_parent_preview_student_photo")

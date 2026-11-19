@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -82,6 +83,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -563,32 +565,38 @@ fun StudentDetailDialog(
                                             }
                                         }
 
-                                        StudentLargeProfilePhoto(
-                                            name = student.name,
-                                            gender = student.gender,
-                                            photoUrl = student.photoUrl,
-                                            photoFallbackUrl = student.photoFallbackUrl,
-                                            emptyHint = if (isEn) {
-                                                "No student profile photo uploaded yet"
-                                            } else {
-                                                "Belum ada foto profil siswa"
-                                            },
-                                            showZoomBadge = hasDetailPhoto,
-                                            shape = RoundedCornerShape(12.dp),
-                                            borderColor = MaterialTheme.colorScheme.outlineVariant,
-                                            placeholderAvatarSize = 96.dp,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(196.dp)
-                                                .let { mod ->
-                                                    when {
-                                                        hasDetailPhoto -> mod.clickable { showPhotoPreview = true }
-                                                        onUploadStudentPhoto != null -> mod.clickable { showPhotoManager = true }
-                                                        else -> mod
+                                        Box(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            StudentLargeProfilePhoto(
+                                                name = student.name,
+                                                gender = student.gender,
+                                                photoUrl = student.photoUrl,
+                                                photoFallbackUrl = student.photoFallbackUrl,
+                                                emptyHint = if (isEn) {
+                                                    "No student profile photo uploaded yet"
+                                                } else {
+                                                    "Belum ada foto profil siswa"
+                                                },
+                                                showZoomBadge = hasDetailPhoto,
+                                                contentScale = ContentScale.Fit,
+                                                shape = RoundedCornerShape(14.dp),
+                                                borderColor = MaterialTheme.colorScheme.outlineVariant,
+                                                placeholderAvatarSize = 96.dp,
+                                                modifier = Modifier
+                                                    .width(180.dp)
+                                                    .aspectRatio(3f / 4f)
+                                                    .let { mod ->
+                                                        when {
+                                                            hasDetailPhoto -> mod.clickable { showPhotoPreview = true }
+                                                            onUploadStudentPhoto != null -> mod.clickable { showPhotoManager = true }
+                                                            else -> mod
+                                                        }
                                                     }
-                                                }
-                                                .testTag("img_student_detail_large_photo")
-                                        )
+                                                    .testTag("img_student_detail_large_photo")
+                                            )
+                                        }
                                     }
                                 }
 

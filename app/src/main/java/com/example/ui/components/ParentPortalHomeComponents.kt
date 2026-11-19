@@ -216,12 +216,13 @@ fun ParentGreetingHeroCard(
                         photoUrl = heroPhotoUrl,
                         photoFallbackUrl = heroPhotoFallbackUrl,
                         showZoomBadge = hasHeroPhoto,
+                        contentScale = ContentScale.Fit,
                         shape = RoundedCornerShape(16.dp),
                         borderColor = Color.White.copy(alpha = 0.78f),
                         placeholderAvatarSize = 58.dp,
                         modifier = Modifier
-                            .width(92.dp)
-                            .height(112.dp)
+                            .width(96.dp)
+                            .height(128.dp)
                             .let { mod ->
                                 if (onAvatarClick != null) {
                                     mod.clickable(onClick = onAvatarClick).testTag("btn_hero_student_avatar")

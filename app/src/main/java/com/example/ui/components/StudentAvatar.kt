@@ -133,6 +133,7 @@ fun StudentLargeProfilePhoto(
     photoFallbackUrl: String = "",
     emptyHint: String = "",
     showZoomBadge: Boolean = true,
+    contentScale: ContentScale = ContentScale.Fit,
     shape: Shape = RoundedCornerShape(16.dp),
     borderColor: Color = Color.White.copy(alpha = 0.75f),
     placeholderAvatarSize: Dp = 88.dp,
@@ -175,7 +176,7 @@ fun StudentLargeProfilePhoto(
                     .memoryCachePolicy(CachePolicy.ENABLED)
                     .build(),
                 contentDescription = name,
-                contentScale = ContentScale.Crop,
+                contentScale = contentScale,
                 onError = {
                     if (!useFallback && fallbackUrl.isNotBlank() && fallbackUrl != primaryUrl) {
                         useFallback = true
