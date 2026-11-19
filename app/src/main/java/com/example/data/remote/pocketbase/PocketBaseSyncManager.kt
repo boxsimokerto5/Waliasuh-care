@@ -1298,6 +1298,180 @@ object PocketBaseSyncManager {
             }
         }
 
+    suspend fun uploadParentMessageWithPhoto(
+        context: Context,
+        draftMessage: ParentMessage,
+        compressedBytes: ByteArray
+    ): Result<ParentMessage> = withContext(Dispatchers.IO) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum dikonfigurasi.")
+            )
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.failure(
+                Exception(if (isEn) "Invalid PocketBase URL." else "URL PocketBase tidak valid.")
+            )
+        }
+
+        val safeId = if (draftMessage.id > 0L) draftMessage.id else generateCloudSafeId()
+        val pbId = PocketBaseIdCodec.toPbId(safeId)
+        val filename = "chat_${safeId}.webp"
+        val cleanSchool = draftMessage.schoolId.trim().ifBlank { "SRT1-KDR" }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
+
+        val multipart = MultipartBody.Builder()
+            .setType(MultipartBody.FORM)
+            .addFormDataPart("id", pbId)
+            .addFormDataPart("local_id", safeId.toString())
+            .addFormDataPart("school_id", cleanSchool)
+            .addFormDataPart("student_id", draftMessage.studentId.toString())
+            .addFormDataPart("student_name", draftMessage.studentName)
+            .addFormDataPart("parent_name", draftMessage.parentName)
+            .addFormDataPart("wali_username", draftMessage.waliUsername)
+            .addFormDataPart("wali_name", draftMessage.waliName)
+            .addFormDataPart("sender_role", draftMessage.senderRole)
+            .addFormDataPart("sender_name", draftMessage.senderName)
+            .addFormDataPart("message_content", draftMessage.messageContent)
+            .addFormDataPart("is_read_by_wali", draftMessage.isReadByWali.toString())
+            .addFormDataPart("is_read_by_parent", draftMessage.isReadByParent.toString())
+            .addFormDataPart("is_downloaded_by_recipient", "false")
+            .addFormDataPart("is_media_purged_from_server", "false")
+            .addFormDataPart("created_at", draftMessage.createdAt.toString())
+            .addFormDataPart("updated_at", draftMessage.updatedAt.coerceAtLeast(draftMessage.createdAt).toString())
+            .addFormDataPart("photo_file", filename, compressedBytes.toRequestBody("image/webp".toMediaType()))
+            .build()
+
+        val postRequest = Request.Builder()
+            .url("$baseUrl/api/collections/parent_messages/records")
+            .post(multipart)
+            .build()
+
+        return@withContext try {
+            var responseCode = 0
+            var responseRaw = ""
+            var wasSuccess = false
+
+            client.newCall(postRequest).execute().use { resp ->
+                responseCode = resp.code
+                responseRaw = resp.body?.string().orEmpty()
+                wasSuccess = resp.isSuccessful
+            }
+
+            if (responseCode == 404) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Collection 'parent_messages' is not synced on server yet. Run Sync Schema in Superadmin."
+                        } else {
+                            "Koleksi 'parent_messages' belum disinkronkan di server. Jalankan Sync Skema di Superadmin terlebih dahulu."
+                        }
+                    )
+                )
+            }
+
+            if (!wasSuccess) {
+                val errMsg = parsePocketBaseUploadError(responseRaw, responseCode, isEn)
+                return@withContext Result.failure(
+                    Exception(if (isEn) "Failed to upload chat photo: $errMsg" else "Gagal mengunggah foto chat ke R2/PocketBase: $errMsg")
+                )
+            }
+
+            val json = JSONObject(responseRaw)
+            val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "parent_messages").ifBlank { "parent_messages" }
+            val uploadedFilename = when {
+                json.has("photo_file") && json.optJSONArray("photo_file") != null -> {
+                    json.optJSONArray("photo_file")?.optString(0, "").orEmpty()
+                }
+                else -> json.optString("photo_file", "")
+            }.trim()
+
+            if (uploadedFilename.isBlank()) {
+                return@withContext Result.failure(
+                    Exception(
+                        if (isEn) {
+                            "Column 'photo_file' on parent_messages is not active yet. Run Sync Schema in Superadmin."
+                        } else {
+                            "Kolom 'photo_file' pada parent_messages belum aktif di server. Jalankan Sync Skema di Superadmin."
+                        }
+                    )
+                )
+            }
+
+            val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
+            val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
+            val finalized = draftMessage.copy(
+                id = safeId,
+                schoolId = cleanSchool,
+                photoUrl = cdnUrl,
+                photoFallbackUrl = fallbackUrl,
+                pbRecordId = recordId,
+                pbCollectionId = collectionId,
+                pbFilename = uploadedFilename,
+                isMediaPurgedFromServer = false
+            )
+            uploadSingleParentMessage(context, finalized)
+            Result.success(finalized)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error uploadParentMessageWithPhoto", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun purgeParentMessageServerMedia(
+        context: Context,
+        message: ParentMessage
+    ): Result<ParentMessage> = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
+        val purgedLocal = message.copy(
+            photoUrl = "",
+            photoFallbackUrl = "",
+            pbFilename = "",
+            isMediaPurgedFromServer = true,
+            updatedAt = maxOf(now, message.updatedAt + 1L)
+        )
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext Result.success(purgedLocal)
+        }
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) {
+            return@withContext Result.success(purgedLocal)
+        }
+        val pbId = com.example.data.model.ParentMessageHelper.resolveRecordPbId(message)
+        val payload = JSONObject().apply {
+            put("photo_file", JSONObject.NULL)
+            put("photo_url", "")
+            put("photo_fallback_url", "")
+            put("pb_filename", "")
+            put("is_media_purged_from_server", true)
+            put("updated_at", purgedLocal.updatedAt)
+        }
+        val client = OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(25, TimeUnit.SECONDS)
+            .build()
+        val request = Request.Builder()
+            .url("$baseUrl/api/collections/parent_messages/records/$pbId")
+            .patch(payload.toString().toRequestBody("application/json; charset=utf-8".toMediaType()))
+            .build()
+        return@withContext runCatching {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful && resp.code != 404) {
+                    error("HTTP ${resp.code}: ${resp.body?.string().orEmpty()}")
+                }
+            }
+            purgedLocal
+        }
+    }
+
     suspend fun deleteRemoteParentMessage(context: Context, messageId: Long) =
         withContext(Dispatchers.IO) {
             if (!PocketBaseConfig.isConfigured(context)) return@withContext
@@ -1723,8 +1897,9 @@ object PocketBaseSyncManager {
             .map { it.recordId }
             .toSet()
 
+        val pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
         runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds) }
-        runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds) }
+        runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds, pbBaseUrl) }
         runCatching { syncParentExpectationsMerged(service, cleanSchoolId, filter, repository) }
         runCatching {
             syncWaliGalleryMerged(
@@ -1732,8 +1907,17 @@ object PocketBaseSyncManager {
                 schoolId = cleanSchoolId,
                 filter = filter,
                 repository = repository,
-                pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
+                pbBaseUrl = pbBaseUrl
             )
+        }
+        val now = System.currentTimeMillis()
+        val latestMsgs = runCatching { repository.getParentMessagesBySchoolList(cleanSchoolId) }.getOrDefault(emptyList())
+        for (msg in latestMsgs) {
+            if (com.example.data.model.ParentMessageHelper.shouldAutoPurgeServerMedia(msg, now)) {
+                purgeParentMessageServerMedia(context, msg).getOrNull()?.let { purged ->
+                    repository.updateParentMessage(purged)
+                }
+            }
         }
     }
 
@@ -2059,19 +2243,21 @@ object PocketBaseSyncManager {
         cleanSchoolId: String,
         filter: String,
         repository: HealthRepository,
-        deletedMessageIds: Set<Long> = emptySet()
+        deletedMessageIds: Set<Long> = emptySet(),
+        pbBaseUrl: String = DashboardBannerItem.DEFAULT_POCKETBASE_BASE_URL
     ) {
         val localMsgs = repository.getParentMessagesBySchoolList(cleanSchoolId)
         val localDeleted = localMsgs.filter { it.id in deletedMessageIds }
         localDeleted.forEach { msg ->
             repository.deleteParentMessageById(msg.id)
+            repository.deleteChatMediaLocalSave(msg.id)
         }
         val activeLocalMsgs = localMsgs.filter { it.id !in deletedMessageIds }
 
         val remoteRes = fetchAllPages { page ->
             service.listParentMessages(page = page, perPage = 500, filter = filter)
         }
-        val remoteMsgs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId) } ?: return
+        val remoteMsgs = remoteRes.getOrNull()?.map { it.toDomainModel(cleanSchoolId, pbBaseUrl) } ?: return
         val activeRemoteMsgs = remoteMsgs.filter { it.id !in deletedMessageIds }
 
         val localById = activeLocalMsgs.associateBy { it.id }
@@ -2080,9 +2266,35 @@ object PocketBaseSyncManager {
         val mergedReadRemote = activeRemoteMsgs.map { rem ->
             val loc = localById[rem.id]
             if (loc != null) {
+                val purged = rem.isMediaPurgedFromServer || loc.isMediaPurgedFromServer
+                val downloaded = rem.isDownloadedByRecipient || loc.isDownloadedByRecipient
+                val useRemoteUrls = !purged && (rem.photoUrl.isNotBlank() || rem.photoFallbackUrl.isNotBlank())
+                val resolvedPhoto = when {
+                    purged -> ""
+                    useRemoteUrls -> rem.photoUrl
+                    else -> loc.photoUrl
+                }
+                val resolvedFallback = when {
+                    purged -> ""
+                    useRemoteUrls -> rem.photoFallbackUrl
+                    else -> loc.photoFallbackUrl
+                }
+                val resolvedFilename = when {
+                    purged -> ""
+                    rem.pbFilename.isNotBlank() -> rem.pbFilename
+                    else -> loc.pbFilename
+                }
                 rem.copy(
                     isReadByWali = rem.isReadByWali || loc.isReadByWali,
-                    isReadByParent = rem.isReadByParent || loc.isReadByParent
+                    isReadByParent = rem.isReadByParent || loc.isReadByParent,
+                    isDownloadedByRecipient = downloaded,
+                    isMediaPurgedFromServer = purged,
+                    photoUrl = resolvedPhoto,
+                    photoFallbackUrl = resolvedFallback,
+                    pbRecordId = rem.pbRecordId.ifBlank { loc.pbRecordId },
+                    pbCollectionId = rem.pbCollectionId.ifBlank { loc.pbCollectionId },
+                    pbFilename = resolvedFilename,
+                    updatedAt = maxOf(rem.updatedAt, loc.updatedAt)
                 )
             } else rem
         }
@@ -2098,7 +2310,10 @@ object PocketBaseSyncManager {
             val rem = remoteById[loc.id]
             rem == null ||
                 (loc.isReadByWali && !rem.isReadByWali) ||
-                (loc.isReadByParent && !rem.isReadByParent)
+                (loc.isReadByParent && !rem.isReadByParent) ||
+                (loc.isDownloadedByRecipient && !rem.isDownloadedByRecipient) ||
+                (loc.isMediaPurgedFromServer && !rem.isMediaPurgedFromServer) ||
+                loc.updatedAt > rem.updatedAt
         }
         if (toPushRemote.isNotEmpty()) {
             val pairs = toPushRemote.map { msg ->
@@ -2841,7 +3056,14 @@ object PocketBaseSyncManager {
                 syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds)
             }
             runCatching {
-                syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds)
+                syncParentMessagesMerged(
+                    service = service,
+                    cleanSchoolId = cleanSchoolId,
+                    filter = filter,
+                    repository = repository,
+                    deletedMessageIds = deletedParentMsgIds,
+                    pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
+                )
             }
             runCatching {
                 syncParentExpectationsMerged(service, cleanSchoolId, filter, repository)

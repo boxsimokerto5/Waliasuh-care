@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
@@ -76,8 +77,26 @@ interface ParentMessageDao {
     @Query("UPDATE parent_messages SET isReadByParent = 1 WHERE studentId = :studentId AND schoolId = :schoolId AND isReadByParent = 0")
     suspend fun markReadByParent(studentId: Long, schoolId: String)
 
+    @Query("SELECT * FROM parent_messages WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): ParentMessage?
+
     @Query("DELETE FROM parent_messages WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
+}
+
+@Dao
+interface ChatMediaLocalSaveDao {
+    @Query("SELECT * FROM chat_media_local_saves ORDER BY savedAt DESC")
+    fun getAllLocalSaves(): Flow<List<ChatMediaLocalSave>>
+
+    @Query("SELECT * FROM chat_media_local_saves WHERE messageId = :messageId LIMIT 1")
+    suspend fun getByMessageId(messageId: Long): ChatMediaLocalSave?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(save: ChatMediaLocalSave)
+
+    @Query("DELETE FROM chat_media_local_saves WHERE messageId = :messageId")
+    suspend fun deleteByMessageId(messageId: Long)
 }
 
 @Dao

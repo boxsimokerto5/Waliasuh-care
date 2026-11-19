@@ -255,6 +255,13 @@ fun DashboardScreen(
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
     val isPublishingGalleryPost by viewModel.isPublishingGalleryPost.collectAsStateWithLifecycle()
+    val chatMediaLocalSaves by viewModel.chatMediaLocalSaves.collectAsStateWithLifecycle()
+    val chatAutoSaveMediaEnabled by viewModel.chatAutoSaveMediaEnabled.collectAsStateWithLifecycle()
+    val isSendingChatPhoto by viewModel.isSendingChatPhoto.collectAsStateWithLifecycle()
+    val isSavingChatMedia by viewModel.isSavingChatMedia.collectAsStateWithLifecycle()
+    val chatLocalSavesByMsgId = remember(chatMediaLocalSaves) {
+        chatMediaLocalSaves.associateBy { it.messageId }
+    }
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
     val canManageSchedule = isAdminUser || isAnakSuperAdmin || isAnakAdminSekolah
 
@@ -2668,6 +2675,9 @@ fun DashboardScreen(
 
     // Modal Hubungan Orang Tua 4: Pesan Chat 2 Arah dengan Orang Tua
     if (modalState.showPesanOrtuSheet) {
+        LaunchedEffect(Unit) {
+            viewModel.syncParentRelationsQuietly()
+        }
         PesanOrangTuaSheet(
             students = students,
             parentMessages = parentMessages,
@@ -2686,6 +2696,30 @@ fun DashboardScreen(
             },
             onDeleteMessage = { msg ->
                 viewModel.deleteParentMessage(msg)
+            },
+            localSavesByMessageId = chatLocalSavesByMsgId,
+            autoSaveMediaEnabled = chatAutoSaveMediaEnabled,
+            isSendingPhoto = isSendingChatPhoto,
+            isSavingMedia = isSavingChatMedia,
+            onToggleAutoSaveMedia = { enabled ->
+                viewModel.setChatAutoSaveMediaEnabled(enabled)
+            },
+            onSendPhotoMessage = { st, uri, caption ->
+                viewModel.sendParentMessageWithPhoto(st, uri, caption, "WALI") { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onSavePhotoToGallery = { msg, silent ->
+                viewModel.saveChatPhotoToDevice(msg, "WALI", silentAuto = silent) { _, feedback ->
+                    if (!silent) {
+                        Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                    }
+                }
+            },
+            onPurgeServerMedia = { msg ->
+                viewModel.purgeChatPhotoServerMediaNow(msg) { _, feedback ->
+                    Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                }
             },
             onDismiss = {
                 modalState.showPesanOrtuSheet = false

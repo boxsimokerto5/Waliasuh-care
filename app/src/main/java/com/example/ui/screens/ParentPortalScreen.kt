@@ -188,6 +188,13 @@ fun ParentPortalScreen(
     val waliGalleryLocalSaves by viewModel.waliGalleryLocalSaves.collectAsStateWithLifecycle()
     val parentGalleryAutoSaveEnabled by viewModel.parentGalleryAutoSaveEnabled.collectAsStateWithLifecycle()
     val isSavingGalleryMedia by viewModel.isSavingGalleryMedia.collectAsStateWithLifecycle()
+    val chatMediaLocalSaves by viewModel.chatMediaLocalSaves.collectAsStateWithLifecycle()
+    val chatAutoSaveMediaEnabled by viewModel.chatAutoSaveMediaEnabled.collectAsStateWithLifecycle()
+    val isSendingChatPhoto by viewModel.isSendingChatPhoto.collectAsStateWithLifecycle()
+    val isSavingChatMedia by viewModel.isSavingChatMedia.collectAsStateWithLifecycle()
+    val chatLocalSavesByMsgId = remember(chatMediaLocalSaves) {
+        chatMediaLocalSaves.associateBy { it.messageId }
+    }
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isCurrentParentAccountDeleted by viewModel.isCurrentParentAccountDeleted.collectAsStateWithLifecycle()
@@ -751,11 +758,38 @@ fun ParentPortalScreen(
                         link = activeLink,
                         waliAccount = assignedWaliAccount,
                         messages = threadMessages,
+                        localSavesByMessageId = chatLocalSavesByMsgId,
+                        autoSaveMediaEnabled = chatAutoSaveMediaEnabled,
+                        isSendingPhoto = isSendingChatPhoto,
+                        isSavingMedia = isSavingChatMedia,
                         onOpenWaliProfile = { showWaliProfileSheet = true },
                         onSend = { msgText ->
                             val target = student
                             if (target != null) {
                                 viewModel.sendParentMessage(target, msgText, "PARENT")
+                            }
+                        },
+                        onSendPhoto = { uri, caption ->
+                            val target = student
+                            if (target != null) {
+                                viewModel.sendParentMessageWithPhoto(target, uri, caption, "PARENT") { _, feedback ->
+                                    Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onToggleAutoSaveMedia = { enabled ->
+                            viewModel.setChatAutoSaveMediaEnabled(enabled)
+                        },
+                        onSavePhotoToGallery = { msg, silent ->
+                            viewModel.saveChatPhotoToDevice(msg, "PARENT", silentAuto = silent) { _, feedback ->
+                                if (!silent) {
+                                    Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onPurgeServerMedia = { msg ->
+                            viewModel.purgeChatPhotoServerMediaNow(msg) { _, feedback ->
+                                Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
                             }
                         },
                         onDeleteMessage = { msg ->
@@ -2569,8 +2603,16 @@ private fun ParentChatContent(
     link: ParentAccessLink?,
     waliAccount: WaliAccount?,
     messages: List<ParentMessage>,
+    localSavesByMessageId: Map<Long, com.example.data.model.ChatMediaLocalSave> = emptyMap(),
+    autoSaveMediaEnabled: Boolean = true,
+    isSendingPhoto: Boolean = false,
+    isSavingMedia: Boolean = false,
     onOpenWaliProfile: (() -> Unit)? = null,
     onSend: (String) -> Unit,
+    onSendPhoto: ((android.net.Uri, String) -> Unit)? = null,
+    onToggleAutoSaveMedia: (Boolean) -> Unit = {},
+    onSavePhotoToGallery: ((ParentMessage, Boolean) -> Unit)? = null,
+    onPurgeServerMedia: ((ParentMessage) -> Unit)? = null,
     onDeleteMessage: (ParentMessage) -> Unit
 ) {
     val s = LocalAppStrings.current
@@ -2649,6 +2691,13 @@ private fun ParentChatContent(
             }
         }
 
+        com.example.ui.components.ChatAutoSaveToggleStrip(
+            autoSaveEnabled = autoSaveMediaEnabled,
+            isSavingMedia = isSavingMedia,
+            isEn = isEn,
+            onToggleAutoSave = onToggleAutoSaveMedia
+        )
+
         ParentChatMessagesList(
             messages = messages,
             myRole = "PARENT",
@@ -2657,6 +2706,11 @@ private fun ParentChatContent(
             ownBubbleColor = Color(0xFF4338CA),
             listState = listState,
             onDeleteMessage = onDeleteMessage,
+            localSavesByMessageId = localSavesByMessageId,
+            autoSaveMediaEnabled = autoSaveMediaEnabled,
+            isSavingMedia = isSavingMedia,
+            onSavePhotoToGallery = onSavePhotoToGallery,
+            onPurgeServerMedia = onPurgeServerMedia,
             emptyContent = {
                 ParentEmptyNotice(
                     if (isEn) "No messages yet. Write a message to your child's caregiver below."
@@ -2670,42 +2724,19 @@ private fun ParentChatContent(
 
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedTextField(
-                value = draft,
-                onValueChange = { draft = it },
-                placeholder = { Text(if (isEn) "Write message to caregiver..." else "Tulis pesan ke wali asuh...", fontSize = 12.5.sp) },
-                maxLines = 3,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("input_parent_portal_message")
-            )
-            IconButton(
-                onClick = {
-                    if (draft.isNotBlank()) {
-                        onSend(draft.trim())
-                        draft = ""
-                    }
-                },
-                colors = IconButtonDefaults.filledIconButtonColors(
-                    containerColor = Color(0xFF4338CA),
-                    contentColor = Color.White
-                ),
-                modifier = Modifier
-                    .size(48.dp)
-                    .testTag("btn_parent_portal_send")
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = if (isEn) "Send" else "Kirim")
-            }
-        }
+        com.example.ui.components.ChatPhotoComposerBar(
+            draftText = draft,
+            onDraftChange = { draft = it },
+            placeholderText = if (isEn) "Write message to caregiver..." else "Tulis pesan ke wali asuh...",
+            isEn = isEn,
+            isSendingPhoto = isSendingPhoto,
+            supportsPhotoUpload = onSendPhoto != null,
+            onSendText = onSend,
+            onSendPhoto = onSendPhoto,
+            inputTestTag = "input_parent_portal_message",
+            sendButtonTestTag = "btn_parent_portal_send",
+            attachButtonTestTag = "btn_attach_chat_photo_parent"
+        )
     }
 }
 

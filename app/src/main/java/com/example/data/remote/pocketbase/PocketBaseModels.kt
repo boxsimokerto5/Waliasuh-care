@@ -1193,6 +1193,7 @@ data class PbParentAccessLinkDto(
 @JsonClass(generateAdapter = true)
 data class PbParentMessageDto(
     @Json(name = "id") val id: String? = null,
+    @Json(name = "collectionId") val collectionId: String? = null,
     @Json(name = "local_id") val localId: Long? = null,
     @Json(name = "school_id") val schoolId: String? = null,
     @Json(name = "student_id") val studentId: Long = 0L,
@@ -1202,13 +1203,44 @@ data class PbParentMessageDto(
     @Json(name = "wali_name") val waliName: String? = null,
     @Json(name = "sender_role") val senderRole: String? = null,
     @Json(name = "sender_name") val senderName: String? = null,
-    @Json(name = "message_content") val messageContent: String = "",
+    @Json(name = "message_content") val messageContent: String? = null,
     @Json(name = "is_read_by_wali") val isReadByWali: Boolean? = null,
     @Json(name = "is_read_by_parent") val isReadByParent: Boolean? = null,
-    @Json(name = "created_at") val createdAt: Long? = null
+    @Json(name = "photo_url") val photoUrl: String? = null,
+    @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null,
+    @Json(name = "pb_record_id") val pbRecordId: String? = null,
+    @Json(name = "pb_collection_id") val pbCollectionId: String? = null,
+    @Json(name = "pb_filename") val pbFilename: String? = null,
+    @Json(name = "photo_file") val photoFile: String? = null,
+    @Json(name = "is_downloaded_by_recipient") val isDownloadedByRecipient: Boolean? = null,
+    @Json(name = "is_media_purged_from_server") val isMediaPurgedFromServer: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
-    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ParentMessage {
+    fun toDomainModel(
+        fallbackSchoolId: String = "SRT1-KDR",
+        pbBaseUrl: String = DashboardBannerItem.DEFAULT_POCKETBASE_BASE_URL
+    ): ParentMessage {
         val now = System.currentTimeMillis()
+        val purged = isMediaPurgedFromServer ?: false
+        val recId = pbRecordId.orEmpty().trim().ifBlank { id.orEmpty().trim() }
+        val colId = pbCollectionId.orEmpty().trim().ifBlank { collectionId.orEmpty().trim() }.ifBlank { "parent_messages" }
+        val file = pbFilename.orEmpty().trim().ifBlank { photoFile.orEmpty().trim() }
+        val resolvedPrimary = if (purged) "" else {
+            photoUrl?.takeIf { it.isNotBlank() } ?: run {
+                if (recId.isNotBlank() && file.isNotBlank()) {
+                    DashboardBannerItem.buildR2CdnUrl(colId, recId, file)
+                } else ""
+            }
+        }
+        val resolvedFallback = if (purged) "" else {
+            photoFallbackUrl?.takeIf { it.isNotBlank() } ?: run {
+                if (recId.isNotBlank() && file.isNotBlank()) {
+                    DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, file)
+                } else ""
+            }
+        }
+        val created = createdAt?.takeIf { it > 0L } ?: now
         return ParentMessage(
             id = PocketBaseIdCodec.resolveLocalId(localId, id),
             studentId = studentId,
@@ -1218,11 +1250,19 @@ data class PbParentMessageDto(
             waliName = waliName.orEmpty(),
             senderRole = senderRole?.ifBlank { "WALI" } ?: "WALI",
             senderName = senderName.orEmpty(),
-            messageContent = messageContent,
+            messageContent = messageContent.orEmpty(),
             isReadByWali = isReadByWali ?: false,
             isReadByParent = isReadByParent ?: false,
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
-            createdAt = createdAt?.takeIf { it > 0L } ?: now
+            createdAt = created,
+            photoUrl = resolvedPrimary,
+            photoFallbackUrl = resolvedFallback,
+            pbRecordId = recId,
+            pbCollectionId = if (recId.isNotBlank()) colId else "",
+            pbFilename = if (purged) "" else file,
+            isDownloadedByRecipient = isDownloadedByRecipient ?: false,
+            isMediaPurgedFromServer = purged,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: created
         )
     }
 
@@ -1231,8 +1271,9 @@ data class PbParentMessageDto(
             val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
                 "parent_msg:${model.schoolId}:${model.studentId}:${model.createdAt}:${model.senderRole}"
             )
+            val pbId = model.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
             return PbParentMessageDto(
-                id = PocketBaseIdCodec.toPbId(safeId),
+                id = pbId,
                 localId = safeId,
                 schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
                 studentId = model.studentId,
@@ -1245,7 +1286,15 @@ data class PbParentMessageDto(
                 messageContent = model.messageContent,
                 isReadByWali = model.isReadByWali,
                 isReadByParent = model.isReadByParent,
-                createdAt = model.createdAt
+                photoUrl = if (model.isMediaPurgedFromServer) "" else model.photoUrl,
+                photoFallbackUrl = if (model.isMediaPurgedFromServer) "" else model.photoFallbackUrl,
+                pbRecordId = pbId,
+                pbCollectionId = model.pbCollectionId.ifBlank { "parent_messages" },
+                pbFilename = if (model.isMediaPurgedFromServer) "" else model.pbFilename,
+                isDownloadedByRecipient = model.isDownloadedByRecipient,
+                isMediaPurgedFromServer = model.isMediaPurgedFromServer,
+                createdAt = model.createdAt,
+                updatedAt = if (model.updatedAt > 0L) model.updatedAt else model.createdAt
             )
         }
     }

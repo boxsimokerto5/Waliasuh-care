@@ -25,10 +25,12 @@ import com.example.data.model.KonselingRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
+import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentExpectationHelper
 import com.example.data.model.ParentMessage
+import com.example.data.model.ParentMessageHelper
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.ShiftMessage
@@ -136,7 +138,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.parentExpectationDao(),
             db.sholatRecordDao(),
             db.waliGalleryPostDao(),
-            db.waliGalleryLocalSaveDao()
+            db.waliGalleryLocalSaveDao(),
+            db.chatMediaLocalSaveDao()
         )
     }
 
@@ -3694,6 +3697,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val waliDisplay = student.assignedWaliName.ifBlank {
                 if (!isParentSender) _waliName.value else existingLink?.assignedWaliName.orEmpty()
             }
+            val now = System.currentTimeMillis()
             val msg = ParentMessage(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
                 studentId = student.id,
@@ -3707,7 +3711,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 isReadByWali = !isParentSender,
                 isReadByParent = isParentSender,
                 schoolId = activeSchool,
-                createdAt = System.currentTimeMillis()
+                createdAt = now,
+                updatedAt = now
             )
             repository.insertParentMessage(msg)
             onComplete()
@@ -3744,7 +3749,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 studentName = message.studentName,
                 studentClass = "",
                 recordId = message.id,
-                deletedSummary = message.messageContent.take(60),
+                deletedSummary = ParentMessageHelper.displayPreviewText(message, false).take(60),
                 deletedBy = _waliName.value.ifBlank { message.senderName },
                 deletedByUsername = _currentUsername.value.orEmpty(),
                 schoolId = activeSchool,
@@ -3752,6 +3757,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
             repository.insertDeletionLog(deletionLog)
             repository.deleteParentMessageById(message.id)
+            repository.deleteChatMediaLocalSave(message.id)
             onComplete()
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleDeletionLog(getApplication(), deletionLog)
@@ -7507,6 +7513,266 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 onResult(savedCount, failCount)
             } finally {
                 _isSavingGalleryMedia.value = false
+            }
+        }
+    }
+
+    // --- Foto Chat 2 Arah (Wali Asuh <-> Orang Tua, Estafet PocketBase + R2 -> Galeri HP) ---
+
+    private val _chatAutoSaveMediaEnabled = MutableStateFlow(
+        galleryPrefs.getBoolean("chat_auto_save_media", true)
+    )
+    val chatAutoSaveMediaEnabled: StateFlow<Boolean> = _chatAutoSaveMediaEnabled.asStateFlow()
+
+    fun setChatAutoSaveMediaEnabled(enabled: Boolean) {
+        _chatAutoSaveMediaEnabled.value = enabled
+        galleryPrefs.edit().putBoolean("chat_auto_save_media", enabled).apply()
+    }
+
+    private val _isSendingChatPhoto = MutableStateFlow(false)
+    val isSendingChatPhoto: StateFlow<Boolean> = _isSendingChatPhoto.asStateFlow()
+
+    private val _isSavingChatMedia = MutableStateFlow(false)
+    val isSavingChatMedia: StateFlow<Boolean> = _isSavingChatMedia.asStateFlow()
+
+    val chatMediaLocalSaves: StateFlow<List<ChatMediaLocalSave>> =
+        repository.allChatMediaLocalSaves
+            .stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    fun sendParentMessageWithPhoto(
+        student: ChildStudent,
+        imageUri: Uri,
+        captionText: String,
+        senderRole: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            _isSendingChatPhoto.value = true
+            try {
+                val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                val existingLink = repository.getParentAccessLinkByStudentId(student.id, activeSchool)
+                val isParentSender = senderRole.equals("PARENT", ignoreCase = true)
+                val senderDisplay = if (isParentSender) {
+                    existingLink?.parentName?.ifBlank { student.motherName.ifBlank { "Orang Tua ${student.name}" } }
+                        ?: student.motherName.ifBlank { "Orang Tua ${student.name}" }
+                } else {
+                    _waliName.value.trim().ifBlank { "Wali Asuh" }
+                }
+                val waliUser = student.assignedWaliUsername.ifBlank {
+                    if (!isParentSender) _currentUsername.value.orEmpty() else existingLink?.assignedWaliUsername.orEmpty()
+                }
+                val waliDisplay = student.assignedWaliName.ifBlank {
+                    if (!isParentSender) _waliName.value else existingLink?.assignedWaliName.orEmpty()
+                }
+
+                val compressed = if (!isUnitTestEnvironment()) {
+                    WaliGalleryMediaHelper.compressGalleryPhotoBytes(getApplication(), imageUri)
+                        ?: run {
+                            onResult(
+                                false,
+                                if (isEn) "Unable to read selected image." else "Gagal membaca foto yang dipilih."
+                            )
+                            return@launch
+                        }
+                } else {
+                    WaliGalleryMediaHelper.compressGalleryPhotoBytes(getApplication(), imageUri)
+                        ?: byteArrayOf(1, 2, 3)
+                }
+
+                val now = System.currentTimeMillis()
+                val msgId = PocketBaseSyncManager.generateCloudSafeId()
+                val draftMsg = ParentMessage(
+                    id = msgId,
+                    studentId = student.id,
+                    studentName = student.name,
+                    parentName = existingLink?.parentName?.ifBlank { student.motherName } ?: student.motherName,
+                    waliUsername = waliUser,
+                    waliName = waliDisplay,
+                    senderRole = if (isParentSender) "PARENT" else "WALI",
+                    senderName = senderDisplay,
+                    messageContent = captionText.trim(),
+                    isReadByWali = !isParentSender,
+                    isReadByParent = isParentSender,
+                    schoolId = activeSchool,
+                    createdAt = now,
+                    isDownloadedByRecipient = false,
+                    isMediaPurgedFromServer = false,
+                    updatedAt = now
+                )
+
+                val finalMsg = if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                    val uploadRes = PocketBaseSyncManager.uploadParentMessageWithPhoto(
+                        context = getApplication(),
+                        draftMessage = draftMsg,
+                        compressedBytes = compressed
+                    )
+                    if (uploadRes.isFailure) {
+                        onResult(
+                            false,
+                            uploadRes.exceptionOrNull()?.message
+                                ?: if (isEn) "Failed to upload chat photo." else "Gagal mengunggah foto chat."
+                        )
+                        return@launch
+                    }
+                    uploadRes.getOrThrow()
+                } else {
+                    draftMsg.copy(
+                        photoUrl = imageUri.toString(),
+                        pbRecordId = PocketBaseIdCodec.toPbId(msgId),
+                        pbCollectionId = "parent_messages"
+                    )
+                }
+
+                // Simpan salinan lokal untuk pengirim agar foto tetap tersedia meski R2 dibersihkan setelah penerima mengunduh
+                WaliGalleryMediaHelper.saveCompressedChatBytesToLocalGallery(
+                    context = getApplication(),
+                    messageId = finalMsg.id,
+                    senderName = senderDisplay,
+                    bytes = compressed
+                ).getOrNull()?.let { senderLocalSave ->
+                    repository.upsertChatMediaLocalSave(senderLocalSave)
+                }
+
+                repository.insertParentMessage(finalMsg)
+                onResult(
+                    true,
+                    if (isEn) "Photo sent! Recipient can auto-save it to phone gallery."
+                    else "Foto terkirim via R2! Penerima dapat langsung menyimpannya ke Galeri HP."
+                )
+            } catch (e: Exception) {
+                onResult(false, e.message ?: if (isEn) "Failed to send photo." else "Gagal mengirim foto.")
+            } finally {
+                _isSendingChatPhoto.value = false
+            }
+        }
+    }
+
+    fun saveChatPhotoToDevice(
+        message: ParentMessage,
+        readerRole: String,
+        silentAuto: Boolean = false,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val isRecipientReader = !readerRole.equals(message.senderRole, ignoreCase = true)
+        viewModelScope.launch {
+            val existingSave = repository.getChatMediaLocalSave(message.id)
+            if (existingSave != null && WaliGalleryMediaHelper.isLocalSaveAccessible(getApplication(), existingSave.localGalleryUri)) {
+                if (isRecipientReader && !message.isDownloadedByRecipient) {
+                    val now = System.currentTimeMillis()
+                    var updated = (repository.getParentMessageById(message.id) ?: message).copy(
+                        isDownloadedByRecipient = true,
+                        updatedAt = maxOf(now, message.updatedAt + 1L)
+                    )
+                    repository.updateParentMessage(updated)
+                    if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        PocketBaseSyncManager.uploadSingleParentMessage(getApplication(), updated)
+                        if (ParentMessageHelper.shouldAutoPurgeServerMedia(updated, now)) {
+                            PocketBaseSyncManager.purgeParentMessageServerMedia(getApplication(), updated).getOrNull()?.let { purged ->
+                                updated = purged
+                                repository.updateParentMessage(purged)
+                            }
+                        }
+                    }
+                }
+                if (!silentAuto) {
+                    onResult(true, if (isEn) "Already saved in phone gallery." else "Foto sudah tersimpan di Galeri HP.")
+                }
+                return@launch
+            }
+
+            if (!ParentMessageHelper.hasServerMedia(message)) {
+                if (!silentAuto) {
+                    onResult(
+                        false,
+                        if (isEn) "Server photo was already cleared." else "Foto sementara di server sudah dibersihkan."
+                    )
+                }
+                return@launch
+            }
+
+            if (!silentAuto) _isSavingChatMedia.value = true
+            try {
+                val saveRes = WaliGalleryMediaHelper.saveChatPhotoToDeviceGallery(getApplication(), message)
+                if (saveRes.isFailure) {
+                    if (!silentAuto) {
+                        onResult(
+                            false,
+                            saveRes.exceptionOrNull()?.message
+                                ?: if (isEn) "Failed to save photo." else "Gagal menyimpan foto ke Galeri HP."
+                        )
+                    }
+                    return@launch
+                }
+
+                val saved = saveRes.getOrThrow()
+                repository.upsertChatMediaLocalSave(saved)
+
+                if (isRecipientReader) {
+                    val latest = repository.getParentMessageById(message.id) ?: message
+                    val now = System.currentTimeMillis()
+                    var updated = latest.copy(
+                        isDownloadedByRecipient = true,
+                        updatedAt = maxOf(now, latest.updatedAt + 1L)
+                    )
+                    repository.updateParentMessage(updated)
+                    if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        PocketBaseSyncManager.uploadSingleParentMessage(getApplication(), updated)
+                        if (ParentMessageHelper.shouldAutoPurgeServerMedia(updated, now)) {
+                            PocketBaseSyncManager.purgeParentMessageServerMedia(getApplication(), updated).getOrNull()?.let { purged ->
+                                updated = purged
+                                repository.updateParentMessage(purged)
+                            }
+                        }
+                    }
+                }
+
+                if (!silentAuto) {
+                    onResult(
+                        true,
+                        if (isEn) "Saved permanently to Pictures/WaliAsuhCare!"
+                        else "Foto tersimpan permanen di Galeri HP (Pictures/WaliAsuhCare)!"
+                    )
+                }
+            } finally {
+                if (!silentAuto) _isSavingChatMedia.value = false
+            }
+        }
+    }
+
+    fun purgeChatPhotoServerMediaNow(
+        message: ParentMessage,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val res = if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.purgeParentMessageServerMedia(getApplication(), message)
+            } else {
+                Result.success(
+                    message.copy(
+                        photoUrl = "",
+                        photoFallbackUrl = "",
+                        pbFilename = "",
+                        isMediaPurgedFromServer = true,
+                        updatedAt = System.currentTimeMillis()
+                    )
+                )
+            }
+            if (res.isSuccess) {
+                repository.updateParentMessage(res.getOrThrow())
+                onResult(
+                    true,
+                    if (isEn) "Temporary R2/PocketBase chat photo cleared."
+                    else "File foto sementara di R2/PocketBase berhasil dibersihkan."
+                )
+            } else {
+                onResult(
+                    false,
+                    res.exceptionOrNull()?.message
+                        ?: if (isEn) "Failed to clean server file." else "Gagal membersihkan file server."
+                )
             }
         }
     }

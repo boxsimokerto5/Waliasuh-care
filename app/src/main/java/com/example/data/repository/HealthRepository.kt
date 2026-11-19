@@ -47,6 +47,8 @@ import com.example.data.model.KonselingRecord
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
+import com.example.data.dao.ChatMediaLocalSaveDao
+import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ParentMessage
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
@@ -85,7 +87,8 @@ class HealthRepository(
     private val parentExpectationDao: ParentExpectationDao? = null,
     private val sholatRecordDao: SholatRecordDao? = null,
     private val waliGalleryPostDao: WaliGalleryPostDao? = null,
-    private val waliGalleryLocalSaveDao: WaliGalleryLocalSaveDao? = null
+    private val waliGalleryLocalSaveDao: WaliGalleryLocalSaveDao? = null,
+    private val chatMediaLocalSaveDao: ChatMediaLocalSaveDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -128,6 +131,8 @@ class HealthRepository(
         waliGalleryPostDao?.getAllActivePosts() ?: emptyFlow()
     val allWaliGalleryLocalSaves: Flow<List<WaliGalleryLocalSave>> =
         waliGalleryLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
+    val allChatMediaLocalSaves: Flow<List<ChatMediaLocalSave>> =
+        chatMediaLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -539,6 +544,24 @@ class HealthRepository(
 
     suspend fun deleteParentMessageById(id: Long) {
         parentMessageDao?.deleteById(id)
+    }
+
+    suspend fun getParentMessageById(id: Long): ParentMessage? =
+        parentMessageDao?.getById(id)
+
+    suspend fun updateParentMessage(message: ParentMessage) {
+        parentMessageDao?.update(message)
+    }
+
+    suspend fun upsertChatMediaLocalSave(save: ChatMediaLocalSave) {
+        chatMediaLocalSaveDao?.upsert(save)
+    }
+
+    suspend fun getChatMediaLocalSave(messageId: Long): ChatMediaLocalSave? =
+        chatMediaLocalSaveDao?.getByMessageId(messageId)
+
+    suspend fun deleteChatMediaLocalSave(messageId: Long) {
+        chatMediaLocalSaveDao?.deleteByMessageId(messageId)
     }
 
     // --- Parent Character Expectations (Harapan Karakter Orang Tua) ---

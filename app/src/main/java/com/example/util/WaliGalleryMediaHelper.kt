@@ -10,6 +10,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.example.data.model.ChatMediaLocalSave
+import com.example.data.model.ParentMessage
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
 import java.io.ByteArrayOutputStream
@@ -127,12 +129,93 @@ object WaliGalleryMediaHelper {
         val candidateUrls = listOf(post.photoUrl.trim(), post.photoFallbackUrl.trim())
             .filter { it.isNotBlank() }
             .distinct()
-        if (candidateUrls.isEmpty()) {
-            return@withContext Result.failure(
-                Exception("File foto sudah dibersihkan dari server atau URL tidak tersedia.")
+        val downloaded = downloadFromCandidateUrls(context, candidateUrls)
+        val bytes = downloaded.getOrElse { return@withContext Result.failure(it) }
+
+        val safeWali = post.waliName
+            .replace(Regex("[^A-Za-z0-9]"), "_")
+            .take(18)
+            .ifBlank { "WaliAsuh" }
+        val (ext, mimeType) = resolveExtensionAndMime(candidateUrls)
+        val displayFileName = "WaliAsuh_${safeWali}_${post.id}.$ext"
+        val now = System.currentTimeMillis()
+        writeImageBytesToDeviceGallery(context, displayFileName, mimeType, bytes).map { savedUri ->
+            WaliGalleryLocalSave(
+                postId = post.id,
+                localGalleryUri = savedUri,
+                displayFileName = displayFileName,
+                savedAt = now
             )
         }
+    }
 
+    suspend fun saveChatPhotoToDeviceGallery(
+        context: Context,
+        message: ParentMessage
+    ): Result<ChatMediaLocalSave> = withContext(Dispatchers.IO) {
+        val candidateUrls = listOf(message.photoUrl.trim(), message.photoFallbackUrl.trim())
+            .filter { it.isNotBlank() }
+            .distinct()
+        val downloaded = downloadFromCandidateUrls(context, candidateUrls)
+        val bytes = downloaded.getOrElse { return@withContext Result.failure(it) }
+
+        val safeSender = message.senderName
+            .replace(Regex("[^A-Za-z0-9]"), "_")
+            .take(18)
+            .ifBlank { if (message.senderRole.equals("PARENT", true)) "OrangTua" else "WaliAsuh" }
+        val (ext, mimeType) = resolveExtensionAndMime(candidateUrls)
+        val displayFileName = "Chat_${safeSender}_${message.id}.$ext"
+        val now = System.currentTimeMillis()
+        writeImageBytesToDeviceGallery(context, displayFileName, mimeType, bytes).map { savedUri ->
+            ChatMediaLocalSave(
+                messageId = message.id,
+                localGalleryUri = savedUri,
+                displayFileName = displayFileName,
+                savedAt = now
+            )
+        }
+    }
+
+    suspend fun saveCompressedChatBytesToLocalGallery(
+        context: Context,
+        messageId: Long,
+        senderName: String,
+        bytes: ByteArray
+    ): Result<ChatMediaLocalSave> = withContext(Dispatchers.IO) {
+        val safeSender = senderName
+            .replace(Regex("[^A-Za-z0-9]"), "_")
+            .take(18)
+            .ifBlank { "WaliAsuhCare" }
+        val displayFileName = "Chat_${safeSender}_${messageId}.webp"
+        val now = System.currentTimeMillis()
+        writeImageBytesToDeviceGallery(context, displayFileName, "image/webp", bytes).map { savedUri ->
+            ChatMediaLocalSave(
+                messageId = messageId,
+                localGalleryUri = savedUri,
+                displayFileName = displayFileName,
+                savedAt = now
+            )
+        }
+    }
+
+    private fun resolveExtensionAndMime(candidateUrls: List<String>): Pair<String, String> {
+        val ext = when {
+            candidateUrls.any { it.contains(".png", ignoreCase = true) } -> "png"
+            candidateUrls.any { it.contains(".jpg", ignoreCase = true) || it.contains(".jpeg", ignoreCase = true) } -> "jpg"
+            else -> "webp"
+        }
+        val mimeType = when (ext) {
+            "png" -> "image/png"
+            "jpg" -> "image/jpeg"
+            else -> "image/webp"
+        }
+        return ext to mimeType
+    }
+
+    private fun downloadFromCandidateUrls(context: Context, candidateUrls: List<String>): Result<ByteArray> {
+        if (candidateUrls.isEmpty()) {
+            return Result.failure(Exception("File foto sudah dibersihkan dari server atau URL tidak tersedia."))
+        }
         var downloadedBytes: ByteArray? = null
         var lastError: Throwable? = null
         for (url in candidateUrls) {
@@ -145,28 +228,18 @@ object WaliGalleryMediaHelper {
                 lastError = attempt.exceptionOrNull()
             }
         }
-
-        val bytes = downloadedBytes ?: return@withContext Result.failure(
+        val bytes = downloadedBytes ?: return Result.failure(
             lastError ?: Exception("Gagal mengunduh foto dari server.")
         )
+        return Result.success(bytes)
+    }
 
-        val safeWali = post.waliName
-            .replace(Regex("[^A-Za-z0-9]"), "_")
-            .take(18)
-            .ifBlank { "WaliAsuh" }
-        val ext = when {
-            candidateUrls.any { it.contains(".png", ignoreCase = true) } -> "png"
-            candidateUrls.any { it.contains(".jpg", ignoreCase = true) || it.contains(".jpeg", ignoreCase = true) } -> "jpg"
-            else -> "webp"
-        }
-        val mimeType = when (ext) {
-            "png" -> "image/png"
-            "jpg" -> "image/jpeg"
-            else -> "image/webp"
-        }
-        val displayFileName = "WaliAsuh_${safeWali}_${post.id}.$ext"
-        val now = System.currentTimeMillis()
-
+    private fun writeImageBytesToDeviceGallery(
+        context: Context,
+        displayFileName: String,
+        mimeType: String,
+        bytes: ByteArray
+    ): Result<String> {
         // Simpan ke MediaStore (Pictures/WaliAsuhCare/) di Android 10+ tanpa izin penyimpanan sensitif
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
             !Build.FINGERPRINT.equals("robolectric", ignoreCase = true)
@@ -195,33 +268,16 @@ object WaliGalleryMediaHelper {
                     throw e
                 }
             }
-            mediaStoreRes.getOrNull()?.let { savedUri ->
-                return@withContext Result.success(
-                    WaliGalleryLocalSave(
-                        postId = post.id,
-                        localGalleryUri = savedUri,
-                        displayFileName = displayFileName,
-                        savedAt = now
-                    )
-                )
-            }
+            mediaStoreRes.getOrNull()?.let { return Result.success(it) }
         }
 
         // Fallback untuk API 24-28 atau environment unit test
-        val fallbackFile = runCatching {
+        return runCatching {
             val baseDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir
             val galleryDir = File(baseDir, "WaliAsuhCare").apply { mkdirs() }
             val dest = File(galleryDir, displayFileName)
             dest.writeBytes(bytes)
             Uri.fromFile(dest).toString()
-        }
-        return@withContext fallbackFile.map { uriStr ->
-            WaliGalleryLocalSave(
-                postId = post.id,
-                localGalleryUri = uriStr,
-                displayFileName = displayFileName,
-                savedAt = now
-            )
         }
     }
 

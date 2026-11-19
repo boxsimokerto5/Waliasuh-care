@@ -32,7 +32,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.49.0 • 28 Koleksi Multi-Tenant + Galeri Wali Asuh (Relay R2 & Simpan Galeri Ortu) (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.50.0 • 28 Koleksi Multi-Tenant + Foto Chat 2 Arah & Galeri R2 (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -404,7 +404,21 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("message_content", "text"),
                 PbFieldDef("is_read_by_wali", "bool"),
                 PbFieldDef("is_read_by_parent", "bool"),
-                PbFieldDef("created_at", "number")
+                PbFieldDef("photo_url", "text"),
+                PbFieldDef("photo_fallback_url", "text"),
+                PbFieldDef("pb_record_id", "text"),
+                PbFieldDef("pb_collection_id", "text"),
+                PbFieldDef("pb_filename", "text"),
+                PbFieldDef(
+                    name = "photo_file",
+                    type = "file",
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
+                ),
+                PbFieldDef("is_downloaded_by_recipient", "bool"),
+                PbFieldDef("is_media_purged_from_server", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_pm_school ON parent_messages (school_id)")
         ),

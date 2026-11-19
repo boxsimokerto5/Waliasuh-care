@@ -1,5 +1,6 @@
 package com.example.ui.dialogs
 
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,7 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
@@ -39,7 +39,6 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -65,8 +64,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ChildStudent
 import com.example.data.model.ParentMessage
+import com.example.data.model.ParentMessageHelper
+import com.example.ui.components.ChatAutoSaveToggleStrip
+import com.example.ui.components.ChatPhotoComposerBar
 import com.example.ui.components.ParentChatMessagesList
 import com.example.ui.components.StudentAvatar
 import com.example.util.DateUtils
@@ -84,6 +87,14 @@ fun PesanOrangTuaSheet(
     onSendMessage: (ChildStudent, String) -> Unit,
     onMarkRead: (Long) -> Unit,
     onDeleteMessage: (ParentMessage) -> Unit = {},
+    localSavesByMessageId: Map<Long, ChatMediaLocalSave> = emptyMap(),
+    autoSaveMediaEnabled: Boolean = true,
+    isSendingPhoto: Boolean = false,
+    isSavingMedia: Boolean = false,
+    onToggleAutoSaveMedia: (Boolean) -> Unit = {},
+    onSendPhotoMessage: ((ChildStudent, Uri, String) -> Unit)? = null,
+    onSavePhotoToGallery: ((ParentMessage, Boolean) -> Unit)? = null,
+    onPurgeServerMedia: ((ParentMessage) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val s = LocalAppStrings.current
@@ -444,7 +455,8 @@ fun PesanOrangTuaSheet(
                                                         } else {
                                                             ""
                                                         }
-                                                        "$prefix${it.messageContent}"
+                                                        val preview = ParentMessageHelper.displayPreviewText(it, isEn)
+                                                        "$prefix$preview"
                                                     } ?: if (isEn) "Tap to send a message to parents" else "Ketuk untuk kirim pesan ke orang tua",
                                                     fontSize = 12.sp,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -511,6 +523,15 @@ fun PesanOrangTuaSheet(
                             )
                         }
 
+                        if (onSendPhotoMessage != null || onSavePhotoToGallery != null) {
+                            ChatAutoSaveToggleStrip(
+                                autoSaveEnabled = autoSaveMediaEnabled,
+                                isSavingMedia = isSavingMedia,
+                                isEn = isEn,
+                                onToggleAutoSave = onToggleAutoSaveMedia
+                            )
+                        }
+
                         ParentChatMessagesList(
                             messages = threadMessages,
                             myRole = "WALI",
@@ -519,6 +540,11 @@ fun PesanOrangTuaSheet(
                             ownBubbleColor = Color(0xFF4338CA),
                             listState = threadListState,
                             onDeleteMessage = onDeleteMessage,
+                            localSavesByMessageId = localSavesByMessageId,
+                            autoSaveMediaEnabled = autoSaveMediaEnabled,
+                            isSavingMedia = isSavingMedia,
+                            onSavePhotoToGallery = onSavePhotoToGallery,
+                            onPurgeServerMedia = onPurgeServerMedia,
                             emptyContent = {
                                 Box(
                                     modifier = Modifier
@@ -540,50 +566,25 @@ fun PesanOrangTuaSheet(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.surface)
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = replyText,
-                                onValueChange = { replyText = it },
-                                placeholder = {
-                                    Text(
-                                        if (isEn) "Write message to parent..." else "Tulis pesan ke orang tua...",
-                                        fontSize = 12.5.sp
-                                    )
-                                },
-                                maxLines = 3,
-                                shape = RoundedCornerShape(14.dp),
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("input_parent_chat_reply")
-                            )
-                            IconButton(
-                                onClick = {
-                                    if (replyText.isNotBlank()) {
-                                        onSendMessage(activeStudent, replyText.trim())
-                                        replyText = ""
-                                    }
-                                },
-                                colors = IconButtonDefaults.filledIconButtonColors(
-                                    containerColor = Color(0xFF4338CA),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .testTag("btn_send_parent_message")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.AutoMirrored.Filled.Send,
-                                    contentDescription = if (isEn) "Send" else "Kirim"
-                                )
-                            }
-                        }
+                        ChatPhotoComposerBar(
+                            draftText = replyText,
+                            onDraftChange = { replyText = it },
+                            placeholderText = if (isEn) "Write message to parent..." else "Tulis pesan ke orang tua...",
+                            isEn = isEn,
+                            isSendingPhoto = isSendingPhoto,
+                            supportsPhotoUpload = onSendPhotoMessage != null,
+                            onSendText = { text ->
+                                onSendMessage(activeStudent, text)
+                            },
+                            onSendPhoto = onSendPhotoMessage?.let { sendPhoto ->
+                                { uri, caption ->
+                                    sendPhoto(activeStudent, uri, caption)
+                                }
+                            },
+                            inputTestTag = "input_parent_chat_reply",
+                            sendButtonTestTag = "btn_send_parent_message",
+                            attachButtonTestTag = "btn_attach_chat_photo_wali"
+                        )
                     }
                 }
             }

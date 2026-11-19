@@ -38,10 +38,12 @@ import com.example.data.dao.InfoPentingCommentDao
 import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
+import com.example.data.dao.ChatMediaLocalSaveDao
 import com.example.data.dao.WaliGalleryLocalSaveDao
 import com.example.data.dao.WaliGalleryPostDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
+import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.DeletionLog
 import com.example.data.model.FastingRecord
 import com.example.data.model.FastingSession
@@ -93,9 +95,10 @@ import com.example.data.model.WaliShiftCode
         InfoPentingComment::class,
         SholatRecord::class,
         WaliGalleryPost::class,
-        WaliGalleryLocalSave::class
+        WaliGalleryLocalSave::class,
+        ChatMediaLocalSave::class
     ],
-    version = 32,
+    version = 33,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -126,6 +129,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun sholatRecordDao(): SholatRecordDao
     abstract fun waliGalleryPostDao(): WaliGalleryPostDao
     abstract fun waliGalleryLocalSaveDao(): WaliGalleryLocalSaveDao
+    abstract fun chatMediaLocalSaveDao(): ChatMediaLocalSaveDao
 
     companion object {
         @Volatile
@@ -842,6 +846,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_32_33 = object : androidx.room.migration.Migration(32, 33) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val alters = listOf(
+                    "ALTER TABLE parent_messages ADD COLUMN photoUrl TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE parent_messages ADD COLUMN photoFallbackUrl TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE parent_messages ADD COLUMN pbRecordId TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE parent_messages ADD COLUMN pbCollectionId TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE parent_messages ADD COLUMN pbFilename TEXT NOT NULL DEFAULT ''",
+                    "ALTER TABLE parent_messages ADD COLUMN isDownloadedByRecipient INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE parent_messages ADD COLUMN isMediaPurgedFromServer INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE parent_messages ADD COLUMN updatedAt INTEGER NOT NULL DEFAULT 0"
+                )
+                alters.forEach { sql ->
+                    try {
+                        db.execSQL(sql)
+                    } catch (_: Exception) {
+                        // Column may already exist
+                    }
+                }
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS chat_media_local_saves (
+                        messageId INTEGER PRIMARY KEY NOT NULL,
+                        localGalleryUri TEXT NOT NULL DEFAULT '',
+                        displayFileName TEXT NOT NULL DEFAULT '',
+                        savedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -874,7 +910,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_28_29,
                         MIGRATION_29_30,
                         MIGRATION_30_31,
-                        MIGRATION_31_32
+                        MIGRATION_31_32,
+                        MIGRATION_32_33
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()
