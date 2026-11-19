@@ -255,6 +255,8 @@ fun DashboardScreen(
     val infoPentingComments by viewModel.infoPentingComments.collectAsStateWithLifecycle()
     val unreadInfoPentingCount by viewModel.unreadInfoPentingCount.collectAsStateWithLifecycle()
     val isPublishingInfoPenting by viewModel.isPublishingInfoPenting.collectAsStateWithLifecycle()
+    val bibleBookmarks by viewModel.bibleBookmarks.collectAsStateWithLifecycle()
+    val bibleNotes by viewModel.bibleNotes.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
     val isPublishingGalleryPost by viewModel.isPublishingGalleryPost.collectAsStateWithLifecycle()
@@ -282,6 +284,11 @@ fun DashboardScreen(
     LaunchedEffect(modalState.showAbsenSholatSheet) {
         if (modalState.showAbsenSholatSheet) {
             viewModel.syncSholatOnlineQuietly()
+        }
+    }
+    LaunchedEffect(modalState.showBibleSheet) {
+        if (modalState.showBibleSheet) {
+            viewModel.syncBibleOnlineQuietly()
         }
     }
     LaunchedEffect(currentUserRole) {
@@ -1195,6 +1202,10 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 modalState.activeCategoryHub = DashboardCategoryHub.SHOLAT
                             },
+                            onOpenBible = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.showBibleSheet = true
+                            },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,
@@ -1227,6 +1238,7 @@ fun DashboardScreen(
                             konselingFollowUpCount = konselingStats.followUpCount,
                             konselingTotalCount = konselingStats.totalEntries,
                             unreadInfoPentingCount = unreadInfoPentingCount,
+                            bibleSavedCount = bibleBookmarks.size + bibleNotes.size,
                             todayMyShiftBadge = todayMyShiftBadge,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
@@ -3140,6 +3152,59 @@ fun DashboardScreen(
         isPublishingInfoPenting = isPublishingInfoPenting,
         readyJadwalPdf = readyJadwalPdf,
         onClearReadyJadwalPdf = { readyJadwalPdf = null }
+    )
+
+    DashboardBibleModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        isEn = isEn
+    )
+}
+
+@Composable
+private fun DashboardBibleModalsHost(
+    viewModel: HealthViewModel,
+    modalState: DashboardModalState,
+    isEn: Boolean
+) {
+    if (!modalState.showBibleSheet) return
+    val bibleBookmarks by viewModel.bibleBookmarks.collectAsStateWithLifecycle()
+    val bibleNotes by viewModel.bibleNotes.collectAsStateWithLifecycle()
+    com.example.ui.dialogs.BibleReaderSheet(
+        bookmarks = bibleBookmarks,
+        notes = bibleNotes,
+        initialEnglish = isEn,
+        onSyncRequested = { viewModel.syncBibleOnlineQuietly() },
+        onToggleBookmark = { bookId, chapter, verse, textId, textEn, color, onResult ->
+            viewModel.toggleBibleBookmark(
+                bookId = bookId,
+                chapter = chapter,
+                verse = verse,
+                verseTextId = textId,
+                verseTextEn = textEn,
+                highlightColor = color,
+                onResult = onResult
+            )
+        },
+        onDeleteBookmark = { bm, onResult ->
+            viewModel.deleteBibleBookmark(bm, onResult)
+        },
+        onSaveNote = { existingNote, bookId, chapter, verse, title, content, tag, onResult ->
+            viewModel.saveBibleNote(
+                existingNote = existingNote,
+                bookId = bookId,
+                chapter = chapter,
+                verse = verse,
+                title = title,
+                content = content,
+                categoryTag = tag,
+                onResult = onResult
+            )
+        },
+        onDeleteNote = { note, onResult ->
+            viewModel.deleteBibleNote(note, onResult)
+        },
+        onDismiss = { modalState.showBibleSheet = false }
     )
 }
 

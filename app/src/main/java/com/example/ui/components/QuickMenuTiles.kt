@@ -144,6 +144,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_info_penting,
             tileBg = Color(0xFFCCFBF1)
         )
+        DashboardIconKey.BIBLE -> DashboardIconUiMeta(
+            key = key,
+            title = "Bible",
+            imageRes = R.drawable.img_menu_bible,
+            tileBg = Color(0xFFFEF3C7)
+        )
     }
 }
 
@@ -206,6 +212,7 @@ fun QuickMenuTiles(
     onOpenPilihAnakAsuh: () -> Unit = {},
     onOpenInfoPenting: () -> Unit = {},
     onOpenAbsenSholat: () -> Unit = {},
+    onOpenBible: () -> Unit = {},
     todayPlansCount: Int = 0,
     inpatientCount: Int = 0,
     studentsCount: Int = 0,
@@ -231,6 +238,7 @@ fun QuickMenuTiles(
     konselingFollowUpCount: Int = 0,
     konselingTotalCount: Int = 0,
     unreadInfoPentingCount: Int = 0,
+    bibleSavedCount: Int = 0,
     todayMyShiftBadge: String? = null,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
@@ -442,6 +450,20 @@ fun QuickMenuTiles(
                     badgeBg = infoBadgeBg,
                     testTag = "tile_info_penting",
                     onClick = onOpenInfoPenting
+                )
+            }
+            DashboardIconKey.BIBLE -> {
+                val bibleBadge = if (bibleSavedCount > 0) {
+                    "$bibleSavedCount"
+                } else {
+                    "IND/ENG"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = bibleBadge,
+                    badgeBg = Color(0xFFB45309),
+                    testTag = "tile_bible",
+                    onClick = onOpenBible
                 )
             }
         }

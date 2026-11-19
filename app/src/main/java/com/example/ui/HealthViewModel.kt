@@ -6,6 +6,9 @@ import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.database.AppDatabase
+import com.example.data.model.BibleBookmark
+import com.example.data.model.BibleCatalog
+import com.example.data.model.BibleNote
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipLocalSave
@@ -145,7 +148,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.waliGalleryLocalSaveDao(),
             db.chatMediaLocalSaveDao(),
             db.christianWorshipDao(),
-            db.christianWorshipLocalSaveDao()
+            db.christianWorshipLocalSaveDao(),
+            db.bibleBookmarkDao(),
+            db.bibleNoteDao()
         )
     }
 
@@ -6673,6 +6678,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     onResult(false, s.vmDeletePassMismatch)
                     return@launch
                 }
+                val targetSchool = account.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                val targetUser = account.username.ifBlank { username }
+                if (targetUser.isNotBlank()) {
+                    repository.deleteBibleBookmarksByOwner(targetSchool, targetUser)
+                    repository.deleteBibleNotesByOwner(targetSchool, targetUser)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.deleteRemoteBibleDataByOwner(getApplication(), targetSchool, targetUser)
+                    }
+                }
                 repository.deleteWaliAccount(account)
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.deleteRemoteWaliAccount(getApplication(), account.id)
@@ -6770,6 +6784,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteMengajiRecordsBySchool(targetSchoolId)
                 repository.deleteHaidRecordsBySchool(targetSchoolId)
                 repository.deleteChristianWorshipRecordsBySchool(targetSchoolId)
+                repository.deleteBibleBookmarksBySchool(targetSchoolId)
+                repository.deleteBibleNotesBySchool(targetSchoolId)
                 repository.deleteShiftMessagesBySchool(targetSchoolId)
                 repository.deleteStudentsBySchool(targetSchoolId)
                 repository.deleteWaliAccountsBySchool(targetSchoolId)
@@ -8118,6 +8134,240 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             } finally {
                 _isSavingChristianMedia.value = false
             }
+        }
+    }
+
+    // ==================== MODUL ALKITAB DIGITAL & CATATAN PRIBADI ====================
+    private fun activeBibleOwnerUsername(schoolId: String): String {
+        val rawUsername = _currentUsername.value?.trim().orEmpty()
+        if (rawUsername.isNotBlank()) return rawUsername.lowercase()
+        val cleanName = _waliName.value.trim().lowercase().replace(Regex("[^a-z0-9]"), "")
+        return if (cleanName.isNotBlank()) cleanName else "user_${schoolId.lowercase()}"
+    }
+
+    val bibleBookmarks: StateFlow<List<BibleBookmark>> = combine(
+        repository.allBibleBookmarks,
+        _schoolProfile,
+        _currentUsername,
+        _waliName
+    ) { list, profile, _, _ ->
+        val activeSchool = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        val activeOwner = activeBibleOwnerUsername(activeSchool)
+        list.filter { item ->
+            !item.isDeleted &&
+                item.schoolId.equals(activeSchool, ignoreCase = true) &&
+                (item.ownerWaliUsername.equals(activeOwner, ignoreCase = true) ||
+                    (item.ownerWaliUsername.isBlank() && item.ownerWaliName.equals(_waliName.value, ignoreCase = true)))
+        }.sortedByDescending { it.createdAt }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val bibleNotes: StateFlow<List<BibleNote>> = combine(
+        repository.allBibleNotes,
+        _schoolProfile,
+        _currentUsername,
+        _waliName
+    ) { list, profile, _, _ ->
+        val activeSchool = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        val activeOwner = activeBibleOwnerUsername(activeSchool)
+        list.filter { item ->
+            !item.isDeleted &&
+                item.schoolId.equals(activeSchool, ignoreCase = true) &&
+                (item.ownerWaliUsername.equals(activeOwner, ignoreCase = true) ||
+                    (item.ownerWaliUsername.isBlank() && item.ownerWaliName.equals(_waliName.value, ignoreCase = true)))
+        }.sortedByDescending { it.updatedAt }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun syncBibleOnlineQuietly() {
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.syncBibleOnlineQuietly(
+                    context = getApplication(),
+                    schoolId = schoolId,
+                    repository = repository
+                )
+            }
+        }
+    }
+
+    fun toggleBibleBookmark(
+        bookId: String,
+        chapter: Int,
+        verse: Int,
+        verseTextId: String,
+        verseTextEn: String,
+        highlightColor: String = "GOLD",
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        val ownerUsername = activeBibleOwnerUsername(schoolId)
+        val ownerName = _waliName.value.ifBlank { "Wali Asuh" }
+        val book = BibleCatalog.findBook(bookId)
+        viewModelScope.launch {
+            val allLocal = repository.getAllBibleBookmarksIncludingDeletedList()
+            val existing = allLocal.firstOrNull {
+                it.schoolId.equals(schoolId, ignoreCase = true) &&
+                    it.ownerWaliUsername.equals(ownerUsername, ignoreCase = true) &&
+                    it.bookId.equals(book.id, ignoreCase = true) &&
+                    it.chapter == chapter &&
+                    it.verse == verse
+            }
+            val now = System.currentTimeMillis()
+            val updatedItem = if (existing != null) {
+                val toggledDeleted = !existing.isDeleted
+                val updated = existing.copy(
+                    verseTextId = verseTextId.ifBlank { existing.verseTextId },
+                    verseTextEn = verseTextEn.ifBlank { existing.verseTextEn },
+                    highlightColor = highlightColor,
+                    isDeleted = toggledDeleted,
+                    updatedAt = maxOf(now, existing.updatedAt + 1L)
+                )
+                repository.updateBibleBookmark(updated)
+                updated
+            } else {
+                val deterministicId = PocketBaseIdCodec.stablePositiveHash(
+                    "bible_bm:$schoolId:$ownerUsername:${book.id}:$chapter:$verse"
+                )
+                val created = BibleBookmark(
+                    id = deterministicId,
+                    schoolId = schoolId,
+                    ownerWaliUsername = ownerUsername,
+                    ownerWaliName = ownerName,
+                    bookId = book.id,
+                    bookNameId = book.nameId,
+                    bookNameEn = book.nameEn,
+                    chapter = chapter,
+                    verse = verse,
+                    verseTextId = verseTextId,
+                    verseTextEn = verseTextEn,
+                    highlightColor = highlightColor,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                repository.insertBibleBookmark(created)
+                created
+            }
+
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleBibleBookmark(getApplication(), updatedItem)
+            }
+            val msg = if (updatedItem.isDeleted) {
+                if (isEn) "Bookmark removed." else "Bookmark ayat dihapus."
+            } else {
+                if (isEn) "Verse bookmarked & synced." else "Ayat ditandai & disinkronkan."
+            }
+            onResult(!updatedItem.isDeleted, msg)
+        }
+    }
+
+    fun deleteBibleBookmark(bookmark: BibleBookmark, onResult: (String) -> Unit = {}) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val deleted = bookmark.copy(
+                isDeleted = true,
+                updatedAt = maxOf(now, bookmark.updatedAt + 1L)
+            )
+            repository.updateBibleBookmark(deleted)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleBibleBookmark(getApplication(), deleted)
+            }
+            onResult(if (isEn) "Bookmark removed." else "Bookmark dihapus.")
+        }
+    }
+
+    fun saveBibleNote(
+        existingNote: BibleNote? = null,
+        bookId: String,
+        chapter: Int,
+        verse: Int,
+        title: String,
+        content: String,
+        categoryTag: String = "RENUNGAN",
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) {
+            onResult(
+                false,
+                if (isEn) "Please write your reflection note first." else "Isi catatan pribadi belum boleh kosong."
+            )
+            return
+        }
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        val ownerUsername = activeBibleOwnerUsername(schoolId)
+        val ownerName = _waliName.value.ifBlank { "Wali Asuh" }
+        val book = BibleCatalog.findBook(bookId)
+        val cleanTitle = title.trim().ifBlank {
+            "${if (isEn) book.nameEn else book.nameId} $chapter" + if (verse > 0) ":$verse" else ""
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val saved = if (existingNote != null) {
+                val updated = existingNote.copy(
+                    bookId = book.id,
+                    bookNameId = book.nameId,
+                    bookNameEn = book.nameEn,
+                    chapter = chapter,
+                    verse = verse,
+                    title = cleanTitle,
+                    content = cleanContent,
+                    categoryTag = categoryTag,
+                    isDeleted = false,
+                    updatedAt = maxOf(now, existingNote.updatedAt + 1L)
+                )
+                repository.updateBibleNote(updated)
+                updated
+            } else {
+                val deterministicId = PocketBaseIdCodec.stablePositiveHash(
+                    "bible_note:$schoolId:$ownerUsername:$now:${cleanTitle.hashCode()}"
+                )
+                val inserted = BibleNote(
+                    id = deterministicId,
+                    schoolId = schoolId,
+                    ownerWaliUsername = ownerUsername,
+                    ownerWaliName = ownerName,
+                    bookId = book.id,
+                    bookNameId = book.nameId,
+                    bookNameEn = book.nameEn,
+                    chapter = chapter,
+                    verse = verse,
+                    title = cleanTitle,
+                    content = cleanContent,
+                    categoryTag = categoryTag,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                repository.insertBibleNote(inserted)
+                inserted
+            }
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleBibleNote(getApplication(), saved)
+            }
+            onResult(
+                true,
+                if (isEn) "Personal note saved & synced." else "Catatan pribadi tersimpan & disinkronkan."
+            )
+        }
+    }
+
+    fun deleteBibleNote(note: BibleNote, onResult: (String) -> Unit = {}) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val deleted = note.copy(
+                isDeleted = true,
+                updatedAt = maxOf(now, note.updatedAt + 1L)
+            )
+            repository.updateBibleNote(deleted)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleBibleNote(getApplication(), deleted)
+            }
+            onResult(if (isEn) "Note deleted." else "Catatan dihapus.")
         }
     }
 }

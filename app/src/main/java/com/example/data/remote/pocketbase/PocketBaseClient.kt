@@ -281,6 +281,23 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-activity_date,-created_at"
     ): Response<PbListResponse<PbChristianWorshipRecordDto>>
 
+    // --- Modul Alkitab Digital & Catatan Pribadi (Bookmark & Catatan Pribadi Sinkron) ---
+    @GET("api/collections/bible_bookmarks/records")
+    suspend fun listBibleBookmarks(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-created_at"
+    ): Response<PbListResponse<PbBibleBookmarkDto>>
+
+    @GET("api/collections/bible_notes/records")
+    suspend fun listBibleNotes(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-updated_at"
+    ): Response<PbListResponse<PbBibleNoteDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

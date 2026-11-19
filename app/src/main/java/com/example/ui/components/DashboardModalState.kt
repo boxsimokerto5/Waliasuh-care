@@ -123,6 +123,9 @@ class DashboardModalState {
     var absenSholatInitialTab by mutableIntStateOf(0)
     var absenSholatInitialScope by mutableStateOf("ALL")
     var absenSholatAutoOpenScanner by mutableStateOf(false)
+
+    // Modul Alkitab Digital & Catatan Pribadi
+    var showBibleSheet by mutableStateOf(false)
 }
 
 @Composable

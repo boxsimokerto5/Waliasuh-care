@@ -39,12 +39,16 @@ import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
 import com.example.data.dao.ChatMediaLocalSaveDao
+import com.example.data.dao.BibleBookmarkDao
+import com.example.data.dao.BibleNoteDao
 import com.example.data.dao.ChristianWorshipDao
 import com.example.data.dao.ChristianWorshipLocalSaveDao
 import com.example.data.dao.WaliGalleryLocalSaveDao
 import com.example.data.dao.WaliGalleryPostDao
 import com.example.data.dao.WaliScheduleEntryDao
 import com.example.data.dao.WaliShiftCodeDao
+import com.example.data.model.BibleBookmark
+import com.example.data.model.BibleNote
 import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
@@ -102,9 +106,11 @@ import com.example.data.model.WaliShiftCode
         WaliGalleryLocalSave::class,
         ChatMediaLocalSave::class,
         ChristianWorshipRecord::class,
-        ChristianWorshipLocalSave::class
+        ChristianWorshipLocalSave::class,
+        BibleBookmark::class,
+        BibleNote::class
     ],
-    version = 35,
+    version = 36,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -138,6 +144,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun chatMediaLocalSaveDao(): ChatMediaLocalSaveDao
     abstract fun christianWorshipDao(): ChristianWorshipDao
     abstract fun christianWorshipLocalSaveDao(): ChristianWorshipLocalSaveDao
+    abstract fun bibleBookmarkDao(): BibleBookmarkDao
+    abstract fun bibleNoteDao(): BibleNoteDao
 
     companion object {
         @Volatile
@@ -952,6 +960,53 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_35_36 = object : androidx.room.migration.Migration(35, 36) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS bible_bookmarks (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        ownerWaliUsername TEXT NOT NULL DEFAULT '',
+                        ownerWaliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        bookId TEXT NOT NULL DEFAULT 'JHN',
+                        bookNameId TEXT NOT NULL DEFAULT 'Yohanes',
+                        bookNameEn TEXT NOT NULL DEFAULT 'John',
+                        chapter INTEGER NOT NULL DEFAULT 3,
+                        verse INTEGER NOT NULL DEFAULT 16,
+                        verseTextId TEXT NOT NULL DEFAULT '',
+                        verseTextEn TEXT NOT NULL DEFAULT '',
+                        highlightColor TEXT NOT NULL DEFAULT 'GOLD',
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS bible_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        ownerWaliUsername TEXT NOT NULL DEFAULT '',
+                        ownerWaliName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        bookId TEXT NOT NULL DEFAULT '2TI',
+                        bookNameId TEXT NOT NULL DEFAULT '2 Timotius',
+                        bookNameEn TEXT NOT NULL DEFAULT '2 Timothy',
+                        chapter INTEGER NOT NULL DEFAULT 4,
+                        verse INTEGER NOT NULL DEFAULT 1,
+                        title TEXT NOT NULL DEFAULT '',
+                        content TEXT NOT NULL DEFAULT '',
+                        categoryTag TEXT NOT NULL DEFAULT 'RENUNGAN',
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -987,7 +1042,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_31_32,
                         MIGRATION_32_33,
                         MIGRATION_33_34,
-                        MIGRATION_34_35
+                        MIGRATION_34_35,
+                        MIGRATION_35_36
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

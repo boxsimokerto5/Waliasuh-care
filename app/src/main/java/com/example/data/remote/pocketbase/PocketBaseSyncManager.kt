@@ -9,6 +9,8 @@ import android.net.Uri
 import android.os.Build
 import android.provider.OpenableColumns
 import android.util.Log
+import com.example.data.model.BibleBookmark
+import com.example.data.model.BibleNote
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipRecord
@@ -1834,6 +1836,8 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "parent_messages", filter) }
             runCatching { deleteCollectionByFilter(service, "wali_gallery_posts", filter) }
             runCatching { deleteCollectionByFilter(service, "christian_worship_records", filter) }
+            runCatching { deleteCollectionByFilter(service, "bible_bookmarks", filter) }
+            runCatching { deleteCollectionByFilter(service, "bible_notes", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
@@ -3275,6 +3279,12 @@ object PocketBaseSyncManager {
                 syncInfoPentingCommentsMerged(service, repository)
             }
 
+            // 14. Sinkronkan Bookmark & Catatan Pribadi Alkitab (bible_bookmarks & bible_notes)
+            runCatching {
+                syncBibleBookmarksMerged(service, cleanSchoolId, filter, repository)
+                syncBibleNotesMerged(service, cleanSchoolId, filter, repository)
+            }
+
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
             Result.success(
                 if (isEn) {
@@ -4699,5 +4709,136 @@ object PocketBaseSyncManager {
                 }
             }
         }
+    }
+
+    // --- Modul Alkitab Digital & Catatan Pribadi (Bookmark & Catatan Pribadi Sinkron) ---
+    suspend fun uploadSingleBibleBookmark(context: Context, bookmark: BibleBookmark): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext false
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext false
+                val dto = PbBibleBookmarkDto.fromDomain(bookmark)
+                upsertSingleDto(service, "bible_bookmarks", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleBibleBookmark ke PocketBase", e)
+                false
+            }
+        }
+
+    suspend fun uploadSingleBibleNote(context: Context, note: BibleNote): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext false
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext false
+                val dto = PbBibleNoteDto.fromDomain(note)
+                upsertSingleDto(service, "bible_notes", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleBibleNote ke PocketBase", e)
+                false
+            }
+        }
+
+    suspend fun deleteRemoteBibleDataByOwner(
+        context: Context,
+        schoolId: String,
+        ownerUsername: String
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val cleanSchool = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val cleanUser = ownerUsername.trim()
+        if (cleanUser.isBlank()) return@withContext
+        val safeSchool = cleanSchool.replace("'", "\\'")
+        val safeUser = cleanUser.replace("'", "\\'")
+        val filter = "school_id = '$safeSchool' && owner_wali_username = '$safeUser'"
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        runCatching { deleteCollectionByFilter(service, "bible_bookmarks", filter) }
+        runCatching { deleteCollectionByFilter(service, "bible_notes", filter) }
+    }
+
+    private suspend fun syncBibleBookmarksMerged(
+        service: PocketBaseService,
+        schoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localAll = repository.getAllBibleBookmarksIncludingDeletedList()
+            .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
+        val remoteRes = fetchAllPages { page ->
+            service.listBibleBookmarks(page = page, perPage = 500, filter = filter)
+        }
+        val remoteList = remoteRes.getOrNull()?.map { it.toDomainModel(schoolId) } ?: return
+
+        val localById = localAll.associateBy { it.id }
+        val remoteById = remoteList.associateBy { it.id }
+
+        val toInsertLocal = remoteList.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllBibleBookmarks(toInsertLocal)
+        }
+
+        val toPushRemote = localAll.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { item ->
+                val dto = PbBibleBookmarkDto.fromDomain(item)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "bible_bookmarks", pairs)
+        }
+    }
+
+    private suspend fun syncBibleNotesMerged(
+        service: PocketBaseService,
+        schoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localAll = repository.getAllBibleNotesIncludingDeletedList()
+            .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
+        val remoteRes = fetchAllPages { page ->
+            service.listBibleNotes(page = page, perPage = 500, filter = filter)
+        }
+        val remoteList = remoteRes.getOrNull()?.map { it.toDomainModel(schoolId) } ?: return
+
+        val localById = localAll.associateBy { it.id }
+        val remoteById = remoteList.associateBy { it.id }
+
+        val toInsertLocal = remoteList.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllBibleNotes(toInsertLocal)
+        }
+
+        val toPushRemote = localAll.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { item ->
+                val dto = PbBibleNoteDto.fromDomain(item)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "bible_notes", pairs)
+        }
+    }
+
+    suspend fun syncBibleOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+        runCatching { syncBibleBookmarksMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncBibleNotesMerged(service, cleanSchoolId, filter, repository) }
     }
 }

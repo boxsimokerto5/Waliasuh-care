@@ -860,6 +860,52 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_cwr_school ON christian_worship_records (school_id, student_id)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "bible_bookmarks",
+            description = "Bookmark & sorotan ayat Alkitab pribadi per akun Wali Asuh / Admin",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("owner_wali_username", "text"),
+                PbFieldDef("owner_wali_name", "text"),
+                PbFieldDef("book_id", "text"),
+                PbFieldDef("book_name_id", "text"),
+                PbFieldDef("book_name_en", "text"),
+                PbFieldDef("chapter", "number"),
+                PbFieldDef("verse", "number"),
+                PbFieldDef("verse_text_id", "text"),
+                PbFieldDef("verse_text_en", "text"),
+                PbFieldDef("highlight_color", "text"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_bible_bm_owner ON bible_bookmarks (school_id, owner_wali_username)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "bible_notes",
+            description = "Catatan & renungan pribadi Alkitab per akun Wali Asuh / Admin",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("owner_wali_username", "text"),
+                PbFieldDef("owner_wali_name", "text"),
+                PbFieldDef("book_id", "text"),
+                PbFieldDef("book_name_id", "text"),
+                PbFieldDef("book_name_en", "text"),
+                PbFieldDef("chapter", "number"),
+                PbFieldDef("verse", "number"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("content", "text"),
+                PbFieldDef("category_tag", "text"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_bible_note_owner ON bible_notes (school_id, owner_wali_username)")
         )
     )
 

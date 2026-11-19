@@ -1,5 +1,7 @@
 package com.example.data.remote.pocketbase
 
+import com.example.data.model.BibleBookmark
+import com.example.data.model.BibleNote
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipRecord
@@ -2450,6 +2452,142 @@ data class PbWaliGalleryPostDto(
                 expectedRecipientCount = model.expectedRecipientCount,
                 downloadedByCsv = model.downloadedByCsv,
                 isMediaPurgedFromServer = model.isMediaPurgedFromServer,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbBibleBookmarkDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
+    @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
+    @Json(name = "book_id") val bookId: String? = null,
+    @Json(name = "book_name_id") val bookNameId: String? = null,
+    @Json(name = "book_name_en") val bookNameEn: String? = null,
+    @Json(name = "chapter") val chapter: Int? = null,
+    @Json(name = "verse") val verse: Int? = null,
+    @Json(name = "verse_text_id") val verseTextId: String? = null,
+    @Json(name = "verse_text_en") val verseTextEn: String? = null,
+    @Json(name = "highlight_color") val highlightColor: String? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): BibleBookmark {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        return BibleBookmark(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = resolvedSchool,
+            ownerWaliUsername = ownerWaliUsername.orEmpty().trim(),
+            ownerWaliName = ownerWaliName?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            bookId = bookId?.trim()?.uppercase()?.ifBlank { "JHN" } ?: "JHN",
+            bookNameId = bookNameId?.takeIf { it.isNotBlank() } ?: "Yohanes",
+            bookNameEn = bookNameEn?.takeIf { it.isNotBlank() } ?: "John",
+            chapter = (chapter ?: 1).coerceAtLeast(1),
+            verse = (verse ?: 1).coerceAtLeast(1),
+            verseTextId = verseTextId.orEmpty(),
+            verseTextEn = verseTextEn.orEmpty(),
+            highlightColor = highlightColor?.takeIf { it.isNotBlank() } ?: "GOLD",
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: BibleBookmark): PbBibleBookmarkDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "bible_bm:${model.schoolId}:${model.ownerWaliUsername}:${model.bookId}:${model.chapter}:${model.verse}"
+            )
+            return PbBibleBookmarkDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                ownerWaliUsername = model.ownerWaliUsername,
+                ownerWaliName = model.ownerWaliName,
+                bookId = model.bookId,
+                bookNameId = model.bookNameId,
+                bookNameEn = model.bookNameEn,
+                chapter = model.chapter,
+                verse = model.verse,
+                verseTextId = model.verseTextId,
+                verseTextEn = model.verseTextEn,
+                highlightColor = model.highlightColor,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbBibleNoteDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
+    @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
+    @Json(name = "book_id") val bookId: String? = null,
+    @Json(name = "book_name_id") val bookNameId: String? = null,
+    @Json(name = "book_name_en") val bookNameEn: String? = null,
+    @Json(name = "chapter") val chapter: Int? = null,
+    @Json(name = "verse") val verse: Int? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "content") val content: String? = null,
+    @Json(name = "category_tag") val categoryTag: String? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): BibleNote {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        return BibleNote(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = resolvedSchool,
+            ownerWaliUsername = ownerWaliUsername.orEmpty().trim(),
+            ownerWaliName = ownerWaliName?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            bookId = bookId?.trim()?.uppercase()?.ifBlank { "2TI" } ?: "2TI",
+            bookNameId = bookNameId?.takeIf { it.isNotBlank() } ?: "2 Timotius",
+            bookNameEn = bookNameEn?.takeIf { it.isNotBlank() } ?: "2 Timothy",
+            chapter = (chapter ?: 1).coerceAtLeast(1),
+            verse = (verse ?: 1).coerceAtLeast(0),
+            title = title.orEmpty(),
+            content = content.orEmpty(),
+            categoryTag = categoryTag?.takeIf { it.isNotBlank() } ?: "RENUNGAN",
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: BibleNote): PbBibleNoteDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "bible_note:${model.schoolId}:${model.ownerWaliUsername}:${model.createdAt}"
+            )
+            return PbBibleNoteDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                ownerWaliUsername = model.ownerWaliUsername,
+                ownerWaliName = model.ownerWaliName,
+                bookId = model.bookId,
+                bookNameId = model.bookNameId,
+                bookNameEn = model.bookNameEn,
+                chapter = model.chapter,
+                verse = model.verse,
+                title = model.title,
+                content = model.content,
+                categoryTag = model.categoryTag,
                 isDeleted = model.isDeleted,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt

@@ -13,6 +13,8 @@ import com.example.data.model.WaliAccount
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 
+import com.example.data.dao.BibleBookmarkDao
+import com.example.data.dao.BibleNoteDao
 import com.example.data.dao.DeletionLogDao
 import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
@@ -50,6 +52,8 @@ import com.example.data.model.ParentExpectation
 import com.example.data.dao.ChatMediaLocalSaveDao
 import com.example.data.dao.ChristianWorshipDao
 import com.example.data.dao.ChristianWorshipLocalSaveDao
+import com.example.data.model.BibleBookmark
+import com.example.data.model.BibleNote
 import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
@@ -94,7 +98,9 @@ class HealthRepository(
     private val waliGalleryLocalSaveDao: WaliGalleryLocalSaveDao? = null,
     private val chatMediaLocalSaveDao: ChatMediaLocalSaveDao? = null,
     private val christianWorshipDao: ChristianWorshipDao? = null,
-    private val christianWorshipLocalSaveDao: ChristianWorshipLocalSaveDao? = null
+    private val christianWorshipLocalSaveDao: ChristianWorshipLocalSaveDao? = null,
+    private val bibleBookmarkDao: BibleBookmarkDao? = null,
+    private val bibleNoteDao: BibleNoteDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -143,6 +149,10 @@ class HealthRepository(
         christianWorshipDao?.getAllRecords() ?: emptyFlow()
     val allChristianWorshipLocalSaves: Flow<List<ChristianWorshipLocalSave>> =
         christianWorshipLocalSaveDao?.getAllLocalSaves() ?: emptyFlow()
+    val allBibleBookmarks: Flow<List<BibleBookmark>> =
+        bibleBookmarkDao?.getAllActiveBookmarks() ?: emptyFlow()
+    val allBibleNotes: Flow<List<BibleNote>> =
+        bibleNoteDao?.getAllActiveNotes() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -939,5 +949,62 @@ class HealthRepository(
 
     suspend fun deleteChristianWorshipLocalSave(recordId: Long) {
         christianWorshipLocalSaveDao?.deleteByRecordId(recordId)
+    }
+
+    // --- Modul Alkitab Digital & Catatan Pribadi (Bookmark & Catatan Sinkron) ---
+    suspend fun insertBibleBookmark(bookmark: BibleBookmark): Long =
+        bibleBookmarkDao?.insert(bookmark) ?: 0L
+
+    suspend fun insertAllBibleBookmarks(bookmarks: List<BibleBookmark>) {
+        bibleBookmarkDao?.insertAll(bookmarks)
+    }
+
+    suspend fun updateBibleBookmark(bookmark: BibleBookmark) {
+        bibleBookmarkDao?.update(bookmark)
+    }
+
+    suspend fun getBibleBookmarkById(id: Long): BibleBookmark? =
+        bibleBookmarkDao?.getById(id)
+
+    suspend fun getAllBibleBookmarksIncludingDeletedList(): List<BibleBookmark> =
+        bibleBookmarkDao?.getAllBookmarksIncludingDeletedList() ?: emptyList()
+
+    suspend fun getBibleBookmarksBySchoolList(schoolId: String): List<BibleBookmark> =
+        bibleBookmarkDao?.getBookmarksBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteBibleBookmarksBySchool(schoolId: String) {
+        bibleBookmarkDao?.deleteBySchool(schoolId)
+    }
+
+    suspend fun deleteBibleBookmarksByOwner(schoolId: String, username: String) {
+        bibleBookmarkDao?.deleteByOwner(schoolId, username)
+    }
+
+    suspend fun insertBibleNote(note: BibleNote): Long =
+        bibleNoteDao?.insert(note) ?: 0L
+
+    suspend fun insertAllBibleNotes(notes: List<BibleNote>) {
+        bibleNoteDao?.insertAll(notes)
+    }
+
+    suspend fun updateBibleNote(note: BibleNote) {
+        bibleNoteDao?.update(note)
+    }
+
+    suspend fun getBibleNoteById(id: Long): BibleNote? =
+        bibleNoteDao?.getById(id)
+
+    suspend fun getAllBibleNotesIncludingDeletedList(): List<BibleNote> =
+        bibleNoteDao?.getAllNotesIncludingDeletedList() ?: emptyList()
+
+    suspend fun getBibleNotesBySchoolList(schoolId: String): List<BibleNote> =
+        bibleNoteDao?.getNotesBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteBibleNotesBySchool(schoolId: String) {
+        bibleNoteDao?.deleteBySchool(schoolId)
+    }
+
+    suspend fun deleteBibleNotesByOwner(schoolId: String, username: String) {
+        bibleNoteDao?.deleteByOwner(schoolId, username)
     }
 }

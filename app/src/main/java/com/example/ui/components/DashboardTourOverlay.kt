@@ -98,6 +98,7 @@ enum class TourTargetId {
     ICON_KONSELING,
     ICON_JADWAL_WALI,
     ICON_INFO_PENTING,
+    ICON_BIBLE,
     TOUR_REPLAY_BUTTON
 }
 
@@ -116,6 +117,7 @@ fun DashboardIconKey.toTourTargetId(): TourTargetId = when (this) {
     DashboardIconKey.JADWAL_WALI -> TourTargetId.ICON_JADWAL_WALI
     DashboardIconKey.KLAIM_ANAK_ASUH -> TourTargetId.ICON_KLAIM_ANAK_ASUH
     DashboardIconKey.INFO_PENTING -> TourTargetId.ICON_INFO_PENTING
+    DashboardIconKey.BIBLE -> TourTargetId.ICON_BIBLE
 }
 
 data class DashboardTourStep(
@@ -355,6 +357,19 @@ fun buildDashboardTourSteps(isEn: Boolean): List<DashboardTourStep> {
             accentColor = Color(0xFF0F766E),
             iconRes = R.drawable.img_menu_info_penting,
             dashboardIconKey = DashboardIconKey.INFO_PENTING
+        ),
+        DashboardTourStep(
+            targetId = TourTargetId.ICON_BIBLE,
+            chapter = if (isEn) "Bible" else "Alkitab",
+            title = if (isEn) "Digital Bible & Personal Notes" else "Bible (Alkitab & Catatan)",
+            description = if (isEn) {
+                "Read all 66 Bible books in IND/ENG with audio reader, devotionals, stories & synced personal notes."
+            } else {
+                "Baca 66 kitab Alkitab dwibahasa IND/ENG lengkap dengan audio suara, renungan, kisah & catatan tersinkron."
+            },
+            accentColor = Color(0xFFB45309),
+            iconRes = R.drawable.img_menu_bible,
+            dashboardIconKey = DashboardIconKey.BIBLE
         ),
         DashboardTourStep(
             targetId = TourTargetId.TOUR_REPLAY_BUTTON,
