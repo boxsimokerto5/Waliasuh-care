@@ -173,7 +173,7 @@ class TandemWaliRobolectricTest {
         assertNotNull(renamedStudent)
         assertNotNull(renamedLink)
         assertEquals("Ustadz Eko Santoso", TandemWaliHelper.tandemMembers(renamedStudent!!).first { it.username == "eko" }.name)
-        assertEquals("Ustadz Eko Santoso", TandemWaliHelper.tandemMembers(renamedLink!!).first { it.username == "eko" }.name)
+        assertEquals("Ustadz Eko Santoso", TandemWaliHelper.parseMembers(renamedLink!!.tandemWalisJson).first { it.username == "eko" }.name)
 
         // 9. Resolve live schedule piket badges at specific hour (10:00 -> P1 active, S1A inactive)
         val cal = Calendar.getInstance().apply {
@@ -482,7 +482,7 @@ class TandemWaliRobolectricTest {
             schoolId = "SCH-UI"
         )
         val sharedRecordByOther = KonselingRecord(
-            id = "rec_shared_1",
+            id = 8803L,
             studentId = student.id,
             studentName = student.name,
             studentNis = student.nis,
@@ -687,7 +687,7 @@ class TandemWaliRobolectricTest {
         db.tabunganTransactionDao().insertAll(
             listOf(
                 com.example.data.model.TabunganTransaction(
-                    id = "tx_r1",
+                    id = 91001L,
                     studentId = student.id,
                     studentName = student.name,
                     studentNis = student.nis,
@@ -700,7 +700,7 @@ class TandemWaliRobolectricTest {
                     transactionDate = now - 1000L
                 ),
                 com.example.data.model.TabunganTransaction(
-                    id = "tx_f2",
+                    id = 91002L,
                     studentId = student.id,
                     studentName = student.name,
                     studentNis = student.nis,
@@ -756,8 +756,8 @@ class TandemWaliRobolectricTest {
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("card_parent_summary_tabungan").performScrollTo().performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("label_parent_tabungan_holder_tx_r1").performScrollTo().assertIsDisplayed()
-        composeTestRule.onNodeWithTag("label_parent_tabungan_holder_tx_f2").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("label_parent_tabungan_holder_91001").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("label_parent_tabungan_holder_91002").performScrollTo().assertIsDisplayed()
 
         vm.logout()
         clearSchoolData(db, schoolId)
@@ -801,7 +801,7 @@ class TandemWaliRobolectricTest {
         assertEquals(tandemJson, linkDomain.tandemWalisJson)
 
         val konseling = KonselingRecord(
-            id = "k_dto_1",
+            id = 9004L,
             studentId = 123L,
             studentName = "Siswa DTO",
             ownerWaliUsername = "wali1",
@@ -815,8 +815,8 @@ class TandemWaliRobolectricTest {
         val konselingDomain = PbKonselingRecordDto.fromDomain(konseling).toDomainModel()
         assertTrue(konselingDomain.shareWithTandem)
 
-        val schemas = PocketBaseSchemaProvider.getAllCollections()
-        val studentsCols = schemas.first { it.collectionName == "students" }.fields.map { it.name }
+        val schemas = PocketBaseSchemaProvider.COLLECTIONS
+        val studentsCols = schemas.first { it.collectionName == "child_students" }.fields.map { it.name }
         val linkCols = schemas.first { it.collectionName == "parent_access_links" }.fields.map { it.name }
         val konselingCols = schemas.first { it.collectionName == "konseling_records" }.fields.map { it.name }
 

@@ -834,7 +834,8 @@ internal fun LazyListScope.mengajiCategoryItems(
     onOpenInputMengaji: () -> Unit,
     onOpenRiwayatMengaji: () -> Unit,
     onOpenKartuMengaji: () -> Unit,
-    onOpenRekapMengaji: () -> Unit
+    onOpenRekapMengaji: () -> Unit,
+    onOpenQuran: () -> Unit = {}
 ) {
     val todayRecords = mengajiRecords.filter { DateUtils.isToday(it.sessionDate) }
     val fluentCount = mengajiRecords.count { MengajiHelper.isFluent(it.fluencyStatus) }
@@ -915,6 +916,23 @@ internal fun LazyListScope.mengajiCategoryItems(
                     modifier = Modifier.weight(1f)
                 )
             }
+            CartoonMenuCard(
+                title = "Al-Qur'an Digital",
+                subtitle = if (isEn) {
+                    "Calligraphic Ivory-Gold Mushaf, Latin & Audio"
+                } else {
+                    "Mushaf Kaligrafi Emas, Latin, Arti & Audio"
+                },
+                imageRes = R.drawable.img_menu_alquran,
+                badgeText = "114 Surah",
+                badgeBg = Color(0xFFFEF3C7),
+                badgeColor = Color(0xFFB7791F),
+                bgGradient = listOf(Color(0xFFFFFCF3), Color(0xFFFEF3C7).copy(alpha = 0.72f)),
+                borderColor = Color(0xFFE2C788),
+                onClick = onOpenQuran,
+                testTag = "tile_alquran_digital",
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

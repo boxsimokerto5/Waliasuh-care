@@ -74,15 +74,6 @@ class JadwalQuickTabRobolectricTest {
                     dormitory = "Asrama Putra"
                 )
             )
-            db.schoolProfileDao().insert(
-                SchoolProfile(
-                    id = 1,
-                    schoolName = "Sekolah Rakyat Kediri",
-                    shortName = "SR Kediri",
-                    tenantCode = schoolId,
-                    activeThemeId = "EMERALD_CLEAN"
-                )
-            )
             db.waliScheduleEntryDao().insert(
                 WaliScheduleEntry(
                     schoolId = schoolId,
@@ -104,9 +95,16 @@ class JadwalQuickTabRobolectricTest {
 
         val vm = HealthViewModel(app)
         runBlocking {
-            vm.updateLanguage(AppLanguage.INDONESIAN)
+            vm.setAppLanguage(AppLanguage.INDONESIAN)
+            vm.updateSchoolProfile(
+                SchoolProfile(
+                    schoolName = "Sekolah Rakyat Kediri",
+                    shortName = "SR Kediri",
+                    tenantCode = schoolId
+                )
+            )
             val result = vm.executeLogin("budi_jq1", "pw", rememberMe = false)
-            assertEquals(LoginResult.WALI, result)
+            org.junit.Assert.assertTrue(result is LoginResult.SuccessWali)
             waitUntil { vm.schoolScheduleEntries.value.any { it.schoolId == schoolId } }
         }
 
@@ -209,10 +207,10 @@ class JadwalQuickTabRobolectricTest {
                 dayCodesJson = WaliScheduleHelper.serializeDayCodes(mapOf(20 to "S3A", 21 to "M1"))
             )
         )
-        val profile = SchoolProfile(id = 1, schoolName = "SR Kediri", shortName = "SRK", tenantCode = schoolId)
+        val profile = SchoolProfile(schoolName = "SR Kediri", shortName = "SRK", tenantCode = schoolId)
         val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
 
-        var canManageFlag = false
+        val canManageState = androidx.compose.runtime.mutableStateOf(false)
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAppStrings provides strings) {
                 MyApplicationTheme {
@@ -225,7 +223,7 @@ class JadwalQuickTabRobolectricTest {
                         schoolProfile = profile,
                         shiftCodes = shiftCodes,
                         scheduleEntries = entries,
-                        canManageSchedule = canManageFlag,
+                        canManageSchedule = canManageState.value,
                         waliAccounts = emptyList(),
                         currentUsername = "wali_satu",
                         currentWaliName = "Ambika Widya",

@@ -325,6 +325,7 @@ fun ParentPortalScreen(
     var selectedTabIndex by remember { mutableIntStateOf(0) }
     var showChangePasswordSheet by remember { mutableStateOf(false) }
     var showDeleteAccountSheet by remember { mutableStateOf(false) }
+    var showQuranSheet by remember { mutableStateOf(false) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     val currentTab = visibleTabs.getOrElse(safeTabIndex) { ParentPortalTab.HOME }
 
@@ -710,7 +711,8 @@ fun ParentPortalScreen(
                                     isPrimary = true,
                                     account = assignedWaliAccount
                                 )
-                        }
+                        },
+                        onOpenQuran = { showQuranSheet = true }
                     )
                     ParentPortalTab.PROFILE -> ParentProfileContent(
                         student = student,
@@ -790,7 +792,10 @@ fun ParentPortalScreen(
                         schoolProfile = schoolProfile,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
                     )
-                    ParentPortalTab.MENGAJI -> ParentMengajiContent(records = studentMengaji)
+                    ParentPortalTab.MENGAJI -> ParentMengajiContent(
+                        records = studentMengaji,
+                        onOpenQuran = { showQuranSheet = true }
+                    )
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(records = studentMedical)
                     ParentPortalTab.FASTING -> ParentFastingContent(records = studentFasting)
                     ParentPortalTab.HAID -> ParentHaidContent(records = studentHaid)
@@ -987,6 +992,13 @@ fun ParentPortalScreen(
             onDismiss = { selectedWaliBadgeForSheet = null }
         )
     }
+    if (showQuranSheet && !isChristianStudent) {
+        com.example.ui.dialogs.QuranReaderSheet(
+            initialEnglish = isEn,
+            onRecordToMengaji = null,
+            onDismiss = { showQuranSheet = false }
+        )
+    }
 }
 
 @Composable
@@ -1015,7 +1027,8 @@ private fun ParentOverviewContent(
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
     onCancelDeletionRequest: (() -> Unit)? = null,
     onPreviewPhoto: (() -> Unit)? = null,
-    onOpenWaliProfile: (() -> Unit)? = null
+    onOpenWaliProfile: (() -> Unit)? = null,
+    onOpenQuran: () -> Unit = {}
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -1096,6 +1109,21 @@ private fun ParentOverviewContent(
                         badgeColor = Color(0xFF059669),
                         testTag = "card_parent_summary_mengaji",
                         onClick = { onOpenTab(ParentPortalTab.MENGAJI) }
+                    )
+                )
+            }
+            if (!isChristianStudent) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "alquran",
+                        title = if (isEn) "Al-Qur'an" else "Al-Qur'an Digital",
+                        imageRes = R.drawable.img_menu_alquran,
+                        accentColor = Color(0xFFB7791F),
+                        softBg = Color(0xFFFFFBEB),
+                        badgeText = "114 Surah",
+                        badgeColor = Color(0xFFB7791F),
+                        testTag = "card_parent_summary_alquran",
+                        onClick = onOpenQuran
                     )
                 )
             }
@@ -2574,7 +2602,10 @@ private fun ParentSholatContent(
 }
 
 @Composable
-private fun ParentMengajiContent(records: List<MengajiRecord>) {
+private fun ParentMengajiContent(
+    records: List<MengajiRecord>,
+    onOpenQuran: () -> Unit = {}
+) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     LazyColumn(
@@ -2584,6 +2615,63 @@ private fun ParentMengajiContent(records: List<MengajiRecord>) {
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        item(key = "parent_mengaji_quran_cta") {
+            Card(
+                onClick = onOpenQuran,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("btn_parent_open_alquran"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFCF3)),
+                border = BorderStroke(1.2.dp, Color(0xFFE2C788))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_menu_alquran),
+                        contentDescription = "Al-Qur'an Digital",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isEn) "Open Al-Qur'an Digital" else "Buka Al-Qur'an Digital",
+                            fontSize = 13.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF74470B)
+                        )
+                        Text(
+                            text = if (isEn) {
+                                "Calligraphic Ivory-Gold Mushaf • Latin & Audio"
+                            } else {
+                                "Mushaf Kaligrafi Emas & Krem Gading • Latin & Audio"
+                            },
+                            fontSize = 11.sp,
+                            color = Color(0xFF8B7149)
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color(0xFFFEF3C7)
+                    ) {
+                        Text(
+                            text = "114 Surah",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFB7791F),
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
         if (records.isEmpty()) {
             item {
                 ParentEmptyNotice(if (isEn) "No mengaji records yet." else "Belum ada catatan mengaji.")

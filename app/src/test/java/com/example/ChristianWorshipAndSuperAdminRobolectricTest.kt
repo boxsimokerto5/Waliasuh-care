@@ -116,25 +116,26 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         }
         assertEquals(1, claimedCount)
 
-        val updatedDbStudent = db.childStudentDao().getStudentById(9801L)!!
+        val updatedDbStudent = db.childStudentDao().getById(9801L)!!
         val updatedDbLink = db.parentAccessLinkDao().getByStudentId(9801L, schoolId)!!
         assertTrue(StudentReligionHelper.isChristian(updatedDbStudent))
         assertTrue(StudentReligionHelper.isChristian(updatedDbStudent, updatedDbLink))
         assertFalse(StudentReligionHelper.isChristian(muslimStudent))
 
+        val testStudents: List<ChildStudent> = listOf(updatedDbStudent, muslimStudent)
         // Verify SholatAttendanceSheet excludes Christian student while showing Muslim student
         val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAppStrings provides strings) {
                 SholatAttendanceSheet(
-                    students = listOf(updatedDbStudent, muslimStudent),
-                    records = emptyList(),
+                    students = testStudents,
+                    sholatRecords = emptyList(),
                     haidRecords = emptyList(),
-                    schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", tenantCode = schoolId),
                     currentWaliUsername = "walitest",
                     currentWaliName = "Wali Test",
-                    onSaveSingle = { _, _, _, _, _ -> },
-                    onMarkAllJamaah = { _, _, _ -> },
+                    schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", tenantCode = schoolId),
+                    onSaveRecord = { _, _, _, _, _, _, _ -> },
+                    onBulkMarkJamaah = { _, _, _, _ -> },
                     onDeleteRecord = {},
                     onDismiss = {}
                 )
@@ -148,7 +149,7 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         composeTestRule.setContent {
             CompositionLocalProvider(LocalAppStrings provides strings) {
                 PilihanAksesOrangTuaSheet(
-                    students = listOf(updatedDbStudent, muslimStudent),
+                    students = testStudents,
                     parentAccessLinks = listOf(updatedDbLink),
                     isStudentClaimedByCurrentWali = { true },
                     isAdmin = true,
@@ -233,8 +234,8 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         assertTrue(deletedOk)
         assertEquals(1, ChristianWorshipHelper.recordsForStudent(vm.christianWorshipRecords.value, student).size)
 
-        db.christianWorshipDao().getAllRecordsSync().filter { it.studentId == 9821L }.forEach {
-            db.christianWorshipDao().delete(it)
+        db.christianWorshipDao().getAllRecordsIncludingDeletedList().filter { it.studentId == 9821L }.forEach {
+            db.christianWorshipDao().deleteRecord(it)
         }
         db.childStudentDao().delete(student)
         Unit
@@ -347,6 +348,55 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
     }
 
     @Test
+    fun `InputChristianWorshipDialog renders ModalBottomSheet slider with colored activity grid and saves log`() {
+        val student = ChildStudent(
+            id = 9835L,
+            name = "Cristin Dea Musa",
+            nis = "983501",
+            gender = "P",
+            age = 15,
+            dormitory = "Asrama Putri",
+            classGrade = "IX-A",
+            schoolId = "SRT1-KDR",
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        var savedType = ""
+        var savedTitle = ""
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.dialogs.InputChristianWorshipDialog(
+                    christianStudents = listOf(student),
+                    initialTab = 0,
+                    defaultActivityType = ChristianWorshipRecord.TYPE_DOA_PAGI,
+                    targetStudent = student,
+                    isSaving = false,
+                    onOpenClaimChristian = {},
+                    onSaveSingle = { _, actType, _, title, _, _ ->
+                        savedType = actType
+                        savedTitle = title
+                    },
+                    onSaveBatch = { _, _, _, _, _ -> },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("sheet_input_christian_worship").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tab_christian_input_single").assertExists()
+        composeTestRule.onNodeWithTag("tab_christian_input_batch").assertExists()
+        composeTestRule.onNodeWithTag("chip_christian_type_KE_GEREJA").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_save_christian_worship").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(ChristianWorshipRecord.TYPE_KE_GEREJA, savedType)
+        assertTrue(savedTitle.isNotBlank())
+    }
+
+    @Test
     fun `ParentPortalScreen automatically switches to Agama Kristen portal and hides Sholat and Mengaji when student is Christian`() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<Application>()
         app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
@@ -400,7 +450,7 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
             title = "Doa Pagi Bersama",
             notes = "Mengikuti renungan pagi dengan sukacita"
         )
-        db.christianWorshipDao().insert(worshipRec)
+        db.christianWorshipDao().insertRecord(worshipRec)
 
         val loginRes = vm.executeLogin("ortu_grace_9841", "Ortu#9841")
         assertTrue(loginRes is LoginResult.SuccessParent)
@@ -435,7 +485,7 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         composeTestRule.onNodeWithText("Doa Pagi Bersama", substring = true).assertExists()
 
         vm.logout()
-        db.christianWorshipDao().delete(worshipRec)
+        db.christianWorshipDao().deleteRecord(worshipRec)
         db.parentAccessLinkDao().delete(link)
         db.childStudentDao().delete(student)
         Unit

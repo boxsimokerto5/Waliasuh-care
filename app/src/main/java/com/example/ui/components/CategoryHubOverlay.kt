@@ -130,6 +130,7 @@ fun CategoryHubOverlay(
     onOpenRiwayatMengaji: () -> Unit = {},
     onOpenKartuMengaji: () -> Unit = {},
     onOpenRekapMengaji: () -> Unit = {},
+    onOpenQuranFromMengaji: () -> Unit = {},
     onOpenJadwalKunjungan: () -> Unit = {},
     onOpenDaftarHadirKunjungan: (Int) -> Unit = {},
     onOpenLaporanKunjungan: () -> Unit = {},
@@ -619,7 +620,8 @@ fun CategoryHubOverlay(
                                     onOpenInputMengaji = onOpenInputMengaji,
                                     onOpenRiwayatMengaji = onOpenRiwayatMengaji,
                                     onOpenKartuMengaji = onOpenKartuMengaji,
-                                    onOpenRekapMengaji = onOpenRekapMengaji
+                                    onOpenRekapMengaji = onOpenRekapMengaji,
+                                    onOpenQuran = onOpenQuranFromMengaji
                                 )
                                 DashboardCategoryHub.KUNJUNGAN -> kunjunganCategoryItems(
                                     isEn = isEn,

@@ -1564,6 +1564,9 @@ fun DashboardScreen(
                     modalState.riwayatMengajiInitialTab = 1
                     modalState.showRiwayatMengajiSheet = true
                 },
+                onOpenQuranFromMengaji = {
+                    modalState.showQuranSheet = true
+                },
                 onOpenJadwalKunjungan = { modalState.showJadwalKunjunganSheet = true },
                 onOpenDaftarHadirKunjungan = { tabIdx ->
                     modalState.daftarHadirKunjunganInitialTab = tabIdx
@@ -2620,6 +2623,11 @@ fun DashboardScreen(
             useDialogWindow = true
         )
     }
+
+    DashboardQuranModalsHost(
+        modalState = modalState,
+        isEn = isEn
+    )
 }
 
 @Composable
@@ -3563,6 +3571,34 @@ internal fun DashboardBibleModalsHost(
             viewModel.deleteBibleNote(note, onResult)
         },
         onDismiss = { modalState.showBibleSheet = false }
+    )
+}
+
+@Composable
+internal fun DashboardQuranModalsHost(
+    modalState: DashboardModalState,
+    isEn: Boolean
+) {
+    if (!modalState.showQuranSheet) return
+    val context = LocalContext.current
+    com.example.ui.dialogs.QuranReaderSheet(
+        initialEnglish = isEn,
+        onRecordToMengaji = { surah, ayah ->
+            modalState.showQuranSheet = false
+            modalState.mengajiTargetStudent = null
+            modalState.mengajiRecordToEdit = null
+            modalState.showInputMengajiDialog = true
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Ready to record Mengaji for ${surah.nameLatin} Ayah $ayah"
+                } else {
+                    "Siap mencatat setoran ${surah.nameLatin} Ayat $ayah"
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+        },
+        onDismiss = { modalState.showQuranSheet = false }
     )
 }
 
