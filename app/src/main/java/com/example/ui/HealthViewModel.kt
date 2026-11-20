@@ -1771,7 +1771,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             var jamaahCount = 0
             var haidCount = 0
 
-            students.forEach { st ->
+            students.filter { !StudentReligionHelper.isChristian(it) }.forEach { st ->
                 val already = existingMatrix[st.id]?.get(waktu)
                 if (already == null) {
                     val activeSchool = st.schoolId.ifBlank { activeSchoolDefault }
@@ -8381,6 +8381,91 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
             } catch (e: Exception) {
                 onResult(false, e.message ?: if (isEn) "Failed to save worship activity." else "Gagal menyimpan kegiatan ibadah.")
+            } finally {
+                _isSavingChristianWorship.value = false
+            }
+        }
+    }
+
+    fun saveChristianWorshipBatch(
+        students: List<ChildStudent>,
+        activityType: String,
+        activityDate: Long,
+        title: String,
+        notes: String,
+        onResult: (Int, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val christianTargets = students.filter { StudentReligionHelper.isChristian(it) }
+        if (christianTargets.isEmpty()) {
+            onResult(
+                0,
+                if (isEn) "Select at least 1 Christian student first." else "Pilih minimal 1 anak Agama Kristen terlebih dahulu."
+            )
+            return
+        }
+        viewModelScope.launch {
+            _isSavingChristianWorship.value = true
+            try {
+                val now = System.currentTimeMillis()
+                val cleanType = ChristianWorshipHelper.normalizeType(activityType)
+                val cleanDate = activityDate.takeIf { it > 0L } ?: now
+                val dateKey = ChristianWorshipHelper.dateKeyFromMillis(cleanDate)
+                val waliUser = _currentUsername.value?.trim().orEmpty()
+                val waliDisplay = when (_currentUserRole.value) {
+                    UserRole.ADMIN -> _schoolProfile.value.adminName.ifBlank { "Admin Sekolah" }
+                    UserRole.SUPERADMIN -> "Superadmin"
+                    else -> _waliName.value.trim().ifBlank { "Wali Asuh" }
+                }
+                val resolvedTitle = title.trim().ifBlank { ChristianWorshipHelper.activityLabel(cleanType, isEn) }
+                val savedList = mutableListOf<ChristianWorshipRecord>()
+
+                christianTargets.forEachIndexed { idx, student ->
+                    val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+                    val recordId = PocketBaseSyncManager.generateCloudSafeId() + idx.toLong()
+                    val rec = ChristianWorshipRecord(
+                        id = recordId,
+                        schoolId = activeSchool,
+                        studentId = student.id,
+                        studentName = student.name,
+                        studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
+                        studentNis = student.nis,
+                        studentClass = student.classGrade,
+                        studentDorm = student.dormitory,
+                        activityType = cleanType,
+                        activityDate = cleanDate,
+                        dateKey = dateKey,
+                        title = resolvedTitle,
+                        notes = notes.trim(),
+                        waliUsername = waliUser,
+                        waliName = waliDisplay,
+                        pbRecordId = PocketBaseIdCodec.toPbId(recordId),
+                        pbCollectionId = "christian_worship_records",
+                        proofUploadedAt = null,
+                        proofExpiresAt = null,
+                        proofStatus = ChristianWorshipRecord.PROOF_STATUS_NONE,
+                        isMediaPurgedFromServer = false,
+                        isDeleted = false,
+                        createdAt = now + idx,
+                        updatedAt = now + idx
+                    )
+                    repository.insertChristianWorshipRecord(rec)
+                    savedList.add(rec)
+                }
+
+                if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                    savedList.forEach { rec ->
+                        PocketBaseSyncManager.uploadSingleChristianWorshipRecord(getApplication(), rec)
+                    }
+                }
+
+                onResult(
+                    savedList.size,
+                    if (isEn) "${savedList.size} Christian worship log(s) saved."
+                    else "${savedList.size} catatan ${ChristianWorshipHelper.activityLabel(cleanType, false)} berhasil disimpan!"
+                )
+            } catch (e: Exception) {
+                onResult(0, e.message ?: if (isEn) "Failed to save batch worship logs." else "Gagal menyimpan checklist ibadah.")
             } finally {
                 _isSavingChristianWorship.value = false
             }

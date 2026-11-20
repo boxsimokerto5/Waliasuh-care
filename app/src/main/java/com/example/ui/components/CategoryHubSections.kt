@@ -2860,7 +2860,52 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
         }
     }
 
-    // 5. Date Switcher + Filter Chips + Search Bar (Rapat)
+    // 5 & 6. Date Switcher + Filter Chips + Search Bar + Daily Roster Grouped Cards
+    jadwalDailyRosterItems(
+        isEn = isEn,
+        schoolProfile = schoolProfile,
+        monthKey = monthKey,
+        selectedDay = safeDay,
+        shiftCodes = shiftCodes,
+        monthEntries = monthEntries,
+        canManageSchedule = canManageSchedule,
+        searchQuery = searchQuery,
+        selectedGroup = selectedGroup,
+        onSearchChange = onSearchChange,
+        onGroupChange = onGroupChange,
+        onChangeMonth = onChangeMonth,
+        onChangeDay = onChangeDay,
+        onOpenPersonal = onOpenPersonal,
+        onEditCell = onEditCell,
+        onOpenImportMatriks = onOpenImportMatriks
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+internal fun LazyListScope.jadwalDailyRosterItems(
+    isEn: Boolean,
+    schoolProfile: SchoolProfile,
+    monthKey: String,
+    selectedDay: Int,
+    shiftCodes: List<WaliShiftCode>,
+    monthEntries: List<WaliScheduleEntry>,
+    canManageSchedule: Boolean,
+    searchQuery: String,
+    selectedGroup: String,
+    onSearchChange: (String) -> Unit,
+    onGroupChange: (String) -> Unit,
+    onChangeMonth: (String) -> Unit,
+    onChangeDay: (Int) -> Unit,
+    onOpenPersonal: (WaliScheduleEntry) -> Unit,
+    onEditCell: (WaliScheduleEntry, Int) -> Unit,
+    onOpenImportMatriks: (() -> Unit)? = null
+) {
+    val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
+    val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, schoolProfile.tenantCode)
+    val daysInMonth = WaliScheduleHelper.daysInMonth(monthKey)
+    val safeDay = selectedDay.coerceIn(1, daysInMonth)
+
+    // Date Switcher + Search Bar + Filter Chips
     item(key = "jadwal_date_and_filter_controls") {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Surface(
@@ -2886,19 +2931,19 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                             }
                         },
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(48.dp)
                             .testTag("btn_jadwal_prev_day")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                             contentDescription = if (isEn) "Previous Day" else "Hari Sebelumnya",
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text = WaliScheduleHelper.formatDateChipLabel(monthKey, safeDay, isEn),
-                            fontSize = 13.sp,
+                            fontSize = 13.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF0F766E),
                             modifier = Modifier.testTag("text_jadwal_selected_date")
@@ -2924,13 +2969,13 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                             }
                         },
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(48.dp)
                             .testTag("btn_jadwal_next_day")
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = if (isEn) "Next Day" else "Hari Berikutnya",
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }
@@ -2948,7 +2993,7 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                     .testTag("input_jadwal_hub_search")
             )
 
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 val filterChips = listOf(
                     "ALL" to if (isEn) "All" else "Semua",
                     WaliScheduleHelper.GROUP_PAGI to if (isEn) "Morning" else "Pagi",
@@ -2959,30 +3004,37 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                 )
                 items(filterChips) { (key, lbl) ->
                     val selected = selectedGroup == key
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (selected) Color(0xFF0F766E) else MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(
-                            1.dp,
-                            if (selected) Color(0xFF0F766E) else MaterialTheme.colorScheme.outlineVariant
-                        ),
-                        modifier = Modifier.clickable { onGroupChange(key) }
+                    Box(
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .clickable { onGroupChange(key) }
+                            .testTag("chip_jadwal_group_$key"),
+                        contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = lbl,
-                            fontSize = 11.sp,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (selected) Color(0xFF0F766E) else MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                1.dp,
+                                if (selected) Color(0xFF0F766E) else MaterialTheme.colorScheme.outlineVariant
+                            )
+                        ) {
+                            Text(
+                                text = lbl,
+                                fontSize = 11.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
                     }
                 }
             }
         }
     }
 
-    // 6. Daily Roster Grouped Cards (Jaga Pagi, Jaga Sore, Jaga Malam, Lepas & Libur, Izin & Cuti)
+    // Daily Roster Grouped Cards (Jaga Pagi, Jaga Sore, Jaga Malam, Lepas & Libur, Izin & Cuti)
     if (monthEntries.isEmpty()) {
         item(key = "jadwal_empty_state") {
             Surface(
@@ -3005,7 +3057,7 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    if (canManageSchedule) {
+                    if (canManageSchedule && onOpenImportMatriks != null) {
                         Button(
                             onClick = onOpenImportMatriks,
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),

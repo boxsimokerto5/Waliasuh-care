@@ -175,12 +175,16 @@ fun InputMengajiDialog(
         pageOrVerse = MengajiHelper.formatPageLabel(nextNum)
     }
 
-    val matchedStudents = remember(students, searchQuery) {
+    val eligibleStudents = remember(students) {
+        students.filter { !com.example.data.model.StudentReligionHelper.isChristian(it) }
+    }
+
+    val matchedStudents = remember(eligibleStudents, searchQuery) {
         val q = searchQuery.trim().lowercase()
         if (q.isBlank()) {
-            students.take(12)
+            eligibleStudents.take(12)
         } else {
-            students.filter { s ->
+            eligibleStudents.filter { s ->
                 s.name.lowercase().contains(q) ||
                     s.classGrade.lowercase().contains(q) ||
                     s.dormitory.lowercase().contains(q) ||
@@ -363,7 +367,7 @@ fun InputMengajiDialog(
                         item(key = "mengaji_pick_hdr") {
                             Text(
                                 text = if (searchQuery.isBlank()) {
-                                    if (isEn) "Select Student (${matchedStudents.size}):" else "Pilih Siswa (${students.size} Terdaftar):"
+                                    if (isEn) "Select Student (${matchedStudents.size}):" else "Pilih Siswa (${eligibleStudents.size} Terdaftar):"
                                 } else {
                                     if (isEn) "Search Results (${matchedStudents.size}):" else "Hasil Pencarian (${matchedStudents.size} Siswa):"
                                 },
@@ -883,9 +887,9 @@ fun InputMengajiDialog(
 
     if (showBarcodeScanner) {
         BarcodeScannerDialog(
-            femaleStudents = students,
+            femaleStudents = eligibleStudents,
             onScanned = { scannedCode ->
-                val matched = StudentClassifier.findMatchingStudent(students, scannedCode)
+                val matched = StudentClassifier.findMatchingStudent(eligibleStudents, scannedCode)
                 if (matched == null) {
                     scannerFloatingFeedback = ScannerFloatingFeedback(
                         id = System.nanoTime(),
@@ -910,9 +914,9 @@ fun InputMengajiDialog(
                 "Otomatis menampilkan lanjutan bacaan terakhir siswa"
             },
             quickPickTitle = if (isEn) {
-                "Quick Pick Student (${students.size}):"
+                "Quick Pick Student (${eligibleStudents.size}):"
             } else {
-                "Pilih Cepat Siswa (${students.size} Siswa):"
+                "Pilih Cepat Siswa (${eligibleStudents.size} Siswa):"
             },
             searchPlaceholder = if (isEn) "Search name, class, NIK..." else "Cari nama, kelas, atau NIK...",
             emptyListMessage = if (isEn) "No students registered yet." else "Belum ada data siswa terdaftar.",

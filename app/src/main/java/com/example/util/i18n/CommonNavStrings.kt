@@ -8,6 +8,7 @@ interface CommonNavStrings {
     // Bottom Navigation & TopBar
     val navHome: String
     val navPlans: String
+    val navSchedule: String
     val navMedical: String
     val navStudents: String
     val navProfile: String
@@ -174,6 +175,7 @@ interface CommonNavStrings {
 object IdCommonNavStrings : CommonNavStrings {
     override val navHome = "Dashboard"
     override val navPlans = "Rencana"
+    override val navSchedule = "Jadwal"
     override val navMedical = "Tindakan"
     override val navStudents = "Anak Asuh"
     override val navProfile = "Profil"
@@ -330,6 +332,7 @@ object IdCommonNavStrings : CommonNavStrings {
 object EnCommonNavStrings : CommonNavStrings {
     override val navHome = "Home"
     override val navPlans = "Plans"
+    override val navSchedule = "Schedule"
     override val navMedical = "Records"
     override val navStudents = "Students"
     override val navProfile = "Profile"

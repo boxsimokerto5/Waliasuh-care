@@ -41,9 +41,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
@@ -83,6 +83,7 @@ import com.example.ui.components.WaliTopBar
 import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.JadwalQuickScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MedicalRecordScreen
 import com.example.ui.screens.ParentPortalScreen
@@ -98,6 +99,7 @@ import com.example.util.DateUtils
 enum class WaliNavScreen(val title: String) {
     DASHBOARD("Dashboard"),
     RENCANA("Rencana"),
+    JADWAL("Jadwal"),
     TINDAKAN("Tindakan"),
     ANAK_ASUH("Anak Asuh"),
     PROFIL("Profil")
@@ -320,6 +322,7 @@ private fun WaliAsuhCareAppContent(
         }
     }
     LaunchedEffect(
+        currentScreen,
         dashboardModalState.activeCategoryHub,
         dashboardModalState.showJadwalMatriksSheet,
         dashboardModalState.showDaftarKodeSopSheet,
@@ -327,7 +330,8 @@ private fun WaliAsuhCareAppContent(
         dashboardModalState.showImportJadwalMatriksDialog,
         schoolProfile.tenantCode
     ) {
-        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.JADWAL_WALI ||
+        if (currentScreen == WaliNavScreen.JADWAL ||
+            dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.JADWAL_WALI ||
             dashboardModalState.showJadwalMatriksSheet ||
             dashboardModalState.showDaftarKodeSopSheet ||
             dashboardModalState.showManageShiftCodesDialog ||
@@ -495,24 +499,24 @@ private fun WaliAsuhCareAppContent(
                         modifier = Modifier.testTag("nav_item_rencana")
                     )
 
-                    // 3. Tindakan / Rekam Medis (from Mockup 2 & 4)
+                    // 3. Jadwal Harian Cepat (menggantikan slot Tindakan di bottom bar; Tindakan tetap dibuka lewat Dashboard -> Berobat / Notifikasi)
                     NavigationBarItem(
-                        selected = currentScreen == WaliNavScreen.TINDAKAN,
+                        selected = currentScreen == WaliNavScreen.JADWAL,
                         onClick = {
                             TopOnAdManager.onUserActionClick(context)
-                            currentScreen = WaliNavScreen.TINDAKAN
+                            currentScreen = WaliNavScreen.JADWAL
                         },
                         icon = {
                             Icon(
-                                imageVector = Icons.Default.FormatListBulleted,
-                                contentDescription = s.nav.navMedical,
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = s.nav.navSchedule,
                                 modifier = Modifier.size(22.dp)
                             )
                         },
                         label = {
                             Text(
-                                text = s.nav.navMedical,
-                                fontWeight = if (currentScreen == WaliNavScreen.TINDAKAN) FontWeight.Bold else FontWeight.Medium,
+                                text = s.nav.navSchedule,
+                                fontWeight = if (currentScreen == WaliNavScreen.JADWAL) FontWeight.Bold else FontWeight.Medium,
                                 fontSize = 10.sp,
                                 maxLines = 1,
                                 softWrap = false
@@ -523,7 +527,7 @@ private fun WaliAsuhCareAppContent(
                             selectedTextColor = WaliPrimary,
                             indicatorColor = WaliPrimary.copy(alpha = 0.12f)
                         ),
-                        modifier = Modifier.testTag("nav_item_tindakan")
+                        modifier = Modifier.testTag("nav_item_jadwal")
                     )
 
                     // 4. Anak Asuh (from Mockup 1, 2, 3, 4)
@@ -631,6 +635,19 @@ private fun WaliAsuhCareAppContent(
                         plans = activePlans,
                         pendingControls = pendingControls,
                         students = students
+                    )
+                }
+                WaliNavScreen.JADWAL -> {
+                    JadwalQuickScreen(
+                        viewModel = viewModel,
+                        schoolProfile = schoolProfile,
+                        shiftCodes = schoolShiftCodes,
+                        scheduleEntries = schoolScheduleEntries,
+                        canManageSchedule = canManageMainSchedule,
+                        waliAccounts = waliAccounts,
+                        currentUsername = currentUsername,
+                        currentWaliName = waliName,
+                        modalState = dashboardModalState
                     )
                 }
                 WaliNavScreen.TINDAKAN -> {

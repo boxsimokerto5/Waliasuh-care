@@ -202,6 +202,29 @@ enum class DashboardBannerFeatureTarget(
         groupEn = "5 Daily Prayers"
     ),
 
+    // Agama Kristen
+    FEATURE_KRISTEN_HUB(
+        key = "FEATURE_KRISTEN_HUB",
+        labelId = "Menu Kategori Agama Kristen",
+        labelEn = "Christian Worship Hub",
+        groupId = "Agama Kristen",
+        groupEn = "Christian Worship"
+    ),
+    FEATURE_KLAIM_KRISTEN(
+        key = "FEATURE_KLAIM_KRISTEN",
+        labelId = "Klaim Anak Asuh Agama Kristen",
+        labelEn = "Claim Christian Students",
+        groupId = "Agama Kristen",
+        groupEn = "Christian Worship"
+    ),
+    FEATURE_INPUT_IBADAH_KRISTEN(
+        key = "FEATURE_INPUT_IBADAH_KRISTEN",
+        labelId = "Input & Rekap Ibadah Kristen",
+        labelEn = "Log Christian Worship Activity",
+        groupId = "Agama Kristen",
+        groupEn = "Christian Worship"
+    ),
+
     // Pesan Shift
     FEATURE_PESAN_HUB(
         key = "FEATURE_PESAN_HUB",

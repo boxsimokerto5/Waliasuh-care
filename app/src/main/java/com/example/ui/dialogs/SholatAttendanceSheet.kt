@@ -140,19 +140,22 @@ fun SholatAttendanceSheet(
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    val myStudentIds = remember(students, currentWaliUsername, currentWaliName) {
-        students.filter { st ->
-            (currentWaliUsername.isNotBlank() && st.assignedWaliUsername.equals(currentWaliUsername, ignoreCase = true)) ||
-                (currentWaliName.isNotBlank() && st.assignedWaliName.equals(currentWaliName, ignoreCase = true))
+    val eligibleStudents = remember(students) {
+        students.filter { !com.example.data.model.StudentReligionHelper.isChristian(it) }
+    }
+
+    val myStudentIds = remember(eligibleStudents, currentWaliUsername, currentWaliName) {
+        eligibleStudents.filter { st ->
+            com.example.data.model.TandemWaliHelper.isClaimedByWali(st, currentWaliUsername, currentWaliName)
         }.map { it.id }.toSet()
     }
 
-    val scopedStudents = remember(students, scopeFilter, myStudentIds) {
+    val scopedStudents = remember(eligibleStudents, scopeFilter, myStudentIds) {
         val base = when (scopeFilter) {
-            "MINE" -> if (myStudentIds.isNotEmpty()) students.filter { it.id in myStudentIds } else students
-            "PUTRA" -> students.filter { !StudentClassifier.isFemaleStudent(it) }
-            "PUTRI" -> students.filter { StudentClassifier.isFemaleStudent(it) }
-            else -> students
+            "MINE" -> if (myStudentIds.isNotEmpty()) eligibleStudents.filter { it.id in myStudentIds } else eligibleStudents
+            "PUTRA" -> eligibleStudents.filter { !StudentClassifier.isFemaleStudent(it) }
+            "PUTRI" -> eligibleStudents.filter { StudentClassifier.isFemaleStudent(it) }
+            else -> eligibleStudents
         }
         base.sortedBy { it.name.lowercase() }
     }
@@ -649,9 +652,9 @@ fun SholatAttendanceSheet(
 
     if (showBarcodeScanner) {
         BarcodeScannerDialog(
-            femaleStudents = students,
+            femaleStudents = eligibleStudents,
             onScanned = { scannedCode ->
-                val matched = StudentClassifier.findMatchingStudent(students, scannedCode)
+                val matched = StudentClassifier.findMatchingStudent(eligibleStudents, scannedCode)
                 if (matched == null) {
                     scannerFeedback = ScannerFloatingFeedback(
                         id = System.nanoTime(),
@@ -690,7 +693,7 @@ fun SholatAttendanceSheet(
             } else {
                 "Otomatis catat Jamaah Tepat Waktu (atau Udzur Haid bila aktif)"
             },
-            quickPickTitle = if (isEn) "Quick Pick Student (${students.size}):" else "Pilih Cepat Siswa (${students.size}):",
+            quickPickTitle = if (isEn) "Quick Pick Student (${eligibleStudents.size}):" else "Pilih Cepat Siswa (${eligibleStudents.size}):",
             searchPlaceholder = if (isEn) "Search student or NIK/NIS..." else "Cari nama, kelas, kamar, atau NIK...",
             emptyListMessage = if (isEn) "No students registered yet." else "Belum ada siswa terdaftar.",
             accentColor = emeraldPrimary,

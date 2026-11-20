@@ -5751,6 +5751,7 @@ object PdfReportGenerator {
             val pagiCount = activeRecords.count { ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_PAGI }
             val malamCount = activeRecords.count { ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_MALAM }
             val gerejaCount = activeRecords.count { ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_KE_GEREJA }
+            val pembinaanCount = activeRecords.count { ChristianWorshipHelper.isExtraType(it.activityType) }
             val photoCount = activeRecords.count { ChristianWorshipHelper.hasAnyPhoto(it) }
 
             val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
@@ -5765,10 +5766,10 @@ object PdfReportGenerator {
 
             val kpis = listOf(
                 (if (isEn) "Christian Kids" else "Anak Kristen") to "${students.size}",
-                (if (isEn) "Total Logs" else "Total Kegiatan") to "${activeRecords.size}",
-                (if (isEn) "Morning Prayer" else "Doa Pagi") to "$pagiCount",
-                (if (isEn) "Evening Prayer" else "Doa Malam") to "$malamCount",
-                (if (isEn) "Church" else "Ke Gereja") to "$gerejaCount",
+                (if (isEn) "Morning" else "Ibadah Pagi") to "$pagiCount",
+                (if (isEn) "Evening" else "Ibadah Malam") to "$malamCount",
+                (if (isEn) "Church" else "Gereja") to "$gerejaCount",
+                (if (isEn) "Verse/Prayer" else "Pembinaan") to "$pembinaanCount",
                 (if (isEn) "Photos" else "Bukti Foto") to "$photoCount"
             )
             val colW = (contentRight - marginX) / kpis.size

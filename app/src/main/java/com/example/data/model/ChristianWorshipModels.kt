@@ -44,6 +44,9 @@ data class ChristianWorshipRecord(
         const val TYPE_DOA_PAGI = "DOA_PAGI"
         const val TYPE_DOA_MALAM = "DOA_MALAM"
         const val TYPE_KE_GEREJA = "KE_GEREJA"
+        const val TYPE_AYAT_HAFALAN = "AYAT_HAFALAN"
+        const val TYPE_POKOK_DOA = "POKOK_DOA"
+        const val TYPE_IZIN_IBADAH = "IZIN_IBADAH"
 
         const val PROOF_STATUS_NONE = "NONE"
         const val PROOF_STATUS_ACTIVE = "ACTIVE"
@@ -65,37 +68,93 @@ object ChristianWorshipHelper {
     const val DAY_MILLIS = 86_400_000L
     const val RETENTION_MILLIS = RETENTION_DAYS * DAY_MILLIS
 
-    val ALL_TYPES = listOf(
+    val CORE_TYPES = listOf(
         ChristianWorshipRecord.TYPE_DOA_PAGI,
         ChristianWorshipRecord.TYPE_DOA_MALAM,
         ChristianWorshipRecord.TYPE_KE_GEREJA
     )
 
+    val EXTRA_TYPES = listOf(
+        ChristianWorshipRecord.TYPE_AYAT_HAFALAN,
+        ChristianWorshipRecord.TYPE_POKOK_DOA,
+        ChristianWorshipRecord.TYPE_IZIN_IBADAH
+    )
+
+    val ALL_TYPES = CORE_TYPES + EXTRA_TYPES
+
     fun computeExpiresAt(uploadedAt: Long): Long = uploadedAt + RETENTION_MILLIS
 
     fun normalizeType(raw: String?): String {
         return when (raw?.trim()?.uppercase()) {
-            ChristianWorshipRecord.TYPE_DOA_MALAM, "MALAM" -> ChristianWorshipRecord.TYPE_DOA_MALAM
-            ChristianWorshipRecord.TYPE_KE_GEREJA, "GEREJA" -> ChristianWorshipRecord.TYPE_KE_GEREJA
+            ChristianWorshipRecord.TYPE_DOA_MALAM, "MALAM", "IBADAH_MALAM" -> ChristianWorshipRecord.TYPE_DOA_MALAM
+            ChristianWorshipRecord.TYPE_KE_GEREJA, "GEREJA", "KEGIATAN_GEREJA" -> ChristianWorshipRecord.TYPE_KE_GEREJA
+            ChristianWorshipRecord.TYPE_AYAT_HAFALAN, "HAFALAN", "PA", "PENDALAMAN_ALKITAB" -> ChristianWorshipRecord.TYPE_AYAT_HAFALAN
+            ChristianWorshipRecord.TYPE_POKOK_DOA, "DOA", "PEMBINAAN_ROHANI" -> ChristianWorshipRecord.TYPE_POKOK_DOA
+            ChristianWorshipRecord.TYPE_IZIN_IBADAH, "IZIN", "SAKIT" -> ChristianWorshipRecord.TYPE_IZIN_IBADAH
             else -> ChristianWorshipRecord.TYPE_DOA_PAGI
         }
     }
 
+    fun isExtraType(type: String): Boolean = normalizeType(type) in EXTRA_TYPES
+
     fun activityLabel(type: String, isEn: Boolean): String {
         return when (normalizeType(type)) {
-            ChristianWorshipRecord.TYPE_DOA_PAGI -> if (isEn) "Morning Prayer" else "Doa Ibadah Pagi"
-            ChristianWorshipRecord.TYPE_DOA_MALAM -> if (isEn) "Evening Prayer" else "Doa Ibadah Malam"
-            ChristianWorshipRecord.TYPE_KE_GEREJA -> if (isEn) "Church Service" else "Kegiatan ke Gereja"
+            ChristianWorshipRecord.TYPE_DOA_PAGI -> if (isEn) "Morning Worship & Prayer" else "Ibadah Pagi"
+            ChristianWorshipRecord.TYPE_DOA_MALAM -> if (isEn) "Evening Worship & Prayer" else "Ibadah Malam"
+            ChristianWorshipRecord.TYPE_KE_GEREJA -> if (isEn) "Church Service" else "Kegiatan Gereja"
+            ChristianWorshipRecord.TYPE_AYAT_HAFALAN -> if (isEn) "Memory Verse & Bible Study" else "Ayat Hafalan & PA"
+            ChristianWorshipRecord.TYPE_POKOK_DOA -> if (isEn) "Prayer Requests & Counseling" else "Pokok Doa & Pembinaan"
+            ChristianWorshipRecord.TYPE_IZIN_IBADAH -> if (isEn) "Sick / Worship Leave" else "Sakit / Izin Ibadah"
             else -> if (isEn) "Worship Activity" else "Kegiatan Ibadah"
         }
     }
 
     fun activityShortLabel(type: String, isEn: Boolean): String {
         return when (normalizeType(type)) {
-            ChristianWorshipRecord.TYPE_DOA_PAGI -> if (isEn) "Morning" else "Doa Pagi"
-            ChristianWorshipRecord.TYPE_DOA_MALAM -> if (isEn) "Evening" else "Doa Malam"
-            ChristianWorshipRecord.TYPE_KE_GEREJA -> if (isEn) "Church" else "Ke Gereja"
+            ChristianWorshipRecord.TYPE_DOA_PAGI -> if (isEn) "Morning" else "Ibadah Pagi"
+            ChristianWorshipRecord.TYPE_DOA_MALAM -> if (isEn) "Evening" else "Ibadah Malam"
+            ChristianWorshipRecord.TYPE_KE_GEREJA -> if (isEn) "Church" else "Gereja"
+            ChristianWorshipRecord.TYPE_AYAT_HAFALAN -> if (isEn) "Verse/PA" else "Ayat/PA"
+            ChristianWorshipRecord.TYPE_POKOK_DOA -> if (isEn) "Prayer Note" else "Pokok Doa"
+            ChristianWorshipRecord.TYPE_IZIN_IBADAH -> if (isEn) "Sick/Leave" else "Sakit/Izin"
             else -> if (isEn) "Worship" else "Ibadah"
+        }
+    }
+
+    fun buildDailyWhatsappSummary(
+        records: List<ChristianWorshipRecord>,
+        students: List<ChildStudent>,
+        filterTitle: String,
+        waliName: String,
+        isEn: Boolean = false
+    ): String {
+        val active = records.filter { !it.isDeleted }
+            .sortedWith(compareByDescending<ChristianWorshipRecord> { it.activityDate }.thenByDescending { it.createdAt })
+        val pagi = active.count { normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_PAGI }
+        val malam = active.count { normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_MALAM }
+        val gereja = active.count { normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_KE_GEREJA }
+        val pembinaan = active.count { isExtraType(it.activityType) }
+        val dateFmt = SimpleDateFormat("dd MMM", if (isEn) Locale.ENGLISH else Locale("id", "ID"))
+
+        return buildString {
+            appendLine(if (isEn) "*CHRISTIAN WORSHIP REPORT*" else "*LAPORAN IBADAH AGAMA KRISTEN*")
+            if (filterTitle.isNotBlank()) appendLine("_${filterTitle}_")
+            appendLine(if (isEn) "Caregiver: *$waliName*" else "Wali Asuh: *$waliName*")
+            appendLine(if (isEn) "Christian Students: *${students.size}* • Total Logs: *${active.size}*" else "Anak Kristen: *${students.size}* • Total Catatan: *${active.size}*")
+            appendLine("• ${activityShortLabel(ChristianWorshipRecord.TYPE_DOA_PAGI, isEn)}: *$pagi*")
+            appendLine("• ${activityShortLabel(ChristianWorshipRecord.TYPE_DOA_MALAM, isEn)}: *$malam*")
+            appendLine("• ${activityShortLabel(ChristianWorshipRecord.TYPE_KE_GEREJA, isEn)}: *$gereja*")
+            appendLine("• ${if (isEn) "Bible/Prayer/Leave" else "Ayat/Doa/Izin"}: *$pembinaan*")
+            if (active.isNotEmpty()) {
+                appendLine()
+                appendLine(if (isEn) "*Recent Records:*" else "*Catatan Terbaru:*")
+                active.take(15).forEachIndexed { idx, rec ->
+                    val dStr = dateFmt.format(Date(rec.activityDate))
+                    val typeLbl = activityShortLabel(rec.activityType, isEn)
+                    val titlePart = rec.title.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty()
+                    appendLine("${idx + 1}. [$dStr] *${rec.studentName}* ($typeLbl)$titlePart")
+                }
+            }
         }
     }
 
