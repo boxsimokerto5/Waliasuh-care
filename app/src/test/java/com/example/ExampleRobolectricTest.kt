@@ -10160,5 +10160,137 @@ class ExampleRobolectricTest {
     )
     summaryBmps.forEach { it.recycle() }
   }
+
+  @Test
+  fun `verify BibleContentRepository separates Indonesian and English parsers and never leaks English text into Indonesian mode`() = kotlinx.coroutines.runBlocking {
+    val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+    com.example.util.BibleContentRepository.clearMemoryCacheForTesting()
+    java.io.File(ctx.filesDir, "bible_cache").deleteRecursively()
+
+    // 1. Parser Beeble Terjemahan Baru (TB) mengisi textId saja
+    val beebleSample = """
+      {
+        "data": {
+          "book": { "name": "Yohanes", "chapter": 1 },
+          "verses": [
+            { "verse": 0, "type": "title", "content": "Firman yang telah menjadi manusia" },
+            { "verse": 1, "type": "text", "content": "Pada mulanya adalah Firman; Firman itu bersama-sama dengan Allah dan Firman itu adalah Allah." }
+          ]
+        }
+      }
+    """.trimIndent()
+    val beebleVerses = com.example.util.BibleContentRepository.parseBeebleChapterJson(beebleSample)
+    assertEquals(1, beebleVerses.size)
+    assertEquals(1, beebleVerses[0].verse)
+    org.junit.Assert.assertTrue(beebleVerses[0].textId.contains("Pada mulanya adalah Firman"))
+    assertEquals("", beebleVerses[0].textEn)
+
+    // 2. Parser HelloAO Indonesian (ind_ayt) mengisi textId saja
+    val helloIdSample = """
+      {
+        "chapter": {
+          "number": 1,
+          "content": [
+            { "type": "heading", "text": "Penciptaan" },
+            { "type": "verse", "number": 1, "text": "Pada mulanya, Allah menciptakan langit dan bumi." }
+          ]
+        }
+      }
+    """.trimIndent()
+    val helloIdVerses = com.example.util.BibleContentRepository.parseHelloAoChapterJson(
+      helloIdSample,
+      isEnglishTarget = false
+    )
+    assertEquals(1, helloIdVerses.size)
+    org.junit.Assert.assertTrue(helloIdVerses[0].textId.contains("Pada mulanya, Allah menciptakan langit"))
+    assertEquals("", helloIdVerses[0].textEn)
+
+    // 3. Parser bible-api WEB (Inggris) HARUS mengisi textEn saja dan TIDAK BOLEH membocorkan teks Inggris ke textId
+    val webApiSample = """
+      {
+        "verses": [
+          { "verse": 1, "text": "In the beginning was the Word, and the Word was with God." }
+        ]
+      }
+    """.trimIndent()
+    val webVerses = com.example.util.BibleContentRepository.parseWebApiChapterJson(webApiSample)
+    assertEquals(1, webVerses.size)
+    assertEquals("", webVerses[0].textId)
+    org.junit.Assert.assertTrue(webVerses[0].textEn.contains("In the beginning was the Word"))
+
+    // 4. Cache lokal _id.json vs _en.json tidak pernah tertukar saat loadChapterVerses dipanggil
+    val cacheDir = java.io.File(ctx.filesDir, "bible_cache").apply { mkdirs() }
+    java.io.File(cacheDir, "2CO_1_id.json").writeText(
+      """{"lang":"id","source":"Terjemahan Baru (TB)","verses":[{"verse":3,"text":"Terpujilah Allah, Bapa Tuhan kita Yesus Kristus, Bapa yang penuh belas kasihan."}]}"""
+    )
+    java.io.File(cacheDir, "2CO_1_en.json").writeText(
+      """{"lang":"en","source":"World English Bible (WEB)","verses":[{"verse":3,"text":"Blessed be the God and Father of our Lord Jesus Christ, the Father of mercies."}]}"""
+    )
+    val book2Co = com.example.data.model.BibleCatalog.findBook("2CO")
+    val indLoaded = com.example.util.BibleContentRepository.loadChapterVerses(
+      context = ctx,
+      book = book2Co,
+      chapter = 1,
+      isEnglish = false
+    )
+    val engLoaded = com.example.util.BibleContentRepository.loadChapterVerses(
+      context = ctx,
+      book = book2Co,
+      chapter = 1,
+      isEnglish = true
+    )
+    org.junit.Assert.assertTrue(indLoaded.verses.first().textId.contains("Terpujilah Allah"))
+    assertEquals("", indLoaded.verses.first().textEn)
+    org.junit.Assert.assertTrue(engLoaded.verses.first().textEn.contains("Blessed be the God"))
+    assertEquals("", engLoaded.verses.first().textId)
+
+    // 5. Pastikan curasi 2TI_4 memuat teks asli 2 Timotius 4:1-3 (bukan Filipi 4:7)
+    val curated2Ti4 = com.example.util.BibleContentRepository.CURATED_CHAPTERS["2TI_4"].orEmpty()
+    org.junit.Assert.assertTrue(curated2Ti4.first().textId.contains("Di hadapan Allah dan Kristus Yesus"))
+    org.junit.Assert.assertFalse(curated2Ti4.first().textId.contains("melampaui segala akal budi"))
+  }
+
+  @Test
+  fun `verify BibleReaderSheet renders proportional header, full book title, 17sp default, all 6 bottom tabs, and authentic Indonesian 2TI 4`() {
+    val ctx = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+    com.example.util.BibleContentRepository.clearMemoryCacheForTesting()
+    val cacheDir = java.io.File(ctx.filesDir, "bible_cache").apply { mkdirs() }
+    java.io.File(cacheDir, "2TI_4_id.json").writeText(
+      """{"lang":"id","source":"Terjemahan Baru (TB)","verses":[{"verse":1,"text":"Di hadapan Allah dan Kristus Yesus yang akan menghakimi orang yang hidup dan yang mati, aku berpesan dengan sungguh-sungguh kepadamu demi penyataan-Nya dan demi Kerajaan-Nya:"},{"verse":2,"text":"Beritakanlah firman, siap sedialah baik atau tidak baik waktunya."}]}"""
+    )
+
+    composeTestRule.setContent {
+      com.example.ui.dialogs.BibleReaderSheet(
+        bookmarks = emptyList(),
+        notes = emptyList(),
+        initialEnglish = false,
+        useDialogWindow = false,
+        onSyncRequested = {},
+        onToggleBookmark = { _, _, _, _, _, _, _ -> },
+        onDeleteBookmark = { _, _ -> },
+        onSaveNote = { _, _, _, _, _, _, _, _ -> },
+        onDeleteNote = { _, _ -> },
+        onDismiss = {}
+      )
+    }
+    composeTestRule.waitForIdle()
+
+    // Full untruncated book title & default readable font 17
+    composeTestRule.onNodeWithTag("bible_subheader_book_title").assertExists()
+    composeTestRule.onNodeWithText("2 TIMOTIUS").assertExists()
+    composeTestRule.onNodeWithText("17").assertExists()
+
+    // Seluruh 6 tab bawah tampil
+    composeTestRule.onNodeWithTag("bible_nav_alkitab").assertExists()
+    composeTestRule.onNodeWithTag("bible_nav_renungan").assertExists()
+    composeTestRule.onNodeWithTag("bible_nav_kisah").assertExists()
+    composeTestRule.onNodeWithTag("bible_nav_catatan").assertExists()
+    composeTestRule.onNodeWithTag("bible_nav_bookmark").assertExists()
+    composeTestRule.onNodeWithTag("bible_nav_cari").assertExists()
+
+    // Ayat Indonesia tampil dalam Bahasa Indonesia asli (bukan bahasa Inggris)
+    composeTestRule.onNodeWithTag("bible_verse_row_1").assertExists()
+    composeTestRule.onNodeWithText("Di hadapan Allah dan Kristus Yesus", substring = true).assertExists()
+  }
 }
 

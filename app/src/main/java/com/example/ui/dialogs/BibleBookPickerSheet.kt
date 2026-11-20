@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -68,6 +69,7 @@ fun BibleBookPickerSheet(
     currentBook: BibleBookSpec,
     currentChapter: Int,
     isEnglish: Boolean,
+    useDialogWindow: Boolean = false,
     onSelectBookChapter: (BibleBookSpec, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -105,21 +107,15 @@ fun BibleBookPickerSheet(
         (1..previewBook.chaptersCount).toList()
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
+    val sheetContent: @Composable () -> Unit = {
         BackHandler { onDismiss() }
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0x8824140B))
-                .statusBarsPadding()
-                .padding(top = 18.dp)
+                .then(if (!useDialogWindow) Modifier.statusBarsPadding() else Modifier)
+                .padding(top = 14.dp)
                 .clickable(onClick = onDismiss),
             contentAlignment = Alignment.BottomCenter
         ) {
@@ -135,7 +131,10 @@ fun BibleBookPickerSheet(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .navigationBarsPadding()
+                        .then(
+                            if (!useDialogWindow) Modifier.navigationBarsPadding().imePadding()
+                            else Modifier.imePadding()
+                        )
                 ) {
                     // Header: Icon + "Pilih Kitab & Pasal" + active subtitle + Close X
                     Row(
@@ -516,6 +515,20 @@ fun BibleBookPickerSheet(
                 }
             }
         }
+    }
+
+    if (useDialogWindow) {
+        Dialog(
+            onDismissRequest = onDismiss,
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = true
+            )
+        ) {
+            sheetContent()
+        }
+    } else {
+        sheetContent()
     }
 }
 

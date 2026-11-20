@@ -621,7 +621,8 @@ private fun WaliAsuhCareAppContent(
                             currentScreen = WaliNavScreen.PROFIL
                         },
                         modalState = dashboardModalState,
-                        renderInlineCategoryHub = false
+                        renderInlineCategoryHub = false,
+                        renderInlineBibleSheet = false
                     )
                 }
                 WaliNavScreen.RENCANA -> {
@@ -1086,6 +1087,15 @@ private fun WaliAsuhCareAppContent(
                     dashboardModalState.absenSholatInitialStudent = targetStudent
                     dashboardModalState.showAbsenSholatSheet = true
                 }
+            )
+        }
+
+        if (currentScreen == WaliNavScreen.DASHBOARD) {
+            com.example.ui.screens.DashboardBibleModalsHost(
+                viewModel = viewModel,
+                modalState = dashboardModalState,
+                isEn = s.isEnglish,
+                useDialogWindow = false
             )
         }
     }

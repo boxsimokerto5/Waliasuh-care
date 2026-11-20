@@ -153,7 +153,7 @@ internal fun BibleDevotionalTabContent(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = if (isEnglish) item.titleEn else item.titleId,
-                        fontSize = (fontSizeSp - 2).coerceIn(16, 22).sp,
+                        fontSize = (fontSizeSp + 1).coerceIn(16, 22).sp,
                         fontWeight = FontWeight.Bold,
                         color = BibleParchmentPalette.InkPrimary,
                         fontFamily = fontFamily
@@ -166,7 +166,7 @@ internal fun BibleDevotionalTabContent(
                     ) {
                         Text(
                             text = if (isEnglish) item.keyVerseEn else item.keyVerseId,
-                            fontSize = (fontSizeSp - 5).coerceIn(13, 18).sp,
+                            fontSize = (fontSizeSp - 2).coerceIn(14, 19).sp,
                             fontFamily = FontFamily.Serif,
                             color = BibleParchmentPalette.MaroonAccent,
                             lineHeight = 22.sp,
@@ -176,7 +176,7 @@ internal fun BibleDevotionalTabContent(
                     Spacer(Modifier.height(10.dp))
                     Text(
                         text = if (isEnglish) item.reflectionEn else item.reflectionId,
-                        fontSize = (fontSizeSp - 5).coerceIn(14, 19).sp,
+                        fontSize = (fontSizeSp - 2).coerceIn(14, 19).sp,
                         lineHeight = 23.sp,
                         color = BibleParchmentPalette.InkPrimary,
                         fontFamily = fontFamily
@@ -265,7 +265,7 @@ internal fun BibleStoriesTabContent(
                     Spacer(Modifier.height(4.dp))
                     Text(
                         text = if (isEnglish) story.titleEn else story.titleId,
-                        fontSize = (fontSizeSp - 2).coerceIn(16, 22).sp,
+                        fontSize = (fontSizeSp + 1).coerceIn(16, 22).sp,
                         fontWeight = FontWeight.Bold,
                         color = BibleParchmentPalette.InkPrimary,
                         fontFamily = fontFamily
@@ -273,7 +273,7 @@ internal fun BibleStoriesTabContent(
                     Spacer(Modifier.height(8.dp))
                     Text(
                         text = if (isEnglish) story.summaryEn else story.summaryId,
-                        fontSize = (fontSizeSp - 5).coerceIn(14, 19).sp,
+                        fontSize = (fontSizeSp - 2).coerceIn(14, 19).sp,
                         lineHeight = 23.sp,
                         color = BibleParchmentPalette.InkPrimary,
                         fontFamily = fontFamily

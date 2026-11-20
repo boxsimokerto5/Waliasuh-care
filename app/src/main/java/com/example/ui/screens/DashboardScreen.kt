@@ -213,7 +213,8 @@ fun DashboardScreen(
     onNavigateToProfile: () -> Unit,
     modifier: Modifier = Modifier,
     modalState: DashboardModalState = rememberDashboardModalState(),
-    renderInlineCategoryHub: Boolean = true
+    renderInlineCategoryHub: Boolean = true,
+    renderInlineBibleSheet: Boolean = true
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -3180,18 +3181,22 @@ fun DashboardScreen(
         onClearReadyJadwalPdf = { readyJadwalPdf = null }
     )
 
-    DashboardBibleModalsHost(
-        viewModel = viewModel,
-        modalState = modalState,
-        isEn = isEn
-    )
+    if (renderInlineBibleSheet) {
+        DashboardBibleModalsHost(
+            viewModel = viewModel,
+            modalState = modalState,
+            isEn = isEn,
+            useDialogWindow = true
+        )
+    }
 }
 
 @Composable
-private fun DashboardBibleModalsHost(
+internal fun DashboardBibleModalsHost(
     viewModel: HealthViewModel,
     modalState: DashboardModalState,
-    isEn: Boolean
+    isEn: Boolean,
+    useDialogWindow: Boolean = false
 ) {
     if (!modalState.showBibleSheet) return
     val bibleBookmarks by viewModel.bibleBookmarks.collectAsStateWithLifecycle()
@@ -3200,6 +3205,7 @@ private fun DashboardBibleModalsHost(
         bookmarks = bibleBookmarks,
         notes = bibleNotes,
         initialEnglish = isEn,
+        useDialogWindow = useDialogWindow,
         onSyncRequested = { viewModel.syncBibleOnlineQuietly() },
         onToggleBookmark = { bookId, chapter, verse, textId, textEn, color, onResult ->
             viewModel.toggleBibleBookmark(

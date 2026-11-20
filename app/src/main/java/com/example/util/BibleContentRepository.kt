@@ -20,7 +20,8 @@ data class BibleChapterLoadResult(
     val verses: List<BibleVerseItem>,
     val isFromOnlineOrCache: Boolean,
     val sourceLabelId: String,
-    val sourceLabelEn: String
+    val sourceLabelEn: String,
+    val isOfflineFallback: Boolean = false
 )
 
 data class BibleSearchHit(
@@ -33,64 +34,108 @@ data class BibleSearchHit(
 
 object BibleContentRepository {
 
-    private val memoryCache = mutableMapOf<String, List<BibleVerseItem>>()
+    private data class CachedChapterPayload(
+        val sourceLabel: String,
+        val verses: List<BibleVerseItem>
+    )
+
+    private val memoryCache = mutableMapOf<String, CachedChapterPayload>()
+
+    internal fun clearMemoryCacheForTesting() {
+        memoryCache.clear()
+    }
+
+    private val BEEBLE_BOOK_SLUGS: Map<String, String> = mapOf(
+        // Perjanjian Lama
+        "GEN" to "kej", "EXO" to "kel", "LEV" to "ima", "NUM" to "bil", "DEU" to "ul",
+        "JOS" to "yos", "JDG" to "hak", "RUT" to "rut", "1SA" to "1sam", "2SA" to "2sam",
+        "1KI" to "1raj", "2KI" to "2raj", "1CH" to "1taw", "2CH" to "2taw",
+        "EZR" to "ezr", "NEH" to "neh", "EST" to "est",
+        "JOB" to "ayb", "PSA" to "mzm", "PRO" to "ams", "ECC" to "pkh", "SNG" to "kid",
+        "ISA" to "yes", "JER" to "yer", "LAM" to "rat", "EZK" to "yeh", "DAN" to "dan",
+        "HOS" to "hos", "JOL" to "yoe", "AMO" to "amo", "OBA" to "oba", "JON" to "yun",
+        "MIC" to "mik", "NAM" to "nah", "HAB" to "hab", "ZEP" to "zef",
+        "HAG" to "hag", "ZEC" to "zak", "MAL" to "mal",
+        // Perjanjian Baru
+        "MAT" to "mat", "MRK" to "mrk", "LUK" to "luk", "JHN" to "yoh", "ACT" to "kis",
+        "ROM" to "rom", "1CO" to "1kor", "2CO" to "2kor", "GAL" to "gal", "EPH" to "ef",
+        "PHP" to "flp", "COL" to "kol", "1TH" to "1tes", "2TH" to "2tes",
+        "1TI" to "1tim", "2TI" to "2tim", "TIT" to "tit", "PHM" to "flm",
+        "HEB" to "ibr", "JAS" to "yak", "1PE" to "1pet", "2PE" to "2pet",
+        "1JN" to "1yoh", "2JN" to "2yoh", "3JN" to "3yoh", "JUD" to "yud", "REV" to "why"
+    )
 
     /**
-     * Memuat ayat untuk kitab & pasal tertentu:
-     * 1. Cek curasi dwibahasa internal (`IND | ENG`).
-     * 2. Cek cache JSON lokal di `filesDir/bible_cache/`.
-     * 3. Jika belum ada, ambil teks Public Domain World English Bible (WEB) dari `bible-api.com` lalu simpan ke cache.
-     * 4. Jika offline dan belum di-cache, sediakan ringkasan ayat pengantar pasal agar tetap informatif.
+     * Memuat ayat untuk kitab & pasal tertentu sesuai bahasa aktif (`IND` atau `ENG`):
+     * 1. Cek cache memori & JSON lokal terpisah bahasa (`_id.json` / `_en.json`) untuk teks pasal lengkap.
+     * 2. Jika belum ada (atau diminta muat ulang), ambil dari API bahasa terkait:
+     *    - Bahasa Indonesia (`isEnglish == false`): Beeble Alkitab Terjemahan Baru (`tb`) -> fallback HelloAO `ind_ayt`.
+     *    - Bahasa Inggris (`isEnglish == true`): Bible API Public Domain World English Bible (`web`) -> fallback HelloAO `BSB`.
+     *    (Teks Inggris tidak pernah dipakai untuk mengisi tampilan Bahasa Indonesia.)
+     * 3. Jika offline & belum di-cache, gunakan ayat pilihan internal (jika tersedia) atau ringkasan offline sesuai bahasa.
      */
     suspend fun loadChapterVerses(
         context: Context,
         book: BibleBookSpec,
-        chapter: Int
+        chapter: Int,
+        isEnglish: Boolean = false,
+        forceRefresh: Boolean = false
     ): BibleChapterLoadResult = withContext(Dispatchers.IO) {
         val safeChapter = chapter.coerceIn(1, book.chaptersCount)
-        val key = "${book.id}_$safeChapter"
+        val langCode = if (isEnglish) "en" else "id"
+        val cacheKey = "${book.id}_${safeChapter}_$langCode"
 
-        val curated = CURATED_CHAPTERS[key]
+        if (!forceRefresh) {
+            memoryCache[cacheKey]?.takeIf { it.verses.isNotEmpty() }?.let { cachedMem ->
+                return@withContext BibleChapterLoadResult(
+                    verses = cachedMem.verses,
+                    isFromOnlineOrCache = true,
+                    sourceLabelId = "Tersimpan Offline (${cachedMem.sourceLabel})",
+                    sourceLabelEn = "Cached Offline (${cachedMem.sourceLabel})"
+                )
+            }
+
+            val cacheFile = getCacheFile(context, book.id, safeChapter, langCode)
+            if (cacheFile.exists()) {
+                val parsed = parseNormalizedCacheFile(cacheFile)
+                if (parsed != null && parsed.verses.isNotEmpty()) {
+                    memoryCache[cacheKey] = parsed
+                    return@withContext BibleChapterLoadResult(
+                        verses = parsed.verses,
+                        isFromOnlineOrCache = true,
+                        sourceLabelId = "Tersimpan Offline (${parsed.sourceLabel})",
+                        sourceLabelEn = "Cached Offline (${parsed.sourceLabel})"
+                    )
+                }
+            }
+        }
+
+        val cacheFile = getCacheFile(context, book.id, safeChapter, langCode)
+        val onlinePayload = if (isEnglish) {
+            fetchEnglishChapterOnline(book, safeChapter)
+        } else {
+            fetchIndonesianChapterOnline(book, safeChapter)
+        }
+
+        if (onlinePayload != null && onlinePayload.verses.isNotEmpty()) {
+            memoryCache[cacheKey] = onlinePayload
+            writeNormalizedCacheFile(cacheFile, langCode, onlinePayload)
+            return@withContext BibleChapterLoadResult(
+                verses = onlinePayload.verses,
+                isFromOnlineOrCache = true,
+                sourceLabelId = onlinePayload.sourceLabel,
+                sourceLabelEn = onlinePayload.sourceLabel
+            )
+        }
+
+        val curatedKey = "${book.id}_$safeChapter"
+        val curated = CURATED_CHAPTERS[curatedKey]
         if (curated != null && curated.isNotEmpty()) {
             return@withContext BibleChapterLoadResult(
                 verses = curated,
                 isFromOnlineOrCache = false,
-                sourceLabelId = "Edisi Dwibahasa Pilihan",
-                sourceLabelEn = "Bilingual Curated Edition"
-            )
-        }
-
-        memoryCache[key]?.takeIf { it.isNotEmpty() }?.let { cachedMem ->
-            return@withContext BibleChapterLoadResult(
-                verses = cachedMem,
-                isFromOnlineOrCache = true,
-                sourceLabelId = "Tersimpan Offline (WEB)",
-                sourceLabelEn = "Cached Offline (WEB)"
-            )
-        }
-
-        val cacheFile = getCacheFile(context, book.id, safeChapter)
-        if (cacheFile.exists()) {
-            val parsed = parseCachedJsonFile(cacheFile, book, safeChapter)
-            if (parsed.isNotEmpty()) {
-                memoryCache[key] = parsed
-                return@withContext BibleChapterLoadResult(
-                    verses = parsed,
-                    isFromOnlineOrCache = true,
-                    sourceLabelId = "Tersimpan Offline (WEB)",
-                    sourceLabelEn = "Cached Offline (WEB)"
-                )
-            }
-        }
-
-        val fetched = fetchChapterFromWebApi(book, safeChapter, cacheFile)
-        if (fetched.isNotEmpty()) {
-            memoryCache[key] = fetched
-            return@withContext BibleChapterLoadResult(
-                verses = fetched,
-                isFromOnlineOrCache = true,
-                sourceLabelId = "Tersinkron Online (WEB)",
-                sourceLabelEn = "Synced Online (WEB)"
+                sourceLabelId = "Ayat Pilihan Offline • Hubungkan internet untuk pasal penuh",
+                sourceLabelEn = "Offline Curated Verses • Connect internet for full chapter"
             )
         }
 
@@ -98,89 +143,283 @@ object BibleContentRepository {
         BibleChapterLoadResult(
             verses = fallback,
             isFromOnlineOrCache = false,
-            sourceLabelId = "Ringkasan Offline • Hubungkan internet untuk teks lengkap pasal ini",
-            sourceLabelEn = "Offline Summary • Connect to internet for full chapter text"
+            sourceLabelId = "Mode Offline • Hubungkan internet untuk teks lengkap",
+            sourceLabelEn = "Offline Mode • Connect internet for full chapter text",
+            isOfflineFallback = true
         )
     }
 
-    private fun getCacheFile(context: Context, bookId: String, chapter: Int): File {
+    private fun getCacheFile(context: Context, bookId: String, chapter: Int, langCode: String): File {
         val dir = File(context.filesDir, "bible_cache")
         if (!dir.exists()) dir.mkdirs()
-        return File(dir, "${bookId}_$chapter.json")
+        return File(dir, "${bookId}_${chapter}_$langCode.json")
     }
 
-    private fun fetchChapterFromWebApi(
-        book: BibleBookSpec,
-        chapter: Int,
-        cacheFile: File
-    ): List<BibleVerseItem> {
+    private fun httpGetJson(urlString: String): String? {
         var conn: HttpURLConnection? = null
         return try {
-            val query = URLEncoder.encode("${book.apiQueryName} $chapter", "UTF-8")
-            val url = URL("https://bible-api.com/$query?translation=web")
+            val url = URL(urlString)
             conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 8000
-                readTimeout = 10000
+                connectTimeout = 6000
+                readTimeout = 8000
                 setRequestProperty("Accept", "application/json")
                 setRequestProperty("User-Agent", "WaliasuhCareAndroid/1.0")
             }
-            if (conn.responseCode !in 200..299) return emptyList()
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            if (body.isBlank()) return emptyList()
-            val root = JSONObject(body)
-            val arr = root.optJSONArray("verses") ?: return emptyList()
-            val list = parseVerseJsonArray(arr, book, chapter)
-            if (list.isNotEmpty()) {
-                runCatching { cacheFile.writeText(body) }
-            }
-            list
+            if (conn.responseCode !in 200..299) return null
+            conn.inputStream.bufferedReader().use { it.readText() }.takeIf { it.isNotBlank() }
         } catch (_: Exception) {
-            emptyList()
+            null
         } finally {
             conn?.disconnect()
         }
     }
 
-    private fun parseCachedJsonFile(
-        file: File,
+    private fun fetchIndonesianChapterOnline(
         book: BibleBookSpec,
         chapter: Int
-    ): List<BibleVerseItem> {
+    ): CachedChapterPayload? {
+        // 1. Primary: Beeble API (Alkitab Terjemahan Baru / TB)
+        val slug = BEEBLE_BOOK_SLUGS[book.id] ?: book.nameId.lowercase().replace(" ", "")
+        val beebleCandidates = listOf(slug, book.nameId)
+            .distinct()
+            .map { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
+        for (candidate in beebleCandidates) {
+            val body = httpGetJson("https://beeble.vercel.app/api/v1/passage/$candidate/$chapter?ver=tb")
+            if (body != null) {
+                val parsed = parseBeebleChapterJson(body)
+                if (parsed.isNotEmpty()) {
+                    return CachedChapterPayload(
+                        sourceLabel = "Terjemahan Baru (TB)",
+                        verses = parsed
+                    )
+                }
+            }
+        }
+
+        // 2. Fallback: HelloAO Free Use Bible API (Alkitab Yang Terbuka / ind_ayt)
+        val helloSimpleBody = httpGetJson("https://bible.helloao.org/api/ind_ayt/${book.id}/$chapter.simple.json")
+        if (helloSimpleBody != null) {
+            val parsed = parseHelloAoChapterJson(helloSimpleBody, isEnglishTarget = false)
+            if (parsed.isNotEmpty()) {
+                return CachedChapterPayload(
+                    sourceLabel = "Alkitab Terjemahan (AYT)",
+                    verses = parsed
+                )
+            }
+        }
+
+        val helloFullBody = httpGetJson("https://bible.helloao.org/api/ind_ayt/${book.id}/$chapter.json")
+        if (helloFullBody != null) {
+            val parsed = parseHelloAoChapterJson(helloFullBody, isEnglishTarget = false)
+            if (parsed.isNotEmpty()) {
+                return CachedChapterPayload(
+                    sourceLabel = "Alkitab Terjemahan (AYT)",
+                    verses = parsed
+                )
+            }
+        }
+
+        return null
+    }
+
+    private fun fetchEnglishChapterOnline(
+        book: BibleBookSpec,
+        chapter: Int
+    ): CachedChapterPayload? {
+        val query = URLEncoder.encode("${book.apiQueryName} $chapter", "UTF-8")
+        val webBody = httpGetJson("https://bible-api.com/$query?translation=web")
+        if (webBody != null) {
+            val parsed = parseWebApiChapterJson(webBody)
+            if (parsed.isNotEmpty()) {
+                return CachedChapterPayload(
+                    sourceLabel = "World English Bible (WEB)",
+                    verses = parsed
+                )
+            }
+        }
+
+        val helloEnBody = httpGetJson("https://bible.helloao.org/api/BSB/${book.id}/$chapter.simple.json")
+        if (helloEnBody != null) {
+            val parsed = parseHelloAoChapterJson(helloEnBody, isEnglishTarget = true)
+            if (parsed.isNotEmpty()) {
+                return CachedChapterPayload(
+                    sourceLabel = "Berean Standard Bible (BSB)",
+                    verses = parsed
+                )
+            }
+        }
+
+        return null
+    }
+
+    internal fun parseBeebleChapterJson(jsonText: String): List<BibleVerseItem> {
         return try {
-            val root = JSONObject(file.readText())
-            val arr = root.optJSONArray("verses") ?: return emptyList()
-            parseVerseJsonArray(arr, book, chapter)
+            val root = JSONObject(jsonText)
+            val dataObj = root.optJSONObject("data") ?: root
+            val arr = dataObj.optJSONArray("verses") ?: return emptyList()
+            val out = ArrayList<BibleVerseItem>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val type = obj.optString("type", "text").lowercase()
+                val verseNum = obj.optInt("verse", 0)
+                if (type == "title" || verseNum <= 0) continue
+                val raw = obj.optString("content", obj.optString("text", ""))
+                val clean = cleanVerseWhitespace(raw)
+                if (clean.isNotBlank()) {
+                    out.add(
+                        BibleVerseItem(
+                            verse = verseNum,
+                            textId = clean,
+                            textEn = ""
+                        )
+                    )
+                }
+            }
+            out
         } catch (_: Exception) {
             emptyList()
         }
     }
 
-    private fun parseVerseJsonArray(
-        arr: JSONArray,
-        book: BibleBookSpec,
-        chapter: Int
+    internal fun parseHelloAoChapterJson(
+        jsonText: String,
+        isEnglishTarget: Boolean
     ): List<BibleVerseItem> {
-        val out = ArrayList<BibleVerseItem>(arr.length())
-        for (i in 0 until arr.length()) {
-            val obj = arr.optJSONObject(i) ?: continue
-            val verseNum = obj.optInt("verse", i + 1).coerceAtLeast(1)
-            val cleanText = obj.optString("text", "")
-                .replace("\r", " ")
-                .replace("\n", " ")
-                .replace(Regex("\\s+"), " ")
-                .trim()
-            if (cleanText.isNotBlank()) {
-                out.add(
-                    BibleVerseItem(
-                        verse = verseNum,
-                        textId = "$cleanText (${book.nameId} $chapter:$verseNum)",
-                        textEn = "$cleanText (${book.nameEn} $chapter:$verseNum)"
+        return try {
+            val root = JSONObject(jsonText)
+            val chapterObj = root.optJSONObject("chapter") ?: return emptyList()
+            val contentArr = chapterObj.optJSONArray("content") ?: return emptyList()
+            val out = ArrayList<BibleVerseItem>(contentArr.length())
+            for (i in 0 until contentArr.length()) {
+                val item = contentArr.optJSONObject(i) ?: continue
+                if (!item.optString("type", "").equals("verse", ignoreCase = true)) continue
+                val verseNum = item.optInt("number", 0)
+                if (verseNum <= 0) continue
+
+                val directText = item.optString("text", "")
+                val assembled = if (directText.isNotBlank()) {
+                    directText
+                } else {
+                    extractHelloAoContentArray(item.optJSONArray("content"))
+                }
+                val clean = cleanVerseWhitespace(assembled)
+                if (clean.isNotBlank()) {
+                    out.add(
+                        BibleVerseItem(
+                            verse = verseNum,
+                            textId = if (isEnglishTarget) "" else clean,
+                            textEn = if (isEnglishTarget) clean else ""
+                        )
                     )
-                )
+                }
+            }
+            out
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun extractHelloAoContentArray(arr: JSONArray?): String {
+        if (arr == null) return ""
+        val sb = StringBuilder()
+        for (i in 0 until arr.length()) {
+            val elem = arr.opt(i) ?: continue
+            when (elem) {
+                is String -> sb.append(elem).append(' ')
+                is JSONObject -> {
+                    val t = elem.optString("text", "")
+                    if (t.isNotBlank()) {
+                        sb.append(t).append(' ')
+                    }
+                }
             }
         }
-        return out
+        return sb.toString()
+    }
+
+    internal fun parseWebApiChapterJson(jsonText: String): List<BibleVerseItem> {
+        return try {
+            val root = JSONObject(jsonText)
+            val arr = root.optJSONArray("verses") ?: return emptyList()
+            val out = ArrayList<BibleVerseItem>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val verseNum = obj.optInt("verse", i + 1).coerceAtLeast(1)
+                val clean = cleanVerseWhitespace(obj.optString("text", ""))
+                if (clean.isNotBlank()) {
+                    out.add(
+                        BibleVerseItem(
+                            verse = verseNum,
+                            textId = "",
+                            textEn = clean
+                        )
+                    )
+                }
+            }
+            out
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    private fun cleanVerseWhitespace(raw: String): String {
+        return raw
+            .replace("\r", " ")
+            .replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+    }
+
+    private fun writeNormalizedCacheFile(
+        file: File,
+        langCode: String,
+        payload: CachedChapterPayload
+    ) {
+        runCatching {
+            val versesArr = JSONArray()
+            payload.verses.forEach { v ->
+                versesArr.put(
+                    JSONObject().apply {
+                        put("verse", v.verse)
+                        put("text", if (langCode == "en") v.textEn else v.textId)
+                    }
+                )
+            }
+            val root = JSONObject().apply {
+                put("lang", langCode)
+                put("source", payload.sourceLabel)
+                put("verses", versesArr)
+            }
+            file.writeText(root.toString())
+        }
+    }
+
+    private fun parseNormalizedCacheFile(file: File): CachedChapterPayload? {
+        return try {
+            val root = JSONObject(file.readText())
+            val langCode = root.optString("lang", "")
+            val sourceLabel = root.optString("source", if (langCode == "en") "WEB" else "TB")
+            val arr = root.optJSONArray("verses") ?: return null
+            val list = ArrayList<BibleVerseItem>(arr.length())
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val verseNum = obj.optInt("verse", i + 1).coerceAtLeast(1)
+                val clean = cleanVerseWhitespace(obj.optString("text", ""))
+                if (clean.isNotBlank()) {
+                    list.add(
+                        BibleVerseItem(
+                            verse = verseNum,
+                            textId = if (langCode == "id") clean else "",
+                            textEn = if (langCode == "en") clean else ""
+                        )
+                    )
+                }
+            }
+            if (list.isEmpty()) null else CachedChapterPayload(sourceLabel, list)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun buildOfflineSummaryChapter(
@@ -192,13 +431,13 @@ object BibleContentRepository {
         return listOf(
             BibleVerseItem(
                 verse = 1,
-                textId = "Kitab ${book.nameId} Pasal $chapter tergolong dalam kelompok ${book.categoryId} ($testamentNoteId). Aktifkan koneksi internet sekali saja untuk mengunduh & menyimpan seluruh ayat pasal ini secara offline.",
-                textEn = "${book.nameEn} Chapter $chapter belongs to ${book.categoryEn} ($testamentNoteEn). Connect once to download and cache every verse of this chapter for offline reading."
+                textId = "Kitab ${book.nameId} Pasal $chapter tergolong dalam kelompok ${book.categoryId} ($testamentNoteId). Aktifkan koneksi internet sekali saja untuk mengunduh & menyimpan seluruh ayat pasal ini dalam Bahasa Indonesia secara offline.",
+                textEn = "${book.nameEn} Chapter $chapter belongs to ${book.categoryEn} ($testamentNoteEn). Connect once to download and cache every verse of this chapter in English for offline reading."
             ),
             BibleVerseItem(
                 verse = 2,
-                textId = "Firman Tuhan mengajar kita untuk merenungkan kasih, ketaatan, hikmat, dan pengharapan di setiap musim hidup serta mendampingi peserta didik dengan penuh kesabaran. (${book.nameId} $chapter)",
-                textEn = "God's Word teaches us to meditate on love, obedience, wisdom, and steadfast hope in every season while nurturing students with patience. (${book.nameEn} $chapter)"
+                textId = "Firman Tuhan mengajar kita untuk merenungkan kasih, ketaatan, hikmat, dan pengharapan di setiap musim hidup serta mendampingi peserta didik dengan penuh kesabaran.",
+                textEn = "God's Word teaches us to meditate on love, obedience, wisdom, and steadfast hope in every season while nurturing students with patience."
             ),
             BibleVerseItem(
                 verse = 3,
@@ -209,7 +448,7 @@ object BibleContentRepository {
     }
 
     /**
-     * Pencarian kata kunci pada koleksi ayat pilihan internal + pasal yang sudah di-cache offline.
+     * Pencarian kata kunci pada koleksi ayat pilihan internal + pasal yang sudah di-cache offline sesuai bahasa aktif.
      */
     fun searchVerses(
         context: Context,
@@ -221,6 +460,31 @@ object BibleContentRepository {
 
         val hits = mutableListOf<BibleSearchHit>()
         val seenKeys = mutableSetOf<String>()
+        val targetLang = if (isEnglish) "en" else "id"
+
+        val cacheDir = File(context.filesDir, "bible_cache")
+        if (cacheDir.exists()) {
+            cacheDir.listFiles()?.forEach { file ->
+                val baseName = file.nameWithoutExtension
+                if (!baseName.endsWith("_$targetLang")) return@forEach
+                val parts = baseName.removeSuffix("_$targetLang").split("_")
+                if (parts.size == 2) {
+                    val book = BibleCatalog.findBook(parts[0])
+                    val chapter = parts[1].toIntOrNull() ?: 1
+                    val payload = parseNormalizedCacheFile(file) ?: return@forEach
+                    payload.verses.forEach { v ->
+                        val text = if (isEnglish) v.textEn else v.textId
+                        val bookMatch = (if (isEnglish) book.nameEn else book.nameId).lowercase().contains(q)
+                        if (text.lowercase().contains(q) || bookMatch) {
+                            val hitKey = "${book.id}:$chapter:${v.verse}"
+                            if (seenKeys.add(hitKey)) {
+                                hits.add(BibleSearchHit(book, chapter, v.verse, v.textId, v.textEn))
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
         CURATED_CHAPTERS.forEach { (key, verses) ->
             val parts = key.split("_")
@@ -228,33 +492,12 @@ object BibleContentRepository {
                 val book = BibleCatalog.findBook(parts[0])
                 val chapter = parts[1].toIntOrNull() ?: 1
                 verses.forEach { v ->
-                    val haystack = "${book.nameId} ${book.nameEn} ${v.textId} ${v.textEn}".lowercase()
-                    if (haystack.contains(q)) {
+                    val verseText = if (isEnglish) v.textEn else v.textId
+                    val bookName = if (isEnglish) book.nameEn else book.nameId
+                    if (verseText.lowercase().contains(q) || bookName.lowercase().contains(q)) {
                         val hitKey = "${book.id}:$chapter:${v.verse}"
                         if (seenKeys.add(hitKey)) {
                             hits.add(BibleSearchHit(book, chapter, v.verse, v.textId, v.textEn))
-                        }
-                    }
-                }
-            }
-        }
-
-        val cacheDir = File(context.filesDir, "bible_cache")
-        if (cacheDir.exists()) {
-            cacheDir.listFiles()?.forEach { file ->
-                val baseName = file.nameWithoutExtension
-                val parts = baseName.split("_")
-                if (parts.size == 2) {
-                    val book = BibleCatalog.findBook(parts[0])
-                    val chapter = parts[1].toIntOrNull() ?: 1
-                    val verses = parseCachedJsonFile(file, book, chapter)
-                    verses.forEach { v ->
-                        val target = if (isEnglish) v.textEn else "${v.textId} ${v.textEn}"
-                        if (target.lowercase().contains(q) || "${book.nameId} ${book.nameEn}".lowercase().contains(q)) {
-                            val hitKey = "${book.id}:$chapter:${v.verse}"
-                            if (seenKeys.add(hitKey)) {
-                                hits.add(BibleSearchHit(book, chapter, v.verse, v.textId, v.textEn))
-                            }
                         }
                     }
                 }
@@ -268,38 +511,43 @@ object BibleContentRepository {
         "2TI_4" to listOf(
             BibleVerseItem(
                 1,
-                "Damai sejahtera Allah yang melampaui segala akal budi kiranya memelihara hati dan pikiran kita senantiasa. (2 Timotius 4:1)",
-                "May the peace of God, which surpasses all understanding, guard our hearts and minds in Christ Jesus always. (2 Timothy 4:1)"
+                "Di hadapan Allah dan Kristus Yesus yang akan menghakimi orang yang hidup dan yang mati, aku berpesan dengan sungguh-sungguh kepadamu demi penyataan-Nya dan demi Kerajaan-Nya:",
+                "I command you therefore before God and the Lord Jesus Christ, who will judge the living and the dead at his appearing and his Kingdom:"
             ),
             BibleVerseItem(
                 2,
-                "Terpujilah TUHAN Allah kita dari selama-lamanya sampai selama-lamanya! Amin dan Amin. (2 Timotius 4:2)",
-                "Blessed be the LORD our God from everlasting to everlasting! Amen and Amen. (2 Timothy 4:2)"
+                "Beritakanlah firman, siap sedialah baik atau tidak baik waktunya, nyatakanlah apa yang salah, tegorlah dan nasihatilah dengan segala kesabaran dan pengajaran.",
+                "Preach the word; be urgent in season and out of season; reprove, rebuke, and exhort with all patience and teaching."
             ),
             BibleVerseItem(
                 3,
-                "Berbahagialah orang yang menaruh harapannya kepada Allah dan setia memelihara firman kebenaran di dalam setiap keadaan. (2 Timotius 4:3)",
-                "Blessed are those who place their hope in God and faithfully keep the word of truth in every season. (2 Timothy 4:3)"
+                "Karena akan datang waktunya, orang tidak dapat lagi menerima ajaran sehat, tetapi mereka akan mengumpulkan guru-guru menurut kehendaknya untuk memuaskan keinginan telinganya.",
+                "For the time will come when they will not listen to the sound doctrine, but having itching ears, will heap up for themselves teachers after their own lusts;"
             ),
             BibleVerseItem(
                 4,
-                "Beritakanlah firman, siap sedialah baik atau tidak baik waktunya, nyatakanlah apa yang salah, tegurlah dan nasihatilah dengan segala kesabaran dan pengajaran. (2 Timotius 4:4)",
-                "Preach the word; be urgent in season and out of season; reprove, rebuke, and exhort with all patience and teaching. (2 Timothy 4:4)"
+                "Mereka akan memalingkan telinganya dari kebenaran dan membukanya bagi dongeng.",
+                "and will turn away their ears from the truth, and turn away to fables."
             ),
             BibleVerseItem(
                 5,
-                "Kuasailah dirimu dalam segala hal, sabarlah menderita, lakukanlah pekerjaan pemberita Injil dan tunaikanlah tugas pelayananmu dengan setia. (2 Timotius 4:5)",
-                "But be sober in all things, suffer hardship, do the work of an evangelist, and fulfill your ministry faithfully. (2 Timothy 4:5)"
+                "Tetapi kuasailah dirimu dalam segala hal, sabarlah menderita, lakukanlah pekerjaan pemberita Injil dan tunaikanlah tugas pelayananmu!",
+                "But you be sober in all things, suffer hardship, do the work of an evangelist, and fulfill your ministry."
             ),
             BibleVerseItem(
                 7,
-                "Aku telah mengakhiri pertandingan yang baik, aku telah mencapai garis akhir dan aku telah memelihara iman. (2 Timotius 4:7)",
-                "I have fought the good fight. I have finished the course. I have kept the faith. (2 Timothy 4:7)"
+                "Aku telah mengakhiri pertandingan yang baik, aku telah mencapai garis akhir dan aku telah memelihara iman.",
+                "I have fought the good fight. I have finished the course. I have kept the faith."
+            ),
+            BibleVerseItem(
+                8,
+                "Sekarang telah tersedia bagiku mahkota kebenaran yang akan dikaruniakan kepadaku oleh Tuhan, Hakim yang adil, pada hari-Nya; tetapi bukan hanya kepadaku, melainkan juga kepada semua orang yang merindukan kedatangan-Nya.",
+                "From now on, there is stored up for me the crown of righteousness, which the Lord, the righteous judge, will give to me on that day; and not to me only, but also to all those who have loved his appearing."
             ),
             BibleVerseItem(
                 18,
-                "Dan Tuhan akan melepaskan aku dari setiap usaha yang jahat dan menyelamatkan aku, sehingga aku masuk ke dalam Kerajaan-Nya di sorga. Bagi-Nyalah kemuliaan sampai selama-lamanya! Amin. (2 Timotius 4:18)",
-                "And the Lord will deliver me from every evil work, and will preserve me for his heavenly Kingdom. To him be the glory forever and ever. Amen. (2 Timothy 4:18)"
+                "Dan Tuhan akan melepaskan aku dari setiap usaha yang jahat dan menyelamatkan aku, sehingga aku masuk ke dalam Kerajaan-Nya di sorga. Bagi-Nyalah kemuliaan sampai selama-lamanya! Amin.",
+                "And the Lord will deliver me from every evil work, and will preserve me for his heavenly Kingdom. To him be the glory forever and ever. Amen."
             )
         ),
         "JHN_3" to listOf(

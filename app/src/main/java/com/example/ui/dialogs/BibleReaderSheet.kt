@@ -7,6 +7,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,12 +17,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -38,12 +41,14 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -95,6 +100,7 @@ fun BibleReaderSheet(
     bookmarks: List<BibleBookmark>,
     notes: List<BibleNote>,
     initialEnglish: Boolean = false,
+    useDialogWindow: Boolean = false,
     onSyncRequested: () -> Unit,
     onToggleBookmark: (
         bookId: String,
@@ -127,11 +133,13 @@ fun BibleReaderSheet(
     var activeBook by remember { mutableStateOf(BibleCatalog.findBook("2TI")) }
     var activeChapter by remember { mutableIntStateOf(4) }
     var isEnglish by remember { mutableStateOf(initialEnglish) }
-    var fontSizeSp by remember { mutableIntStateOf(22) }
+    var fontSizeSp by remember { mutableIntStateOf(17) }
     var useSerif by remember { mutableStateOf(true) }
     var showTypographyStrip by remember { mutableStateOf(false) }
     var showBookPicker by remember { mutableStateOf(false) }
     var searchPrefill by remember { mutableStateOf("") }
+    var reloadNonce by remember { mutableIntStateOf(0) }
+    var forceRefreshNext by remember { mutableStateOf(false) }
 
     var chapterResult by remember { mutableStateOf<BibleChapterLoadResult?>(null) }
     var isLoadingChapter by remember { mutableStateOf(true) }
@@ -182,7 +190,11 @@ fun BibleReaderSheet(
         }
         val textToRead = verses
             .filter { it.verse >= startFromVerse }
-            .joinToString(". ") { if (isEnglish) it.textEn else it.textId }
+            .mapNotNull { v ->
+                val raw = if (isEnglish) v.textEn.ifBlank { v.textId } else v.textId
+                raw.takeIf { it.isNotBlank() }?.let { "${v.verse}. $it" }
+            }
+            .joinToString(". ")
         if (textToRead.isBlank()) return
         engine.speak(textToRead.take(3600), TextToSpeech.QUEUE_FLUSH, null, "bible_read_${activeBook.id}_$activeChapter")
         isSpeaking = true
@@ -192,10 +204,18 @@ fun BibleReaderSheet(
         onSyncRequested()
     }
 
-    LaunchedEffect(activeBook.id, activeChapter) {
+    LaunchedEffect(activeBook.id, activeChapter, isEnglish, reloadNonce) {
+        val force = forceRefreshNext
+        forceRefreshNext = false
         isLoadingChapter = true
         stopAudio()
-        chapterResult = BibleContentRepository.loadChapterVerses(context, activeBook, activeChapter)
+        chapterResult = BibleContentRepository.loadChapterVerses(
+            context = context,
+            book = activeBook,
+            chapter = activeChapter,
+            isEnglish = isEnglish,
+            forceRefresh = force
+        )
         isLoadingChapter = false
     }
 
@@ -212,16 +232,7 @@ fun BibleReaderSheet(
             .toSet()
     }
 
-    Dialog(
-        onDismissRequest = {
-            stopAudio()
-            onDismiss()
-        },
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false
-        )
-    ) {
+    val readerBody: @Composable () -> Unit = {
         BackHandler {
             if (showBookPicker) {
                 showBookPicker = false
@@ -244,44 +255,56 @@ fun BibleReaderSheet(
                         )
                     )
                 )
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                    onClick = {}
+                )
+                .testTag("bible_reader_root")
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-            ) {
-                // Dekorasi garis titik warna-warni tipis di atas bar (nuansa perayaan Alkitab)
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
+            Column(modifier = Modifier.fillMaxSize()) {
+                // Header surface extends cleanly behind system status bar when edge-to-edge
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BibleParchmentPalette.TopBarSurface
                 ) {
-                    val dotColors = listOf(
-                        Color(0xFF10B981),
-                        Color(0xFFF59E0B),
-                        Color(0xFFEF4444),
-                        Color(0xFF3B82F6),
-                        Color(0xFFEC4899)
-                    )
-                    val step = size.width / 10f
-                    for (i in 0 until 10) {
-                        drawCircle(
-                            color = dotColors[i % dotColors.size].copy(alpha = 0.85f),
-                            radius = 3.5.dp.toPx(),
-                            center = Offset(step * i + step * 0.5f, size.height / 2f)
-                        )
-                    }
-                }
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(if (!useDialogWindow) Modifier.statusBarsPadding() else Modifier)
+                    ) {
+                        // Dekorasi garis titik warna-warni tipis di atas bar (nuansa perayaan Alkitab)
+                        Canvas(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp)
+                                .height(6.dp)
+                        ) {
+                            val dotColors = listOf(
+                                Color(0xFF10B981),
+                                Color(0xFFF59E0B),
+                                Color(0xFFEF4444),
+                                Color(0xFF3B82F6),
+                                Color(0xFFEC4899)
+                            )
+                            val step = size.width / 10f
+                            for (i in 0 until 10) {
+                                drawCircle(
+                                    color = dotColors[i % dotColors.size].copy(alpha = 0.85f),
+                                    radius = 3.dp.toPx(),
+                                    center = Offset(step * i + step * 0.5f, size.height / 2f)
+                                )
+                            }
+                        }
 
-                // TOP BAR (Matching Screenshot 2: Emblem + Dropdown + IND|ENG + Audio + T + Search + Close)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(BibleParchmentPalette.TopBarSurface)
-                        .padding(horizontal = 10.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
+                        // TOP BAR (Proportional: Emblem + Book Dropdown + IND|ENG + Audio + T + Close)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
                     // Left Golden Cross Emblem Button
                     Surface(
                         modifier = Modifier
@@ -427,25 +450,11 @@ fun BibleReaderSheet(
                         )
                     }
 
-                    // Search shortcut IconButton
-                    IconButton(
-                        onClick = { activeTab = BibleBottomTab.CARI },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .testTag("bible_top_search_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Search,
-                            contentDescription = if (isEnglish) "Search Bible" else "Cari ayat",
-                            tint = BibleParchmentPalette.InkPrimary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
+                    // Search button omitted here because Cari tab sits in bottom nav, freeing room for Book Selector
                     // Right Golden Close / Exit Button
                     Surface(
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(40.dp)
                             .clickable {
                                 stopAudio()
                                 onDismiss()
@@ -464,6 +473,8 @@ fun BibleReaderSheet(
                                 modifier = Modifier.size(20.dp)
                             )
                         }
+                    }
+                }
                     }
                 }
 
@@ -536,7 +547,11 @@ fun BibleReaderSheet(
                                 bookmarksByVerse = currentChapterBookmarks,
                                 notedVerses = currentChapterNoteVerses,
                                 onDecreaseFont = { if (fontSizeSp > 14) fontSizeSp -= 1 },
-                                onIncreaseFont = { if (fontSizeSp < 32) fontSizeSp += 1 },
+                                onIncreaseFont = { if (fontSizeSp < 28) fontSizeSp += 1 },
+                                onRetryOnline = {
+                                    forceRefreshNext = true
+                                    reloadNonce += 1
+                                },
                                 onPrevChapter = {
                                     if (activeChapter > 1) {
                                         activeChapter -= 1
@@ -650,78 +665,84 @@ fun BibleReaderSheet(
                     }
                 }
 
-                HorizontalDivider(color = BibleParchmentPalette.Border)
-
-                // BOTTOM 6-TAB BAR (Matching Screenshot 2: Alkitab, Renungan, Kisah, Catatan + badge, Bookmark + badge, Cari)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(BibleParchmentPalette.TopBarSurface)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
+                // BOTTOM 6-TAB BAR (Surface paints behind Android nav bar; Row stays fully above it via navigationBarsPadding)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BibleParchmentPalette.TopBarSurface,
+                    shadowElevation = 6.dp
                 ) {
-                    BibleBottomNavItem(
-                        label = if (isEnglish) "Bible" else "ALKITAB",
-                        icon = Icons.AutoMirrored.Rounded.MenuBook,
-                        selected = activeTab == BibleBottomTab.ALKITAB,
-                        badgeCount = 0,
-                        onClick = { activeTab = BibleBottomTab.ALKITAB },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("bible_nav_alkitab")
-                    )
-                    BibleBottomNavItem(
-                        label = if (isEnglish) "Devotion" else "Renungan",
-                        icon = Icons.Rounded.AutoAwesome,
-                        selected = activeTab == BibleBottomTab.RENUNGAN,
-                        badgeCount = 0,
-                        onClick = { activeTab = BibleBottomTab.RENUNGAN },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("bible_nav_renungan")
-                    )
-                    BibleBottomNavItem(
-                        label = if (isEnglish) "Stories" else "Kisah",
-                        icon = Icons.Rounded.FavoriteBorder,
-                        selected = activeTab == BibleBottomTab.KISAH,
-                        badgeCount = 0,
-                        onClick = { activeTab = BibleBottomTab.KISAH },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("bible_nav_kisah")
-                    )
-                    BibleBottomNavItem(
-                        label = if (isEnglish) "Notes" else "Catatan",
-                        icon = Icons.Rounded.Description,
-                        selected = activeTab == BibleBottomTab.CATATAN,
-                        badgeCount = notes.size,
-                        onClick = { activeTab = BibleBottomTab.CATATAN },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("bible_nav_catatan")
-                    )
-                    BibleBottomNavItem(
-                        label = "Bookmark",
-                        icon = Icons.Rounded.BookmarkBorder,
-                        selected = activeTab == BibleBottomTab.BOOKMARK,
-                        badgeCount = bookmarks.size,
-                        onClick = { activeTab = BibleBottomTab.BOOKMARK },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("bible_nav_bookmark")
-                    )
-                    BibleBottomNavItem(
-                        label = if (isEnglish) "Search" else "Cari",
-                        icon = Icons.Rounded.Search,
-                        selected = activeTab == BibleBottomTab.CARI,
-                        badgeCount = 0,
-                        onClick = { activeTab = BibleBottomTab.CARI },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("bible_nav_cari")
-                    )
+                    Column(modifier = Modifier.fillMaxWidth()) {
+                        HorizontalDivider(color = BibleParchmentPalette.Border)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (!useDialogWindow) Modifier.navigationBarsPadding() else Modifier)
+                                .padding(horizontal = 4.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            BibleBottomNavItem(
+                                label = if (isEnglish) "Bible" else "Alkitab",
+                                icon = Icons.AutoMirrored.Rounded.MenuBook,
+                                selected = activeTab == BibleBottomTab.ALKITAB,
+                                badgeCount = 0,
+                                onClick = { activeTab = BibleBottomTab.ALKITAB },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bible_nav_alkitab")
+                            )
+                            BibleBottomNavItem(
+                                label = if (isEnglish) "Devotion" else "Renungan",
+                                icon = Icons.Rounded.AutoAwesome,
+                                selected = activeTab == BibleBottomTab.RENUNGAN,
+                                badgeCount = 0,
+                                onClick = { activeTab = BibleBottomTab.RENUNGAN },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bible_nav_renungan")
+                            )
+                            BibleBottomNavItem(
+                                label = if (isEnglish) "Stories" else "Kisah",
+                                icon = Icons.Rounded.FavoriteBorder,
+                                selected = activeTab == BibleBottomTab.KISAH,
+                                badgeCount = 0,
+                                onClick = { activeTab = BibleBottomTab.KISAH },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bible_nav_kisah")
+                            )
+                            BibleBottomNavItem(
+                                label = if (isEnglish) "Notes" else "Catatan",
+                                icon = Icons.Rounded.Description,
+                                selected = activeTab == BibleBottomTab.CATATAN,
+                                badgeCount = notes.size,
+                                onClick = { activeTab = BibleBottomTab.CATATAN },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bible_nav_catatan")
+                            )
+                            BibleBottomNavItem(
+                                label = "Bookmark",
+                                icon = Icons.Rounded.BookmarkBorder,
+                                selected = activeTab == BibleBottomTab.BOOKMARK,
+                                badgeCount = bookmarks.size,
+                                onClick = { activeTab = BibleBottomTab.BOOKMARK },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bible_nav_bookmark")
+                            )
+                            BibleBottomNavItem(
+                                label = if (isEnglish) "Search" else "Cari",
+                                icon = Icons.Rounded.Search,
+                                selected = activeTab == BibleBottomTab.CARI,
+                                badgeCount = 0,
+                                onClick = { activeTab = BibleBottomTab.CARI },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bible_nav_cari")
+                            )
+                        }
+                    }
                 }
             }
 
@@ -730,6 +751,7 @@ fun BibleReaderSheet(
                     currentBook = activeBook,
                     currentChapter = activeChapter,
                     isEnglish = isEnglish,
+                    useDialogWindow = false,
                     onSelectBookChapter = { book, chapter ->
                         activeBook = book
                         activeChapter = chapter
@@ -820,6 +842,23 @@ fun BibleReaderSheet(
             }
         }
     }
+
+    if (useDialogWindow) {
+        Dialog(
+            onDismissRequest = {
+                stopAudio()
+                onDismiss()
+            },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = true
+            )
+        ) {
+            readerBody()
+        }
+    } else {
+        readerBody()
+    }
 }
 
 @Composable
@@ -859,6 +898,7 @@ private fun BiblePassageReaderContent(
     notedVerses: Set<Int>,
     onDecreaseFont: () -> Unit,
     onIncreaseFont: () -> Unit,
+    onRetryOnline: () -> Unit,
     onPrevChapter: () -> Unit,
     onNextChapter: () -> Unit,
     onOpenPicker: () -> Unit,
@@ -868,110 +908,136 @@ private fun BiblePassageReaderContent(
     val catLabel = (if (isEnglish) book.categoryEn else book.categoryId).uppercase()
     val bookTitle = (if (isEnglish) book.nameEn else book.nameId).uppercase()
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Subheader Strip matching Screenshot 2: Pill [CATEGORY • PB] + Book Name + [- 22 +]
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .widthIn(max = 680.dp)
+    ) {
+        // Subheader Card: Row 1 shows FULL untruncated Book Title + Font Stepper; Row 2 shows Category Pill + Source Edition
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             shape = RoundedCornerShape(16.dp),
-            color = BibleParchmentPalette.CardSoft,
+            color = BibleParchmentPalette.CardSurface,
             border = BorderStroke(1.dp, BibleParchmentPalette.Border)
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = BibleParchmentPalette.PillSurface,
-                    border = BorderStroke(1.dp, BibleParchmentPalette.Border),
-                    modifier = Modifier.clickable(onClick = onOpenPicker)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "$catLabel • ${book.testament.code}",
-                        fontSize = 10.sp,
+                        text = bookTitle,
+                        fontSize = 18.sp,
+                        fontFamily = FontFamily.Serif,
                         fontWeight = FontWeight.Bold,
-                        color = BibleParchmentPalette.MaroonAccent,
-                        maxLines = 1,
+                        color = BibleParchmentPalette.InkPrimary,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable(onClick = onOpenPicker)
+                            .testTag("bible_subheader_book_title")
                     )
+
+                    // Font Stepper Pill [- 17 +]
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = BibleParchmentPalette.PillSurface,
+                        border = BorderStroke(1.dp, BibleParchmentPalette.Border)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onDecreaseFont)
+                                    .testTag("bible_font_minus"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "−",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BibleParchmentPalette.InkPrimary
+                                )
+                            }
+                            Text(
+                                text = fontSizeSp.toString(),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = BibleParchmentPalette.InkPrimary,
+                                modifier = Modifier.padding(horizontal = 5.dp)
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(30.dp)
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onIncreaseFont)
+                                    .testTag("bible_font_plus"),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = "+",
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = BibleParchmentPalette.InkPrimary
+                                )
+                            }
+                        }
+                    }
                 }
 
-                Text(
-                    text = bookTitle,
-                    fontSize = 16.sp,
-                    fontFamily = FontFamily.Serif,
-                    fontWeight = FontWeight.Bold,
-                    color = BibleParchmentPalette.InkPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable(onClick = onOpenPicker)
-                )
-
-                // Font Stepper Pill [- 22 +]
-                Surface(
-                    shape = RoundedCornerShape(999.dp),
-                    color = BibleParchmentPalette.PillSurface,
-                    border = BorderStroke(1.dp, BibleParchmentPalette.Border)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = BibleParchmentPalette.CardSoft,
+                        border = BorderStroke(1.dp, BibleParchmentPalette.Border),
+                        modifier = Modifier.clickable(onClick = onOpenPicker)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .clickable(onClick = onDecreaseFont)
-                                .testTag("bible_font_minus"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "−",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BibleParchmentPalette.InkPrimary
-                            )
-                        }
                         Text(
-                            text = fontSizeSp.toString(),
-                            fontSize = 13.sp,
+                            text = "$catLabel • ${book.testament.code}",
+                            fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
-                            color = BibleParchmentPalette.InkPrimary,
-                            modifier = Modifier.padding(horizontal = 4.dp)
+                            color = BibleParchmentPalette.MaroonAccent,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
                         )
-                        Box(
-                            modifier = Modifier
-                                .size(30.dp)
-                                .clip(CircleShape)
-                                .clickable(onClick = onIncreaseFont)
-                                .testTag("bible_font_plus"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "+",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = BibleParchmentPalette.InkPrimary
-                            )
-                        }
+                    }
+
+                    chapterResult?.let { res ->
+                        Text(
+                            text = if (isEnglish) res.sourceLabelEn else res.sourceLabelId,
+                            fontSize = 11.sp,
+                            color = BibleParchmentPalette.InkMuted,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
                     }
                 }
             }
         }
 
-        // Chapter Quick Switcher Row + Source Indicator
+        // Chapter Quick Switcher Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp),
+                .padding(horizontal = 14.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
@@ -984,7 +1050,7 @@ private fun BiblePassageReaderContent(
                     .testTag("bible_prev_chapter")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
@@ -995,33 +1061,27 @@ private fun BiblePassageReaderContent(
                     )
                     Text(
                         text = if (isEnglish) "Prev" else "Sblm",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = BibleParchmentPalette.InkSecondary
                     )
                 }
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = if (isEnglish) {
-                        "Chapter $chapter of ${book.chaptersCount}"
-                    } else {
-                        "Pasal $chapter dari ${book.chaptersCount}"
-                    },
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = BibleParchmentPalette.MaroonAccent,
-                    modifier = Modifier.clickable(onClick = onOpenPicker)
-                )
-                chapterResult?.let { res ->
-                    Text(
-                        text = if (isEnglish) res.sourceLabelEn else res.sourceLabelId,
-                        fontSize = 10.sp,
-                        color = BibleParchmentPalette.InkMuted
-                    )
-                }
-            }
+            Text(
+                text = if (isEnglish) {
+                    "Chapter $chapter of ${book.chaptersCount}"
+                } else {
+                    "Pasal $chapter dari ${book.chaptersCount}"
+                },
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = BibleParchmentPalette.MaroonAccent,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onOpenPicker)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
+            )
 
             Surface(
                 shape = RoundedCornerShape(10.dp),
@@ -1032,12 +1092,12 @@ private fun BiblePassageReaderContent(
                     .testTag("bible_next_chapter")
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = if (isEnglish) "Next" else "Lanjut",
-                        fontSize = 11.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = BibleParchmentPalette.InkSecondary
                     )
@@ -1072,63 +1132,100 @@ private fun BiblePassageReaderContent(
             val verses = chapterResult?.verses.orEmpty()
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 28.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                if (chapterResult?.isOfflineFallback == true) {
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            OutlinedButton(
+                                onClick = onRetryOnline,
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, BibleParchmentPalette.AmberAccent),
+                                modifier = Modifier
+                                    .height(44.dp)
+                                    .testTag("bible_retry_chapter_button")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Refresh,
+                                    contentDescription = null,
+                                    tint = BibleParchmentPalette.MaroonAccent,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    text = if (isEnglish) "Retry Loading Chapter" else "Muat Ulang Pasal Online",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = BibleParchmentPalette.MaroonAccent
+                                )
+                            }
+                        }
+                    }
+                }
                 items(verses, key = { it.verse }) { v ->
                     val bm = bookmarksByVerse[v.verse]
                     val hasNote = notedVerses.contains(v.verse)
                     val rowBg = if (bm != null) resolveHighlightBg(bm.highlightColor) else Color.Transparent
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(rowBg)
-                            .clickable { onVerseClick(v) }
-                            .padding(horizontal = if (bm != null) 10.dp else 4.dp, vertical = 6.dp)
-                            .testTag("bible_verse_row_${v.verse}"),
-                        verticalAlignment = Alignment.Top
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Surface(
-                                modifier = Modifier
-                                    .padding(top = 4.dp)
-                                    .size(26.dp),
-                                shape = RoundedCornerShape(7.dp),
-                                color = if (bm != null) BibleParchmentPalette.MaroonAccent else BibleParchmentPalette.CardSoft,
-                                border = BorderStroke(1.dp, BibleParchmentPalette.Border)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        text = v.verse.toString(),
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (bm != null) Color.White else BibleParchmentPalette.InkSecondary
+                    val displayVerseText = if (isEnglish) {
+                        v.textEn.ifBlank { v.textId }
+                    } else {
+                        v.textId.ifBlank { "" }
+                    }
+                    if (displayVerseText.isNotBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(rowBg)
+                                .clickable { onVerseClick(v) }
+                                .padding(horizontal = if (bm != null) 10.dp else 4.dp, vertical = 6.dp)
+                                .testTag("bible_verse_row_${v.verse}"),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Surface(
+                                    modifier = Modifier
+                                        .padding(top = 3.dp)
+                                        .size(26.dp),
+                                    shape = RoundedCornerShape(7.dp),
+                                    color = if (bm != null) BibleParchmentPalette.MaroonAccent else BibleParchmentPalette.CardSoft,
+                                    border = BorderStroke(1.dp, BibleParchmentPalette.Border)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            text = v.verse.toString(),
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (bm != null) Color.White else BibleParchmentPalette.InkSecondary
+                                        )
+                                    }
+                                }
+                                if (bm != null || hasNote) {
+                                    Spacer(Modifier.height(4.dp))
+                                    Icon(
+                                        imageVector = if (bm != null) Icons.Rounded.Bookmark else Icons.Rounded.Description,
+                                        contentDescription = null,
+                                        tint = BibleParchmentPalette.AmberAccent,
+                                        modifier = Modifier.size(14.dp)
                                     )
                                 }
                             }
-                            if (bm != null || hasNote) {
-                                Spacer(Modifier.height(4.dp))
-                                Icon(
-                                    imageVector = if (bm != null) Icons.Rounded.Bookmark else Icons.Rounded.Description,
-                                    contentDescription = null,
-                                    tint = BibleParchmentPalette.AmberAccent,
-                                    modifier = Modifier.size(14.dp)
-                                )
-                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            Text(
+                                text = displayVerseText,
+                                fontSize = fontSizeSp.sp,
+                                fontFamily = fontFamily,
+                                lineHeight = (fontSizeSp * 1.58f).sp,
+                                color = BibleParchmentPalette.InkPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
                         }
-
-                        Spacer(Modifier.width(12.dp))
-
-                        Text(
-                            text = if (isEnglish) v.textEn else v.textId,
-                            fontSize = fontSizeSp.sp,
-                            fontFamily = fontFamily,
-                            lineHeight = (fontSizeSp * 1.55f).sp,
-                            color = BibleParchmentPalette.InkPrimary,
-                            modifier = Modifier.weight(1f)
-                        )
                     }
                 }
                 item {
