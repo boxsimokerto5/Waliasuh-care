@@ -221,7 +221,8 @@ fun DashboardScreen(
     modifier: Modifier = Modifier,
     modalState: DashboardModalState = rememberDashboardModalState(),
     renderInlineCategoryHub: Boolean = true,
-    renderInlineBibleSheet: Boolean = true
+    renderInlineBibleSheet: Boolean = true,
+    renderInlineQuranSheet: Boolean = true
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -2624,10 +2625,12 @@ fun DashboardScreen(
         )
     }
 
-    DashboardQuranModalsHost(
-        modalState = modalState,
-        isEn = isEn
-    )
+    if (renderInlineQuranSheet) {
+        DashboardQuranModalsHost(
+            modalState = modalState,
+            isEn = isEn
+        )
+    }
 }
 
 @Composable

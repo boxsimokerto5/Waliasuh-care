@@ -643,7 +643,8 @@ private fun WaliAsuhCareAppContent(
                         },
                         modalState = dashboardModalState,
                         renderInlineCategoryHub = false,
-                        renderInlineBibleSheet = false
+                        renderInlineBibleSheet = false,
+                        renderInlineQuranSheet = false
                     )
                 }
                 WaliNavScreen.RENCANA -> {
@@ -817,6 +818,10 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.riwayatMengajiInitialTab = 1
                     dashboardModalState.showRiwayatMengajiSheet = true
+                },
+                onOpenQuranFromMengaji = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showQuranSheet = true
                 },
                 onOpenJadwalKunjungan = {
                     TopOnAdManager.onUserActionClick(context)
@@ -1155,6 +1160,10 @@ private fun WaliAsuhCareAppContent(
                 modalState = dashboardModalState,
                 isEn = s.isEnglish,
                 useDialogWindow = false
+            )
+            com.example.ui.screens.DashboardQuranModalsHost(
+                modalState = dashboardModalState,
+                isEn = s.isEnglish
             )
         }
     }
