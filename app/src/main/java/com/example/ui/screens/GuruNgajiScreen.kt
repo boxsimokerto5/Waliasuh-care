@@ -142,6 +142,10 @@ fun GuruNgajiScreen(
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    val eligibleStudents = remember(students) {
+        students.filter { !com.example.data.model.StudentReligionHelper.isChristian(it) }
+    }
+
     val sortedRecords = remember(mengajiRecords) {
         mengajiRecords.sortedWith(
             compareByDescending<MengajiRecord> { it.sessionDate }.thenByDescending { it.createdAt }
@@ -152,8 +156,8 @@ fun GuruNgajiScreen(
         sortedRecords.count { DateUtils.isToday(it.sessionDate) }
     }
 
-    val studentRows = remember(students, sortedRecords) {
-        students.map { st ->
+    val studentRows = remember(eligibleStudents, sortedRecords) {
+        eligibleStudents.map { st ->
             val recs = MengajiHelper.recordsForStudent(sortedRecords, st)
             GuruStudentMengajiRow(
                 student = st,
@@ -396,9 +400,9 @@ fun GuruNgajiScreen(
                                     )
                                     Text(
                                         text = if (isEn) {
-                                            "Access to all ${students.size} students • Input & Print Card only"
+                                            "Access to all ${eligibleStudents.size} students • Input & Print Card only"
                                         } else {
-                                            "Akses seluruh ${students.size} siswa • Khusus Input & Kartu Mengaji"
+                                            "Akses seluruh ${eligibleStudents.size} siswa • Khusus Input & Kartu Mengaji"
                                         },
                                         fontSize = 11.sp,
                                         color = Color.White.copy(alpha = 0.88f)
@@ -953,7 +957,7 @@ fun GuruNgajiScreen(
 
     if (showInputMengajiDialog) {
         InputMengajiDialog(
-            students = students,
+            students = eligibleStudents,
             mengajiRecords = mengajiRecords,
             initialStudent = inputTargetStudent,
             recordToEdit = null, // Guru Ngaji hak input saja (bukan edit/hapus)
@@ -990,9 +994,9 @@ fun GuruNgajiScreen(
 
     if (showBarcodeScanner) {
         BarcodeScannerDialog(
-            femaleStudents = students,
+            femaleStudents = eligibleStudents,
             onScanned = { scannedCode ->
-                val matched = StudentClassifier.findMatchingStudent(students, scannedCode)
+                val matched = StudentClassifier.findMatchingStudent(eligibleStudents, scannedCode)
                 if (matched == null) {
                     scannerFeedback = ScannerFloatingFeedback(
                         id = System.nanoTime(),
@@ -1018,9 +1022,9 @@ fun GuruNgajiScreen(
                 "Cocokkan QR kartu siswa (Putra/Putri) lalu langsung input setoran"
             },
             quickPickTitle = if (isEn) {
-                "Quick Pick Student (${students.size}):"
+                "Quick Pick Student (${eligibleStudents.size}):"
             } else {
-                "Pilih Cepat Siswa (${students.size} Siswa):"
+                "Pilih Cepat Siswa (${eligibleStudents.size} Siswa):"
             },
             searchPlaceholder = if (isEn) "Search name, class, NIK..." else "Cari nama, kelas, atau NIK...",
             emptyListMessage = if (isEn) "No students registered in this school." else "Belum ada siswa terdaftar di sekolah ini.",
@@ -1037,7 +1041,7 @@ fun GuruNgajiScreen(
 
     if (showKartuMengajiSheet) {
         KartuMengajiSheet(
-            students = students,
+            students = eligibleStudents,
             mengajiRecords = mengajiRecords,
             schoolProfile = schoolProfile,
             waliName = waliName,

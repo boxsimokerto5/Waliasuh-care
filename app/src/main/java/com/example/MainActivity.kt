@@ -269,6 +269,7 @@ private fun WaliAsuhCareAppContent(
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
+    val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
     val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
     val deletionLogs by viewModel.deletionLogs.collectAsStateWithLifecycle()
     val unreadDeletionLogsCount by viewModel.unreadDeletionLogsCount.collectAsStateWithLifecycle()
@@ -358,6 +359,22 @@ private fun WaliAsuhCareAppContent(
             dashboardModalState.showWaliGallerySheet
         ) {
             viewModel.syncWaliGalleryOnlineQuietly()
+        }
+    }
+    LaunchedEffect(
+        dashboardModalState.activeCategoryHub,
+        dashboardModalState.showClaimChristianSheet,
+        dashboardModalState.showInputChristianWorshipDialog,
+        dashboardModalState.showChristianReportSheet,
+        dashboardModalState.showSundayChurchSheet
+    ) {
+        if (dashboardModalState.activeCategoryHub == com.example.ui.components.DashboardCategoryHub.KRISTEN ||
+            dashboardModalState.showClaimChristianSheet ||
+            dashboardModalState.showInputChristianWorshipDialog ||
+            dashboardModalState.showChristianReportSheet ||
+            dashboardModalState.showSundayChurchSheet
+        ) {
+            viewModel.syncChristianWorshipOnlineQuietly()
         }
     }
     val myFosterStudents = remember(students, waliName, currentUsername) {
@@ -1103,6 +1120,31 @@ private fun WaliAsuhCareAppContent(
                     dashboardModalState.absenSholatInitialScope = scopeFilter
                     dashboardModalState.absenSholatInitialStudent = targetStudent
                     dashboardModalState.showAbsenSholatSheet = true
+                },
+                christianWorshipRecords = christianWorshipRecords,
+                onOpenClaimChristianStudents = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showClaimChristianSheet = true
+                },
+                onOpenInputChristianWorship = { initialTab, defaultType, targetStudent ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.christianInputInitialTab = initialTab
+                    dashboardModalState.christianInputDefaultType = defaultType
+                    dashboardModalState.christianInputTargetStudent = targetStudent
+                    dashboardModalState.showInputChristianWorshipDialog = true
+                },
+                onOpenChristianReport = { initialTab ->
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.christianReportInitialTab = initialTab
+                    dashboardModalState.showChristianReportSheet = true
+                },
+                onOpenBibleFromKristen = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showBibleSheet = true
+                },
+                onOpenSundayChurch = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showSundayChurchSheet = true
                 }
             )
         }

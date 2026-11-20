@@ -98,6 +98,7 @@ import com.example.data.model.KonselingHelper
 import com.example.data.model.KonselingLog
 import com.example.data.model.KonselingRecord
 import com.example.data.model.LeaveDayInfo
+import com.example.data.model.StudentReligionHelper
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
@@ -3380,12 +3381,14 @@ internal fun LazyListScope.sholatCategoryItems(
     val todayKey = SholatHelper.todayDateKey()
     val activeWaktu = SholatHelper.detectActiveWaktu()
     val dailyMatrix = SholatHelper.buildDailyMatrix(sholatRecords, todayKey)
+    val muslimStudents = allStudents.filter { !StudentReligionHelper.isChristian(it) }
 
     val displayedStudents = claimedStudents
+        .filter { !StudentReligionHelper.isChristian(it) }
         .distinctBy { it.id }
         .sortedBy { it.name.lowercase() }
 
-    val activeWaktuRecords = allStudents.mapNotNull { st -> dailyMatrix[st.id]?.get(activeWaktu) }
+    val activeWaktuRecords = muslimStudents.mapNotNull { st -> dailyMatrix[st.id]?.get(activeWaktu) }
     val activeJamaah = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
     val activeMunfarid = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.MUNFARID }
     val activeUdzurIzin = activeWaktuRecords.count {
@@ -3393,7 +3396,7 @@ internal fun LazyListScope.sholatCategoryItems(
         status == SholatStatus.UDZUR_HAID || status == SholatStatus.SAKIT || status == SholatStatus.IZIN
     }
     val activeAlfa = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.ALFA }
-    val activeBelum = (allStudents.size - activeWaktuRecords.size).coerceAtLeast(0)
+    val activeBelum = (muslimStudents.size - activeWaktuRecords.size).coerceAtLeast(0)
     val activeLoggedTotal = activeWaktuRecords.size
     val activeUdzurHaidCount = activeWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID }
     val activeWajibDenom = (activeLoggedTotal - activeUdzurHaidCount).coerceAtLeast(0)
@@ -3513,7 +3516,7 @@ internal fun LazyListScope.sholatCategoryItems(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
-                            text = if (activeLoggedTotal > 0) "$activePct% ($activeJamaah/$activeLoggedTotal)" else "0% (0/${allStudents.size})",
+                            text = if (activeLoggedTotal > 0) "$activePct% ($activeJamaah/$activeLoggedTotal)" else "0% (0/${muslimStudents.size})",
                             fontSize = 20.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF047857)
@@ -3538,7 +3541,7 @@ internal fun LazyListScope.sholatCategoryItems(
                                 modifier = Modifier.size(16.dp)
                             )
                             Text(
-                                text = "${activeLoggedTotal}/${allStudents.size} ${if (isEn) "Logged" else "Terabsen"}",
+                                text = "${activeLoggedTotal}/${muslimStudents.size} ${if (isEn) "Logged" else "Terabsen"}",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF065F46)
@@ -3584,7 +3587,7 @@ internal fun LazyListScope.sholatCategoryItems(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     SholatWaktu.entries.forEach { waktu ->
-                        val wCount = allStudents.count { st -> dailyMatrix[st.id]?.get(waktu) != null }
+                        val wCount = muslimStudents.count { st -> dailyMatrix[st.id]?.get(waktu) != null }
                         val isCurrent = waktu == activeWaktu
                         Surface(
                             shape = RoundedCornerShape(8.dp),
@@ -3610,7 +3613,7 @@ internal fun LazyListScope.sholatCategoryItems(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "$wCount/${allStudents.size}",
+                                    text = "$wCount/${muslimStudents.size}",
                                     fontSize = 9.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = if (isCurrent) Color(0xFFD1FAE5) else Color(0xFF64748B),
@@ -3807,7 +3810,7 @@ internal fun LazyListScope.sholatCategoryItems(
                             fontWeight = FontWeight.Bold
                         )
                     }
-                    if (allStudents.isNotEmpty()) {
+                    if (muslimStudents.isNotEmpty()) {
                         OutlinedButton(
                             onClick = { onOpenAbsenSholatSheet(0, false, "ALL", null) },
                             shape = RoundedCornerShape(10.dp),
@@ -3818,7 +3821,7 @@ internal fun LazyListScope.sholatCategoryItems(
                                 .testTag("btn_sholat_open_all_students")
                         ) {
                             Text(
-                                text = if (isEn) "Open All Students (${allStudents.size})" else "Buka Absen Semua Siswa (${allStudents.size})",
+                                text = if (isEn) "Open All Students (${muslimStudents.size})" else "Buka Absen Semua Siswa (${muslimStudents.size})",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFF047857)

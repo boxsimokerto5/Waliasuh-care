@@ -150,6 +150,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_bible,
             tileBg = Color(0xFFFEF3C7)
         )
+        DashboardIconKey.KRISTEN -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Christian" else "Agama Kristen",
+            imageRes = R.drawable.img_menu_kristen,
+            tileBg = Color(0xFFE0E7FF)
+        )
     }
 }
 
@@ -239,6 +245,8 @@ fun QuickMenuTiles(
     konselingTotalCount: Int = 0,
     unreadInfoPentingCount: Int = 0,
     bibleSavedCount: Int = 0,
+    christianStudentsCount: Int = 0,
+    christianWorshipTodayCount: Int = 0,
     todayMyShiftBadge: String? = null,
     schoolShortName: String = "",
     faskesBannerSubtitle: String = "",
@@ -464,6 +472,20 @@ fun QuickMenuTiles(
                     badgeBg = Color(0xFFB45309),
                     testTag = "tile_bible",
                     onClick = onOpenBible
+                )
+            }
+            DashboardIconKey.KRISTEN -> {
+                val kristenBadge = when {
+                    christianWorshipTodayCount > 0 -> "$christianWorshipTodayCount ${if (isEn) "Log" else "Giat"}"
+                    christianStudentsCount > 0 -> "$christianStudentsCount ${if (isEn) "Kids" else "Anak"}"
+                    else -> if (isEn) "Faith" else "Kristen"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = kristenBadge,
+                    badgeBg = Color(0xFF4338CA),
+                    testTag = "category_kristen",
+                    onClick = { onOpenCategoryHub(DashboardCategoryHub.KRISTEN) }
                 )
             }
         }

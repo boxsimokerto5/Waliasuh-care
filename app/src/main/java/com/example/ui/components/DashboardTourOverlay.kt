@@ -99,6 +99,7 @@ enum class TourTargetId {
     ICON_JADWAL_WALI,
     ICON_INFO_PENTING,
     ICON_BIBLE,
+    ICON_KRISTEN,
     TOUR_REPLAY_BUTTON
 }
 
@@ -118,6 +119,7 @@ fun DashboardIconKey.toTourTargetId(): TourTargetId = when (this) {
     DashboardIconKey.KLAIM_ANAK_ASUH -> TourTargetId.ICON_KLAIM_ANAK_ASUH
     DashboardIconKey.INFO_PENTING -> TourTargetId.ICON_INFO_PENTING
     DashboardIconKey.BIBLE -> TourTargetId.ICON_BIBLE
+    DashboardIconKey.KRISTEN -> TourTargetId.ICON_KRISTEN
 }
 
 data class DashboardTourStep(
@@ -305,6 +307,19 @@ fun buildDashboardTourSteps(isEn: Boolean): List<DashboardTourStep> {
             accentColor = Color(0xFF059669),
             iconRes = R.drawable.img_menu_sholat,
             dashboardIconKey = DashboardIconKey.SHOLAT
+        ),
+        DashboardTourStep(
+            targetId = TourTargetId.ICON_KRISTEN,
+            chapter = if (isEn) "Faith Care" else "Agama Kristen",
+            title = if (isEn) "Christian Worship & Portal Sync" else "Ibadah & Pembinaan Agama Kristen",
+            description = if (isEn) {
+                "Claim Christian students (auto-exempt from Sholat/Mengaji, Puasa kept), log morning/evening/church worship with photos & auto-enable Parent Portal."
+            } else {
+                "Klaim anak asuh Kristen (otomatis dikecualikan dari Sholat/Mengaji, Puasa tetap aktif), catat Ibadah Pagi/Malam/Gereja + foto & aktifkan Portal Ortu."
+            },
+            accentColor = Color(0xFF4338CA),
+            iconRes = R.drawable.img_menu_kristen,
+            dashboardIconKey = DashboardIconKey.KRISTEN
         ),
         DashboardTourStep(
             targetId = TourTargetId.ICON_TABUNGAN,

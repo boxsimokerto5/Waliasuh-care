@@ -90,6 +90,8 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.DashboardBannerActionType
 import com.example.data.model.DashboardBannerFeatureTarget
 import com.example.data.model.DashboardBannerItem
@@ -99,6 +101,7 @@ import com.example.data.model.MedicalRecord
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatHelper
 import com.example.data.model.SholatWaktu
+import com.example.data.model.StudentReligionHelper
 import com.example.data.model.TabunganHelper
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliScheduleEntry
@@ -125,6 +128,8 @@ import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.components.tourTarget
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChecklistPuasaSheet
+import com.example.ui.dialogs.ChristianWorshipReportSheet
+import com.example.ui.dialogs.ClaimChristianStudentsSheet
 import com.example.ui.dialogs.CreateFastingSessionDialog
 import com.example.ui.dialogs.CreateInfoPentingDialog
 import com.example.ui.dialogs.CreatePlanDialog
@@ -145,6 +150,7 @@ import com.example.ui.dialogs.FiqihHaidDialog
 import com.example.ui.dialogs.HarapanOrangTuaSheet
 import com.example.ui.dialogs.ImportJadwalMatriksDialog
 import com.example.ui.dialogs.InfoPentingFeedSheet
+import com.example.ui.dialogs.InputChristianWorshipDialog
 import com.example.ui.dialogs.InputHaidDialog
 import com.example.ui.dialogs.InputKonselingDialog
 import com.example.ui.dialogs.InputMengajiDialog
@@ -179,6 +185,7 @@ import com.example.ui.dialogs.ShiftMessagesSheet
 import com.example.ui.dialogs.SholatAttendanceSheet
 import com.example.ui.dialogs.SiswaPerKecamatanSheet
 import com.example.ui.dialogs.StudentDetailDialog
+import com.example.ui.dialogs.SundayChurchScheduleSheet
 import com.example.ui.dialogs.TabunganHistoryLogsSheet
 import com.example.ui.dialogs.TabunganStudentDetailSheet
 import com.example.ui.dialogs.TabunganStudentListSheet
@@ -231,6 +238,8 @@ fun DashboardScreen(
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
+    val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
+    val isSavingChristianWorship by viewModel.isSavingChristianWorship.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
@@ -366,6 +375,22 @@ fun DashboardScreen(
             modalState.showWaliGallerySheet
         ) {
             viewModel.syncWaliGalleryOnlineQuietly()
+        }
+    }
+    LaunchedEffect(
+        modalState.activeCategoryHub,
+        modalState.showClaimChristianSheet,
+        modalState.showInputChristianWorshipDialog,
+        modalState.showChristianReportSheet,
+        modalState.showSundayChurchSheet
+    ) {
+        if (modalState.activeCategoryHub == DashboardCategoryHub.KRISTEN ||
+            modalState.showClaimChristianSheet ||
+            modalState.showInputChristianWorshipDialog ||
+            modalState.showChristianReportSheet ||
+            modalState.showSundayChurchSheet
+        ) {
+            viewModel.syncChristianWorshipOnlineQuietly()
         }
     }
     val tabunganTotals = remember(tabunganTransactions) {
@@ -558,6 +583,18 @@ fun DashboardScreen(
                     DashboardBannerFeatureTarget.FEATURE_INFO_PENTING -> modalState.showInfoPentingSheet = true
                     DashboardBannerFeatureTarget.FEATURE_ABSEN_SHOLAT -> {
                         modalState.activeCategoryHub = DashboardCategoryHub.SHOLAT
+                    }
+                    DashboardBannerFeatureTarget.FEATURE_KRISTEN_HUB -> {
+                        modalState.activeCategoryHub = DashboardCategoryHub.KRISTEN
+                    }
+                    DashboardBannerFeatureTarget.FEATURE_KLAIM_KRISTEN -> {
+                        modalState.showClaimChristianSheet = true
+                    }
+                    DashboardBannerFeatureTarget.FEATURE_INPUT_IBADAH_KRISTEN -> {
+                        modalState.christianInputInitialTab = 0
+                        modalState.christianInputDefaultType = ChristianWorshipRecord.TYPE_DOA_PAGI
+                        modalState.christianInputTargetStudent = null
+                        modalState.showInputChristianWorshipDialog = true
                     }
                     null -> modalState.showPuskesmasInfoSheet = true
                 }
@@ -1242,6 +1279,11 @@ fun DashboardScreen(
                             konselingTotalCount = konselingStats.totalEntries,
                             unreadInfoPentingCount = unreadInfoPentingCount,
                             bibleSavedCount = bibleBookmarks.size + bibleNotes.size,
+                            christianStudentsCount = students.count { StudentReligionHelper.isChristian(it) },
+                            christianWorshipTodayCount = run {
+                                val todayKey = ChristianWorshipHelper.todayDateKey()
+                                christianWorshipRecords.count { !it.isDeleted && (it.dateKey == todayKey || DateUtils.isToday(it.activityDate)) }
+                            },
                             todayMyShiftBadge = todayMyShiftBadge,
                             schoolShortName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
                             faskesBannerSubtitle = schoolProfile.getReferralFaskesSummary(),
@@ -1752,6 +1794,31 @@ fun DashboardScreen(
                     modalState.absenSholatInitialScope = scopeFilter
                     modalState.absenSholatInitialStudent = targetStudent
                     modalState.showAbsenSholatSheet = true
+                },
+                christianWorshipRecords = christianWorshipRecords,
+                onOpenClaimChristianStudents = {
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.showClaimChristianSheet = true
+                },
+                onOpenInputChristianWorship = { initialTab, defaultType, targetStudent ->
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.christianInputInitialTab = initialTab
+                    modalState.christianInputDefaultType = defaultType
+                    modalState.christianInputTargetStudent = targetStudent
+                    modalState.showInputChristianWorshipDialog = true
+                },
+                onOpenChristianReport = { initialTab ->
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.christianReportInitialTab = initialTab
+                    modalState.showChristianReportSheet = true
+                },
+                onOpenBibleFromKristen = {
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.showBibleSheet = true
+                },
+                onOpenSundayChurch = {
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.showSundayChurchSheet = true
                 }
             )
         }
@@ -2465,7 +2532,143 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Kunjungan 1: Jadwal Kunjungan Bulanan & Multi-Tanggal
+    DashboardVisitAndParentModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        currentUsername = currentUsername,
+        isAdminUser = isAdminUser,
+        isAnakSuperAdmin = isAnakSuperAdmin,
+        schoolProfile = schoolProfile,
+        students = students,
+        myFosterStudents = myFosterStudents,
+        allRecords = allRecords,
+        mengajiRecords = mengajiRecords,
+        fastingRecords = fastingRecords,
+        sholatRecords = sholatRecords,
+        activeHaidRecords = activeHaidRecords,
+        suciRecords = suciRecords,
+        showLayoutEditorSheet = showLayoutEditorSheet,
+        onDismissLayoutEditor = { showLayoutEditorSheet = false },
+        showBannerEditorSheet = showBannerEditorSheet,
+        onDismissBannerEditor = { showBannerEditorSheet = false }
+    )
+
+    DashboardTabunganModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        isAnakSuperAdmin = isAnakSuperAdmin,
+        schoolProfile = schoolProfile,
+        students = students,
+        myFosterStudents = myFosterStudents,
+        readyTabunganSummaryPdf = readyTabunganSummaryPdf,
+        onClearReadyTabunganSummaryPdf = { readyTabunganSummaryPdf = null }
+    )
+
+    DashboardKonselingAndSholatModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        currentUsername = currentUsername,
+        schoolProfile = schoolProfile,
+        students = students,
+        myFosterStudents = myFosterStudents,
+        konselingRecords = konselingRecords,
+        konselingLogs = konselingLogs,
+        sholatRecords = sholatRecords,
+        activeHaidRecords = activeHaidRecords,
+        suciRecords = suciRecords,
+        readyKonselingSummaryPdf = readyKonselingSummaryPdf,
+        onClearReadyKonselingSummaryPdf = { readyKonselingSummaryPdf = null }
+    )
+
+    DashboardJadwalAndInfoModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        currentUsername = currentUsername,
+        schoolProfile = schoolProfile,
+        waliAccounts = waliAccounts,
+        schoolShiftCodes = schoolShiftCodes,
+        schoolScheduleEntries = schoolScheduleEntries,
+        canManageSchedule = canManageSchedule,
+        isAnakSuperAdmin = isAnakSuperAdmin,
+        infoPentingPosts = infoPentingPosts,
+        infoPentingReactions = infoPentingReactions,
+        infoPentingComments = infoPentingComments,
+        isPublishingInfoPenting = isPublishingInfoPenting,
+        readyJadwalPdf = readyJadwalPdf,
+        onClearReadyJadwalPdf = { readyJadwalPdf = null }
+    )
+
+    DashboardChristianModalsHost(
+        viewModel = viewModel,
+        modalState = modalState,
+        waliName = waliName,
+        schoolProfile = schoolProfile,
+        students = students,
+        christianWorshipRecords = christianWorshipRecords,
+        isSavingChristianWorship = isSavingChristianWorship
+    )
+
+    if (renderInlineBibleSheet) {
+        DashboardBibleModalsHost(
+            viewModel = viewModel,
+            modalState = modalState,
+            isEn = isEn,
+            useDialogWindow = true
+        )
+    }
+}
+
+@Composable
+private fun DashboardVisitAndParentModalsHost(
+    viewModel: HealthViewModel,
+    modalState: DashboardModalState,
+    waliName: String,
+    currentUsername: String?,
+    isAdminUser: Boolean,
+    isAnakSuperAdmin: Boolean,
+    schoolProfile: com.example.data.model.SchoolProfile,
+    students: List<ChildStudent>,
+    myFosterStudents: List<ChildStudent>,
+    allRecords: List<MedicalRecord>,
+    mengajiRecords: List<com.example.data.model.MengajiRecord>,
+    fastingRecords: List<com.example.data.model.FastingRecord>,
+    sholatRecords: List<com.example.data.model.SholatRecord>,
+    activeHaidRecords: List<com.example.data.model.HaidRecord>,
+    suciRecords: List<com.example.data.model.HaidRecord>,
+    showLayoutEditorSheet: Boolean,
+    onDismissLayoutEditor: () -> Unit,
+    showBannerEditorSheet: Boolean,
+    onDismissBannerEditor: () -> Unit
+) {
+    val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
+    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
+    val incomingTandemBundles by viewModel.incomingTandemRequestBundles.collectAsStateWithLifecycle()
+    val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
+    val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
+    val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
+    val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
+    val chatMediaLocalSaves by viewModel.chatMediaLocalSaves.collectAsStateWithLifecycle()
+    val chatAutoSaveMediaEnabled by viewModel.chatAutoSaveMediaEnabled.collectAsStateWithLifecycle()
+    val isSendingChatPhoto by viewModel.isSendingChatPhoto.collectAsStateWithLifecycle()
+    val isSavingChatMedia by viewModel.isSavingChatMedia.collectAsStateWithLifecycle()
+    val chatLocalSavesByMsgId = remember(chatMediaLocalSaves) {
+        chatMediaLocalSaves.associateBy { it.messageId }
+    }
+    val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
+    val isPublishingGalleryPost by viewModel.isPublishingGalleryPost.collectAsStateWithLifecycle()
+    val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
+    val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
+    val dashboardBannerConfig by viewModel.dashboardBannerConfig.collectAsStateWithLifecycle()
+    val isSavingDashboardBanner by viewModel.isSavingDashboardBanner.collectAsStateWithLifecycle()
+    val isUploadingBannerImage by viewModel.isUploadingBannerImage.collectAsStateWithLifecycle()
+
     if (modalState.showJadwalKunjunganSheet) {
         JadwalKunjunganSheet(
             sessions = visitSessions,
@@ -2491,7 +2694,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Kunjungan 2: Daftar Hadir (Scan Barcode & List Cetak PDF Manual)
     if (modalState.showDaftarHadirKunjunganSheet) {
         DaftarHadirKunjunganSheet(
             sessions = visitSessions,
@@ -2523,7 +2725,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Kunjungan 3: Laporan Kehadiran (Sudah Hadir vs Belum Berkunjung)
     if (modalState.showLaporanKunjunganSheet) {
         LaporanKunjunganSheet(
             sessions = visitSessions,
@@ -2546,7 +2747,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Kunjungan 4: Daftar Siswa per Kecamatan (Dinamis sesuai data siswa sekolah)
     if (modalState.showSiswaPerKecamatanSheet) {
         SiswaPerKecamatanSheet(
             students = students,
@@ -2625,7 +2825,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 1: Pilih Anak Asuh (Tim Tandem Maks. 3 Wali Asuh)
     if (modalState.showPilihAnakAsuhSheet) {
         PilihAnakAsuhSheet(
             students = students,
@@ -2705,7 +2904,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 2: Kartu Akses Orang Tua Otomatis + Share WA / Biasa
     if (modalState.showKartuAksesOrtuSheet) {
         KartuAksesOrangTuaSheet(
             students = students,
@@ -2753,7 +2951,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 3: Pilihan Akses (Profil, Mengaji, Sakit, Puasa, Haid)
     if (modalState.showPilihanAksesOrtuSheet) {
         PilihanAksesOrangTuaSheet(
             students = students,
@@ -2783,7 +2980,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 4: Pesan Chat 2 Arah dengan Orang Tua
     if (modalState.showPesanOrtuSheet) {
         LaunchedEffect(Unit) {
             viewModel.syncParentRelationsQuietly()
@@ -2838,7 +3034,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 5: Harapan Karakter dari Orang Tua
     if (modalState.showHarapanOrtuSheet) {
         LaunchedEffect(Unit) {
             viewModel.syncParentRelationsQuietly()
@@ -2869,7 +3064,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 6: Galeri Wali Asuh (Relay Foto Sementara PocketBase/Cloudflare R2 -> Auto-Save Galeri HP Ortu)
     if (modalState.showWaliGallerySheet) {
         val targetStudentsForGallery = remember(myFosterStudents, students, isAdminUser) {
             if (isAdminUser && myFosterStudents.isEmpty()) students else myFosterStudents
@@ -2902,7 +3096,6 @@ fun DashboardScreen(
         )
     }
 
-    // Dialog Edit Profil / Tambah No. HP Orang Tua langsung dari Kartu Akses Orang Tua
     modalState.studentToEditParentPhone?.let { editingStudent ->
         AddStudentDialog(
             initialStudent = editingStudent,
@@ -2931,12 +3124,11 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Bottom Sheet: Atur Tata Letak Ikon Dashboard (Khusus Anak Superadmin + Sinkron PocketBase)
     if (showLayoutEditorSheet && isAnakSuperAdmin) {
         DashboardLayoutEditorSheet(
             currentOrder = dashboardIconOrder,
             isSaving = isSavingDashboardLayout,
-            onDismiss = { showLayoutEditorSheet = false },
+            onDismiss = onDismissLayoutEditor,
             onSave = { newOrder ->
                 viewModel.saveDashboardIconOrder(newOrder) { success, message ->
                     Toast.makeText(
@@ -2945,7 +3137,7 @@ fun DashboardScreen(
                         if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
                     ).show()
                     if (success) {
-                        showLayoutEditorSheet = false
+                        onDismissLayoutEditor()
                     }
                 }
             },
@@ -2961,7 +3153,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Bottom Sheet: Atur Banner Slider Global + Cloudflare R2 CDN (Khusus Anak Superadmin)
     if (showBannerEditorSheet && isAnakSuperAdmin) {
         DashboardBannerEditorSheet(
             currentConfig = dashboardBannerConfig,
@@ -2970,7 +3161,7 @@ fun DashboardScreen(
             onUploadImage = { uri, bannerId, title, onResult ->
                 viewModel.uploadBannerImageToCloud(uri, bannerId, title, onResult)
             },
-            onDismiss = { showBannerEditorSheet = false },
+            onDismiss = onDismissBannerEditor,
             onSave = { newConfig ->
                 viewModel.saveDashboardBannerConfig(newConfig) { success, message ->
                     Toast.makeText(
@@ -2979,14 +3170,31 @@ fun DashboardScreen(
                         if (success) Toast.LENGTH_SHORT else Toast.LENGTH_LONG
                     ).show()
                     if (success) {
-                        showBannerEditorSheet = false
+                        onDismissBannerEditor()
                     }
                 }
             }
         )
     }
+}
 
-    // Modal Tabungan 1: Input / Edit Titip Masuk (+) / Pengeluaran (-)
+@Composable
+private fun DashboardTabunganModalsHost(
+    viewModel: HealthViewModel,
+    modalState: DashboardModalState,
+    waliName: String,
+    isAnakSuperAdmin: Boolean,
+    schoolProfile: com.example.data.model.SchoolProfile,
+    students: List<ChildStudent>,
+    myFosterStudents: List<ChildStudent>,
+    readyTabunganSummaryPdf: File?,
+    onClearReadyTabunganSummaryPdf: () -> Unit
+) {
+    val context = LocalContext.current
+    val isEn = LocalAppStrings.current.isEnglish
+    val tabunganTransactions by viewModel.tabunganTransactions.collectAsStateWithLifecycle()
+    val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
+
     if (modalState.showInputTabunganDialog) {
         InputTabunganDialog(
             claimedStudents = myFosterStudents,
@@ -3040,7 +3248,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Tabungan 2: Daftar Saldo Per Anak
     if (modalState.showTabunganStudentListSheet) {
         TabunganStudentListSheet(
             claimedStudents = myFosterStudents,
@@ -3062,7 +3269,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Tabungan 3: Pop-Up Detail Tabungan Anak (Pemasukan, Pengeluaran, Ubah, Batalkan, Hapus & Log)
     modalState.tabunganStudentForDetail?.let { detailStudent ->
         val studentTxs = remember(tabunganTransactions, detailStudent) {
             tabunganTransactions.filter { TabunganHelper.matchesStudent(it, detailStudent) }
@@ -3107,7 +3313,6 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Tabungan 4: Riwayat Transaksi & Log Audit Pribadi
     if (modalState.showTabunganHistoryLogsSheet) {
         val summaryStudents = remember(myFosterStudents, students, tabunganTransactions) {
             TabunganHelper.buildSummaryStudents(
@@ -3165,7 +3370,7 @@ fun DashboardScreen(
 
     readyTabunganSummaryPdf?.let { file ->
         AlertDialog(
-            onDismissRequest = { readyTabunganSummaryPdf = null },
+            onDismissRequest = onClearReadyTabunganSummaryPdf,
             title = { Text(if (isEn) "Savings Recap PDF Ready" else "PDF Rekap Tabungan Siap") },
             text = {
                 Text(
@@ -3176,7 +3381,7 @@ fun DashboardScreen(
             confirmButton = {
                 Button(
                     onClick = {
-                        readyTabunganSummaryPdf = null
+                        onClearReadyTabunganSummaryPdf()
                         PdfReportGenerator.openPdfFile(context, file)
                     }
                 ) {
@@ -3186,7 +3391,7 @@ fun DashboardScreen(
             dismissButton = {
                 TextButton(
                     onClick = {
-                        readyTabunganSummaryPdf = null
+                        onClearReadyTabunganSummaryPdf()
                         PdfReportGenerator.shareFastingPdf(
                             context = context,
                             pdfFile = file,
@@ -3200,49 +3405,114 @@ fun DashboardScreen(
             }
         )
     }
+}
 
-    DashboardKonselingAndSholatModalsHost(
-        viewModel = viewModel,
-        modalState = modalState,
-        waliName = waliName,
-        currentUsername = currentUsername,
-        schoolProfile = schoolProfile,
-        students = students,
-        myFosterStudents = myFosterStudents,
-        konselingRecords = konselingRecords,
-        konselingLogs = konselingLogs,
-        sholatRecords = sholatRecords,
-        activeHaidRecords = activeHaidRecords,
-        suciRecords = suciRecords,
-        readyKonselingSummaryPdf = readyKonselingSummaryPdf,
-        onClearReadyKonselingSummaryPdf = { readyKonselingSummaryPdf = null }
-    )
+@Composable
+private fun DashboardChristianModalsHost(
+    viewModel: HealthViewModel,
+    modalState: DashboardModalState,
+    waliName: String,
+    schoolProfile: com.example.data.model.SchoolProfile,
+    students: List<ChildStudent>,
+    christianWorshipRecords: List<ChristianWorshipRecord>,
+    isSavingChristianWorship: Boolean
+) {
+    val context = LocalContext.current
+    val christianStudents = remember(students) {
+        students.filter { StudentReligionHelper.isChristian(it) }
+            .distinctBy { it.id }
+            .sortedBy { it.name.lowercase() }
+    }
 
-    DashboardJadwalAndInfoModalsHost(
-        viewModel = viewModel,
-        modalState = modalState,
-        waliName = waliName,
-        currentUsername = currentUsername,
-        schoolProfile = schoolProfile,
-        waliAccounts = waliAccounts,
-        schoolShiftCodes = schoolShiftCodes,
-        schoolScheduleEntries = schoolScheduleEntries,
-        canManageSchedule = canManageSchedule,
-        isAnakSuperAdmin = isAnakSuperAdmin,
-        infoPentingPosts = infoPentingPosts,
-        infoPentingReactions = infoPentingReactions,
-        infoPentingComments = infoPentingComments,
-        isPublishingInfoPenting = isPublishingInfoPenting,
-        readyJadwalPdf = readyJadwalPdf,
-        onClearReadyJadwalPdf = { readyJadwalPdf = null }
-    )
+    if (modalState.showClaimChristianSheet) {
+        ClaimChristianStudentsSheet(
+            students = students,
+            onClaimStudents = { picked, markChristian ->
+                viewModel.claimStudentsChristianReligion(picked, markChristian) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showClaimChristianSheet = false }
+        )
+    }
 
-    if (renderInlineBibleSheet) {
-        DashboardBibleModalsHost(
-            viewModel = viewModel,
-            modalState = modalState,
-            isEn = isEn,
-            useDialogWindow = true
+    if (modalState.showInputChristianWorshipDialog) {
+        InputChristianWorshipDialog(
+            christianStudents = christianStudents,
+            initialTab = modalState.christianInputInitialTab,
+            defaultActivityType = modalState.christianInputDefaultType,
+            targetStudent = modalState.christianInputTargetStudent,
+            isSaving = isSavingChristianWorship,
+            onOpenClaimChristian = {
+                modalState.showInputChristianWorshipDialog = false
+                modalState.showClaimChristianSheet = true
+            },
+            onSaveSingle = { student, activityType, activityDate, title, notes, imageUri ->
+                viewModel.saveChristianWorshipActivity(
+                    student = student,
+                    activityType = activityType,
+                    activityDate = activityDate,
+                    title = title,
+                    notes = notes,
+                    imageUri = imageUri
+                ) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) modalState.showInputChristianWorshipDialog = false
+                }
+            },
+            onSaveBatch = { pickedStudents, activityType, activityDate, title, notes ->
+                viewModel.saveChristianWorshipBatch(
+                    students = pickedStudents,
+                    activityType = activityType,
+                    activityDate = activityDate,
+                    title = title,
+                    notes = notes
+                ) { savedCount, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (savedCount > 0) modalState.showInputChristianWorshipDialog = false
+                }
+            },
+            onDismiss = {
+                modalState.showInputChristianWorshipDialog = false
+                modalState.christianInputTargetStudent = null
+            }
+        )
+    }
+
+    if (modalState.showChristianReportSheet) {
+        ChristianWorshipReportSheet(
+            christianStudents = christianStudents,
+            records = christianWorshipRecords,
+            schoolProfile = schoolProfile,
+            waliName = waliName,
+            initialTab = modalState.christianReportInitialTab,
+            onDeleteRecord = { record ->
+                viewModel.deleteChristianWorshipRecord(record) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showChristianReportSheet = false }
+        )
+    }
+
+    if (modalState.showSundayChurchSheet) {
+        SundayChurchScheduleSheet(
+            christianStudents = christianStudents,
+            records = christianWorshipRecords,
+            waliName = waliName,
+            onQuickMarkChurch = { student, churchName, notes ->
+                viewModel.saveChristianWorshipActivity(
+                    student = student,
+                    activityType = ChristianWorshipRecord.TYPE_KE_GEREJA,
+                    activityDate = System.currentTimeMillis(),
+                    title = churchName,
+                    notes = notes,
+                    imageUri = null
+                ) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { modalState.showSundayChurchSheet = false }
         )
     }
 }

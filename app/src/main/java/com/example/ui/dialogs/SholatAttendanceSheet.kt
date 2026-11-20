@@ -146,7 +146,7 @@ fun SholatAttendanceSheet(
 
     val myStudentIds = remember(eligibleStudents, currentWaliUsername, currentWaliName) {
         eligibleStudents.filter { st ->
-            com.example.data.model.TandemWaliHelper.isClaimedByWali(st, currentWaliUsername, currentWaliName)
+            com.example.data.model.TandemWaliHelper.isAssignedWali(st, currentWaliUsername, currentWaliName)
         }.map { it.id }.toSet()
     }
 

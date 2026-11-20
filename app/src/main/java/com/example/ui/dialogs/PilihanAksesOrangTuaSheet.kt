@@ -374,6 +374,7 @@ fun PilihanAksesOrangTuaSheet(
                                     }
 
                                     if (link != null) {
+                                        val isChristian = com.example.data.model.StudentReligionHelper.isChristian(student, link)
                                         PermissionCheckboxRow(
                                             label = if (isEn) "Child Profile & Biodata" else "Profil & Biodata Anak",
                                             checked = link.canViewProfile,
@@ -383,24 +384,48 @@ fun PilihanAksesOrangTuaSheet(
                                             },
                                             testTag = "chk_access_profile_${student.id}"
                                         )
-                                        PermissionCheckboxRow(
-                                            label = if (isEn) "5 Daily Prayers Attendance (Fajr - Isha)" else "Pantauan Sholat 5 Waktu (Subuh - Isya)",
-                                            checked = link.canViewSholat,
-                                            accentColor = Color(0xFF059669),
-                                            onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile, link.canViewTabungan, checked)
-                                            },
-                                            testTag = "chk_access_sholat_${student.id}"
-                                        )
-                                        PermissionCheckboxRow(
-                                            label = if (isEn) "Mengaji History (Progress & Fluency)" else "Riwayat Mengaji (Jilid & Kelancaran)",
-                                            checked = link.canViewMengaji,
-                                            accentColor = Color(0xFF047857),
-                                            onCheckedChange = { checked ->
-                                                onUpdatePermissions(link, checked, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile, link.canViewTabungan, link.canViewSholat)
-                                            },
-                                            testTag = "chk_access_mengaji_${student.id}"
-                                        )
+                                        if (isChristian) {
+                                            Surface(
+                                                shape = RoundedCornerShape(10.dp),
+                                                color = Color(0xFFEEF2FF),
+                                                border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .testTag("info_christian_auto_portal_${student.id}")
+                                            ) {
+                                                Text(
+                                                    text = if (isEn) {
+                                                        "✝️ Christian Student: Christian Worship menu & reports are auto-enabled in Parent Portal (5 Prayers & Mengaji are hidden)."
+                                                    } else {
+                                                        "✝️ Anak Agama Kristen: Menu Ibadah Kristen & laporannya aktif otomatis di Portal Orang Tua (Sholat & Mengaji disembunyikan)."
+                                                    },
+                                                    fontSize = 11.5.sp,
+                                                    color = Color(0xFF3730A3),
+                                                    fontWeight = FontWeight.Medium,
+                                                    lineHeight = 16.sp,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                                )
+                                            }
+                                        } else {
+                                            PermissionCheckboxRow(
+                                                label = if (isEn) "5 Daily Prayers Attendance (Fajr - Isha)" else "Pantauan Sholat 5 Waktu (Subuh - Isya)",
+                                                checked = link.canViewSholat,
+                                                accentColor = Color(0xFF059669),
+                                                onCheckedChange = { checked ->
+                                                    onUpdatePermissions(link, link.canViewMengaji, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile, link.canViewTabungan, checked)
+                                                },
+                                                testTag = "chk_access_sholat_${student.id}"
+                                            )
+                                            PermissionCheckboxRow(
+                                                label = if (isEn) "Mengaji History (Progress & Fluency)" else "Riwayat Mengaji (Jilid & Kelancaran)",
+                                                checked = link.canViewMengaji,
+                                                accentColor = Color(0xFF047857),
+                                                onCheckedChange = { checked ->
+                                                    onUpdatePermissions(link, checked, link.canViewMedical, link.canViewFasting, link.canViewHaid, link.canViewProfile, link.canViewTabungan, link.canViewSholat)
+                                                },
+                                                testTag = "chk_access_mengaji_${student.id}"
+                                            )
+                                        }
                                         PermissionCheckboxRow(
                                             label = if (isEn) "Medical History (Illness & Treatment)" else "Riwayat Sakit & Rekam Medis",
                                             checked = link.canViewMedical,

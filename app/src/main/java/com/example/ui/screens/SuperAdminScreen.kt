@@ -18,11 +18,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutoutPadding
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -142,6 +144,7 @@ import com.example.data.remote.pocketbase.PocketBaseConfig
 import com.example.data.remote.pocketbase.PocketBaseSchemaProvider
 import com.example.data.remote.pocketbase.PocketBaseSchemaSyncResult
 import com.example.ui.HealthViewModel
+import com.example.ui.components.SuperadminQuickMenuGridCard
 import com.example.ui.dialogs.PocketBaseConfigDialog
 import com.example.ui.dialogs.SuperadminSchoolDetailSheet
 import com.example.ui.theme.WaliPrimary
@@ -746,6 +749,28 @@ fun SuperAdminScreen(
                             }
                         }
                     }
+                }
+
+                // Kartu Grid Menu Cepat Superadmin Senada Wali Asuh
+                item {
+                    SuperadminQuickMenuGridCard(
+                        selectedMainTab = selectedMainTab,
+                        selectedStatusFilter = selectedStatusFilter,
+                        totalCount = totalCount,
+                        pendingCount = pendingCount,
+                        approvedCount = approvedCount,
+                        suspendedCount = suspendedCount,
+                        rejectedCount = rejectedCount,
+                        isSyncing = isSyncing,
+                        isEn = isEn,
+                        onSelectStatusFilter = { selectedStatusFilter = it },
+                        onSelectMainTab = { selectedMainTab = it },
+                        onRefreshCloud = {
+                            viewModel.refreshSuperadminCloudData { _, msg ->
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    )
                 }
 
                 // Search Bar & Filter Chips
@@ -1409,16 +1434,26 @@ fun SuperadminRegistrationItemCard(
             .fillMaxWidth()
             .testTag("school_reg_item_${registration.id}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardElevation().let {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        }
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .height(IntrinsicSize.Min)
         ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(statusColor)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
             // Row Atas: Nama Sekolah & Badge Status
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1826,6 +1861,7 @@ fun SuperadminRegistrationItemCard(
                     Text(if (isEn) "Delete School" else "Hapus Sekolah", fontSize = 11.5.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
+        }
         }
     }
 }
@@ -2398,22 +2434,37 @@ fun SuperadminReportSchoolCard(
     modifier: Modifier = Modifier
 ) {
     val isEn = LocalAppStrings.current.isEnglish
+    val badgeColor = when {
+        school.isPrimaryPilot -> Color(0xFF8B5CF6)
+        school.status == "Disuspend" || school.status == "Suspended" -> Color(0xFFEA580C)
+        else -> Color(0xFF16A34A)
+    }
     ElevatedCard(
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
             .testTag("report_school_${school.schoolCode}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardElevation().let {
-            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        }
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .height(IntrinsicSize.Min)
         ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .background(badgeColor)
+            )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
             // Top Row: Nama Sekolah, Kode Sekolah & Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2454,11 +2505,6 @@ fun SuperadminReportSchoolCard(
                     }
                 }
 
-                val badgeColor = when {
-                    school.isPrimaryPilot -> Color(0xFF8B5CF6)
-                    school.status == "Disuspend" || school.status == "Suspended" -> Color(0xFFEA580C)
-                    else -> Color(0xFF16A34A)
-                }
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
@@ -2685,6 +2731,7 @@ fun SuperadminReportSchoolCard(
                     }
                 }
             }
+        }
         }
     }
 }

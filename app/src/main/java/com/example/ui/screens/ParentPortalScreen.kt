@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
@@ -104,6 +105,9 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipLocalSave
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.FastingRecord
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
@@ -123,6 +127,7 @@ import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
 import com.example.data.model.SholatStatus
 import com.example.data.model.SholatWaktu
+import com.example.data.model.StudentReligionHelper
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.TandemWaliHelper
@@ -158,6 +163,7 @@ private enum class ParentPortalTab(
 ) {
     HOME("Ringkasan", "Overview", Icons.Default.Home, "parent_tab_home"),
     PROFILE("Profil Anak", "Profile", Icons.Default.Badge, "parent_tab_profile"),
+    KRISTEN("Agama Kristen", "Christian", Icons.Default.Church, "parent_tab_kristen"),
     SHOLAT("Sholat 5 Waktu", "Prayers", Icons.Default.AutoAwesome, "parent_tab_sholat"),
     MENGAJI("Mengaji", "Mengaji", Icons.AutoMirrored.Filled.MenuBook, "parent_tab_mengaji"),
     MEDICAL("Riwayat Sakit", "Medical", Icons.Default.LocalHospital, "parent_tab_medical"),
@@ -187,6 +193,9 @@ fun ParentPortalScreen(
     val medicalRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
+    val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
+    val christianWorshipLocalSaves by viewModel.christianWorshipLocalSaves.collectAsStateWithLifecycle()
+    val isSavingChristianMedia by viewModel.isSavingChristianMedia.collectAsStateWithLifecycle()
     val tabunganRecords by viewModel.parentTabunganTransactions.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
@@ -234,6 +243,7 @@ fun ParentPortalScreen(
                 assignedWaliName = link.assignedWaliName,
                 tandemWalisJson = link.tandemWalisJson,
                 schoolId = link.schoolId,
+                religion = link.studentReligion,
                 photoUrl = link.studentPhotoUrl,
                 photoFallbackUrl = link.studentPhotoFallbackUrl
             )
@@ -288,13 +298,20 @@ fun ParentPortalScreen(
     val isFemaleStudent = remember(student) {
         student != null && StudentClassifier.isFemaleStudent(student)
     }
+    val isChristianStudent = remember(student, activeLink) {
+        StudentReligionHelper.isChristian(student, activeLink)
+    }
 
-    val visibleTabs = remember(activeLink, isFemaleStudent) {
+    val visibleTabs = remember(activeLink, isFemaleStudent, isChristianStudent) {
         buildList {
             add(ParentPortalTab.HOME)
             if (activeLink?.canViewProfile == true) add(ParentPortalTab.PROFILE)
-            if (activeLink?.canViewSholat == true) add(ParentPortalTab.SHOLAT)
-            if (activeLink?.canViewMengaji == true) add(ParentPortalTab.MENGAJI)
+            if (isChristianStudent) {
+                add(ParentPortalTab.KRISTEN)
+            } else {
+                if (activeLink?.canViewSholat == true) add(ParentPortalTab.SHOLAT)
+                if (activeLink?.canViewMengaji == true) add(ParentPortalTab.MENGAJI)
+            }
             if (activeLink?.canViewMedical == true) add(ParentPortalTab.MEDICAL)
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
             if (isFemaleStudent && activeLink?.canViewHaid == true) add(ParentPortalTab.HAID)
@@ -381,6 +398,17 @@ fun ParentPortalScreen(
     val localSavesByPostId = remember(waliGalleryLocalSaves) {
         waliGalleryLocalSaves.associateBy { it.postId }
     }
+    val studentChristianWorship = remember(christianWorshipRecords, student, resolvedStudentId) {
+        if (student != null) {
+            ChristianWorshipHelper.recordsForStudent(christianWorshipRecords, student)
+        } else {
+            christianWorshipRecords.filter { !it.isDeleted && it.studentId == resolvedStudentId }
+                .sortedWith(compareByDescending<ChristianWorshipRecord> { it.activityDate }.thenByDescending { it.createdAt })
+        }
+    }
+    val localChristianSavesByRecordId = remember(christianWorshipLocalSaves) {
+        christianWorshipLocalSaves.associateBy { it.recordId }
+    }
     val galleryRecipientKey = remember(resolvedStudentId, activeLink) {
         WaliGalleryHelper.buildParentRecipientKey(resolvedStudentId, activeLink?.username.orEmpty())
     }
@@ -390,6 +418,7 @@ fun ParentPortalScreen(
         viewModel.syncTabunganOnlineQuietly()
         viewModel.syncSholatOnlineQuietly()
         viewModel.syncWaliGalleryOnlineQuietly()
+        viewModel.syncChristianWorshipOnlineQuietly()
     }
 
     LaunchedEffect(currentTab) {
@@ -400,6 +429,8 @@ fun ParentPortalScreen(
             viewModel.syncSholatOnlineQuietly()
         } else if (currentTab == ParentPortalTab.GALLERY) {
             viewModel.syncWaliGalleryOnlineQuietly()
+        } else if (currentTab == ParentPortalTab.KRISTEN) {
+            viewModel.syncChristianWorshipOnlineQuietly()
         }
     }
 
@@ -412,6 +443,7 @@ fun ParentPortalScreen(
     val bottomNavTabs = remember(visibleTabs) {
         buildList {
             add(ParentPortalTab.HOME)
+            if (ParentPortalTab.KRISTEN in visibleTabs) add(ParentPortalTab.KRISTEN)
             if (ParentPortalTab.MENGAJI in visibleTabs) add(ParentPortalTab.MENGAJI)
             if (ParentPortalTab.TABUNGAN in visibleTabs) add(ParentPortalTab.TABUNGAN)
             if (size < 3 && ParentPortalTab.MEDICAL in visibleTabs) add(ParentPortalTab.MEDICAL)
@@ -640,8 +672,10 @@ fun ParentPortalScreen(
                         waliBadges = resolvedWaliBadges,
                         schoolName = resolvedSchoolName,
                         isFemaleStudent = isFemaleStudent,
+                        isChristianStudent = isChristianStudent,
                         mengajiRecords = studentMengaji,
                         sholatRecords = studentSholat,
+                        christianWorshipRecords = studentChristianWorship,
                         medicalRecords = studentMedical,
                         fastingRecords = studentFasting,
                         haidRecords = studentHaid,
@@ -715,6 +749,39 @@ fun ParentPortalScreen(
                             }
                         } else null,
                         onPreviewPhoto = { showPhotoPreview = true }
+                    )
+                    ParentPortalTab.KRISTEN -> ParentChristianWorshipContent(
+                        student = student,
+                        records = studentChristianWorship,
+                        localSavesByRecordId = localChristianSavesByRecordId,
+                        schoolProfile = schoolProfile,
+                        waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+                        isSavingMedia = isSavingChristianMedia,
+                        onSavePhotoToDevice = { record, silentAuto ->
+                            viewModel.saveChristianWorshipPhotoToParentDevice(
+                                record = record,
+                                silentAuto = silentAuto
+                            ) { _, msg ->
+                                if (!silentAuto) {
+                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        },
+                        onSaveAllPending = { pendingRecords ->
+                            viewModel.saveAllPendingChristianPhotosToDevice(pendingRecords) { saved, failed ->
+                                val msg = when {
+                                    saved > 0 && failed == 0 -> if (isEn) {
+                                        "$saved worship photo(s) saved to Phone Gallery!"
+                                    } else {
+                                        "$saved foto ibadah berhasil disimpan ke Galeri HP!"
+                                    }
+                                    saved > 0 -> if (isEn) "$saved saved, $failed failed." else "$saved tersimpan, $failed gagal."
+                                    failed > 0 -> if (isEn) "Failed to download photos." else "Gagal mengunduh foto ke galeri."
+                                    else -> if (isEn) "All photos already saved." else "Semua foto sudah tersimpan."
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        }
                     )
                     ParentPortalTab.SHOLAT -> ParentSholatContent(
                         student = student,
@@ -930,8 +997,10 @@ private fun ParentOverviewContent(
     waliBadges: List<ResolvedWaliBadgeInfo> = emptyList(),
     schoolName: String,
     isFemaleStudent: Boolean,
+    isChristianStudent: Boolean = false,
     mengajiRecords: List<MengajiRecord>,
     sholatRecords: List<SholatRecord> = emptyList(),
+    christianWorshipRecords: List<ChristianWorshipRecord> = emptyList(),
     medicalRecords: List<MedicalRecord>,
     fastingRecords: List<FastingRecord>,
     haidRecords: List<HaidRecord>,
@@ -955,8 +1024,10 @@ private fun ParentOverviewContent(
     val menuTiles = remember(
         link,
         isFemaleStudent,
+        isChristianStudent,
         mengajiRecords.size,
         sholatRecords,
+        christianWorshipRecords.size,
         medicalRecords.size,
         fastingRecords.size,
         haidRecords,
@@ -981,7 +1052,22 @@ private fun ParentOverviewContent(
                     )
                 )
             }
-            if (link?.canViewSholat == true) {
+            if (isChristianStudent) {
+                add(
+                    ParentMenuTileSpec(
+                        id = "kristen",
+                        title = if (isEn) "Christian" else "Agama Kristen",
+                        imageRes = R.drawable.img_menu_kristen,
+                        accentColor = Color(0xFF4338CA),
+                        softBg = Color(0xFFEEF2FF),
+                        badgeText = if (christianWorshipRecords.isNotEmpty()) "${christianWorshipRecords.size}" else if (isEn) "Active" else "Aktif",
+                        badgeColor = Color(0xFF4338CA),
+                        testTag = "card_parent_summary_kristen",
+                        onClick = { onOpenTab(ParentPortalTab.KRISTEN) }
+                    )
+                )
+            }
+            if (!isChristianStudent && link?.canViewSholat == true) {
                 val todayKey = SholatHelper.todayDateKey()
                 val todayPrayerCount = sholatRecords.count { it.dateKey == todayKey }
                 add(
@@ -998,7 +1084,7 @@ private fun ParentOverviewContent(
                     )
                 )
             }
-            if (link?.canViewMengaji == true) {
+            if (!isChristianStudent && link?.canViewMengaji == true) {
                 add(
                     ParentMenuTileSpec(
                         id = "mengaji",
@@ -1150,7 +1236,8 @@ private fun ParentOverviewContent(
                 waliAccount = waliAccount,
                 schoolName = schoolName,
                 onOpenWaliProfile = onOpenWaliProfile,
-                waliBadges = waliBadges
+                waliBadges = waliBadges,
+                isChristianStudent = isChristianStudent
             )
         }
 
@@ -1240,10 +1327,13 @@ private fun ParentOverviewContent(
             messages = messages,
             expectations = expectations,
             sholatRecords = sholatRecords,
+            isChristianStudent = isChristianStudent,
+            christianWorshipRecords = christianWorshipRecords,
             isEn = isEn,
             lang = lang,
             onOpenMengaji = { onOpenTab(ParentPortalTab.MENGAJI) },
             onOpenSholat = { onOpenTab(ParentPortalTab.SHOLAT) },
+            onOpenChristianWorship = { onOpenTab(ParentPortalTab.KRISTEN) },
             onOpenTabungan = { onOpenTab(ParentPortalTab.TABUNGAN) },
             onOpenMedical = { onOpenTab(ParentPortalTab.MEDICAL) },
             onOpenFasting = { onOpenTab(ParentPortalTab.FASTING) },

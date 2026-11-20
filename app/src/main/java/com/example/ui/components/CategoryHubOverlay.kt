@@ -58,7 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.FastingRecord
+import com.example.data.model.StudentReligionHelper
 import com.example.data.model.FastingSession
 import com.example.data.model.HaidRecord
 import com.example.data.model.KonselingHelper
@@ -182,7 +184,13 @@ fun CategoryHubOverlay(
     onShareJadwalWhatsapp: () -> Unit = {},
     onExportJadwalMatriksPdf: () -> Unit = {},
     sholatRecords: List<SholatRecord> = emptyList(),
-    onOpenAbsenSholatSheet: (tabIndex: Int, autoScanner: Boolean, scopeFilter: String, targetStudent: ChildStudent?) -> Unit = { _, _, _, _ -> }
+    onOpenAbsenSholatSheet: (tabIndex: Int, autoScanner: Boolean, scopeFilter: String, targetStudent: ChildStudent?) -> Unit = { _, _, _, _ -> },
+    christianWorshipRecords: List<ChristianWorshipRecord> = emptyList(),
+    onOpenClaimChristianStudents: () -> Unit = {},
+    onOpenInputChristianWorship: (initialTab: Int, defaultType: String, targetStudent: ChildStudent?) -> Unit = { _, _, _ -> },
+    onOpenChristianReport: (initialTab: Int) -> Unit = {},
+    onOpenBibleFromKristen: () -> Unit = {},
+    onOpenSundayChurch: () -> Unit = {}
 ) {
     var lastCategory by remember { mutableStateOf(category) }
     var jadwalSearchQuery by remember(category) { mutableStateOf("") }
@@ -221,6 +229,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.KONSELING -> listOf(Color(0xFF4C1D95), Color(0xFF6D28D9))
             DashboardCategoryHub.JADWAL_WALI -> listOf(Color(0xFF0F766E), Color(0xFF0369A1))
             DashboardCategoryHub.SHOLAT -> listOf(Color(0xFF065F46), Color(0xFF059669))
+            DashboardCategoryHub.KRISTEN -> listOf(Color(0xFF3730A3), Color(0xFF0369A1))
         }
 
         val heroTitle = when (current) {
@@ -235,6 +244,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.KONSELING -> if (isEn) "Confidential Counseling" else "Konseling Rahasia Anak"
             DashboardCategoryHub.JADWAL_WALI -> if (isEn) "Wali Asuh Duty Roster" else "Jadwal Kerja Wali Asuh"
             DashboardCategoryHub.SHOLAT -> if (isEn) "5 Daily Prayers Attendance" else "Absen Sholat 5 Waktu"
+            DashboardCategoryHub.KRISTEN -> if (isEn) "Christian Faith & Worship" else "Pembinaan Agama Kristen"
         }
 
         val heroSubtitle = when (current) {
@@ -310,14 +320,24 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.SHOLAT -> {
                 val todayKey = SholatHelper.todayDateKey()
                 val activeWaktu = SholatHelper.detectActiveWaktu()
+                val eligibleMuslimStudents = students.filter { !StudentReligionHelper.isChristian(it) }
                 val todayWaktuRecords = sholatRecords.filter {
                     it.dateKey == todayKey && SholatWaktu.fromCode(it.waktu) == activeWaktu
                 }
                 val jamaahCount = todayWaktuRecords.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
                 if (isEn) {
-                    "${activeWaktu.labelEn} • $jamaahCount/${students.size} Congregation Today"
+                    "${activeWaktu.labelEn} • $jamaahCount/${eligibleMuslimStudents.size} Congregation Today"
                 } else {
-                    "${activeWaktu.labelId} • $jamaahCount/${students.size} Jamaah Hari Ini"
+                    "${activeWaktu.labelId} • $jamaahCount/${eligibleMuslimStudents.size} Jamaah Hari Ini"
+                }
+            }
+            DashboardCategoryHub.KRISTEN -> {
+                val christianCount = students.count { StudentReligionHelper.isChristian(it) }
+                val activeLogs = christianWorshipRecords.count { !it.isDeleted }
+                if (isEn) {
+                    "$christianCount Christian Kids • $activeLogs Worship Logs"
+                } else {
+                    "$christianCount Anak Kristen • $activeLogs Catatan Ibadah"
                 }
             }
         }
@@ -334,6 +354,7 @@ fun CategoryHubOverlay(
             DashboardCategoryHub.KONSELING -> R.drawable.img_menu_konseling
             DashboardCategoryHub.JADWAL_WALI -> R.drawable.img_menu_jadwal
             DashboardCategoryHub.SHOLAT -> R.drawable.img_menu_sholat
+            DashboardCategoryHub.KRISTEN -> R.drawable.img_menu_kristen
         }
 
         val contextPillText = schoolProfile.shortName
@@ -447,6 +468,7 @@ fun CategoryHubOverlay(
                                     if (isEn) "Monthly Matrix" else "Matriks Jadwal Bulanan"
                                 }
                                 DashboardCategoryHub.SHOLAT -> if (isEn) "Scan Prayer Card QR" else "Scan Kartu Sholat"
+                                DashboardCategoryHub.KRISTEN -> if (isEn) "Log Christian Worship" else "Catat Ibadah Kristen"
                             }
                             Surface(
                                 shape = CircleShape,
@@ -471,6 +493,7 @@ fun CategoryHubOverlay(
                                                 else onOpenJadwalMatriks()
                                             }
                                             DashboardCategoryHub.SHOLAT -> onOpenAbsenSholatSheet(0, true, "ALL", null)
+                                            DashboardCategoryHub.KRISTEN -> onOpenInputChristianWorship(0, ChristianWorshipRecord.TYPE_DOA_PAGI, null)
                                         }
                                     }
                                     .testTag("btn_quick_action_category_hub")
@@ -695,6 +718,19 @@ fun CategoryHubOverlay(
                                     onOpenAbsenSholatSheet = onOpenAbsenSholatSheet,
                                     onOpenPilihAnakAsuh = onOpenPilihAnakAsuh,
                                     onOpenPilihanAksesOrtu = onOpenPilihanAksesOrtu
+                                )
+                                DashboardCategoryHub.KRISTEN -> kristenCategoryItems(
+                                    isEn = isEn,
+                                    lang = lang,
+                                    allStudents = students,
+                                    claimedStudents = claimedFosterStudents,
+                                    christianWorshipRecords = christianWorshipRecords,
+                                    waliName = currentWaliName.ifBlank { "Wali Asuh" },
+                                    onOpenClaimChristianStudents = onOpenClaimChristianStudents,
+                                    onOpenInputChristianWorship = onOpenInputChristianWorship,
+                                    onOpenChristianReport = onOpenChristianReport,
+                                    onOpenBible = onOpenBibleFromKristen,
+                                    onOpenSundayChurch = onOpenSundayChurch
                                 )
                             }
                         }

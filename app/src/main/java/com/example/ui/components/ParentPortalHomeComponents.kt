@@ -29,6 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.NightlightRound
@@ -59,6 +60,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.FastingRecord
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
@@ -116,7 +119,8 @@ fun ParentGreetingHeroCard(
     waliAccount: WaliAccount? = null,
     schoolName: String = "",
     onOpenWaliProfile: (() -> Unit)? = null,
-    waliBadges: List<ResolvedWaliBadgeInfo> = emptyList()
+    waliBadges: List<ResolvedWaliBadgeInfo> = emptyList(),
+    isChristianStudent: Boolean = false
 ) {
     val studentName = student?.name ?: link?.studentName.orEmpty().ifBlank { "Ananda" }
     val parentName = link?.parentName?.ifBlank { student?.motherName.orEmpty() }.orEmpty()
@@ -184,10 +188,18 @@ fun ParentGreetingHeroCard(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (isEn) {
-                            if (parentName.isNotBlank()) "Assalamu'alaikum, $parentName" else "Assalamu'alaikum, Parent"
+                        text = if (isChristianStudent) {
+                            if (isEn) {
+                                if (parentName.isNotBlank()) "Warm Greetings, $parentName" else "Warm Greetings, Parent"
+                            } else {
+                                if (parentName.isNotBlank()) "Salam Sejahtera, $parentName" else "Salam Sejahtera, Ayah / Bunda"
+                            }
                         } else {
-                            if (parentName.isNotBlank()) "Assalamu'alaikum, $parentName" else "Assalamu'alaikum, Ayah / Bunda"
+                            if (isEn) {
+                                if (parentName.isNotBlank()) "Assalamu'alaikum, $parentName" else "Assalamu'alaikum, Parent"
+                            } else {
+                                if (parentName.isNotBlank()) "Assalamu'alaikum, $parentName" else "Assalamu'alaikum, Ayah / Bunda"
+                            }
                         },
                         fontSize = 11.5.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -600,10 +612,13 @@ fun ParentSwipeableHighlightsSection(
     messages: List<ParentMessage>,
     expectations: List<ParentExpectation> = emptyList(),
     sholatRecords: List<SholatRecord> = emptyList(),
+    isChristianStudent: Boolean = false,
+    christianWorshipRecords: List<ChristianWorshipRecord> = emptyList(),
     isEn: Boolean,
     lang: AppLanguage,
     onOpenMengaji: () -> Unit,
     onOpenSholat: () -> Unit = {},
+    onOpenChristianWorship: () -> Unit = {},
     onOpenTabungan: () -> Unit,
     onOpenMedical: () -> Unit,
     onOpenFasting: () -> Unit,
@@ -612,7 +627,55 @@ fun ParentSwipeableHighlightsSection(
     onOpenHarapan: () -> Unit = {}
 ) {
     val cards = buildList<ParentHighlightCardData> {
-        if (link?.canViewSholat == true) {
+        if (isChristianStudent) {
+            val activeChristian = christianWorshipRecords.filter { !it.isDeleted }
+            val latestChristian = activeChristian.firstOrNull()
+            val pagiCount = activeChristian.count {
+                ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_PAGI
+            }
+            val malamCount = activeChristian.count {
+                ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_MALAM
+            }
+            val gerejaCount = activeChristian.count {
+                ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_KE_GEREJA
+            }
+            add(
+                ParentHighlightCardData(
+                    id = "hl_kristen",
+                    badge = if (isEn) "Christian Worship Report" else "Laporan Ibadah Kristen",
+                    title = if (latestChristian != null) {
+                        ChristianWorshipHelper.activityLabel(latestChristian.activityType, isEn)
+                    } else {
+                        if (isEn) "Christian Nurture Active" else "Menu Ibadah Kristen Aktif"
+                    },
+                    mainValue = if (activeChristian.isNotEmpty()) {
+                        if (isEn) "Morning:$pagiCount • Evening:$malamCount • Church:$gerejaCount"
+                        else "Pagi:$pagiCount • Malam:$malamCount • Gereja:$gerejaCount"
+                    } else {
+                        if (isEn) "Waiting for caregiver worship logs" else "Menunggu catatan ibadah dari Wali Asuh"
+                    },
+                    detailLine = latestChristian?.let { rec ->
+                        val noteOrTitle = rec.notes.ifBlank { rec.title }
+                        noteOrTitle.ifBlank {
+                            if (isEn) "Logged by ${rec.waliName} • ${DateUtils.formatShortDate(rec.activityDate, lang)}"
+                            else "Dicatat oleh ${rec.waliName} • ${DateUtils.formatShortDate(rec.activityDate, lang)}"
+                        }
+                    } ?: if (isEn) {
+                        "Morning prayer, evening worship, church service & Bible verse progress appear here."
+                    } else {
+                        "Catatan ibadah pagi, malam, kegiatan gereja & ayat hafalan tampil otomatis."
+                    },
+                    footerAction = if (isEn) "Open Christian Worship" else "Buka Menu Agama Kristen",
+                    icon = Icons.Default.Church,
+                    gradientColors = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF)),
+                    accentColor = Color(0xFF4338CA),
+                    badgeBg = Color(0xFF3730A3),
+                    onClick = onOpenChristianWorship
+                )
+            )
+        }
+
+        if (!isChristianStudent && link?.canViewSholat == true) {
             val todayKey = SholatHelper.todayDateKey()
             val todayRecords = sholatRecords.filter { it.dateKey == todayKey }
             val byWaktu = todayRecords.associateBy { SholatWaktu.fromCode(it.waktu) }
@@ -673,7 +736,7 @@ fun ParentSwipeableHighlightsSection(
             )
         }
 
-        if (link?.canViewMengaji == true) {
+        if (!isChristianStudent && link?.canViewMengaji == true) {
             val latest = mengajiRecords.firstOrNull()
             val fluency = latest?.let { MengajiHelper.fluencyLabel(it.fluencyStatus, isEn) }
             add(

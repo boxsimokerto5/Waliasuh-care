@@ -29,7 +29,8 @@ enum class DashboardCategoryHub {
     TABUNGAN,
     KONSELING,
     JADWAL_WALI,
-    SHOLAT
+    SHOLAT,
+    KRISTEN
 }
 
 @Stable
@@ -126,6 +127,16 @@ class DashboardModalState {
 
     // Modul Alkitab Digital & Catatan Pribadi
     var showBibleSheet by mutableStateOf(false)
+
+    // Modul Agama Kristen (Klaim Siswa Kristen, Ibadah Pagi/Malam/Gereja, Pembinaan & Laporan)
+    var showClaimChristianSheet by mutableStateOf(false)
+    var showInputChristianWorshipDialog by mutableStateOf(false)
+    var christianInputInitialTab by mutableIntStateOf(0)
+    var christianInputDefaultType by mutableStateOf("DOA_PAGI")
+    var christianInputTargetStudent by mutableStateOf<ChildStudent?>(null)
+    var showChristianReportSheet by mutableStateOf(false)
+    var christianReportInitialTab by mutableIntStateOf(0)
+    var showSundayChurchSheet by mutableStateOf(false)
 }
 
 @Composable
