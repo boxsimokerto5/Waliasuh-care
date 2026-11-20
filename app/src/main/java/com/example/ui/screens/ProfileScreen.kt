@@ -3,6 +3,7 @@ package com.example.ui.screens
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.layout.ContentScale
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -65,6 +67,7 @@ import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.util.TopOnAdManager
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -88,9 +91,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -189,17 +194,79 @@ fun ProfileScreen(
                     val hasPhoto = photoUrl.isNotBlank() || photoFallbackUrl.isNotBlank()
                     val avatarGender = if (acc?.dormitory?.contains("putri", ignoreCase = true) == true) "P" else "L"
 
-                    ElevatedCard(
+                    val isPutri = acc?.dormitory?.contains("putri", ignoreCase = true) == true
+                    val isAnakAdmin = acc?.isAnakAdminSekolah() == true
+                    val cardGradient = if (isDarkTheme) {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFF172554).copy(alpha = 0.6f),
+                                Color(0xFF134E4A).copy(alpha = 0.48f)
+                            )
+                        )
+                    } else {
+                        Brush.linearGradient(
+                            colors = listOf(
+                                Color(0xFFEFF6FF),
+                                Color(0xFFF0FDFA)
+                            )
+                        )
+                    }
+                    val cardBorderColor = if (isDarkTheme) {
+                        Color(0xFF38BDF8).copy(alpha = 0.35f)
+                    } else {
+                        Color(0xFFBFDBFE)
+                    }
+                    val pillBg = when {
+                        isDarkTheme -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                        isAnakAdmin -> Color(0xFFE0E7FF)
+                        isPutri -> Color(0xFFFCE7F3)
+                        else -> Color(0xFFDBEAFE)
+                    }
+                    val pillFg = when {
+                        isDarkTheme -> MaterialTheme.colorScheme.onPrimaryContainer
+                        isAnakAdmin -> Color(0xFF3730A3)
+                        isPutri -> Color(0xFFBE185D)
+                        else -> Color(0xFF1D4ED8)
+                    }
+                    val quoteBg = if (isDarkTheme) {
+                        MaterialTheme.colorScheme.surface.copy(alpha = 0.45f)
+                    } else {
+                        Color.White.copy(alpha = 0.78f)
+                    }
+                    val quoteBorder = if (isDarkTheme) {
+                        Color(0xFF38BDF8).copy(alpha = 0.25f)
+                    } else {
+                        Color(0xFFBAE6FD)
+                    }
+                    val editBtnBg = if (isDarkTheme) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    } else {
+                        Color(0xFFE0F2FE).copy(alpha = 0.9f)
+                    }
+                    val editBtnBorder = if (isDarkTheme) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+                    } else {
+                        Color(0xFF7DD3FC)
+                    }
+                    val editBtnFg = if (isDarkTheme) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        Color(0xFF0369A1)
+                    }
+
+                    Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("card_wali_profile_summary"),
                         shape = RoundedCornerShape(16.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp)
+                        border = BorderStroke(1.dp, cardBorderColor),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .background(cardGradient)
                                 .padding(14.dp),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
@@ -209,7 +276,16 @@ fun ProfileScreen(
                             ) {
                                 Box(
                                     modifier = Modifier
-                                        .size(64.dp)
+                                        .size(68.dp)
+                                        .clip(CircleShape)
+                                        .border(
+                                            2.dp,
+                                            Brush.linearGradient(
+                                                listOf(Color(0xFF1976D2), Color(0xFF0D9488))
+                                            ),
+                                            CircleShape
+                                        )
+                                        .padding(2.dp)
                                         .clip(CircleShape)
                                         .let { mod ->
                                             if (hasPhoto) mod.clickable { showWaliPhotoPreview = true } else mod
@@ -227,7 +303,7 @@ fun ProfileScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(
                                     modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
@@ -245,23 +321,29 @@ fun ProfileScreen(
                                         Icon(
                                             imageVector = Icons.Default.Verified,
                                             contentDescription = if (isEn) "Verified Caregiver" else "Pembina Terverifikasi",
-                                            tint = Color(0xFF047857),
+                                            tint = Color(0xFF059669),
                                             modifier = Modifier.size(16.dp)
                                         )
                                     }
-                                    Text(
-                                        text = buildString {
-                                            append(displayTitle)
-                                            if (!acc?.dormitory.isNullOrBlank()) {
-                                                append(" • ${acc?.dormitory}")
-                                            }
-                                        },
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = pillBg
+                                    ) {
+                                        Text(
+                                            text = buildString {
+                                                append(displayTitle)
+                                                if (!acc?.dormitory.isNullOrBlank()) {
+                                                    append(" • ${acc?.dormitory}")
+                                                }
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = pillFg,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
                                     val metaParts = listOfNotNull(
                                         acc?.employeeCode?.takeIf { it.isNotBlank() }?.let { "ID: $it" },
                                         acc?.phone?.takeIf { it.isNotBlank() }?.let { "WA: $it" }
@@ -270,7 +352,7 @@ fun ProfileScreen(
                                         Text(
                                             text = metaParts.joinToString(" • "),
                                             fontSize = 11.sp,
-                                            color = WaliPrimary,
+                                            color = if (isDarkTheme) Color(0xFF7DD3FC) else Color(0xFF0F766E),
                                             fontWeight = FontWeight.SemiBold,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
@@ -280,13 +362,22 @@ fun ProfileScreen(
                             }
 
                             if (!acc?.bio.isNullOrBlank()) {
-                                Text(
-                                    text = "\"${acc?.bio}\"",
-                                    fontSize = 11.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = quoteBg,
+                                    border = BorderStroke(1.dp, quoteBorder),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text(
+                                        text = "\"${acc?.bio}\"",
+                                        fontSize = 11.5.sp,
+                                        fontStyle = FontStyle.Italic,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                    )
+                                }
                             }
 
                             OutlinedButton(
@@ -295,15 +386,20 @@ fun ProfileScreen(
                                     showEditAccountDialog = true
                                 },
                                 shape = RoundedCornerShape(10.dp),
-                                border = BorderStroke(1.dp, WaliPrimary.copy(alpha = 0.6f)),
+                                border = BorderStroke(1.dp, editBtnBorder),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = editBtnBg,
+                                    contentColor = editBtnFg
+                                ),
                                 modifier = Modifier
                                     .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
                                     .testTag("btn_open_edit_wali_profile")
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Edit,
                                     contentDescription = null,
-                                    tint = WaliPrimary,
+                                    tint = editBtnFg,
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
@@ -311,7 +407,7 @@ fun ProfileScreen(
                                     text = if (isEn) "Edit Profile, Photo & Password" else "Edit Profil, Foto & Kata Sandi",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = WaliPrimary
+                                    color = editBtnFg
                                 )
                             }
                         }
