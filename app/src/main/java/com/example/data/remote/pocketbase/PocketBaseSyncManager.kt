@@ -2052,6 +2052,8 @@ object PocketBaseSyncManager {
 
         val pbBaseUrl = PocketBaseConfig.getBaseUrl(context)
         runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds) }
+        runCatching { syncWaliShiftCodesMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncWaliScheduleEntriesMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds, pbBaseUrl) }
         runCatching { syncParentExpectationsMerged(service, cleanSchoolId, filter, repository) }
         runCatching {
@@ -3868,6 +3870,9 @@ object PocketBaseSyncManager {
                     .addFormDataPart("parent_phone", com.example.util.StudentCsvParser.cleanPhoneNumber(student.parentPhone))
                     .addFormDataPart("assigned_wali_username", student.assignedWaliUsername)
                     .addFormDataPart("assigned_wali_name", student.assignedWaliName)
+                    .addFormDataPart("religion", student.religion)
+                    .addFormDataPart("tandem_walis_json", student.tandemWalisJson)
+                    .addFormDataPart("tandem_requests_json", student.tandemRequestsJson)
                     .addFormDataPart(
                         "photo_file",
                         filename,

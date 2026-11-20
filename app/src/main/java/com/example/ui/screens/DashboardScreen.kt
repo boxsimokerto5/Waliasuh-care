@@ -240,6 +240,7 @@ fun DashboardScreen(
     val tabunganLogs by viewModel.tabunganLogs.collectAsStateWithLifecycle()
     val konselingRecords by viewModel.konselingRecords.collectAsStateWithLifecycle()
     val konselingLogs by viewModel.konselingLogs.collectAsStateWithLifecycle()
+    val incomingTandemBundles by viewModel.incomingTandemRequestBundles.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
@@ -1533,6 +1534,7 @@ fun DashboardScreen(
                     modalState.showCreateVisitSessionDialog = true
                 },
                 onOpenPilihAnakAsuh = { modalState.showPilihAnakAsuhSheet = true },
+                incomingTandemRequestCount = incomingTandemBundles.size,
                 onOpenKartuAksesOrtu = { modalState.showKartuAksesOrtuSheet = true },
                 onOpenPilihanAksesOrtu = { modalState.showPilihanAksesOrtuSheet = true },
                 onOpenPesanOrtu = {
@@ -2623,7 +2625,7 @@ fun DashboardScreen(
         )
     }
 
-    // Modal Hubungan Orang Tua 1: Pilih Anak Asuh (Klaim Eksklusif & Lepas oleh Admin / Wali Bersangkutan)
+    // Modal Hubungan Orang Tua 1: Pilih Anak Asuh (Tim Tandem Maks. 3 Wali Asuh)
     if (modalState.showPilihAnakAsuhSheet) {
         PilihAnakAsuhSheet(
             students = students,
@@ -2636,7 +2638,7 @@ fun DashboardScreen(
                     val msg = if (isEn) {
                         "Claimed $claimed student(s)" + if (skipped > 0) ", $skipped already assigned." else "!"
                     } else {
-                        "$claimed anak asuh dipilih & kartu akses dibuat!" + if (skipped > 0) " ($skipped sudah dibina wali lain)" else ""
+                        "$claimed anak asuh dipilih & kartu akses dibuat!" + if (skipped > 0) " ($skipped sudah memiliki Wali Utama)" else ""
                     }
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
@@ -2646,7 +2648,60 @@ fun DashboardScreen(
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
             },
-            onDismiss = { modalState.showPilihAnakAsuhSheet = false }
+            onDismiss = { modalState.showPilihAnakAsuhSheet = false },
+            incomingTandemBundles = incomingTandemBundles,
+            waliAccounts = waliAccounts,
+            currentUsername = currentUsername,
+            isStudentPrimaryWali = { viewModel.isStudentPrimaryWali(it) },
+            isStudentTandemWali = { viewModel.isStudentTandemWali(it) },
+            hasPendingTandemRequest = { viewModel.hasPendingTandemRequestByCurrentWali(it) },
+            onRequestTandemJoin = { selectedList ->
+                viewModel.requestTandemJoinForStudents(selectedList) { _, _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            },
+            onCancelTandemRequest = { st ->
+                viewModel.cancelTandemRequest(st) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onApproveTandemBundle = { reqUser, reqName, approvedIds, allIds ->
+                viewModel.approveTandemRequestBundle(
+                    requesterUsername = reqUser,
+                    requesterName = reqName,
+                    approvedStudentIds = approvedIds,
+                    allBundleStudentIds = allIds
+                ) { _, _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            },
+            onRejectTandemBundle = { reqUser, reqName, allIds ->
+                viewModel.rejectTandemRequestBundle(
+                    requesterUsername = reqUser,
+                    requesterName = reqName,
+                    studentIds = allIds
+                ) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onInviteTandemWaliBatch = { targetWali, targetStudents ->
+                viewModel.inviteTandemWaliBatch(
+                    targetWali = targetWali,
+                    studentsList = targetStudents
+                ) { _, _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            },
+            onRemoveTandemMember = { st, memberUser, memberName ->
+                viewModel.removeTandemMember(st, memberUser, memberName) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onPromoteTandemToPrimary = { st, memberUser, memberName ->
+                viewModel.promoteTandemToPrimary(st, memberUser, memberName) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            }
         )
     }
 
@@ -2657,6 +2712,7 @@ fun DashboardScreen(
             parentAccessLinks = parentAccessLinks,
             schoolProfile = schoolProfile,
             isStudentClaimedByCurrentWali = { viewModel.isStudentClaimedByCurrentWali(it) },
+            isPrimaryWaliForStudent = { viewModel.isStudentPrimaryWali(it) },
             isAdmin = isAdminUser,
             onOpenPilihAnakAsuh = {
                 modalState.showKartuAksesOrtuSheet = false
@@ -3325,6 +3381,60 @@ private fun DashboardKonselingAndSholatModalsHost(
                     }
                 }
             },
+            onSaveWithShare = { student, entryType, topic, urgencyLevel, moodLevel, title, summary, intervention, followUpPlan, followUpDate, sessionDate, markCompleted, photoPaths, photoUrls, shareWithTandem, existingRecord ->
+                TopOnAdManager.onUserActionClick(context)
+                if (existingRecord == null) {
+                    viewModel.saveKonselingRecord(
+                        student = student,
+                        entryType = entryType,
+                        topic = topic,
+                        urgencyLevel = urgencyLevel,
+                        moodLevel = moodLevel,
+                        title = title,
+                        summary = summary,
+                        intervention = intervention,
+                        followUpPlan = followUpPlan,
+                        followUpDate = followUpDate,
+                        sessionDate = sessionDate,
+                        markCompleted = markCompleted,
+                        photoPaths = photoPaths,
+                        photoUrls = photoUrls,
+                        shareWithTandem = shareWithTandem
+                    ) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) {
+                            modalState.showInputKonselingDialog = false
+                            modalState.konselingRecordToEdit = null
+                            modalState.inputKonselingTargetStudent = null
+                        }
+                    }
+                } else {
+                    viewModel.editKonselingRecord(
+                        existingRecord = existingRecord,
+                        entryType = entryType,
+                        topic = topic,
+                        urgencyLevel = urgencyLevel,
+                        moodLevel = moodLevel,
+                        title = title,
+                        summary = summary,
+                        intervention = intervention,
+                        followUpPlan = followUpPlan,
+                        followUpDate = followUpDate,
+                        sessionDate = sessionDate,
+                        markCompleted = markCompleted,
+                        photoPaths = photoPaths,
+                        photoUrls = photoUrls,
+                        shareWithTandem = shareWithTandem
+                    ) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) {
+                            modalState.showInputKonselingDialog = false
+                            modalState.konselingRecordToEdit = null
+                            modalState.inputKonselingTargetStudent = null
+                        }
+                    }
+                }
+            },
             onDismiss = {
                 modalState.showInputKonselingDialog = false
                 modalState.konselingRecordToEdit = null
@@ -3351,6 +3461,14 @@ private fun DashboardKonselingAndSholatModalsHost(
             studentLogs = studentLogItems,
             waliName = waliName,
             schoolProfile = schoolProfile,
+            isRecordOwnedByCurrentWali = { rec ->
+                com.example.data.model.KonselingHelper.matchesOwnerOnly(
+                    ownerUsername = rec.ownerWaliUsername,
+                    ownerName = rec.ownerWaliName,
+                    currentUsername = currentUsername,
+                    currentWaliName = waliName
+                )
+            },
             onQuickInput = { entryType ->
                 modalState.konselingRecordToEdit = null
                 modalState.inputKonselingDefaultEntryType = entryType
@@ -3409,6 +3527,14 @@ private fun DashboardKonselingAndSholatModalsHost(
             waliName = waliName,
             schoolProfile = schoolProfile,
             initialTab = modalState.konselingHistoryInitialTab,
+            isRecordOwnedByCurrentWali = { rec ->
+                com.example.data.model.KonselingHelper.matchesOwnerOnly(
+                    ownerUsername = rec.ownerWaliUsername,
+                    ownerName = rec.ownerWaliName,
+                    currentUsername = currentUsername,
+                    currentWaliName = waliName
+                )
+            },
             onOpenStudentById = { studentId ->
                 val target = KonselingHelper.resolveStudentByIdOrFallback(
                     studentId = studentId,

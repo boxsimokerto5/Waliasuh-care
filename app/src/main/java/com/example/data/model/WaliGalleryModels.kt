@@ -162,7 +162,8 @@ object WaliGalleryHelper {
         student: ChildStudent?,
         link: ParentAccessLink?,
         assignedWaliUsername: String,
-        assignedWaliName: String
+        assignedWaliName: String,
+        assignedWalis: List<Pair<String, String>> = emptyList()
     ): Boolean {
         if (post.isDeleted) return false
         val activeSchool = (student?.schoolId?.ifBlank { null } ?: link?.schoolId).orEmpty().trim()
@@ -176,8 +177,16 @@ object WaliGalleryHelper {
         if (post.targetScope.equals(SCOPE_SPECIFIC_STUDENTS, ignoreCase = true)) {
             return studentId > 0L && studentId in targetIds
         }
-        // ALL_MY_STUDENTS: cocok jika wali asuh anak sama dengan pemosting ATAU studentId masuk target snapshot
-        val waliMatches = matchesWaliOwner(post, assignedWaliUsername, assignedWaliName)
+        // ALL_MY_STUDENTS: cocok jika wali utama atau tandem anak sama dengan pemosting ATAU studentId masuk target snapshot
+        val waliRefs = if (assignedWalis.isNotEmpty()) {
+            assignedWalis
+        } else {
+            TandemWaliHelper.allAssignedWaliRefs(student, link).ifEmpty {
+                listOf(assignedWaliUsername to assignedWaliName)
+            }
+        }
+        val waliMatches = matchesWaliOwner(post, assignedWaliUsername, assignedWaliName) ||
+            waliRefs.any { (u, n) -> matchesWaliOwner(post, u, n) }
         val idMatches = studentId > 0L && studentId in targetIds
         return waliMatches || idMatches
     }

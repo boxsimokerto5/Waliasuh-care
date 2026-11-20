@@ -97,6 +97,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.data.model.TandemWaliHelper
 import com.example.data.model.WaliAccount
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.AddWaliAccountDialog
@@ -269,6 +270,7 @@ fun AdminScreen(
     var studentForMengajiInput by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForKartuMengaji by remember { mutableStateOf<ChildStudent?>(null) }
     var studentToEdit by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForManageTandem by remember { mutableStateOf<ChildStudent?>(null) }
     var showAddStudentDialog by remember { mutableStateOf(false) }
 
     // State untuk Kelola Akun Wali Asuh
@@ -451,7 +453,11 @@ fun AdminScreen(
                 student.jenjang.contains(studentSearchQuery, ignoreCase = true) ||
                 student.roomNumber.contains(studentSearchQuery, ignoreCase = true) ||
                 student.classGrade.contains(studentSearchQuery, ignoreCase = true) ||
-                student.dormitory.contains(studentSearchQuery, ignoreCase = true)
+                student.dormitory.contains(studentSearchQuery, ignoreCase = true) ||
+                TandemWaliHelper.allAssignedWaliRefs(student).any { (u, n) ->
+                    n.contains(studentSearchQuery, ignoreCase = true) ||
+                        u.contains(studentSearchQuery, ignoreCase = true)
+                }
         val matchGender = when (selectedStudentGenderFilter) {
             "Putra" -> StudentClassifier.isMaleStudent(student)
             "Putri" -> StudentClassifier.isFemaleStudent(student)
@@ -1107,9 +1113,10 @@ fun AdminScreen(
                             AdminStudentCardItem(
                                 student = student,
                                 onViewDetail = { selectedDetailStudent = student },
+                                onManageTandem = { studentForManageTandem = student },
                                 onReleaseWali = if (student.assignedWaliName.isNotBlank() || student.assignedWaliUsername.isNotBlank()) {
                                     {
-                                        viewModel.releaseStudentClaim(student) { ok, msg ->
+                                        viewModel.releaseStudentClaim(student) { _, msg ->
                                             Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                         }
                                     }
@@ -2724,6 +2731,26 @@ fun AdminScreen(
         )
     }
 
+    studentForManageTandem?.let { targetStudent ->
+        val freshStudent = schoolStudents.firstOrNull { it.id == targetStudent.id } ?: targetStudent
+        AdminManageTandemDialog(
+            student = freshStudent,
+            waliAccounts = schoolAccounts.filter { !it.isGuruNgaji() },
+            isEn = isEn,
+            onSaveTeam = { primaryAcc, tandemAccs ->
+                viewModel.adminAssignPrimaryAndTandems(
+                    student = freshStudent,
+                    primaryWali = primaryAcc,
+                    tandemWalis = tandemAccs
+                ) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+                studentForManageTandem = null
+            },
+            onDismiss = { studentForManageTandem = null }
+        )
+    }
+
     studentToDelete?.let { student ->
         AlertDialog(
             onDismissRequest = { studentToDelete = null },
@@ -3976,6 +4003,7 @@ fun WaliAccountCardItem(
 fun AdminStudentCardItem(
     student: ChildStudent,
     onViewDetail: () -> Unit,
+    onManageTandem: (() -> Unit)? = null,
     onReleaseWali: (() -> Unit)? = null,
     onDelete: () -> Unit
 ) {
@@ -4144,25 +4172,51 @@ fun AdminStudentCardItem(
                             color = Color(0xFF0F766E)
                         )
                     }
-                    if (student.assignedWaliName.isNotBlank() || student.assignedWaliUsername.isNotBlank()) {
-                        val waliDisplay = student.assignedWaliName.ifBlank { student.assignedWaliUsername }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    val assignedWalis = TandemWaliHelper.allAssignedWaliRefs(student)
+                    if (assignedWalis.isNotEmpty() || onManageTandem != null) {
+                        @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp),
                             modifier = Modifier.padding(top = 2.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFFEDE9FE))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = if (isEn) "Wali: $waliDisplay" else "Dibina: $waliDisplay",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = Color(0xFF5B21B6)
-                                )
+                            assignedWalis.forEachIndexed { idx, (u, n) ->
+                                val label = n.ifBlank { u }
+                                val isPrimary = idx == 0
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(if (isPrimary) Color(0xFFEDE9FE) else Color(0xFFCCFBF1))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = if (isPrimary) {
+                                            if (isEn) "Lead: $label" else "Utama: $label"
+                                        } else {
+                                            "Tandem: $label"
+                                        },
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = if (isPrimary) Color(0xFF5B21B6) else Color(0xFF0F766E)
+                                    )
+                                }
+                            }
+                            if (onManageTandem != null) {
+                                OutlinedButton(
+                                    onClick = onManageTandem,
+                                    shape = RoundedCornerShape(6.dp),
+                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                    modifier = Modifier
+                                        .height(24.dp)
+                                        .testTag("btn_admin_manage_tandem_${student.id}")
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Manage Team (${assignedWalis.size}/3)" else "Tim Wali (${assignedWalis.size}/3)",
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = WaliPrimary
+                                    )
+                                }
                             }
                             if (onReleaseWali != null) {
                                 OutlinedButton(
@@ -4286,6 +4340,199 @@ fun AdminStudentCardItem(
             }
         }
     }
+}
+
+@Composable
+private fun AdminManageTandemDialog(
+    student: ChildStudent,
+    waliAccounts: List<WaliAccount>,
+    isEn: Boolean,
+    onSaveTeam: (primary: WaliAccount?, tandems: List<WaliAccount>) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val initialPrimaryKey = remember(student) {
+        waliAccounts.firstOrNull { acc ->
+            TandemWaliHelper.matchesIdentity(student.assignedWaliUsername, student.assignedWaliName, acc.username, acc.name)
+        }?.username?.ifBlank { null } ?: student.assignedWaliUsername
+    }
+    val initialTandemKeys = remember(student) {
+        TandemWaliHelper.tandemMembers(student).mapNotNull { m ->
+            waliAccounts.firstOrNull { acc ->
+                TandemWaliHelper.matchesIdentity(m.username, m.name, acc.username, acc.name)
+            }?.username?.ifBlank { m.username } ?: m.username.ifBlank { null }
+        }.toSet()
+    }
+    var selectedPrimaryUser by remember(student) { mutableStateOf(initialPrimaryKey) }
+    var selectedTandemUsers by remember(student) { mutableStateOf(initialTandemKeys) }
+    var search by remember { mutableStateOf("") }
+
+    val filteredAccounts = remember(waliAccounts, search) {
+        val q = search.trim().lowercase()
+        waliAccounts.filter {
+            q.isEmpty() || it.name.lowercase().contains(q) ||
+                it.username.lowercase().contains(q) ||
+                it.dormitory.lowercase().contains(q)
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = if (isEn) "Manage Caregiver Team (Max 3)" else "Kelola Tim Wali Asuh (Maks. 3)",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Text(
+                    text = "${student.name} (${student.dormitory.ifBlank { "-" }})",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = if (isEn) {
+                        "Pick 1 Lead Caregiver and up to 2 Tandem Caregivers."
+                    } else {
+                        "Pilih 1 Wali Utama dan maksimal 2 Wali Tandem."
+                    },
+                    fontSize = 11.5.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    placeholder = {
+                        Text(if (isEn) "Search wali name..." else "Cari nama wali asuh...", fontSize = 12.sp)
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("input_admin_search_tandem_wali")
+                )
+                if (selectedPrimaryUser.isNotBlank()) {
+                    TextButton(
+                        onClick = {
+                            selectedPrimaryUser = ""
+                            selectedTandemUsers = emptySet()
+                        },
+                        modifier = Modifier.testTag("btn_admin_clear_team")
+                    ) {
+                        Text(
+                            text = if (isEn) "Clear All Assignments" else "Kosongkan Semua Penugasan",
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 11.5.sp
+                        )
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 120.dp, max = 260.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(filteredAccounts, key = { "adm_tw_${it.id}_${it.username}" }) { acc ->
+                        val accKey = acc.username.ifBlank { acc.name }
+                        val isPrimary = selectedPrimaryUser.equals(accKey, ignoreCase = true)
+                        val isTandem = selectedTandemUsers.any { it.equals(accKey, ignoreCase = true) }
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = when {
+                                isPrimary -> Color(0xFFEDE9FE)
+                                isTandem -> Color(0xFFCCFBF1)
+                                else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            },
+                            border = BorderStroke(
+                                1.dp,
+                                when {
+                                    isPrimary -> Color(0xFF7C3AED)
+                                    isTandem -> Color(0xFF0F766E)
+                                    else -> MaterialTheme.colorScheme.outlineVariant
+                                }
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = "${acc.name} (${acc.dormitory.ifBlank { "-" }})",
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FilterChip(
+                                        selected = isPrimary,
+                                        onClick = {
+                                            selectedPrimaryUser = if (isPrimary) "" else accKey
+                                            selectedTandemUsers = selectedTandemUsers.filterNot {
+                                                it.equals(accKey, ignoreCase = true)
+                                            }.toSet()
+                                        },
+                                        label = {
+                                            Text(if (isEn) "Lead" else "Wali Utama", fontSize = 10.5.sp)
+                                        },
+                                        modifier = Modifier.testTag("chip_admin_set_primary_${accKey}")
+                                    )
+                                    FilterChip(
+                                        selected = isTandem,
+                                        enabled = selectedPrimaryUser.isNotBlank() && !isPrimary && (isTandem || selectedTandemUsers.size < 2),
+                                        onClick = {
+                                            selectedTandemUsers = if (isTandem) {
+                                                selectedTandemUsers.filterNot { it.equals(accKey, ignoreCase = true) }.toSet()
+                                            } else if (selectedTandemUsers.size < 2) {
+                                                selectedTandemUsers + accKey
+                                            } else {
+                                                selectedTandemUsers
+                                            }
+                                        },
+                                        label = {
+                                            Text("Tandem", fontSize = 10.5.sp)
+                                        },
+                                        modifier = Modifier.testTag("chip_admin_set_tandem_${accKey}")
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val primaryAcc = waliAccounts.firstOrNull {
+                        it.username.ifBlank { it.name }.equals(selectedPrimaryUser, ignoreCase = true)
+                    }
+                    val tandemAccs = selectedTandemUsers.mapNotNull { tKey ->
+                        waliAccounts.firstOrNull {
+                            it.username.ifBlank { it.name }.equals(tKey, ignoreCase = true)
+                        }
+                    }.take(TandemWaliHelper.MAX_TANDEM_MEMBERS)
+                    onSaveTeam(primaryAcc, tandemAccs)
+                },
+                modifier = Modifier.testTag("btn_admin_save_tandem_team")
+            ) {
+                Text(if (isEn) "Save Team" else "Simpan Tim", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(if (isEn) "Cancel" else "Batal")
+            }
+        }
+    )
 }
 
 

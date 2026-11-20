@@ -15,6 +15,7 @@ data class KonselingRecord(
     val ownerWaliUsername: String = "",
     val ownerWaliName: String = "Wali Asuh",
     val isConfidential: Boolean = true,
+    val shareWithTandem: Boolean = false,
     val entryType: String = KonselingHelper.ENTRY_SESI, // SESI | PERKEMBANGAN
     val topic: String = KonselingHelper.TOPIC_ADAPTASI,
     val urgencyLevel: String = KonselingHelper.URGENCY_RINGAN, // RINGAN | PANTAU | PRIORITAS
@@ -175,22 +176,43 @@ object KonselingHelper {
             cleanOwnerName.equals(cleanCurName, ignoreCase = true)
     }
 
+    fun canWaliViewRecord(
+        rec: KonselingRecord,
+        currentUsername: String?,
+        currentWaliName: String,
+        students: List<ChildStudent> = emptyList()
+    ): Boolean {
+        if (matchesOwnerOnly(
+                ownerUsername = rec.ownerWaliUsername,
+                ownerName = rec.ownerWaliName,
+                currentUsername = currentUsername,
+                currentWaliName = currentWaliName
+            )
+        ) {
+            return true
+        }
+        if (!rec.shareWithTandem) return false
+        val student = students.firstOrNull { st -> matchesStudent(rec, st) } ?: return false
+        return TandemWaliHelper.isAssignedWali(student, currentUsername, currentWaliName)
+    }
+
     fun filterPrivateRecords(
         allRecords: List<KonselingRecord>,
         schoolId: String,
         role: UserRole,
         currentUsername: String?,
-        currentWaliName: String
+        currentWaliName: String,
+        students: List<ChildStudent> = emptyList()
     ): List<KonselingRecord> {
         if (role != UserRole.WALI) return emptyList()
         val cleanSchool = schoolId.trim()
         return allRecords.filter { rec ->
             rec.schoolId.equals(cleanSchool, ignoreCase = true) &&
-                matchesOwnerOnly(
-                    ownerUsername = rec.ownerWaliUsername,
-                    ownerName = rec.ownerWaliName,
+                canWaliViewRecord(
+                    rec = rec,
                     currentUsername = currentUsername,
-                    currentWaliName = currentWaliName
+                    currentWaliName = currentWaliName,
+                    students = students
                 )
         }
     }

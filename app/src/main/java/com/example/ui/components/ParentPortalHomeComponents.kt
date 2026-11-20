@@ -67,6 +67,7 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
+import com.example.data.model.ResolvedWaliBadgeInfo
 import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
 import com.example.data.model.SholatStatus
@@ -114,16 +115,23 @@ fun ParentGreetingHeroCard(
     onAvatarClick: (() -> Unit)? = null,
     waliAccount: WaliAccount? = null,
     schoolName: String = "",
-    onOpenWaliProfile: (() -> Unit)? = null
+    onOpenWaliProfile: (() -> Unit)? = null,
+    waliBadges: List<ResolvedWaliBadgeInfo> = emptyList()
 ) {
     val studentName = student?.name ?: link?.studentName.orEmpty().ifBlank { "Ananda" }
     val parentName = link?.parentName?.ifBlank { student?.motherName.orEmpty() }.orEmpty()
     val classGrade = student?.classGrade ?: link?.studentClass ?: "-"
     val dorm = student?.dormitory ?: link?.studentDorm ?: "-"
     val room = student?.roomNumber?.takeIf { it.isNotBlank() }
-    val waliName = waliAccount?.name?.takeIf { it.isNotBlank() }
-        ?: student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
-        ?: link?.assignedWaliName.orEmpty()
+    val onDutyBadge = waliBadges.firstOrNull { it.isOnDutyNow }
+    val displayPrimaryBadge = onDutyBadge ?: waliBadges.firstOrNull()
+    val waliName = when {
+        waliBadges.size > 1 -> waliBadges.joinToString(", ") { it.name }
+        else -> displayPrimaryBadge?.name?.takeIf { it.isNotBlank() }
+            ?: waliAccount?.name?.takeIf { it.isNotBlank() }
+            ?: student?.assignedWaliName?.ifBlank { link?.assignedWaliName.orEmpty() }
+            ?: link?.assignedWaliName.orEmpty()
+    }
 
     ElevatedCard(
         modifier = Modifier
@@ -278,11 +286,12 @@ fun ParentGreetingHeroCard(
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    val waliPhotoUrl = waliAccount?.photoUrl.orEmpty()
-                    val waliPhotoFallback = waliAccount?.photoFallbackUrl.orEmpty()
-                    val hasWaliIdentity = waliName.isNotBlank() || waliAccount != null
+                    val displayedAcc = displayPrimaryBadge?.account ?: waliAccount
+                    val waliPhotoUrl = displayedAcc?.photoUrl.orEmpty()
+                    val waliPhotoFallback = displayedAcc?.photoFallbackUrl.orEmpty()
+                    val hasWaliIdentity = waliName.isNotBlank() || displayedAcc != null
                     val waliAvatarGender = if (
-                        (waliAccount?.dormitory ?: dorm).contains("putri", ignoreCase = true)
+                        (displayedAcc?.dormitory ?: dorm).contains("putri", ignoreCase = true)
                     ) "P" else "L"
 
                     Row(
@@ -335,17 +344,45 @@ fun ParentGreetingHeroCard(
                                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
                                     Text(
-                                        text = if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
+                                        text = when {
+                                            waliBadges.size > 1 -> if (isEn) {
+                                                "Caregiver Team (${waliBadges.size})"
+                                            } else {
+                                                "Tim Wali Asuh (${waliBadges.size})"
+                                            }
+                                            else -> if (isEn) "Foster Caregiver" else "Wali Asuh Pembina"
+                                        },
                                         fontSize = 10.sp,
                                         color = Color(0xFFE0E7FF)
                                     )
-                                    if (waliAccount != null) {
+                                    if (displayedAcc != null) {
                                         Icon(
                                             imageVector = Icons.Default.Verified,
                                             contentDescription = if (isEn) "Verified" else "Terverifikasi",
                                             tint = Color(0xFF6EE7B7),
                                             modifier = Modifier.size(12.dp)
                                         )
+                                    }
+                                    if (onDutyBadge != null) {
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = Color(0xFF10B981).copy(alpha = 0.28f),
+                                            border = BorderStroke(1.dp, Color(0xFF6EE7B7).copy(alpha = 0.7f))
+                                        ) {
+                                            Text(
+                                                text = if (waliBadges.size > 1) {
+                                                    if (isEn) "On Duty: ${onDutyBadge.name}" else "Piket: ${onDutyBadge.name}"
+                                                } else {
+                                                    if (isEn) "On Duty" else "Sedang Piket"
+                                                },
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                color = Color(0xFFD1FAE5),
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                            )
+                                        }
                                     }
                                 }
                                 Text(
@@ -357,15 +394,22 @@ fun ParentGreetingHeroCard(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 if (hasWaliIdentity) {
-                                    val subLine = waliAccount?.let { acc ->
-                                        val parts = listOfNotNull(
-                                            acc.effectiveTitle(isEn),
-                                            acc.employeeCode.takeIf { it.isNotBlank() }?.let { "ID: $it" }
-                                        )
-                                        parts.joinToString(" • ")
-                                    }?.takeIf { it.isNotBlank() } ?: if (onOpenWaliProfile != null) {
-                                        if (isEn) "Tap for verified profile" else "Ketuk lihat profil resmi"
-                                    } else ""
+                                    val subLine = when {
+                                        waliBadges.size > 1 -> if (isEn) {
+                                            "Lead & tandem active • Tap for team profiles"
+                                        } else {
+                                            "Utama & tandem aktif • Ketuk profil pembina"
+                                        }
+                                        else -> displayedAcc?.let { acc ->
+                                            val parts = listOfNotNull(
+                                                acc.effectiveTitle(isEn),
+                                                acc.employeeCode.takeIf { it.isNotBlank() }?.let { "ID: $it" }
+                                            )
+                                            parts.joinToString(" • ")
+                                        }?.takeIf { it.isNotBlank() } ?: if (onOpenWaliProfile != null) {
+                                            if (isEn) "Tap for verified profile" else "Ketuk lihat profil resmi"
+                                        } else ""
+                                    }
                                     if (subLine.isNotBlank()) {
                                         Text(
                                             text = subLine,

@@ -83,6 +83,9 @@ fun WaliOfficialProfileSheet(
     waliAccount: WaliAccount?,
     schoolName: String,
     dormitory: String = "",
+    roleBadgeLabel: String = "",
+    shiftInfoLabel: String = "",
+    isOnDutyNow: Boolean = false,
     onOpenChat: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
@@ -275,6 +278,56 @@ fun WaliOfficialProfileSheet(
                             color = Color(0xFFE0E7FF),
                             textAlign = TextAlign.Center
                         )
+                        if (roleBadgeLabel.isNotBlank() || isOnDutyNow || shiftInfoLabel.isNotBlank()) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (roleBadgeLabel.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color.White.copy(alpha = 0.2f),
+                                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                                    ) {
+                                        Text(
+                                            text = roleBadgeLabel,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                if (isOnDutyNow) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color(0xFF10B981).copy(alpha = 0.28f),
+                                        border = BorderStroke(1.dp, Color(0xFF6EE7B7))
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "On Duty Now" else "Sedang Piket",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFFD1FAE5),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                } else if (shiftInfoLabel.isNotBlank()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(999.dp),
+                                        color = Color.White.copy(alpha = 0.16f)
+                                    ) {
+                                        Text(
+                                            text = shiftInfoLabel,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFFE0E7FF),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
                         if (hasPhoto) {
                             Text(
                                 text = if (isEn) "Tap photo to zoom full size" else "Ketuk foto untuk memperbesar",

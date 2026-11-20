@@ -1205,6 +1205,7 @@ internal fun LazyListScope.orangTuaCategoryItems(
     parentMessages: List<ParentMessage>,
     parentExpectations: List<ParentExpectation> = emptyList(),
     myFosterStudentsCount: Int,
+    incomingTandemRequestCount: Int = 0,
     onOpenPilihAnakAsuh: () -> Unit,
     onOpenKartuAksesOrtu: () -> Unit,
     onOpenPilihanAksesOrtu: () -> Unit,
@@ -1227,15 +1228,15 @@ internal fun LazyListScope.orangTuaCategoryItems(
             ) {
                 CartoonMenuCard(
                     title = if (isEn) "Claim Foster Kids" else "Klaim Anak Asuh",
-                    subtitle = if (isEn) "Claim & Search Students" else "Cari & Klaim Binaan",
+                    subtitle = if (isEn) "Team Claim (Up to 3 Walis)" else "Kelola Binaan & Tim Tandem (Maks 3)",
                     imageRes = R.drawable.img_menu_klaim_anak_asuh,
-                    badgeText = if (myFosterStudentsCount > 0) {
-                        "$myFosterStudentsCount ${if (isEn) "Kids" else "Anak"}"
-                    } else {
-                        if (isEn) "Pick" else "Pilih"
+                    badgeText = when {
+                        incomingTandemRequestCount > 0 -> "$incomingTandemRequestCount ${if (isEn) "Tandem Req" else "Ajuan Tandem"}"
+                        myFosterStudentsCount > 0 -> "$myFosterStudentsCount ${if (isEn) "Kids" else "Anak"}"
+                        else -> if (isEn) "Pick" else "Pilih"
                     },
-                    badgeBg = Color(0xFFE0E7FF),
-                    badgeColor = Color(0xFF4338CA),
+                    badgeBg = if (incomingTandemRequestCount > 0) Color(0xFFFEF3C7) else Color(0xFFE0E7FF),
+                    badgeColor = if (incomingTandemRequestCount > 0) Color(0xFFB45309) else Color(0xFF4338CA),
                     bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.6f)),
                     borderColor = Color(0xFFC7D2FE),
                     onClick = onOpenPilihAnakAsuh,

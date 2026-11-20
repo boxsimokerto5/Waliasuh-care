@@ -95,6 +95,7 @@ fun KonselingStudentDetailSheet(
     studentLogs: List<KonselingLog>,
     waliName: String,
     schoolProfile: SchoolProfile,
+    isRecordOwnedByCurrentWali: (KonselingRecord) -> Boolean = { true },
     onQuickInput: (String) -> Unit,
     onEditRecord: (KonselingRecord) -> Unit,
     onToggleStatus: (KonselingRecord) -> Unit,
@@ -460,6 +461,7 @@ fun KonselingStudentDetailSheet(
                         items(filteredRecords, key = { "k_det_rec_${it.id}" }) { rec ->
                             val completed = KonselingHelper.isCompleted(rec.status)
                             val growth = KonselingHelper.isGrowthEntry(rec.entryType)
+                            val isOwned = isRecordOwnedByCurrentWali(rec)
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -509,6 +511,28 @@ fun KonselingStudentDetailSheet(
                                         fontWeight = FontWeight.Bold,
                                         color = MaterialTheme.colorScheme.onSurface
                                     )
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (!isOwned) {
+                                            KonselingBadgePill(
+                                                text = if (isEn) {
+                                                    "Shared • By ${rec.ownerWaliName} (Read-Only)"
+                                                } else {
+                                                    "Dibagikan • Oleh ${rec.ownerWaliName} (Baca-Saja)"
+                                                },
+                                                bg = Color(0xFFCCFBF1),
+                                                fg = Color(0xFF0F766E)
+                                            )
+                                        } else if (rec.shareWithTandem) {
+                                            KonselingBadgePill(
+                                                text = if (isEn) "Shared with Tandem" else "Dibagikan ke Tandem",
+                                                bg = Color(0xFFE0E7FF),
+                                                fg = Color(0xFF4338CA)
+                                            )
+                                        }
+                                    }
                                     Text(
                                         text = "${KonselingHelper.formatTopicLabel(rec.topic, isEn)} • Mood: ${KonselingHelper.formatMoodLabel(rec.moodLevel, isEn)} • ${KonselingHelper.formatUrgencyLabel(rec.urgencyLevel, isEn)}",
                                         fontSize = 10.sp,
@@ -607,62 +631,64 @@ fun KonselingStudentDetailSheet(
                                         }
                                     }
 
-                                    // Row Actions Kompak
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        OutlinedButton(
-                                            onClick = { onEditRecord(rec) },
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                            modifier = Modifier
-                                                .height(36.dp)
-                                                .testTag("btn_edit_konseling_${rec.id}")
+                                    if (isOwned) {
+                                        // Row Actions Kompak (Hanya untuk Wali pemilik catatan)
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
-                                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(if (isEn) "Edit" else "Ubah", fontSize = 11.sp, maxLines = 1)
-                                        }
-                                        OutlinedButton(
-                                            onClick = { onToggleStatus(rec) },
-                                            shape = RoundedCornerShape(8.dp),
-                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .height(36.dp)
-                                                .testTag("btn_toggle_konseling_${rec.id}")
-                                        ) {
-                                            Icon(
-                                                imageVector = if (completed) Icons.Default.Refresh else Icons.Default.CheckCircle,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(13.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text(
-                                                text = if (completed) {
-                                                    if (isEn) "Reopen" else "Pantau Lagi"
-                                                } else {
-                                                    if (isEn) "Mark Resolved" else "Tandai Selesai"
-                                                },
-                                                fontSize = 11.sp,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        IconButton(
-                                            onClick = { recordToDelete = rec },
-                                            modifier = Modifier
-                                                .size(36.dp)
-                                                .testTag("btn_delete_konseling_${rec.id}")
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.DeleteOutline,
-                                                contentDescription = if (isEn) "Delete Note" else "Hapus Catatan",
-                                                tint = Color(0xFFDC2626),
-                                                modifier = Modifier.size(19.dp)
-                                            )
+                                            OutlinedButton(
+                                                onClick = { onEditRecord(rec) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                                modifier = Modifier
+                                                    .height(36.dp)
+                                                    .testTag("btn_edit_konseling_${rec.id}")
+                                            ) {
+                                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(13.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(if (isEn) "Edit" else "Ubah", fontSize = 11.sp, maxLines = 1)
+                                            }
+                                            OutlinedButton(
+                                                onClick = { onToggleStatus(rec) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .height(36.dp)
+                                                    .testTag("btn_toggle_konseling_${rec.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (completed) Icons.Default.Refresh else Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (completed) {
+                                                        if (isEn) "Reopen" else "Pantau Lagi"
+                                                    } else {
+                                                        if (isEn) "Mark Resolved" else "Tandai Selesai"
+                                                    },
+                                                    fontSize = 11.sp,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { recordToDelete = rec },
+                                                modifier = Modifier
+                                                    .size(36.dp)
+                                                    .testTag("btn_delete_konseling_${rec.id}")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.DeleteOutline,
+                                                    contentDescription = if (isEn) "Delete Note" else "Hapus Catatan",
+                                                    tint = Color(0xFFDC2626),
+                                                    modifier = Modifier.size(19.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }

@@ -10292,5 +10292,94 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("bible_verse_row_1").assertExists()
     composeTestRule.onNodeWithText("Di hadapan Allah dan Kristus Yesus", substring = true).assertExists()
   }
+
+  @Test
+  fun `verify BarcodeScannerDialog Option 2 renders fullscreen portrait overlay, manual picker bottom sheet, and continuous scan controls`() {
+    val indonesianStrings = com.example.util.i18n.AppLanguageManager.stringsFor(
+      com.example.util.i18n.AppLanguage.INDONESIAN
+    )
+    val students = listOf(
+      com.example.data.model.ChildStudent(
+        id = 701L,
+        name = "Adelia Sukmawati",
+        nis = "31900701",
+        nik = "3506015105090001",
+        gender = "P",
+        age = 15,
+        dormitory = "Asrama Putri",
+        classGrade = "XI-1 (IPA)",
+        schoolId = "SRT1-KDR"
+      ),
+      com.example.data.model.ChildStudent(
+        id = 702L,
+        name = "Budi Santoso",
+        nis = "31900702",
+        nik = "3506015105090002",
+        gender = "L",
+        age = 15,
+        dormitory = "Asrama Putra",
+        classGrade = "XI-2 (IPS)",
+        schoolId = "SRT1-KDR"
+      )
+    )
+
+    val continuousMode = androidx.compose.runtime.mutableStateOf(false)
+    val scannedCodes = mutableListOf<String>()
+    var dismissCount = 0
+
+    composeTestRule.setContent {
+      CompositionLocalProvider(com.example.util.i18n.LocalAppStrings provides indonesianStrings) {
+        com.example.ui.dialogs.BarcodeScannerDialog(
+          femaleStudents = students,
+          onScanned = { scannedCodes.add(it) },
+          onDismiss = { dismissCount++ },
+          dialogTitle = if (continuousMode.value) "Scan Kartu Sholat Dzuhur" else "Scan Barcode Kartu Siswa",
+          continuousScan = continuousMode.value,
+          sessionParticipantCount = if (continuousMode.value) 3 else null,
+          floatingFeedback = if (continuousMode.value) {
+            com.example.ui.dialogs.ScannerFloatingFeedback(
+              id = 101L,
+              status = com.example.ui.dialogs.ScannerFeedbackStatus.SUCCESS,
+              title = "Adelia Sukmawati tercatat",
+              subtitle = "Jamaah Tepat Waktu"
+            )
+          } else {
+            null
+          }
+        )
+      }
+    }
+    composeTestRule.waitForIdle()
+
+    // 1. Fullscreen portrait overlay & bottom action dock
+    composeTestRule.onNodeWithTag("scanner_fullscreen_root").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_close_scanner").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_open_manual_student_picker").assertIsDisplayed()
+    composeTestRule.onNodeWithText("Arahkan Barcode / QR Kartu Siswa ke Kotak").assertIsDisplayed()
+
+    // 2. Open Manual Input & Quick Pick ModalBottomSheet
+    composeTestRule.onNodeWithTag("btn_open_manual_student_picker").performClick()
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithTag("input_manual_nik_haid").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("input_quick_pick_haid_search").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("input_quick_pick_haid_search").performTextInput("Adelia")
+    composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithText("Adelia Sukmawati").performClick()
+    composeTestRule.waitForIdle()
+
+    assertEquals(listOf("3506015105090001"), scannedCodes)
+    assertEquals(1, dismissCount)
+
+    // 3. Continuous scan mode renders floating feedback, count pill, and Selesai button
+    continuousMode.value = true
+    composeTestRule.waitForIdle()
+
+    composeTestRule.onNodeWithText("3 Anak").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("floating_scan_feedback_popup").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("btn_done_continuous_scan").assertIsDisplayed().performClick()
+    composeTestRule.waitForIdle()
+    assertEquals(2, dismissCount)
+  }
 }
 

@@ -793,10 +793,10 @@ fun StudentDetailDialog(
                                             label = if (isEn) "Parent WhatsApp / Phone" else "No. HP Orang Tua",
                                             value = student.parentPhone.ifBlank { "-" }
                                         )
-                                        if (student.assignedWaliName.isNotBlank()) {
+                                        if (com.example.data.model.TandemWaliHelper.hasPrimaryWali(student)) {
                                             ProfileDetailRow(
-                                                label = if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
-                                                value = student.assignedWaliName
+                                                label = if (isEn) "Caregiver Team" else "Tim Wali Asuh Pembina",
+                                                value = com.example.data.model.TandemWaliHelper.formatAllWaliSummary(student, isEn)
                                             )
                                         }
                                         ProfileDetailRow(

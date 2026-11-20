@@ -148,7 +148,9 @@ data class PbStudentDto(
     @Json(name = "assigned_wali_name") val assignedWaliName: String? = null,
     @Json(name = "photo_url") val photoUrl: String? = null,
     @Json(name = "photo_fallback_url") val photoFallbackUrl: String? = null,
-    @Json(name = "religion") val religion: String? = null
+    @Json(name = "religion") val religion: String? = null,
+    @Json(name = "tandem_walis_json") val tandemWalisJson: String? = null,
+    @Json(name = "tandem_requests_json") val tandemRequestsJson: String? = null
 ) {
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ChildStudent {
         return ChildStudent(
@@ -178,7 +180,9 @@ data class PbStudentDto(
             assignedWaliName = assignedWaliName ?: "",
             photoUrl = photoUrl?.trim().orEmpty(),
             photoFallbackUrl = photoFallbackUrl?.trim().orEmpty(),
-            religion = com.example.data.model.StudentReligionHelper.normalize(religion)
+            religion = com.example.data.model.StudentReligionHelper.normalize(religion),
+            tandemWalisJson = tandemWalisJson.orEmpty(),
+            tandemRequestsJson = tandemRequestsJson.orEmpty()
         )
     }
 
@@ -217,7 +221,9 @@ data class PbStudentDto(
                 assignedWaliName = model.assignedWaliName,
                 photoUrl = model.photoUrl.trim(),
                 photoFallbackUrl = model.photoFallbackUrl.trim(),
-                religion = com.example.data.model.StudentReligionHelper.normalize(model.religion)
+                religion = com.example.data.model.StudentReligionHelper.normalize(model.religion),
+                tandemWalisJson = model.tandemWalisJson,
+                tandemRequestsJson = model.tandemRequestsJson
             )
         }
     }
@@ -1252,6 +1258,7 @@ data class PbParentAccessLinkDto(
     @Json(name = "password") val password: String = "",
     @Json(name = "assigned_wali_username") val assignedWaliUsername: String? = null,
     @Json(name = "assigned_wali_name") val assignedWaliName: String? = null,
+    @Json(name = "tandem_walis_json") val tandemWalisJson: String? = null,
     @Json(name = "can_view_mengaji") val canViewMengaji: Boolean? = null,
     @Json(name = "can_view_medical") val canViewMedical: Boolean? = null,
     @Json(name = "can_view_fasting") val canViewFasting: Boolean? = null,
@@ -1284,6 +1291,7 @@ data class PbParentAccessLinkDto(
             password = password,
             assignedWaliUsername = assignedWaliUsername.orEmpty(),
             assignedWaliName = assignedWaliName.orEmpty(),
+            tandemWalisJson = tandemWalisJson.orEmpty(),
             canViewMengaji = canViewMengaji ?: true,
             canViewMedical = canViewMedical ?: true,
             canViewFasting = canViewFasting ?: true,
@@ -1323,6 +1331,7 @@ data class PbParentAccessLinkDto(
                 password = model.password,
                 assignedWaliUsername = model.assignedWaliUsername,
                 assignedWaliName = model.assignedWaliName,
+                tandemWalisJson = model.tandemWalisJson,
                 canViewMengaji = model.canViewMengaji,
                 canViewMedical = model.canViewMedical,
                 canViewFasting = model.canViewFasting,
@@ -1760,6 +1769,7 @@ data class PbKonselingRecordDto(
     @Json(name = "owner_wali_username") val ownerWaliUsername: String? = null,
     @Json(name = "owner_wali_name") val ownerWaliName: String? = null,
     @Json(name = "is_confidential") val isConfidential: Boolean? = null,
+    @Json(name = "share_with_tandem") val shareWithTandem: Boolean? = null,
     @Json(name = "entry_type") val entryType: String? = null,
     @Json(name = "topic") val topic: String? = null,
     @Json(name = "urgency_level") val urgencyLevel: String? = null,
@@ -1788,6 +1798,7 @@ data class PbKonselingRecordDto(
             ownerWaliUsername = ownerWaliUsername.orEmpty(),
             ownerWaliName = ownerWaliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
             isConfidential = isConfidential ?: true,
+            shareWithTandem = shareWithTandem ?: false,
             entryType = entryType?.trim()?.uppercase()?.ifBlank { KonselingHelper.ENTRY_SESI } ?: KonselingHelper.ENTRY_SESI,
             topic = topic?.trim()?.uppercase()?.ifBlank { KonselingHelper.TOPIC_ADAPTASI } ?: KonselingHelper.TOPIC_ADAPTASI,
             urgencyLevel = urgencyLevel?.trim()?.uppercase()?.ifBlank { KonselingHelper.URGENCY_RINGAN } ?: KonselingHelper.URGENCY_RINGAN,
@@ -1824,6 +1835,7 @@ data class PbKonselingRecordDto(
                 ownerWaliUsername = model.ownerWaliUsername,
                 ownerWaliName = model.ownerWaliName,
                 isConfidential = model.isConfidential,
+                shareWithTandem = model.shareWithTandem,
                 entryType = model.entryType,
                 topic = model.topic,
                 urgencyLevel = model.urgencyLevel,

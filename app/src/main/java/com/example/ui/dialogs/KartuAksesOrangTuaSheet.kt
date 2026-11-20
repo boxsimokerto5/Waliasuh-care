@@ -100,7 +100,8 @@ fun KartuAksesOrangTuaSheet(
     onEditStudentProfile: (ChildStudent) -> Unit,
     onApproveDeleteParentAccount: (ParentAccessLink) -> Unit = {},
     onRejectDeleteParentAccount: (ParentAccessLink) -> Unit = {},
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    isPrimaryWaliForStudent: (ChildStudent) -> Boolean = { true }
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -466,6 +467,7 @@ fun KartuAksesOrangTuaSheet(
                                     onEditStudentProfile = { onEditStudentProfile(student) },
                                     onApproveDeleteAccount = { linkPendingApproveDialog = link },
                                     onRejectDeleteAccount = { onRejectDeleteParentAccount(link) },
+                                    canManageDeletionApproval = isAdmin || isPrimaryWaliForStudent(student),
                                     onShare = {
                                         val effectivePhone = student.parentPhone.ifBlank { link.parentPhone }
                                         val effectiveLink = link.copy(
@@ -561,7 +563,8 @@ private fun ParentDigitalIdCardItem(
     onEditStudentProfile: () -> Unit,
     onApproveDeleteAccount: () -> Unit,
     onRejectDeleteAccount: () -> Unit,
-    onShare: () -> Unit
+    onShare: () -> Unit,
+    canManageDeletionApproval: Boolean = true
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     var passwordVisible by remember { mutableStateOf(false) }
@@ -786,10 +789,11 @@ private fun ParentDigitalIdCardItem(
                                     color = Color(0xFF991B1B)
                                 )
                             }
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
+                            if (canManageDeletionApproval) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                 OutlinedButton(
                                     onClick = onRejectDeleteAccount,
                                     shape = RoundedCornerShape(8.dp),
@@ -836,6 +840,18 @@ private fun ParentDigitalIdCardItem(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
+                            }
+                            } else {
+                                Text(
+                                    text = if (isEn) {
+                                        "Approval for parent account deletion is restricted to Lead Caregiver or School Admin."
+                                    } else {
+                                        "Persetujuan hapus akun orang tua khusus Wali Utama atau Admin Sekolah."
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF991B1B)
+                                )
                             }
                         }
                     }

@@ -49,6 +49,8 @@ import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.IncomingTandemRequestBundle
+import com.example.data.model.TandemWaliHelper
 import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
@@ -1941,36 +1943,55 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    private fun currentActorIdentity(): Pair<String, String> {
+        val display = _waliName.value.trim().ifBlank { "Wali Asuh" }
+        val user = _currentUsername.value?.trim().orEmpty().ifBlank {
+            display.lowercase().replace(" ", "")
+        }
+        return user to display
+    }
+
+    fun isStudentPrimaryWali(student: ChildStudent): Boolean {
+        return TandemWaliHelper.isPrimaryWali(student, _currentUsername.value, _waliName.value)
+    }
+
+    fun isStudentTandemWali(student: ChildStudent): Boolean {
+        return TandemWaliHelper.isTandemMember(student, _currentUsername.value, _waliName.value)
+    }
+
+    fun hasPendingTandemRequestByCurrentWali(student: ChildStudent): Boolean {
+        return TandemWaliHelper.hasPendingRequest(student, _currentUsername.value, _waliName.value)
+    }
+
     fun isStudentClaimedByOtherWali(student: ChildStudent): Boolean {
-        val claimedUser = student.assignedWaliUsername.trim()
-        val claimedName = student.assignedWaliName.trim()
-        if (claimedUser.isBlank() && claimedName.isBlank()) return false
+        if (!TandemWaliHelper.hasPrimaryWali(student)) return false
         val role = _currentUserRole.value
         if (role == UserRole.ADMIN || role == UserRole.SUPERADMIN) return false
-        val activeUser = _currentUsername.value?.trim().orEmpty()
-        val activeName = _waliName.value.trim()
-        val matchesUser = activeUser.isNotBlank() && claimedUser.isNotBlank() && claimedUser.equals(activeUser, ignoreCase = true)
-        val matchesName = activeName.isNotBlank() && claimedName.isNotBlank() && claimedName.equals(activeName, ignoreCase = true)
-        return !(matchesUser || matchesName)
+        return !TandemWaliHelper.isAssignedWali(student, _currentUsername.value, _waliName.value)
     }
 
     fun isStudentClaimedByCurrentWali(student: ChildStudent): Boolean {
-        val claimedUser = student.assignedWaliUsername.trim()
-        val claimedName = student.assignedWaliName.trim()
-        if (claimedUser.isBlank() && claimedName.isBlank()) return false
-        val activeUser = _currentUsername.value?.trim().orEmpty()
-        val activeName = _waliName.value.trim()
-        val matchesUser = activeUser.isNotBlank() && claimedUser.isNotBlank() && claimedUser.equals(activeUser, ignoreCase = true)
-        val matchesName = activeName.isNotBlank() && claimedName.isNotBlank() && claimedName.equals(activeName, ignoreCase = true)
-        return matchesUser || matchesName
+        return TandemWaliHelper.isAssignedWali(student, _currentUsername.value, _waliName.value)
     }
 
     fun canCurrentUserReleaseStudent(student: ChildStudent): Boolean {
-        if (student.assignedWaliUsername.isBlank() && student.assignedWaliName.isBlank()) return false
+        if (!TandemWaliHelper.hasPrimaryWali(student)) return false
         val role = _currentUserRole.value
         if (role == UserRole.ADMIN || role == UserRole.SUPERADMIN) return true
         return isStudentClaimedByCurrentWali(student)
     }
+
+    val incomingTandemRequestBundles: StateFlow<List<IncomingTandemRequestBundle>> = combine(
+        students,
+        _currentUsername,
+        _waliName
+    ) { allStudents, curUser, curName ->
+        TandemWaliHelper.groupIncomingRequestsForPrimary(
+            students = allStudents,
+            primaryUsername = curUser,
+            primaryName = curName
+        )
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private fun buildParentAccessUsername(student: ChildStudent, existingUsernames: Set<String>): String {
         val nameSlug = student.name.trim().lowercase()
@@ -2010,6 +2031,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 parentPhone = cleanPhone.ifBlank { existing.parentPhone },
                 assignedWaliUsername = assignedWaliUser.ifBlank { existing.assignedWaliUsername },
                 assignedWaliName = assignedWaliDisplay.ifBlank { existing.assignedWaliName },
+                tandemWalisJson = student.tandemWalisJson,
                 schoolId = activeSchool,
                 studentReligion = StudentReligionHelper.normalize(student.religion),
                 studentPhotoUrl = student.photoUrl.ifBlank { existing.studentPhotoUrl },
@@ -2031,6 +2053,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 password = PasswordGenerator.generateRandomPassword(),
                 assignedWaliUsername = assignedWaliUser,
                 assignedWaliName = assignedWaliDisplay,
+                tandemWalisJson = student.tandemWalisJson,
                 canViewMengaji = true,
                 canViewMedical = true,
                 canViewFasting = true,
@@ -2052,25 +2075,42 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         return link
     }
 
+    private suspend fun syncParentLinkTandemSnapshot(student: ChildStudent) {
+        val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+        repository.getParentAccessLinkByStudentId(student.id, activeSchool)?.let { existingLink ->
+            val updatedLink = existingLink.copy(
+                assignedWaliUsername = student.assignedWaliUsername,
+                assignedWaliName = student.assignedWaliName,
+                tandemWalisJson = student.tandemWalisJson,
+                updatedAt = System.currentTimeMillis()
+            )
+            repository.updateParentAccessLink(updatedLink)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updatedLink)
+            }
+        }
+    }
+
     fun claimStudentsForCurrentWali(
         selectedStudents: List<ChildStudent>,
         onResult: (claimedCount: Int, skippedCount: Int) -> Unit = { _, _ -> }
     ) {
         viewModelScope.launch {
-            val waliDisplay = _waliName.value.trim().ifBlank { "Wali Asuh" }
-            val waliUser = _currentUsername.value?.trim().orEmpty().ifBlank {
-                waliDisplay.lowercase().replace(" ", "")
-            }
+            val (waliUser, waliDisplay) = currentActorIdentity()
             var claimedCount = 0
             var skippedCount = 0
             selectedStudents.forEach { st ->
                 val latest = repository.getStudentById(st.id) ?: st
-                if (isStudentClaimedByOtherWali(latest)) {
+                if (TandemWaliHelper.hasPrimaryWali(latest) && !isStudentPrimaryWali(latest)) {
                     skippedCount++
                 } else {
+                    val cleanedRequests = TandemWaliHelper.pendingRequests(latest).filterNot { req ->
+                        TandemWaliHelper.matchesIdentity(req.username, req.name, waliUser, waliDisplay)
+                    }
                     val updatedStudent = latest.copy(
                         assignedWaliUsername = waliUser,
-                        assignedWaliName = waliDisplay
+                        assignedWaliName = waliDisplay,
+                        tandemRequestsJson = TandemWaliHelper.serializeRequests(cleanedRequests)
                     )
                     repository.updateStudent(updatedStudent)
                     if (!isUnitTestEnvironment()) {
@@ -2081,6 +2121,302 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 }
             }
             onResult(claimedCount, skippedCount)
+        }
+    }
+
+    fun requestTandemJoinForStudents(
+        selectedStudents: List<ChildStudent>,
+        onResult: (requestedCount: Int, skippedCount: Int, message: String) -> Unit = { _, _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val (waliUser, waliDisplay) = currentActorIdentity()
+            val now = System.currentTimeMillis()
+            var requestedCount = 0
+            var skippedCount = 0
+            val updatedStudents = mutableListOf<ChildStudent>()
+
+            selectedStudents.forEach { st ->
+                val latest = repository.getStudentById(st.id) ?: st
+                if (TandemWaliHelper.canRequestTandemJoin(latest, waliUser, waliDisplay)) {
+                    val updated = TandemWaliHelper.withAddedRequest(latest, waliUser, waliDisplay, now)
+                    repository.updateStudent(updated)
+                    updatedStudents.add(updated)
+                    requestedCount++
+                } else {
+                    skippedCount++
+                }
+            }
+            if (!isUnitTestEnvironment() && updatedStudents.isNotEmpty()) {
+                PocketBaseSyncManager.uploadStudents(getApplication(), updatedStudents)
+            }
+            val msg = when {
+                requestedCount > 0 && skippedCount > 0 -> if (isEn) {
+                    "Sent tandem request for $requestedCount student(s) ($skippedCount skipped: slot full or pending)."
+                } else {
+                    "Permintaan gabung tandem dikirim untuk $requestedCount anak ($skippedCount dilewati karena slot penuh/sudah diajukan)."
+                }
+                requestedCount > 0 -> if (isEn) {
+                    "Tandem request sent for $requestedCount student(s). Waiting for Lead Caregiver approval."
+                } else {
+                    "Permintaan gabung tandem berhasil dikirim untuk $requestedCount anak. Menunggu persetujuan Wali Utama."
+                }
+                else -> if (isEn) {
+                    "No eligible students for tandem request (slots full or already requested)."
+                } else {
+                    "Tidak ada siswa yang dapat diajukan tandem (slot maksimal 3 wali penuh atau sudah diajukan)."
+                }
+            }
+            onResult(requestedCount, skippedCount, msg)
+        }
+    }
+
+    fun cancelTandemRequest(
+        student: ChildStudent,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val (waliUser, waliDisplay) = currentActorIdentity()
+            val latest = repository.getStudentById(student.id) ?: student
+            val updated = TandemWaliHelper.withCancelledRequest(latest, waliUser, waliDisplay)
+            repository.updateStudent(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) "Tandem request cancelled for ${latest.name}." else "Permintaan tandem untuk ${latest.name} dibatalkan."
+            )
+        }
+    }
+
+    fun approveTandemRequestBundle(
+        requesterUsername: String,
+        requesterName: String,
+        approvedStudentIds: Set<Long>,
+        allBundleStudentIds: Set<Long>,
+        onResult: (approvedCount: Int, rejectedCount: Int, message: String) -> Unit = { _, _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val role = _currentUserRole.value
+            val isAdmin = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            val now = System.currentTimeMillis()
+            var approvedCount = 0
+            var rejectedCount = 0
+            val changedStudents = mutableListOf<ChildStudent>()
+
+            allBundleStudentIds.forEach { stId ->
+                val latest = repository.getStudentById(stId) ?: return@forEach
+                if (!isAdmin && !isStudentPrimaryWali(latest)) return@forEach
+                val updated = if (stId in approvedStudentIds) {
+                    val next = TandemWaliHelper.withApprovedRequest(latest, requesterUsername, requesterName, now)
+                    if (TandemWaliHelper.isTandemMember(next, requesterUsername, requesterName)) {
+                        approvedCount++
+                    } else {
+                        rejectedCount++
+                    }
+                    next
+                } else {
+                    rejectedCount++
+                    TandemWaliHelper.withCancelledRequest(latest, requesterUsername, requesterName)
+                }
+                repository.updateStudent(updated)
+                syncParentLinkTandemSnapshot(updated)
+                changedStudents.add(updated)
+            }
+            if (!isUnitTestEnvironment() && changedStudents.isNotEmpty()) {
+                PocketBaseSyncManager.uploadStudents(getApplication(), changedStudents)
+            }
+            val msg = if (approvedCount > 0) {
+                if (isEn) {
+                    "Approved $requesterName as Tandem Caregiver for $approvedCount student(s)."
+                } else {
+                    "$requesterName disetujui sebagai Wali Tandem untuk $approvedCount anak."
+                }
+            } else {
+                if (isEn) {
+                    "Tandem request from $requesterName was declined/cleared."
+                } else {
+                    "Permintaan tandem dari $requesterName ditolak."
+                }
+            }
+            onResult(approvedCount, rejectedCount, msg)
+        }
+    }
+
+    fun rejectTandemRequestBundle(
+        requesterUsername: String,
+        requesterName: String,
+        studentIds: Set<Long>,
+        onResult: (Int, String) -> Unit = { _, _ -> }
+    ) {
+        approveTandemRequestBundle(
+            requesterUsername = requesterUsername,
+            requesterName = requesterName,
+            approvedStudentIds = emptySet(),
+            allBundleStudentIds = studentIds
+        ) { _, rejectedCount, message ->
+            onResult(rejectedCount, message)
+        }
+    }
+
+    fun inviteTandemWaliBatch(
+        targetWali: WaliAccount,
+        studentsList: List<ChildStudent>,
+        onResult: (addedCount: Int, skippedCount: Int, message: String) -> Unit = { _, _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val role = _currentUserRole.value
+            val isAdmin = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            val now = System.currentTimeMillis()
+            var addedCount = 0
+            var skippedCount = 0
+            val changedStudents = mutableListOf<ChildStudent>()
+
+            studentsList.forEach { st ->
+                val latest = repository.getStudentById(st.id) ?: st
+                val allowed = isAdmin || isStudentPrimaryWali(latest)
+                if (!allowed ||
+                    TandemWaliHelper.isAssignedWali(latest, targetWali.username, targetWali.name) ||
+                    TandemWaliHelper.remainingTandemSlots(latest) <= 0
+                ) {
+                    skippedCount++
+                } else {
+                    val updated = TandemWaliHelper.withInvitedTandemMember(
+                        student = latest,
+                        targetUsername = targetWali.username,
+                        targetName = targetWali.name,
+                        nowMillis = now
+                    )
+                    repository.updateStudent(updated)
+                    syncParentLinkTandemSnapshot(updated)
+                    changedStudents.add(updated)
+                    addedCount++
+                }
+            }
+            if (!isUnitTestEnvironment() && changedStudents.isNotEmpty()) {
+                PocketBaseSyncManager.uploadStudents(getApplication(), changedStudents)
+            }
+            val msg = if (addedCount > 0) {
+                if (isEn) {
+                    "Added ${targetWali.name} as Tandem Caregiver for $addedCount student(s)."
+                } else {
+                    "${targetWali.name} berhasil ditambahkan sebagai Wali Tandem untuk $addedCount anak."
+                }
+            } else {
+                if (isEn) {
+                    "Could not add ${targetWali.name} (slot full or already assigned)."
+                } else {
+                    "${targetWali.name} tidak dapat ditambahkan (slot penuh 3 wali atau sudah terhubung)."
+                }
+            }
+            onResult(addedCount, skippedCount, msg)
+        }
+    }
+
+    fun removeTandemMember(
+        student: ChildStudent,
+        memberUsername: String,
+        memberName: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val latest = repository.getStudentById(student.id) ?: student
+            val role = _currentUserRole.value
+            val isAdmin = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            val isSelf = TandemWaliHelper.matchesIdentity(memberUsername, memberName, _currentUsername.value, _waliName.value)
+            if (!isAdmin && !isStudentPrimaryWali(latest) && !isSelf) {
+                onResult(
+                    false,
+                    if (isEn) "Only Lead Caregiver or Admin can remove this tandem partner."
+                    else "Hanya Wali Utama atau Admin Sekolah yang dapat melepas Wali Tandem."
+                )
+                return@launch
+            }
+            val updated = TandemWaliHelper.withRemovedTandemMember(latest, memberUsername, memberName)
+            repository.updateStudent(updated)
+            syncParentLinkTandemSnapshot(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) "$memberName removed from ${latest.name}'s tandem team."
+                else "$memberName dilepas dari tim tandem ${latest.name}."
+            )
+        }
+    }
+
+    fun promoteTandemToPrimary(
+        student: ChildStudent,
+        memberUsername: String,
+        memberName: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val latest = repository.getStudentById(student.id) ?: student
+            val role = _currentUserRole.value
+            val isAdmin = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            if (!isAdmin && !isStudentPrimaryWali(latest)) {
+                onResult(
+                    false,
+                    if (isEn) "Only Lead Caregiver or School Admin can change the Lead role."
+                    else "Hanya Wali Utama atau Admin Sekolah yang dapat menunjuk Wali Utama baru."
+                )
+                return@launch
+            }
+            val updated = TandemWaliHelper.withPromotedTandemToPrimary(latest, memberUsername, memberName)
+            repository.updateStudent(updated)
+            syncParentLinkTandemSnapshot(updated)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) "$memberName is now Lead Caregiver for ${latest.name}."
+                else "$memberName sekarang menjadi Wali Utama untuk ${latest.name}."
+            )
+        }
+    }
+
+    fun adminAssignPrimaryAndTandems(
+        student: ChildStudent,
+        primaryWali: WaliAccount?,
+        tandemWalis: List<WaliAccount>,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val role = _currentUserRole.value
+            if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+                onResult(
+                    false,
+                    if (isEn) "Only School Admin can override the caregiver team directly."
+                    else "Hanya Admin Sekolah yang dapat menetapkan tim Wali Asuh secara langsung."
+                )
+                return@launch
+            }
+            val latest = repository.getStudentById(student.id) ?: student
+            val updated = TandemWaliHelper.withAdminTeamAssignment(latest, primaryWali, tandemWalis)
+            repository.updateStudent(updated)
+            if (TandemWaliHelper.hasPrimaryWali(updated)) {
+                createOrSyncParentLinkForStudent(updated, updated.assignedWaliUsername, updated.assignedWaliName)
+            } else {
+                syncParentLinkTandemSnapshot(updated)
+            }
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleStudent(getApplication(), updated)
+            }
+            onResult(
+                true,
+                if (isEn) "Caregiver team updated for ${latest.name}."
+                else "Tim Wali Asuh untuk ${latest.name} berhasil diperbarui."
+            )
         }
     }
 
@@ -2102,26 +2438,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 return@launch
             }
-            val releasedStudent = latest.copy(
-                assignedWaliUsername = "",
-                assignedWaliName = ""
+            val role = _currentUserRole.value
+            val isAdmin = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            val releasedStudent = TandemWaliHelper.withReleasedActor(
+                student = latest,
+                actorUsername = _currentUsername.value,
+                actorName = _waliName.value,
+                isAdmin = isAdmin
             )
             repository.updateStudent(releasedStudent)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleStudent(getApplication(), releasedStudent)
             }
-            val activeSchool = latest.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
-            repository.getParentAccessLinkByStudentId(latest.id, activeSchool)?.let { existingLink ->
-                val updatedLink = existingLink.copy(
-                    assignedWaliUsername = "",
-                    assignedWaliName = "",
-                    updatedAt = System.currentTimeMillis()
-                )
-                repository.updateParentAccessLink(updatedLink)
-                if (!isUnitTestEnvironment()) {
-                    PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updatedLink)
-                }
-            }
+            syncParentLinkTandemSnapshot(releasedStudent)
             onResult(
                 true,
                 if (isEn) "${latest.name} has been released." else "${latest.name} berhasil dilepas dari binaan."
@@ -2397,13 +2726,29 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // --- Persetujuan atau Penolakan Hapus Akun Orang Tua oleh Wali Asuh ---
+    // --- Persetujuan atau Penolakan Hapus Akun Orang Tua oleh Wali Utama atau Admin ---
+    private suspend fun isAuthorizedForParentDeletion(studentId: Long): Boolean {
+        val role = _currentUserRole.value
+        if (role == UserRole.ADMIN || role == UserRole.SUPERADMIN) return true
+        val student = repository.getStudentById(studentId) ?: return true
+        if (!TandemWaliHelper.hasPrimaryWali(student)) return true
+        return TandemWaliHelper.isPrimaryWali(student, _currentUsername.value, _waliName.value)
+    }
+
     fun rejectParentAccountDeletion(
         link: ParentAccessLink,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         viewModelScope.launch {
             val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            if (!isAuthorizedForParentDeletion(link.studentId)) {
+                onResult(
+                    false,
+                    if (isEn) "Only Lead Caregiver or School Admin can process parent account deletion requests."
+                    else "Hanya Wali Utama atau Admin Sekolah yang berhak memproses pengajuan hapus akun orang tua."
+                )
+                return@launch
+            }
             val now = System.currentTimeMillis()
             val updated = link.copy(
                 deletionRequested = false,
@@ -2432,6 +2777,14 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            if (!isAuthorizedForParentDeletion(link.studentId)) {
+                onResult(
+                    false,
+                    if (isEn) "Only Lead Caregiver or School Admin can approve parent account deletion."
+                    else "Hanya Wali Utama atau Admin Sekolah yang berhak menyetujui hapus akun orang tua."
+                )
+                return@launch
+            }
             if (!link.deletionRequested) {
                 onResult(
                     false,
@@ -2450,7 +2803,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 studentName = link.studentName,
                 studentClass = link.studentClass,
                 recordId = link.id,
-                deletedSummary = "Akun orang tua ${link.username} (${link.studentName}) dihapus atas persetujuan Wali Asuh",
+                deletedSummary = "Akun orang tua ${link.username} (${link.studentName}) dihapus atas persetujuan Wali Utama",
                 schoolId = activeSchool
             )
             repository.deleteParentAccessLink(link)
@@ -2558,8 +2911,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val activeSchool = student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val currentUser = _currentUsername.value?.trim().orEmpty()
             val currentName = _waliName.value.trim().ifBlank { "Wali Asuh" }
-            val ownerUser = student.assignedWaliUsername.trim().ifBlank { currentUser }
-            val ownerName = student.assignedWaliName.trim().ifBlank { currentName }
+            val ownerUser = currentUser.ifBlank { student.assignedWaliUsername.trim() }
+            val ownerName = _waliName.value.trim().ifBlank {
+                student.assignedWaliName.trim().ifBlank { currentName }
+            }
 
             val existingForStudent = repository.getTabunganTransactionsBySchoolList(activeSchool)
                 .filter {
@@ -2906,17 +3261,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // ==========================================
     val konselingRecords: StateFlow<List<KonselingRecord>> = combine(
         repository.allKonselingRecords,
+        repository.allStudents,
         _schoolProfile,
         _currentUserRole,
         combine(_currentUsername, _waliName) { u, w -> u to w }
-    ) { allRecs, profile, role, actorPair ->
+    ) { allRecs, allStudents, profile, role, actorPair ->
         val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
         KonselingHelper.filterPrivateRecords(
             allRecords = allRecs,
             schoolId = tenant,
             role = role,
             currentUsername = actorPair.first,
-            currentWaliName = actorPair.second
+            currentWaliName = actorPair.second,
+            students = allStudents
         )
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -2960,6 +3317,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         markCompleted: Boolean = false,
         photoPaths: String = "",
         photoUrls: String = "",
+        shareWithTandem: Boolean = false,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
@@ -3002,6 +3360,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 ownerWaliUsername = ownerUser,
                 ownerWaliName = ownerName,
                 isConfidential = true,
+                shareWithTandem = shareWithTandem,
                 entryType = cleanEntryType,
                 topic = topic.trim().ifBlank { KonselingHelper.TOPIC_ADAPTASI },
                 urgencyLevel = urgencyLevel.trim().ifBlank { KonselingHelper.URGENCY_RINGAN },
@@ -3048,7 +3407,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.insertKonselingLog(logEntry)
             onResult(
                 true,
-                if (isEn) "Private counseling note saved (owner-only)." else "Catatan konseling rahasia berhasil disimpan (khusus Anda)."
+                if (shareWithTandem) {
+                    if (isEn) "Counseling note saved (shared read-only with Tandem team)." else "Catatan konseling tersimpan & dibagikan (baca-saja) ke rekan tandem."
+                } else {
+                    if (isEn) "Private counseling note saved (owner-only)." else "Catatan konseling rahasia berhasil disimpan (khusus Anda)."
+                }
             )
             if (!isUnitTestEnvironment()) {
                 val synced = PocketBaseSyncManager.uploadSingleKonselingRecordWithPhotos(getApplication(), newRecord)
@@ -3075,6 +3438,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         markCompleted: Boolean = KonselingHelper.isCompleted(existingRecord.status),
         photoPaths: String = existingRecord.photoPaths,
         photoUrls: String = existingRecord.photoUrls,
+        shareWithTandem: Boolean = existingRecord.shareWithTandem,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
@@ -3110,6 +3474,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val activeSchool = existingRecord.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val updated = existingRecord.copy(
                 isConfidential = true,
+                shareWithTandem = shareWithTandem,
                 entryType = cleanEntryType,
                 topic = topic.trim().ifBlank { KonselingHelper.TOPIC_ADAPTASI },
                 urgencyLevel = urgencyLevel.trim().ifBlank { KonselingHelper.URGENCY_RINGAN },
@@ -6350,13 +6715,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         val newName = account.name.trim()
         if (newName.isBlank() || newName == oldName.trim()) return
         val schoolId = account.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
-        val cleanUser = account.username.trim()
 
         val schoolStudents = repository.getStudentsBySchoolList(schoolId)
-        val affectedStudents = schoolStudents.filter { st ->
-            (cleanUser.isNotBlank() && st.assignedWaliUsername.equals(cleanUser, ignoreCase = true)) ||
-                (oldName.isNotBlank() && st.assignedWaliName.equals(oldName, ignoreCase = true))
-        }.map { it.copy(assignedWaliName = newName, assignedWaliUsername = it.assignedWaliUsername.ifBlank { cleanUser }) }
+        val affectedStudents = schoolStudents.mapNotNull { st ->
+            TandemWaliHelper.applyWaliRename(st, oldName, account)
+        }
         if (affectedStudents.isNotEmpty()) {
             repository.insertAllStudents(affectedStudents)
             if (!isUnitTestEnvironment()) {
@@ -6366,15 +6729,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
         val links = repository.getParentAccessLinksBySchoolList(schoolId)
         val now = System.currentTimeMillis()
-        val affectedLinks = links.filter { lk ->
-            (cleanUser.isNotBlank() && lk.assignedWaliUsername.equals(cleanUser, ignoreCase = true)) ||
-                (oldName.isNotBlank() && lk.assignedWaliName.equals(oldName, ignoreCase = true))
-        }.map { lk ->
-            lk.copy(
-                assignedWaliName = newName,
-                assignedWaliUsername = lk.assignedWaliUsername.ifBlank { cleanUser },
-                updatedAt = now
-            )
+        val affectedLinks = links.mapNotNull { lk ->
+            TandemWaliHelper.applyWaliRename(lk, oldName, account, now)
         }
         if (affectedLinks.isNotEmpty()) {
             repository.insertAllParentAccessLinks(affectedLinks)

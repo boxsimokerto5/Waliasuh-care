@@ -164,7 +164,25 @@ fun InputKonselingDialog(
         photoUrls: String,
         existingRecord: KonselingRecord?
     ) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onSaveWithShare: ((
+        student: ChildStudent,
+        entryType: String,
+        topic: String,
+        urgencyLevel: String,
+        moodLevel: String,
+        title: String,
+        summary: String,
+        intervention: String,
+        followUpPlan: String,
+        followUpDate: Long?,
+        sessionDate: Long,
+        markCompleted: Boolean,
+        photoPaths: String,
+        photoUrls: String,
+        shareWithTandem: Boolean,
+        existingRecord: KonselingRecord?
+    ) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -255,6 +273,9 @@ fun InputKonselingDialog(
     }
     var markCompleted by remember(recordToEdit?.id) {
         mutableStateOf(recordToEdit?.let { KonselingHelper.isCompleted(it.status) } ?: false)
+    }
+    var shareWithTandem by remember(recordToEdit?.id) {
+        mutableStateOf(recordToEdit?.shareWithTandem ?: false)
     }
     var showFollowUpDetails by remember(recordToEdit?.id) {
         mutableStateOf(
@@ -1391,6 +1412,34 @@ fun InputKonselingDialog(
                             )
                         }
 
+                        // Toggle Bagikan ke Rekan Tandem (Baca-Saja)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { shareWithTandem = !shareWithTandem },
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Checkbox(
+                                checked = shareWithTandem,
+                                onCheckedChange = { shareWithTandem = it },
+                                colors = CheckboxDefaults.colors(checkedColor = primaryAccent),
+                                modifier = Modifier.testTag("switch_konseling_share_tandem")
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isEn) "Share read-only with Tandem Caregivers" else "Bagikan (baca-saja) ke Rekan Tandem anak ini",
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = primaryAccent
+                                )
+                                Text(
+                                    text = if (isEn) "Always hidden from Admin, Teachers & Parents" else "Tetap rahasia dari Admin, Guru Ngaji & Orang Tua",
+                                    fontSize = 9.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
                         HorizontalDivider(color = accentBorder.copy(alpha = 0.7f))
 
                         // Action Footer
@@ -1411,23 +1460,44 @@ fun InputKonselingDialog(
                                 onClick = {
                                     val st = selectedStudent ?: return@Button
                                     val (packedPaths, packedUrls) = KonselingPhotoHelper.packSlots(photoSlots)
-                                    onSave(
-                                        st,
-                                        entryType,
-                                        topic,
-                                        urgencyLevel,
-                                        moodLevel,
-                                        titleText,
-                                        summaryText,
-                                        interventionText,
-                                        followUpPlanText,
-                                        followUpDate,
-                                        sessionDate,
-                                        markCompleted,
-                                        packedPaths,
-                                        packedUrls,
-                                        recordToEdit
-                                    )
+                                    if (onSaveWithShare != null) {
+                                        onSaveWithShare(
+                                            st,
+                                            entryType,
+                                            topic,
+                                            urgencyLevel,
+                                            moodLevel,
+                                            titleText,
+                                            summaryText,
+                                            interventionText,
+                                            followUpPlanText,
+                                            followUpDate,
+                                            sessionDate,
+                                            markCompleted,
+                                            packedPaths,
+                                            packedUrls,
+                                            shareWithTandem,
+                                            recordToEdit
+                                        )
+                                    } else {
+                                        onSave(
+                                            st,
+                                            entryType,
+                                            topic,
+                                            urgencyLevel,
+                                            moodLevel,
+                                            titleText,
+                                            summaryText,
+                                            interventionText,
+                                            followUpPlanText,
+                                            followUpDate,
+                                            sessionDate,
+                                            markCompleted,
+                                            packedPaths,
+                                            packedUrls,
+                                            recordToEdit
+                                        )
+                                    }
                                 },
                                 enabled = canSave && !isProcessingPhotos,
                                 shape = RoundedCornerShape(10.dp),

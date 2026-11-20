@@ -31,7 +31,9 @@ data class ChildStudent(
     val assignedWaliName: String = "",
     val photoUrl: String = "",
     val photoFallbackUrl: String = "",
-    val religion: String = "" // "" / "ISLAM" (default) atau "KRISTEN"
+    val religion: String = "", // "" / "ISLAM" (default) atau "KRISTEN"
+    val tandemWalisJson: String = "",
+    val tandemRequestsJson: String = ""
 )
 
 object StudentReligionHelper {

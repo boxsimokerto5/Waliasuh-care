@@ -339,6 +339,7 @@ fun KonselingHistoryLogsSheet(
     waliName: String,
     schoolProfile: SchoolProfile,
     initialTab: Int = 0,
+    isRecordOwnedByCurrentWali: (KonselingRecord) -> Boolean = { true },
     onOpenStudentById: (Long) -> Unit,
     onEditRecord: (KonselingRecord) -> Unit,
     onToggleStatus: (KonselingRecord) -> Unit,
@@ -586,6 +587,7 @@ fun KonselingHistoryLogsSheet(
                         } else {
                             items(filteredRecords, key = { "k_hist_rec_${it.id}" }) { rec ->
                                 val completed = KonselingHelper.isCompleted(rec.status)
+                                val isOwned = isRecordOwnedByCurrentWali(rec)
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -688,29 +690,42 @@ fun KonselingHistoryLogsSheet(
                                                 bg = if (completed) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
                                                 fg = if (completed) Color(0xFF15803D) else Color(0xFFB45309)
                                             )
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            IconButton(
-                                                onClick = { onEditRecord(rec) },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(Icons.Default.Edit, contentDescription = if (isEn) "Edit" else "Ubah", modifier = Modifier.size(16.dp))
-                                            }
-                                            IconButton(
-                                                onClick = { onToggleStatus(rec) },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (completed) Icons.Default.Refresh else Icons.Default.CheckCircle,
-                                                    contentDescription = if (isEn) "Toggle status" else "Ubah status",
-                                                    tint = Color(0xFF15803D),
-                                                    modifier = Modifier.size(16.dp)
+                                            if (!isOwned) {
+                                                KonselingBadgePill(
+                                                    text = if (isEn) {
+                                                        "Read-Only • ${rec.ownerWaliName}"
+                                                    } else {
+                                                        "Baca-Saja • ${rec.ownerWaliName}"
+                                                    },
+                                                    bg = Color(0xFFCCFBF1),
+                                                    fg = Color(0xFF0F766E)
                                                 )
                                             }
-                                            IconButton(
-                                                onClick = { recordToDelete = rec },
-                                                modifier = Modifier.size(48.dp)
-                                            ) {
-                                                Icon(Icons.Default.DeleteOutline, contentDescription = if (isEn) "Delete" else "Hapus", tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.weight(1f))
+                                            if (isOwned) {
+                                                IconButton(
+                                                    onClick = { onEditRecord(rec) },
+                                                    modifier = Modifier.size(48.dp)
+                                                ) {
+                                                    Icon(Icons.Default.Edit, contentDescription = if (isEn) "Edit" else "Ubah", modifier = Modifier.size(16.dp))
+                                                }
+                                                IconButton(
+                                                    onClick = { onToggleStatus(rec) },
+                                                    modifier = Modifier.size(48.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (completed) Icons.Default.Refresh else Icons.Default.CheckCircle,
+                                                        contentDescription = if (isEn) "Toggle status" else "Ubah status",
+                                                        tint = Color(0xFF15803D),
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = { recordToDelete = rec },
+                                                    modifier = Modifier.size(48.dp)
+                                                ) {
+                                                    Icon(Icons.Default.DeleteOutline, contentDescription = if (isEn) "Delete" else "Hapus", tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+                                                }
                                             }
                                         }
                                     }

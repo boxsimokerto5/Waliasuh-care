@@ -110,7 +110,7 @@ import com.example.data.model.WaliShiftCode
         BibleBookmark::class,
         BibleNote::class
     ],
-    version = 36,
+    version = 37,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -1007,6 +1007,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_36_37 = object : androidx.room.migration.Migration(36, 37) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN tandemWalisJson TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE child_students ADD COLUMN tandemRequestsJson TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE parent_access_links ADD COLUMN tandemWalisJson TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE konseling_records ADD COLUMN shareWithTandem INTEGER NOT NULL DEFAULT 0")
+                } catch (_: Exception) {}
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -1043,7 +1060,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_32_33,
                         MIGRATION_33_34,
                         MIGRATION_34_35,
-                        MIGRATION_35_36
+                        MIGRATION_35_36,
+                        MIGRATION_36_37
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

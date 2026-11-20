@@ -17,6 +17,7 @@ data class ParentAccessLink(
     val password: String,
     val assignedWaliUsername: String = "",
     val assignedWaliName: String = "",
+    val tandemWalisJson: String = "",
     val canViewMengaji: Boolean = true,
     val canViewMedical: Boolean = true,
     val canViewFasting: Boolean = true,
