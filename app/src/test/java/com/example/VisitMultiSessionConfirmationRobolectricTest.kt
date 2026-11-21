@@ -23,6 +23,8 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
@@ -219,6 +221,9 @@ class VisitMultiSessionConfirmationRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
+        composeTestRule.onNodeWithTag("btn_close_create_visit_sheet").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_save_visit_session").assertIsDisplayed().assertHeightIsAtLeast(48.dp)
+
         // Choose 3 sessions (pinned header above scroll)
         composeTestRule.onNodeWithTag("chip_visit_session_count_3").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
@@ -374,9 +379,14 @@ class VisitMultiSessionConfirmationRobolectricTest {
 
         composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
             .performScrollToNode(hasTestTag("btn_parent_visit_confirm_8801"))
+        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
+            .performTouchInput { swipeUp() }
+        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("btn_parent_visit_confirm_8801")
+            .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
             .performClick()
+        composeTestRule.waitForIdle()
 
         var confLoops = 0
         while (confLoops < 60 && vm.visitConfirmations.value.none { it.sessionId == 8801L && it.studentId == 7701L }) {
