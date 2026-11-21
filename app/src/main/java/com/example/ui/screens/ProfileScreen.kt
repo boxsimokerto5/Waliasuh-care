@@ -6,7 +6,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import com.example.R
@@ -157,7 +161,7 @@ fun ProfileScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .widthIn(max = 640.dp),
-            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 80.dp),
+            contentPadding = PaddingValues(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 0.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // Header Titles
@@ -788,7 +792,7 @@ fun ProfileScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 16.dp),
+                        .padding(top = 14.dp, bottom = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -883,6 +887,13 @@ fun ProfileScreen(
                         }
                     }
                 }
+            }
+
+            item {
+                ProfileFooterScenicIllustration(
+                    isDarkTheme = isDarkTheme,
+                    isEn = isEn
+                )
             }
         }
     }
@@ -1466,5 +1477,71 @@ private fun LanguageOptionCard(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ProfileFooterScenicIllustration(
+    isDarkTheme: Boolean,
+    isEn: Boolean
+) {
+    val bgColor = MaterialTheme.colorScheme.background
+    val colorFilter = remember(isDarkTheme, bgColor) {
+        if (isDarkTheme) {
+            ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -0.38f, 0f, 0f, 0f, 112f,
+                        0f, -0.36f, 0f, 0f, 114f,
+                        0f, 0f, -0.34f, 0f, 118f,
+                        0f, 0f, 0f, 0.85f, 0f
+                    )
+                )
+            )
+        } else {
+            ColorFilter.tint(bgColor, BlendMode.Multiply)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .layout { measurable, constraints ->
+                val sidePad = 10.dp.roundToPx()
+                val fullWidth = (constraints.maxWidth + sidePad * 2).coerceAtLeast(constraints.maxWidth)
+                val placeable = measurable.measure(
+                    constraints.copy(minWidth = fullWidth, maxWidth = fullWidth)
+                )
+                layout(constraints.maxWidth, placeable.height) {
+                    placeable.place(-sidePad, 0)
+                }
+            }
+            .height(175.dp)
+            .testTag("profile_scenic_footer")
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.img_profile_mountain_kites),
+            contentDescription = if (isEn) {
+                "Mountain scenery with parents and children flying kites"
+            } else {
+                "Pemandangan gunung dengan orang tua dan anak-anak bermain layang-layang"
+            },
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.BottomCenter,
+            colorFilter = colorFilter,
+            alpha = if (isDarkTheme) 0.90f else 0.92f,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(60.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(bgColor, bgColor.copy(alpha = 0f))
+                    )
+                )
+        )
     }
 }
