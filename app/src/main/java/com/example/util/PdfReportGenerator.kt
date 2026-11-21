@@ -232,7 +232,7 @@ object PdfReportGenerator {
         canvas.drawBitmap(bitmap, null, destRect, bmpPaint)
     }
 
-    private fun drawHeader(
+    internal fun drawHeader(
         context: Context,
         canvas: Canvas,
         paint: Paint,
@@ -363,7 +363,7 @@ object PdfReportGenerator {
         return y + 14f
     }
 
-    private fun drawStudentBio(
+    internal fun drawStudentBio(
         canvas: Canvas,
         paint: Paint,
         width: Int,
@@ -948,6 +948,39 @@ object PdfReportGenerator {
             }
 
             context.startActivity(Intent.createChooser(shareIntent, s.pdfPassportChooserTitle))
+        } catch (e: Exception) {
+            Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun shareDocumentPdf(
+        context: Context,
+        pdfFile: File,
+        subject: String,
+        text: String,
+        chooserTitle: String? = null
+    ) {
+        val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val s = AppLanguageManager.getStrings(context).report
+        try {
+            val uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                pdfFile
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, subject)
+                putExtra(Intent.EXTRA_TEXT, text)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(
+                Intent.createChooser(
+                    shareIntent,
+                    chooserTitle ?: if (isEn) "Share PDF Report" else "Bagikan Laporan PDF"
+                )
+            )
         } catch (e: Exception) {
             Toast.makeText(context, s.pdfErrorToast(e.message ?: ""), Toast.LENGTH_SHORT).show()
         }

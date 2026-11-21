@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.MarkChatRead
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.AlertDialog
@@ -71,9 +73,13 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentExpectationHelper
+import com.example.data.model.SchoolProfile
+import com.example.ui.components.ParentPdfReadyDialog
+import com.example.ui.components.ParentReadyPdfDialogData
 import com.example.ui.dialogs.appendVoiceTranscript
 import com.example.ui.dialogs.buildGoogleSpeechToTextIntent
 import com.example.util.DateUtils
+import com.example.util.ParentPortalPdfHelper
 import com.example.util.i18n.LocalAppStrings
 
 private enum class ParentHarapanVoiceField {
@@ -94,7 +100,9 @@ fun ParentHarapanContent(
         parentPrayerMessage: String,
         existing: ParentExpectation?
     ) -> Unit,
-    onDeleteExpectation: (ParentExpectation) -> Unit
+    onDeleteExpectation: (ParentExpectation) -> Unit,
+    schoolProfile: SchoolProfile = SchoolProfile(),
+    waliName: String = "Wali Asuh"
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -107,6 +115,7 @@ fun ParentHarapanContent(
     var adviceNotesText by remember { mutableStateOf("") }
     var prayerText by remember { mutableStateOf("") }
     var itemToDelete by remember { mutableStateOf<ParentExpectation?>(null) }
+    var readyPdfData by remember { mutableStateOf<ParentReadyPdfDialogData?>(null) }
 
     var activeVoiceField by remember { mutableStateOf<ParentHarapanVoiceField?>(null) }
     val speechLauncher = rememberLauncherForActivityResult(
@@ -583,8 +592,65 @@ fun ParentHarapanContent(
                     text = if (isEn) "Submitted Expectations (${expectations.size})" else "Daftar Harapan Tersimpan (${expectations.size})",
                     fontSize = 14.sp,
                     fontWeight = FontWeight.ExtraBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
+                if (student != null) {
+                    OutlinedButton(
+                        onClick = {
+                            val pdf = ParentPortalPdfHelper.generateStudentHarapanReportPdf(
+                                context = context,
+                                student = student,
+                                expectations = expectations,
+                                waliName = waliName.ifBlank { "Wali Asuh" },
+                                schoolProfile = schoolProfile
+                            )
+                            if (pdf != null) {
+                                readyPdfData = ParentReadyPdfDialogData(
+                                    file = pdf,
+                                    title = if (isEn) "Character Expectations PDF Ready" else "PDF Harapan Karakter Siap",
+                                    description = if (isEn) {
+                                        "Open or share your submitted character expectations & prayers for ${student.name}."
+                                    } else {
+                                        "Pilih buka PDF atau bagikan catatan harapan karakter & doa ananda ${student.name}."
+                                    },
+                                    shareSubject = if (isEn) "Character Expectations - ${student.name}" else "Harapan Karakter - ${student.name}",
+                                    shareText = if (isEn) {
+                                        "Attached character expectations & prayers PDF for ${student.name}."
+                                    } else {
+                                        "Terlampir PDF catatan harapan karakter & doa orang tua untuk ${student.name}."
+                                    }
+                                )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to create expectations PDF" else "Gagal membuat PDF harapan karakter",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFF047857)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_parent_harapan_pdf")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            tint = Color(0xFF047857),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (isEn) "PDF" else "Unduh PDF",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF047857)
+                        )
+                    }
+                }
             }
         }
 
@@ -879,6 +945,14 @@ fun ParentHarapanContent(
                     Text(if (isEn) "Cancel" else "Batal")
                 }
             }
+        )
+    }
+
+    readyPdfData?.let { dialogData ->
+        ParentPdfReadyDialog(
+            data = dialogData,
+            isEn = isEn,
+            onDismiss = { readyPdfData = null }
         )
     }
 }
