@@ -65,13 +65,13 @@ class ExampleRobolectricTest {
     }
     assertEquals(5, com.example.util.TopOnAdManager.getSavedClickCount(context))
 
-    // Simulate next 4 clicks (total 9)
-    for (i in 1..4) {
+    // Simulate next 9 clicks (total 14)
+    for (i in 1..9) {
       com.example.util.TopOnAdManager.onUserActionClick(context)
     }
-    assertEquals(9, com.example.util.TopOnAdManager.getSavedClickCount(context))
+    assertEquals(14, com.example.util.TopOnAdManager.getSavedClickCount(context))
 
-    // 10th click triggers reset back to 0
+    // 15th click triggers reset back to 0
     com.example.util.TopOnAdManager.onUserActionClick(context)
     assertEquals(0, com.example.util.TopOnAdManager.getSavedClickCount(context))
   }

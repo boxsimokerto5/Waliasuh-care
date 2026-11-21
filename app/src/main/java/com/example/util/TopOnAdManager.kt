@@ -20,7 +20,7 @@ object TopOnAdManager {
     private const val TAG = "TopOnAdManager"
     private const val PREFS_NAME = "topon_ads_prefs"
     private const val KEY_CLICK_COUNTER = "key_click_counter"
-    private const val CLICKS_THRESHOLD = 10
+    private const val CLICKS_THRESHOLD = 15
 
     // Kredensial TopOn & Placement ID
     const val DEFAULT_APP_ID = "h6af3e64badfd8"
@@ -233,7 +233,7 @@ object TopOnAdManager {
     /**
      * Dipanggil setiap kali pengguna mengeklik navigasi/menu/kartu umum
      * (TIDAK dipanggil saat pengguna sedang mengisi form / menginput data).
-     * Hitungan tersimpan secara persisten. Saat mencapai 10 kali, memicu iklan Interstitial
+     * Hitungan tersimpan secara persisten. Saat mencapai 15 kali, memicu iklan Interstitial
      * dan mereset hitungan kembali ke 0.
      */
     fun onUserActionClick(context: Context) {
@@ -249,10 +249,10 @@ object TopOnAdManager {
             prefs.edit().putInt(KEY_CLICK_COUNTER, 0).apply()
 
             if (activity != null && interstitialAd?.isAdReady() == true) {
-                Log.d(TAG, "Showing Interstitial Ad on 10th click")
+                Log.d(TAG, "Showing Interstitial Ad on ${CLICKS_THRESHOLD}th click")
                 interstitialAd?.show(activity)
             } else {
-                Log.d(TAG, "Interstitial not ready yet on 10th click, reloading...")
+                Log.d(TAG, "Interstitial not ready yet on ${CLICKS_THRESHOLD}th click, reloading...")
                 interstitialAd?.load()
             }
         } else {
