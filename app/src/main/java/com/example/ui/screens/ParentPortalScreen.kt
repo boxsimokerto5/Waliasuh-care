@@ -326,6 +326,7 @@ fun ParentPortalScreen(
     var showChangePasswordSheet by remember { mutableStateOf(false) }
     var showDeleteAccountSheet by remember { mutableStateOf(false) }
     var showQuranSheet by remember { mutableStateOf(false) }
+    var showBibleSheet by remember { mutableStateOf(false) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     val currentTab = visibleTabs.getOrElse(safeTabIndex) { ParentPortalTab.HOME }
 
@@ -712,7 +713,8 @@ fun ParentPortalScreen(
                                     account = assignedWaliAccount
                                 )
                         },
-                        onOpenQuran = { showQuranSheet = true }
+                        onOpenQuran = { showQuranSheet = true },
+                        onOpenBible = { showBibleSheet = true }
                     )
                     ParentPortalTab.PROFILE -> ParentProfileContent(
                         student = student,
@@ -783,7 +785,8 @@ fun ParentPortalScreen(
                                 }
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
-                        }
+                        },
+                        onOpenBible = { showBibleSheet = true }
                     )
                     ParentPortalTab.SHOLAT -> ParentSholatContent(
                         student = student,
@@ -999,6 +1002,13 @@ fun ParentPortalScreen(
             onDismiss = { showQuranSheet = false }
         )
     }
+    if (showBibleSheet && isChristianStudent) {
+        ParentBibleReaderHost(
+            viewModel = viewModel,
+            isEn = isEn,
+            onDismiss = { showBibleSheet = false }
+        )
+    }
 }
 
 @Composable
@@ -1028,7 +1038,8 @@ private fun ParentOverviewContent(
     onCancelDeletionRequest: (() -> Unit)? = null,
     onPreviewPhoto: (() -> Unit)? = null,
     onOpenWaliProfile: (() -> Unit)? = null,
-    onOpenQuran: () -> Unit = {}
+    onOpenQuran: () -> Unit = {},
+    onOpenBible: () -> Unit = {}
 ) {
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -1077,6 +1088,19 @@ private fun ParentOverviewContent(
                         badgeColor = Color(0xFF4338CA),
                         testTag = "card_parent_summary_kristen",
                         onClick = { onOpenTab(ParentPortalTab.KRISTEN) }
+                    )
+                )
+                add(
+                    ParentMenuTileSpec(
+                        id = "bible",
+                        title = if (isEn) "Digital Bible" else "Alkitab Digital",
+                        imageRes = R.drawable.img_menu_bible,
+                        accentColor = Color(0xFFB45309),
+                        softBg = Color(0xFFFFFBEB),
+                        badgeText = if (isEn) "66 Books" else "66 Kitab",
+                        badgeColor = Color(0xFFB45309),
+                        testTag = "card_parent_summary_bible",
+                        onClick = onOpenBible
                     )
                 )
             }
@@ -3355,6 +3379,53 @@ private fun ParentTabunganContent(
             }
         }
     }
+}
+
+@Composable
+private fun ParentBibleReaderHost(
+    viewModel: HealthViewModel,
+    isEn: Boolean,
+    onDismiss: () -> Unit
+) {
+    val bibleBookmarks by viewModel.bibleBookmarks.collectAsStateWithLifecycle()
+    val bibleNotes by viewModel.bibleNotes.collectAsStateWithLifecycle()
+    com.example.ui.dialogs.BibleReaderSheet(
+        bookmarks = bibleBookmarks,
+        notes = bibleNotes,
+        initialEnglish = isEn,
+        useDialogWindow = true,
+        onSyncRequested = { viewModel.syncBibleOnlineQuietly() },
+        onToggleBookmark = { bookId, chapter, verse, textId, textEn, color, onResult ->
+            viewModel.toggleBibleBookmark(
+                bookId = bookId,
+                chapter = chapter,
+                verse = verse,
+                verseTextId = textId,
+                verseTextEn = textEn,
+                highlightColor = color,
+                onResult = onResult
+            )
+        },
+        onDeleteBookmark = { bm, onResult ->
+            viewModel.deleteBibleBookmark(bm, onResult)
+        },
+        onSaveNote = { existingNote, bookId, chapter, verse, title, content, tag, onResult ->
+            viewModel.saveBibleNote(
+                existingNote = existingNote,
+                bookId = bookId,
+                chapter = chapter,
+                verse = verse,
+                title = title,
+                content = content,
+                categoryTag = tag,
+                onResult = onResult
+            )
+        },
+        onDeleteNote = { note, onResult ->
+            viewModel.deleteBibleNote(note, onResult)
+        },
+        onDismiss = onDismiss
+    )
 }
 
 @Composable

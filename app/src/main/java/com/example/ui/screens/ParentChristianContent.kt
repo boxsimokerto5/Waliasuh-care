@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -67,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import coil.compose.rememberAsyncImagePainter
+import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipLocalSave
@@ -87,7 +89,8 @@ fun ParentChristianWorshipContent(
     waliName: String,
     isSavingMedia: Boolean,
     onSavePhotoToDevice: (record: ChristianWorshipRecord, silentAuto: Boolean) -> Unit,
-    onSaveAllPending: (List<ChristianWorshipRecord>) -> Unit
+    onSaveAllPending: (List<ChristianWorshipRecord>) -> Unit,
+    onOpenBible: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -298,6 +301,68 @@ fun ParentChristianWorshipContent(
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (onOpenBible != null) {
+                item(key = "parent_chris_bible_cta") {
+                    Card(
+                        onClick = onOpenBible,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_parent_christian_open_bible"),
+                        shape = RoundedCornerShape(16.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFCF3)),
+                        border = BorderStroke(1.2.dp, Color(0xFFE2C788))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.img_menu_bible),
+                                contentDescription = if (isEn) "Digital Bible" else "Alkitab Digital",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(44.dp)
+                                    .clip(RoundedCornerShape(12.dp))
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isEn) "Open Digital Bible" else "Buka Alkitab Digital",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color(0xFF74470B)
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "66 Books IND/ENG • Devotionals, Audio & Notes"
+                                    } else {
+                                        "66 Kitab IND/ENG • Renungan, Audio & Catatan"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF8B7149),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = Color(0xFFFEF3C7)
+                            ) {
+                                Text(
+                                    text = if (isEn) "66 Books" else "66 Kitab",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFB45309),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
                             }
                         }
                     }

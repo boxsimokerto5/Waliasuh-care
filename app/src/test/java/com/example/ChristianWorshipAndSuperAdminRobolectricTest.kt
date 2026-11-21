@@ -8,6 +8,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -474,14 +475,30 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
 
         composeTestRule.onNodeWithText("Salam Sejahtera", substring = true).assertExists()
         composeTestRule.onNodeWithTag("card_parent_summary_kristen").performScrollTo().assertExists()
+        composeTestRule.onNodeWithTag("card_parent_summary_bible").performScrollTo().assertExists()
         composeTestRule.onNodeWithTag("card_parent_summary_fasting").assertExists()
         composeTestRule.onNodeWithTag("card_parent_summary_sholat").assertDoesNotExist()
         composeTestRule.onNodeWithTag("card_parent_summary_mengaji").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("card_parent_summary_alquran").assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag("card_parent_summary_bible").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("bible_reader_root").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("bible_close_button").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("bible_reader_root").assertDoesNotExist()
 
         composeTestRule.onNodeWithTag("card_parent_summary_kristen").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("parent_christian_content").assertIsDisplayed()
         composeTestRule.onNodeWithTag("btn_parent_christian_pdf").assertExists()
+        composeTestRule.onNodeWithTag("btn_parent_christian_open_bible").assertExists().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("bible_reader_root").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("bible_close_button").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("parent_christian_list")
+            .performScrollToNode(hasText("Doa Pagi Bersama", substring = true))
         composeTestRule.onNodeWithText("Doa Pagi Bersama", substring = true).assertExists()
 
         vm.logout()

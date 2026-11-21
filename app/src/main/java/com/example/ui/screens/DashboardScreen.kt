@@ -112,6 +112,7 @@ import com.example.ui.components.CategoryHubOverlay
 import com.example.ui.components.DashboardBannerCarousel
 import com.example.ui.components.DashboardCategoryHub
 import com.example.ui.components.DashboardModalState
+import com.example.ui.components.DashboardTopHeroPager
 import com.example.ui.components.DashboardTourOverlay
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.InpatientStudentsStrip
@@ -693,379 +694,41 @@ fun DashboardScreen(
                         )
                     }
 
-                    val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-                    val heroGradient = if (isDarkSurface) {
-                        listOf(Color(0xFF064E3B), Color(0xFF065F46), Color(0xFF047857))
-                    } else {
-                        listOf(Color(0xFFF0FDF4), Color(0xFFDCFCE7), Color(0xFFD1FAE5))
-                    }
-                    val heroBorderColor = if (isDarkSurface) {
-                        Color(0xFF34D399).copy(alpha = 0.45f)
-                    } else {
-                        Color(0xFF86EFAC)
-                    }
-                    val heroTitleColor = if (isDarkSurface) Color(0xFFECFDF5) else Color(0xFF064E3B)
-                    val heroSubtitleColor = if (isDarkSurface) Color(0xFFA7F3D0) else Color(0xFF14532D)
-                    val heroAccentGreen = if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857)
-                    val heroDateBg = if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.72f) else Color.White.copy(alpha = 0.88f)
-                    val heroDateText = if (isDarkSurface) Color(0xFF6EE7B7) else Color(0xFF065F46)
-
-                    ElevatedCard(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .tourTarget(tourRegistry, TourTargetId.HERO_CARE)
-                            .testTag("card_summary_today"),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Brush.linearGradient(heroGradient))
-                                .border(1.dp, heroBorderColor, RoundedCornerShape(14.dp))
-                        ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            // Row 1: Concise Title + Short Date Chip + Wali Shortcut + Slim "+ Rencana" CTA
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(1.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            text = if (isEn) "Today's Care" else "Berobat Hari Ini",
-                                            fontSize = 13.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = heroTitleColor,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = heroDateBg,
-                                            border = BorderStroke(0.8.dp, heroBorderColor.copy(alpha = 0.8f))
-                                        ) {
-                                            Text(
-                                                text = todayShortFormatted,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = heroDateText,
-                                                maxLines = 1,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.5.dp)
-                                            )
-                                        }
-                                    }
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .clickable(onClick = onNavigateToProfile)
-                                            .padding(vertical = 1.dp, horizontal = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        if (currentWaliAccount?.hasProfilePhoto() == true) {
-                                            val acc = currentWaliAccount!!
-                                            StudentAvatar(
-                                                name = acc.name.ifBlank { waliName },
-                                                gender = if (acc.dormitory.contains("putri", ignoreCase = true)) "P" else "L",
-                                                size = 18.dp,
-                                                photoUrl = acc.photoUrl,
-                                                photoFallbackUrl = acc.photoFallbackUrl
-                                            )
-                                        } else {
-                                            Icon(
-                                                imageVector = Icons.Default.Person,
-                                                contentDescription = null,
-                                                tint = heroSubtitleColor,
-                                                modifier = Modifier.size(11.dp)
-                                            )
-                                        }
-                                        Text(
-                                            text = "Wali: $waliName",
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = heroSubtitleColor,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Row(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(10.dp))
-                                        .background(heroAccentGreen)
-                                        .clickable {
-                                            TopOnAdManager.onUserActionClick(context)
-                                            modalState.showCreateDialog = true
-                                        }
-                                        .padding(horizontal = 10.dp, vertical = 6.dp)
-                                        .testTag("fab_dashboard_add"),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    val ctaTextColor = if (isDarkSurface) Color(0xFF022C22) else Color.White
-                                    Icon(
-                                        imageVector = Icons.Default.Add,
-                                        contentDescription = if (isEn) "Add Sick Student / Treatment Plan" else "Tambah Anak Sakit / Rencana",
-                                        tint = ctaTextColor,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = if (isEn) "Plan" else "Rencana",
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = ctaTextColor,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-
-                            // Row 2: Horizontal Scrollable Faskes Pill Strip (Inpatients & Active Plans First)
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .horizontalScroll(rememberScrollState())
-                                    .testTag("row_faskes_strip"),
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                sortedFaskesEntries.forEach { (faskesName, count, faskesInpatients) ->
-                                    val hasActive = count > 0 || faskesInpatients.isNotEmpty()
-                                    val faskesSlug = faskesName.lowercase().replace(" ", "_")
-                                    val pillBg = when {
-                                        isDarkSurface && hasActive -> Color(0xFF022C22).copy(alpha = 0.85f)
-                                        isDarkSurface -> Color(0xFF022C22).copy(alpha = 0.55f)
-                                        hasActive -> Color.White
-                                        else -> Color.White.copy(alpha = 0.85f)
-                                    }
-                                    val pillBorder = when {
-                                        isDarkSurface && hasActive -> Color(0xFF6EE7B7).copy(alpha = 0.7f)
-                                        isDarkSurface -> Color(0xFF34D399).copy(alpha = 0.3f)
-                                        hasActive -> Color(0xFF34D399)
-                                        else -> Color(0xFFA7F3D0)
-                                    }
-                                    val pillLabelColor = when {
-                                        isDarkSurface -> Color(0xFFECFDF5)
-                                        hasActive -> Color(0xFF064E3B)
-                                        else -> Color(0xFF1E293B)
-                                    }
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(pillBg)
-                                            .border(
-                                                width = 1.dp,
-                                                color = pillBorder,
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 8.dp, vertical = 3.5.dp)
-                                            .testTag("pill_faskes_$faskesSlug"),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(5.5.dp)
-                                                .clip(CircleShape)
-                                                .background(
-                                                    when {
-                                                        faskesInpatients.isNotEmpty() -> Color(0xFFDC2626)
-                                                        count > 0 -> heroAccentGreen
-                                                        else -> if (isDarkSurface) Color(0xFF6EE7B7).copy(alpha = 0.6f) else Color(0xFF64748B).copy(alpha = 0.55f)
-                                                    }
-                                                )
-                                        )
-                                        Text(
-                                            text = faskesName,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (hasActive) FontWeight.Bold else FontWeight.Medium,
-                                            color = pillLabelColor,
-                                            maxLines = 1
-                                        )
-                                        Surface(
-                                            shape = CircleShape,
-                                            color = when {
-                                                count > 0 -> heroAccentGreen
-                                                isDarkSurface -> Color(0xFF065F46)
-                                                else -> Color(0xFFECFDF5)
-                                            }
-                                        ) {
-                                            Text(
-                                                text = if (count > 0) {
-                                                    if (isEn) "$count Students" else "$count Anak"
-                                                } else {
-                                                    "0"
-                                                },
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = when {
-                                                    count > 0 -> if (isDarkSurface) Color(0xFF022C22) else Color.White
-                                                    isDarkSurface -> Color(0xFFA7F3D0)
-                                                    else -> Color(0xFF065F46)
-                                                },
-                                                maxLines = 1,
-                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
-                                            )
-                                        }
-                                        if (faskesInpatients.isNotEmpty()) {
-                                            Surface(
-                                                onClick = {
-                                                    TopOnAdManager.onUserActionClick(context)
-                                                    if (faskesInpatients.size == 1) {
-                                                        selectedInpatientRecordForDetail = faskesInpatients.first()
-                                                    } else {
-                                                        inpatientPickerForFaskes = faskesName to faskesInpatients
-                                                    }
-                                                },
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = Color(0xFFFEE2E2),
-                                                modifier = Modifier.testTag("badge_inpatient_$faskesSlug")
-                                            ) {
-                                                Row(
-                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.LocalHospital,
-                                                        contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
-                                                        tint = Color(0xFFDC2626),
-                                                        modifier = Modifier.size(12.dp)
-                                                    )
-                                                    Text(
-                                                        text = if (isEn) "${faskesInpatients.size} Inpatient" else "${faskesInpatients.size} Rawat Inap",
-                                                        fontSize = 10.5.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = Color(0xFFB91C1C),
-                                                        maxLines = 1
-                                                    )
-                                                    Icon(
-                                                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                        contentDescription = null,
-                                                        tint = Color(0xFFB91C1C),
-                                                        modifier = Modifier.size(13.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                customFaskesInpatients.forEach { (faskesName, list) ->
-                                    Row(
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(8.dp))
-                                            .background(Color.White.copy(alpha = if (isDarkSurface) 0.12f else 0.92f))
-                                            .border(
-                                                width = 1.dp,
-                                                color = Color(0xFFDC2626).copy(alpha = 0.35f),
-                                                shape = RoundedCornerShape(8.dp)
-                                            )
-                                            .padding(horizontal = 8.dp, vertical = 3.5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                    ) {
-                                        Text(
-                                            text = faskesName,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isDarkSurface) Color(0xFFECFDF5) else Color(0xFF0F172A),
-                                            maxLines = 1
-                                        )
-                                        Surface(
-                                            onClick = {
-                                                TopOnAdManager.onUserActionClick(context)
-                                                if (list.size == 1) {
-                                                    selectedInpatientRecordForDetail = list.first()
-                                                } else {
-                                                    inpatientPickerForFaskes = faskesName to list
-                                                }
-                                            },
-                                            shape = RoundedCornerShape(8.dp),
-                                            color = Color(0xFFFEE2E2),
-                                            modifier = Modifier.testTag("badge_inpatient_custom")
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.LocalHospital,
-                                                    contentDescription = if (isEn) "Inpatient" else "Rawat Inap",
-                                                    tint = Color(0xFFDC2626),
-                                                    modifier = Modifier.size(12.dp)
-                                                )
-                                                Text(
-                                                    text = if (isEn) "${list.size} Inpatient" else "${list.size} Rawat Inap",
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFB91C1C),
-                                                    maxLines = 1
-                                                )
-                                                Icon(
-                                                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                                                    contentDescription = null,
-                                                    tint = Color(0xFFB91C1C),
-                                                    modifier = Modifier.size(13.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            // Row 3: Slim Progress Bar + Compact 1-Line Footer
-                            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                                LinearProgressIndicator(
-                                    progress = { progressRatio },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(3.5.dp)
-                                        .clip(RoundedCornerShape(2.dp)),
-                                    color = heroAccentGreen,
-                                    trackColor = if (isDarkSurface) Color(0xFF022C22).copy(alpha = 0.65f) else Color.White.copy(alpha = 0.75f)
-                                )
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Text(
-                                        text = if (isEn) {
-                                            "$totalToday/$totalSchoolStudents Students Scheduled"
-                                        } else {
-                                            "$totalToday/$totalSchoolStudents Siswa Dijadwalkan"
-                                        },
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = heroSubtitleColor
-                                    )
-                                    if (upcomingPlans.isNotEmpty()) {
-                                        Text(
-                                            text = if (isEn) "+${upcomingPlans.size} upcoming" else "+${upcomingPlans.size} mendatang",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = heroDateText
-                                        )
-                                    }
-                                }
-                            }
+                    DashboardTopHeroPager(
+                        todayShortFormatted = todayShortFormatted,
+                        waliName = waliName,
+                        currentWaliAccount = currentWaliAccount,
+                        schoolCityName = schoolProfile.city,
+                        sortedFaskesEntries = sortedFaskesEntries,
+                        customFaskesInpatients = customFaskesInpatients,
+                        totalToday = totalToday,
+                        totalSchoolStudents = totalSchoolStudents,
+                        upcomingCount = upcomingPlans.size,
+                        progressRatio = progressRatio,
+                        isEn = isEn,
+                        tourRegistry = tourRegistry,
+                        onNavigateToProfile = onNavigateToProfile,
+                        onAddPlan = {
+                            TopOnAdManager.onUserActionClick(context)
+                            modalState.showCreateDialog = true
+                        },
+                        onSelectInpatientRecord = { rec ->
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedInpatientRecordForDetail = rec
+                        },
+                        onOpenInpatientPicker = { faskesName, list ->
+                            TopOnAdManager.onUserActionClick(context)
+                            inpatientPickerForFaskes = faskesName to list
+                        },
+                        onOpenAbsenSholat = {
+                            TopOnAdManager.onUserActionClick(context)
+                            modalState.absenSholatInitialTab = 0
+                            modalState.absenSholatAutoOpenScanner = false
+                            modalState.absenSholatInitialScope = "ALL"
+                            modalState.absenSholatInitialStudent = null
+                            modalState.showAbsenSholatSheet = true
                         }
-                        }
-                    }
+                    )
                 }
 
                 // Super-App Hub Grid ala Gojek (Semua Kategori & Layanan)
