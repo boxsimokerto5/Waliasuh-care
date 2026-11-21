@@ -2345,7 +2345,9 @@ object PdfReportGenerator {
         existingRecords: List<VisitRecord>,
         targetDateMillis: Long? = null,
         waliName: String = "Wali Asuh",
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        selectedDistrictFilter: String = "Semua",
+        visitConfirmations: List<com.example.data.model.VisitConfirmation> = emptyList()
     ): File? {
         try {
             val document = PdfDocument()
@@ -2362,6 +2364,8 @@ object PdfReportGenerator {
                 targetDateMillis = targetDateMillis,
                 waliName = waliName,
                 schoolProfile = schoolProfile,
+                selectedDistrictFilter = selectedDistrictFilter,
+                visitConfirmations = visitConfirmations,
                 startNewCanvas = {
                     currentPage?.let { document.finishPage(it) }
                     pageNumber++
@@ -2375,8 +2379,11 @@ object PdfReportGenerator {
 
             val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
             val cleanTitle = session.title.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val distSlug = if (!selectedDistrictFilter.equals("Semua", ignoreCase = true) && selectedDistrictFilter.isNotBlank()) {
+                "_Kec_" + VisitHelper.displayDistrict(selectedDistrictFilter, false).replace(Regex("[^a-zA-Z0-9]"), "_").take(18)
+            } else ""
             val dateSlug = SimpleDateFormat("yyyyMMdd", Locale.US).format(Date(targetDateMillis ?: System.currentTimeMillis()))
-            val file = File(outputDir, "Daftar_Hadir_Kunjungan_Manual_${cleanTitle}_$dateSlug.pdf")
+            val file = File(outputDir, "Daftar_Hadir_Kunjungan_${cleanTitle}${distSlug}_$dateSlug.pdf")
 
             FileOutputStream(file).use { out ->
                 document.writeTo(out)
@@ -2398,6 +2405,8 @@ object PdfReportGenerator {
         targetDateMillis: Long? = null,
         waliName: String = "Wali Asuh",
         schoolProfile: SchoolProfile = SchoolProfile(),
+        selectedDistrictFilter: String = "Semua",
+        visitConfirmations: List<com.example.data.model.VisitConfirmation> = emptyList(),
         startNewCanvas: () -> Canvas
     ) {
         val lang = AppLanguageManager.getLanguage(context)
@@ -2454,7 +2463,7 @@ object PdfReportGenerator {
         paint.textSize = 8.8f
         paint.color = Color.rgb(71, 85, 105)
         val scheduleLine = TextUtils.ellipsize(
-            if (isEn) "Visit Dates: $datesLabel" else "Tanggal Jadwal: $datesLabel",
+            if (isEn) "Visit Date: $datesLabel" else "Tanggal Sesi: $datesLabel",
             TextPaint(paint),
             pageWidth - 70f,
             TextUtils.TruncateAt.END
@@ -2475,18 +2484,31 @@ object PdfReportGenerator {
         canvas.drawRoundRect(RectF(boxLeft, boxTop, boxRight, boxTop + summaryHeight), 6f, 6f, paint)
         paint.style = Paint.Style.FILL
 
-        val districtsText = session.getDistrictsList()
-            .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
-            .ifBlank { if (isEn) "All Districts" else "Semua Kecamatan" }
+        val isSpecificDistrict = !selectedDistrictFilter.equals("Semua", ignoreCase = true) && selectedDistrictFilter.isNotBlank()
+        val districtsText = if (isSpecificDistrict) {
+            VisitHelper.displayDistrict(selectedDistrictFilter, isEn)
+        } else {
+            session.getDistrictsList()
+                .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+                .ifBlank { if (isEn) "All Districts" else "Semua Kecamatan" }
+        }
         val presentCount = scheduledStudents.count { st ->
             VisitHelper.findVisitForStudent(existingRecords, st, targetDateMillis) != null
+        }
+        val confirmedCount = scheduledStudents.count { st ->
+            VisitHelper.findConfirmationForStudent(visitConfirmations, session.id, st, targetDateMillis)?.isHadir == true
         }
 
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.textSize = 9f
         paint.color = Color.rgb(3, 105, 161)
+        val distLinePrefix = if (isSpecificDistrict) {
+            if (isEn) "Printed District: " else "Kecamatan Dicetak: "
+        } else {
+            if (isEn) "Districts: " else "Kecamatan Terjadwal: "
+        }
         val distLine = TextUtils.ellipsize(
-            if (isEn) "Districts: $districtsText" else "Kecamatan Terjadwal: $districtsText",
+            "$distLinePrefix$districtsText",
             TextPaint(paint),
             boxRight - boxLeft - 20f,
             TextUtils.TruncateAt.END
@@ -2494,12 +2516,12 @@ object PdfReportGenerator {
         canvas.drawText(distLine, boxLeft + 10f, boxTop + 16f, paint)
 
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-        paint.textSize = 8.8f
+        paint.textSize = 8.5f
         paint.color = Color.rgb(51, 65, 85)
         val statLine = if (isEn) {
-            "• Total Scheduled: ${scheduledStudents.size} Students   • Checked-in: $presentCount   • Pending: ${scheduledStudents.size - presentCount}"
+            "• Scheduled: ${scheduledStudents.size}   • RSVP Confirmed: $confirmedCount   • Checked-in: $presentCount"
         } else {
-            "• Total Terjadwal: ${scheduledStudents.size} Siswa   • Sudah Hadir: $presentCount   • Belum Berkunjung: ${scheduledStudents.size - presentCount}"
+            "• Total Siswa: ${scheduledStudents.size}   • Konfirmasi Hadir: $confirmedCount   • Sudah Check-in: $presentCount"
         }
         canvas.drawText(statLine, boxLeft + 10f, boxTop + 34f, paint)
         currentY = boxTop + summaryHeight + 12f
@@ -2613,6 +2635,7 @@ object PdfReportGenerator {
                 canvas.drawText(distCell, colDistrict + 4f, textY, paint)
 
                 val matchedRec = VisitHelper.findVisitForStudent(existingRecords, st, targetDateMillis)
+                val matchedConf = VisitHelper.findConfirmationForStudent(visitConfirmations, session.id, st, targetDateMillis)
                 if (matchedRec != null) {
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     paint.color = Color.rgb(21, 128, 61)
@@ -2620,6 +2643,19 @@ object PdfReportGenerator {
                     canvas.drawText(arrivalText, colArrival + 4f, textY, paint)
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                     canvas.drawText(if (isEn) "✓ Checked" else "✓ Hadir", colSign + 5f, textY, paint)
+                } else if (matchedConf != null && matchedConf.isHadir) {
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.color = Color.rgb(15, 118, 110)
+                    val rsvpLabel = matchedConf.estimatedArrivalTime.ifBlank { "Konfirm" }
+                    canvas.drawText(
+                        TextUtils.ellipsize(rsvpLabel, TextPaint(paint), colSign - colArrival - 6f, TextUtils.TruncateAt.END).toString(),
+                        colArrival + 4f,
+                        textY,
+                        paint
+                    )
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(148, 163, 184)
+                    canvas.drawText("..........", colSign + 8f, textY + 2f, paint)
                 } else {
                     paint.color = Color.rgb(148, 163, 184)
                     canvas.drawText("____ : ____", colArrival + 4f, textY, paint)

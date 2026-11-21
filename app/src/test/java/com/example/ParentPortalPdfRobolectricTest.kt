@@ -620,7 +620,7 @@ class ParentPortalPdfRobolectricTest {
             targetScope = WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
             createdAt = now
         )
-        db.waliGalleryDao().insert(galPost)
+        db.waliGalleryPostDao().insert(galPost)
 
         val chatMsg = ParentMessage(
             id = 9891L,
@@ -734,7 +734,7 @@ class ParentPortalPdfRobolectricTest {
 
         vm.logout()
         db.parentMessageDao().deleteBySchoolId(schoolId)
-        db.waliGalleryDao().deleteBySchoolId(schoolId)
+        db.waliGalleryPostDao().deleteBySchoolId(schoolId)
         db.parentExpectationDao().delete(exp)
         db.tabunganTransactionDao().deleteBySchoolId(schoolId)
         db.haidRecordDao().deleteById(haidRec.id)

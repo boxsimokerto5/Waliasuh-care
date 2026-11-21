@@ -133,6 +133,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-checked_in_at"
     ): Response<PbListResponse<PbVisitRecordDto>>
 
+    // --- Visit Confirmations (Konfirmasi Kehadiran Orang Tua) ---
+    @GET("api/collections/visit_confirmations/records")
+    suspend fun listVisitConfirmations(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-updated_at"
+    ): Response<PbListResponse<PbVisitConfirmationDto>>
+
     // --- School Profiles ---
     @GET("api/collections/school_profiles/records")
     suspend fun listSchoolProfiles(

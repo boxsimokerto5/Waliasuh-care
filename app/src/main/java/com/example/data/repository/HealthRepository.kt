@@ -20,6 +20,7 @@ import com.example.data.dao.FastingRecordDao
 import com.example.data.dao.FastingSessionDao
 import com.example.data.dao.HaidRecordDao
 import com.example.data.dao.MengajiRecordDao
+import com.example.data.dao.VisitConfirmationDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.ParentAccessLinkDao
@@ -61,6 +62,7 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliGalleryLocalSave
@@ -100,7 +102,8 @@ class HealthRepository(
     private val christianWorshipDao: ChristianWorshipDao? = null,
     private val christianWorshipLocalSaveDao: ChristianWorshipLocalSaveDao? = null,
     private val bibleBookmarkDao: BibleBookmarkDao? = null,
-    private val bibleNoteDao: BibleNoteDao? = null
+    private val bibleNoteDao: BibleNoteDao? = null,
+    private val visitConfirmationDao: VisitConfirmationDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -121,6 +124,8 @@ class HealthRepository(
     val allMengajiRecords: Flow<List<MengajiRecord>> = mengajiRecordDao?.getAllRecords() ?: emptyFlow()
     val allVisitSessions: Flow<List<VisitSession>> = visitSessionDao?.getAllSessions() ?: emptyFlow()
     val allVisitRecords: Flow<List<VisitRecord>> = visitRecordDao?.getAllRecords() ?: emptyFlow()
+    val allVisitConfirmations: Flow<List<VisitConfirmation>> =
+        visitConfirmationDao?.getAllConfirmations() ?: emptyFlow()
     val allParentAccessLinks: Flow<List<ParentAccessLink>> = parentAccessLinkDao?.getAllLinks() ?: emptyFlow()
     val allParentMessages: Flow<List<ParentMessage>> = parentMessageDao?.getAllMessages() ?: emptyFlow()
     val allParentExpectations: Flow<List<ParentExpectation>> = parentExpectationDao?.getAllExpectations() ?: emptyFlow()
@@ -466,6 +471,7 @@ class HealthRepository(
 
     suspend fun deleteVisitSession(session: VisitSession) {
         visitRecordDao?.deleteBySessionId(session.id)
+        visitConfirmationDao?.deleteBySessionId(session.id)
         visitSessionDao?.delete(session)
     }
 
@@ -499,6 +505,34 @@ class HealthRepository(
 
     suspend fun deleteVisitRecordsBySchool(schoolId: String) {
         visitRecordDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertVisitConfirmation(confirmation: VisitConfirmation): Long =
+        visitConfirmationDao?.insert(confirmation) ?: 0L
+
+    suspend fun insertAllVisitConfirmations(confirmations: List<VisitConfirmation>) {
+        visitConfirmationDao?.insertAll(confirmations)
+    }
+
+    suspend fun getVisitConfirmationsBySchoolList(schoolId: String): List<VisitConfirmation> =
+        visitConfirmationDao?.getConfirmationsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun getVisitConfirmationsBySessionList(sessionId: Long): List<VisitConfirmation> =
+        visitConfirmationDao?.getConfirmationsBySessionList(sessionId) ?: emptyList()
+
+    suspend fun getVisitConfirmationBySessionAndStudent(sessionId: Long, studentId: Long): VisitConfirmation? =
+        visitConfirmationDao?.getBySessionAndStudent(sessionId, studentId)
+
+    suspend fun deleteVisitConfirmation(confirmation: VisitConfirmation) {
+        visitConfirmationDao?.delete(confirmation)
+    }
+
+    suspend fun deleteVisitConfirmationsBySession(sessionId: Long) {
+        visitConfirmationDao?.deleteBySessionId(sessionId)
+    }
+
+    suspend fun deleteVisitConfirmationsBySchool(schoolId: String) {
+        visitConfirmationDao?.deleteBySchoolId(schoolId)
     }
 
     // --- Parent Access Link & Two-Way Messages (Hubungan Orang Tua) ---

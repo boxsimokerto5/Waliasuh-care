@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import kotlinx.coroutines.flow.Flow
@@ -76,5 +77,41 @@ interface VisitRecordDao {
     suspend fun deleteBySessionId(sessionId: Long)
 
     @Query("DELETE FROM visit_records WHERE schoolId = :schoolId")
+    suspend fun deleteBySchoolId(schoolId: String)
+}
+
+@Dao
+interface VisitConfirmationDao {
+    @Query("SELECT * FROM visit_confirmations ORDER BY updatedAt DESC, confirmedAt DESC")
+    fun getAllConfirmations(): Flow<List<VisitConfirmation>>
+
+    @Query("SELECT * FROM visit_confirmations WHERE schoolId = :schoolId ORDER BY updatedAt DESC, confirmedAt DESC")
+    suspend fun getConfirmationsBySchoolList(schoolId: String): List<VisitConfirmation>
+
+    @Query("SELECT * FROM visit_confirmations WHERE sessionId = :sessionId ORDER BY updatedAt DESC, studentName ASC")
+    suspend fun getConfirmationsBySessionList(sessionId: Long): List<VisitConfirmation>
+
+    @Query("SELECT * FROM visit_confirmations WHERE sessionId = :sessionId AND studentId = :studentId LIMIT 1")
+    suspend fun getBySessionAndStudent(sessionId: Long, studentId: Long): VisitConfirmation?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(confirmation: VisitConfirmation): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(confirmations: List<VisitConfirmation>)
+
+    @Update
+    suspend fun update(confirmation: VisitConfirmation)
+
+    @Delete
+    suspend fun delete(confirmation: VisitConfirmation)
+
+    @Query("DELETE FROM visit_confirmations WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM visit_confirmations WHERE sessionId = :sessionId")
+    suspend fun deleteBySessionId(sessionId: Long)
+
+    @Query("DELETE FROM visit_confirmations WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
 }

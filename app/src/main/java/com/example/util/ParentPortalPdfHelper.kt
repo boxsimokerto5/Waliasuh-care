@@ -31,6 +31,10 @@ import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.VisitConfirmation
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
@@ -1726,6 +1730,300 @@ object ParentPortalPdfHelper {
                 currentY += cardHeight + 6f
             }
             currentY += 6f
+        }
+
+        if (currentY > pageHeight - 135f) {
+            finishCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 38f
+        }
+        PdfReportGenerator.drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCanvas()
+    }
+
+    /**
+     * PDF Jadwal Kunjungan & Kartu Konfirmasi Barcode Orang Tua (untuk Portal Orang Tua).
+     */
+    fun generateStudentVisitPassPdf(
+        context: Context,
+        student: ChildStudent,
+        matchedSessions: List<VisitSession>,
+        confirmations: List<VisitConfirmation>,
+        visitRecords: List<VisitRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        val document = PdfDocument()
+        var currentPage: PdfDocument.Page? = null
+        return try {
+            renderStudentVisitPassPages(
+                context = context,
+                student = student,
+                matchedSessions = matchedSessions,
+                confirmations = confirmations,
+                visitRecords = visitRecords,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, num).create()
+                    currentPage = document.startPage(pageInfo)
+                    currentPage!!.canvas
+                },
+                finishCanvas = {
+                    currentPage?.let {
+                        document.finishPage(it)
+                        currentPage = null
+                    }
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanStudent = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val file = File(outputDir, "Kartu_Kunjungan_${cleanStudent}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            runCatching { currentPage?.let { document.finishPage(it) } }
+            runCatching { document.close() }
+        }
+    }
+
+    internal fun renderStudentVisitPassPages(
+        context: Context,
+        student: ChildStudent,
+        matchedSessions: List<VisitSession>,
+        confirmations: List<VisitConfirmation>,
+        visitRecords: List<VisitRecord>,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val pageWidth = PAGE_WIDTH
+        val pageHeight = PAGE_HEIGHT
+        val marginX = 35f
+        val contentRight = pageWidth - marginX
+        val boxW = contentRight - marginX
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+
+        var currentY = 35f
+        currentY = PdfReportGenerator.drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = if (isEn) "PARENT VISIT NOTIFICATION & ENTRY PASS" else "PEMBERITAHUAN JADWAL & KARTU KUNJUNGAN"
+        )
+
+        val districtKey = VisitHelper.resolveStudentDistrictKey(student)
+        val districtLabel = VisitHelper.displayDistrict(districtKey, isEn)
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 12f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            if (isEn) "PARENT VISIT SCHEDULE & BARCODE PASS" else "JADWAL KUNJUNGAN & TIKET KONFIRMASI ORANG TUA",
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        currentY += 13f
+        paint.textSize = 9.5f
+        paint.color = Color.rgb(15, 118, 110)
+        canvas.drawText(
+            (if (isEn) "REGISTERED DISTRICT: " else "KECAMATAN TERDAFTAR: ") + districtLabel.uppercase(lang.locale),
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        paint.textAlign = Paint.Align.LEFT
+        currentY += 14f
+
+        currentY = PdfReportGenerator.drawStudentBio(canvas, paint, pageWidth, currentY, student, isEn)
+
+        val sortedSessions = matchedSessions.sortedWith(
+            compareByDescending<VisitSession> { it.isActive }
+                .thenBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
+        )
+
+        val dateFmt = SimpleDateFormat("EEEE, d MMMM yyyy", lang.locale)
+        val timeFmt = SimpleDateFormat("HH:mm", lang.locale)
+
+        if (sortedSessions.isEmpty()) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) {
+                    "No parent visit session currently matches your child's district ($districtLabel)."
+                } else {
+                    "Belum ada sesi kunjungan yang dijadwalkan untuk kecamatan anak asuh ($districtLabel)."
+                },
+                marginX + 6f,
+                currentY + 14f,
+                paint
+            )
+            currentY += 34f
+        } else {
+            val infoPaint = Paint(paint).apply {
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                textSize = 8.4f
+            }
+            sortedSessions.forEachIndexed { idx, session ->
+                val sessionDate = session.getVisitDatesList().firstOrNull() ?: 0L
+                val dateLabel = if (sessionDate > 0L) dateFmt.format(Date(sessionDate)) else "-"
+                val conf = VisitHelper.findConfirmationForStudent(confirmations, session.id, student, sessionDate)
+                val checkInRec = visitRecords.filter { it.sessionId == session.id }.let { recs ->
+                    VisitHelper.findVisitForStudent(recs, student, if (sessionDate > 0L) sessionDate else null)
+                }
+                val hasQr = conf != null && conf.isHadir
+                val qrSide = 82f
+                val textAvailW = if (hasQr) boxW - qrSide - 34f else boxW - 22f
+
+                val infoLines = buildList {
+                    add((if (isEn) "Visit Date: " else "Tanggal Kunjungan: ") + dateLabel)
+                    val districtsList = session.getDistrictsList().joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+                    if (districtsList.isNotBlank()) {
+                        add((if (isEn) "Session Districts: " else "Kecamatan Sesi: ") + districtsList)
+                    }
+                    when {
+                        conf == null -> add(
+                            if (isEn) "Confirmation Status: Not Confirmed Yet"
+                            else "Status Konfirmasi: Belum Mengisi Konfirmasi"
+                        )
+                        conf.isHadir -> {
+                            add(if (isEn) "Confirmation Status: CONFIRMED ATTENDING" else "Status Konfirmasi: TERKONFIRMASI HADIR")
+                            add(
+                                (if (isEn) "Visitor: " else "Pengunjung: ") +
+                                    listOfNotNull(
+                                        conf.visitorRelation.takeIf { it.isNotBlank() },
+                                        conf.visitorName.takeIf { it.isNotBlank() }
+                                    ).joinToString(" — ").ifBlank { "-" }
+                            )
+                            if (conf.estimatedArrivalTime.isNotBlank()) {
+                                add((if (isEn) "Estimated Arrival: " else "Perkiraan Jam Tiba: ") + conf.estimatedArrivalTime)
+                            }
+                            if (conf.notes.isNotBlank()) {
+                                add((if (isEn) "Notes: " else "Catatan: ") + conf.notes)
+                            }
+                            add((if (isEn) "Pass Code: " else "Kode Tiket: ") + conf.barcodeToken)
+                        }
+                        else -> {
+                            add(if (isEn) "Confirmation Status: UNABLE TO ATTEND" else "Status Konfirmasi: BERHALANGAN HADIR")
+                            if (conf.notes.isNotBlank()) {
+                                add((if (isEn) "Reason/Notes: " else "Keterangan: ") + conf.notes)
+                            }
+                        }
+                    }
+                    if (checkInRec != null) {
+                        add(
+                            if (isEn) {
+                                "Arrival Scan: Checked in at ${timeFmt.format(Date(checkInRec.checkedInAt))}"
+                            } else {
+                                "Kehadiran Asrama: Sudah hadir & discan pukul ${timeFmt.format(Date(checkInRec.checkedInAt))}"
+                            }
+                        )
+                    }
+                }
+
+                val wrappedLines = infoLines.flatMap { wrapTextLines(it, infoPaint, textAvailW, maxLines = 2) }
+                val contentH = 26f + wrappedLines.size * 13f + 10f
+                val cardHeight = maxOf(contentH, if (hasQr) qrSide + 34f else 84f)
+
+                if (currentY + cardHeight > pageHeight - 130f) {
+                    finishCanvas()
+                    pageNumber++
+                    canvas = startNewCanvas(pageNumber)
+                    currentY = 38f
+                }
+
+                val cardRect = RectF(marginX, currentY, contentRight, currentY + cardHeight)
+                paint.style = Paint.Style.FILL
+                paint.color = when {
+                    conf?.isHadir == true -> Color.rgb(240, 253, 250)
+                    conf != null -> Color.rgb(255, 251, 235)
+                    else -> Color.rgb(248, 250, 252)
+                }
+                canvas.drawRoundRect(cardRect, 8f, 8f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = when {
+                    conf?.isHadir == true -> Color.rgb(15, 118, 110)
+                    conf != null -> Color.rgb(217, 119, 6)
+                    else -> Color.rgb(203, 213, 225)
+                }
+                paint.strokeWidth = 1f
+                canvas.drawRoundRect(cardRect, 8f, 8f, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 9.5f
+                paint.color = Color.rgb(15, 118, 110)
+                val headerLine = "#${idx + 1} • ${session.title}"
+                canvas.drawText(
+                    TextUtils.ellipsize(headerLine, TextPaint(paint), textAvailW, TextUtils.TruncateAt.END).toString(),
+                    marginX + 10f,
+                    currentY + 16f,
+                    paint
+                )
+
+                var ly = currentY + 31f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8.4f
+                paint.color = Color.rgb(15, 23, 42)
+                wrappedLines.forEach { line ->
+                    canvas.drawText(line, marginX + 10f, ly, paint)
+                    ly += 13f
+                }
+
+                if (hasQr && conf != null) {
+                    val qrLeft = contentRight - qrSide - 10f
+                    val qrTop = currentY + 10f
+                    val qrBmp = StudentCardRenderer.generateQrBitmap(conf.qrPayload(), 256)
+                    if (qrBmp != null) {
+                        val qrFrame = RectF(qrLeft - 3f, qrTop - 3f, qrLeft + qrSide + 3f, qrTop + qrSide + 3f)
+                        paint.color = Color.WHITE
+                        paint.style = Paint.Style.FILL
+                        canvas.drawRoundRect(qrFrame, 5f, 5f, paint)
+                        paint.color = Color.rgb(15, 118, 110)
+                        paint.style = Paint.Style.STROKE
+                        paint.strokeWidth = 0.8f
+                        canvas.drawRoundRect(qrFrame, 5f, 5f, paint)
+                        paint.style = Paint.Style.FILL
+                        val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+                        canvas.drawBitmap(qrBmp, null, RectF(qrLeft, qrTop, qrLeft + qrSide, qrTop + qrSide), bmpPaint)
+                        qrBmp.recycle()
+
+                        paint.textAlign = Paint.Align.CENTER
+                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                        paint.textSize = 6.8f
+                        paint.color = Color.rgb(15, 118, 110)
+                        canvas.drawText(
+                            if (isEn) "SCAN ON ARRIVAL" else "SCAN SAAT DATANG",
+                            qrLeft + qrSide / 2f,
+                            qrTop + qrSide + 13f,
+                            paint
+                        )
+                        paint.textAlign = Paint.Align.LEFT
+                    }
+                }
+
+                currentY += cardHeight + 10f
+            }
         }
 
         if (currentY > pageHeight - 135f) {

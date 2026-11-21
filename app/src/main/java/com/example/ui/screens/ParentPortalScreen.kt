@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.DeleteForever
+import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.HourglassTop
@@ -133,6 +134,10 @@ import com.example.data.model.StudentReligionHelper
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.TandemWaliHelper
+import com.example.data.model.VisitConfirmation
+import com.example.data.model.VisitHelper
+import com.example.data.model.VisitRecord
+import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
@@ -180,6 +185,7 @@ private enum class ParentPortalTab(
     FASTING("Puasa", "Fasting", Icons.Default.NightlightRound, "parent_tab_fasting"),
     HAID("Riwayat Haid", "Haid Cycle", Icons.Default.Favorite, "parent_tab_haid"),
     TABUNGAN("Tabungan", "Savings", Icons.Default.AccountBalanceWallet, "parent_tab_tabungan"),
+    VISIT("Kunjungan", "Visits", Icons.Default.EventAvailable, "parent_tab_visit"),
     GALLERY("Galeri Wali", "Gallery", Icons.Default.PhotoLibrary, "parent_tab_gallery"),
     HARAPAN("Harapan", "Hopes", Icons.Default.VolunteerActivism, "parent_tab_harapan"),
     MESSAGES("Pesan", "Messages", Icons.Default.ChatBubbleOutline, "parent_tab_messages")
@@ -220,6 +226,9 @@ fun ParentPortalScreen(
     val chatLocalSavesByMsgId = remember(chatMediaLocalSaves) {
         chatMediaLocalSaves.associateBy { it.messageId }
     }
+    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val visitConfirmations by viewModel.visitConfirmations.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
@@ -243,6 +252,7 @@ fun ParentPortalScreen(
                 age = 12,
                 dormitory = link.studentDorm,
                 classGrade = link.studentClass,
+                district = link.studentDistrict,
                 allergies = "-",
                 bloodType = "-",
                 emergencyContact = link.parentPhone,
@@ -326,6 +336,7 @@ fun ParentPortalScreen(
             if (activeLink?.canViewFasting == true) add(ParentPortalTab.FASTING)
             if (isFemaleStudent && activeLink?.canViewHaid == true) add(ParentPortalTab.HAID)
             if (activeLink?.canViewTabungan == true) add(ParentPortalTab.TABUNGAN)
+            add(ParentPortalTab.VISIT)
             add(ParentPortalTab.GALLERY)
             add(ParentPortalTab.HARAPAN)
             add(ParentPortalTab.MESSAGES)
@@ -432,6 +443,7 @@ fun ParentPortalScreen(
         viewModel.syncSholatOnlineQuietly()
         viewModel.syncWaliGalleryOnlineQuietly()
         viewModel.syncChristianWorshipOnlineQuietly()
+        viewModel.syncVisitsOnlineQuietly()
     }
 
     LaunchedEffect(currentTab) {
@@ -444,6 +456,8 @@ fun ParentPortalScreen(
             viewModel.syncWaliGalleryOnlineQuietly()
         } else if (currentTab == ParentPortalTab.KRISTEN) {
             viewModel.syncChristianWorshipOnlineQuietly()
+        } else if (currentTab == ParentPortalTab.VISIT) {
+            viewModel.syncVisitsOnlineQuietly()
         }
     }
 
@@ -698,6 +712,9 @@ fun ParentPortalScreen(
                         expectations = studentExpectations,
                         galleryPosts = parentGalleryPosts,
                         localSavesByPostId = localSavesByPostId,
+                        visitSessions = visitSessions,
+                        visitConfirmations = visitConfirmations,
+                        visitRecords = visitRecords,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
                             val idx = visibleTabs.indexOf(targetTab)
@@ -936,6 +953,33 @@ fun ParentPortalScreen(
                             assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
                         },
                         schoolProfile = schoolProfile,
+                        onPdfReady = { readyPdfDialogData = it }
+                    )
+                    ParentPortalTab.VISIT -> ParentVisitContent(
+                        student = student,
+                        sessions = visitSessions,
+                        confirmations = visitConfirmations,
+                        visitRecords = visitRecords,
+                        defaultParentName = activeLink?.parentName.orEmpty(),
+                        schoolProfile = schoolProfile,
+                        waliName = resolvedWaliBadges.joinToString(", ") { it.name }.ifBlank {
+                            assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
+                        },
+                        onSaveConfirmation = { sess, targetStudent, visitDate, visitorName, relation, status, eta, notes ->
+                            viewModel.saveVisitConfirmation(
+                                session = sess,
+                                student = targetStudent,
+                                visitDate = visitDate,
+                                visitorName = visitorName,
+                                visitorRelation = relation,
+                                attendanceStatus = status,
+                                estimatedArrivalTime = eta,
+                                notes = notes,
+                                parentUsername = activeLink?.username.orEmpty()
+                            ) { _, feedback ->
+                                Toast.makeText(context, feedback, Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.GALLERY -> ParentGalleryContent(
@@ -1178,6 +1222,9 @@ private fun ParentOverviewContent(
     expectations: List<ParentExpectation>,
     galleryPosts: List<WaliGalleryPost> = emptyList(),
     localSavesByPostId: Map<Long, WaliGalleryLocalSave> = emptyMap(),
+    visitSessions: List<VisitSession> = emptyList(),
+    visitConfirmations: List<VisitConfirmation> = emptyList(),
+    visitRecords: List<VisitRecord> = emptyList(),
     unreadMessageCount: Int,
     onOpenTab: (ParentPortalTab) -> Unit,
     onOpenRequestDeleteAccount: (() -> Unit)? = null,
@@ -1191,6 +1238,20 @@ private fun ParentOverviewContent(
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     val lang = s.language
+
+    val matchedActiveVisitSessions = remember(visitSessions, student) {
+        if (student == null) emptyList()
+        else visitSessions
+            .filter { it.isActive && VisitHelper.isStudentInSessionSchedule(it, student) }
+            .sortedBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
+    }
+    val nextVisitSession = matchedActiveVisitSessions.firstOrNull()
+    val nextVisitConf = remember(nextVisitSession, visitConfirmations, student) {
+        val sess = nextVisitSession ?: return@remember null
+        val targetStudent = student ?: return@remember null
+        val d = sess.getVisitDatesList().firstOrNull()
+        VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, targetStudent, d)
+    }
 
     val menuTiles = remember(
         link,
@@ -1206,6 +1267,8 @@ private fun ParentOverviewContent(
         expectations.size,
         galleryPosts,
         localSavesByPostId,
+        matchedActiveVisitSessions,
+        nextVisitConf,
         unreadMessageCount,
         isEn
     ) {
@@ -1359,6 +1422,33 @@ private fun ParentOverviewContent(
                     )
                 )
             }
+            val unconfirmedVisitCount = if (student == null) 0 else matchedActiveVisitSessions.count { sess ->
+                val d = sess.getVisitDatesList().firstOrNull()
+                VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, student, d) == null
+            }
+            add(
+                ParentMenuTileSpec(
+                    id = "visit",
+                    title = if (isEn) "Visits" else "Kunjungan",
+                    imageRes = R.drawable.img_menu_kunjungan,
+                    accentColor = Color(0xFF0F766E),
+                    softBg = Color(0xFFF0FDFA),
+                    badgeText = when {
+                        unconfirmedVisitCount > 0 -> if (isEn) "$unconfirmedVisitCount Schedule" else "$unconfirmedVisitCount Jadwal"
+                        nextVisitConf?.isHadir == true -> if (isEn) "QR Ready" else "QR Siap"
+                        nextVisitConf != null -> if (isEn) "Absent" else "Berhalangan"
+                        matchedActiveVisitSessions.isNotEmpty() -> "${matchedActiveVisitSessions.size}"
+                        else -> null
+                    },
+                    badgeColor = when {
+                        unconfirmedVisitCount > 0 -> Color(0xFFDC2626)
+                        nextVisitConf?.isHadir == true -> Color(0xFF0F766E)
+                        else -> Color(0xFFD97706)
+                    },
+                    testTag = "card_parent_summary_visit",
+                    onClick = { onOpenTab(ParentPortalTab.VISIT) }
+                )
+            )
             val unsavedGalleryCount = galleryPosts.count { post ->
                 !post.isMediaPurgedFromServer && localSavesByPostId[post.id] == null &&
                     (post.photoUrl.isNotBlank() || post.photoFallbackUrl.isNotBlank())
@@ -1505,6 +1595,80 @@ private fun ParentOverviewContent(
                         }
                     }
                 }
+        }
+
+        if (nextVisitSession != null) {
+            val nextDateMillis = nextVisitSession.getVisitDatesList().firstOrNull() ?: 0L
+            val nextDateLabel = if (nextDateMillis > 0L) {
+                SimpleDateFormat("EEEE, d MMM yyyy", lang.locale).format(Date(nextDateMillis))
+            } else "-"
+            val distLabel = student?.let { VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(it), isEn) }.orEmpty()
+            Card(
+                onClick = { onOpenTab(ParentPortalTab.VISIT) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .testTag("banner_parent_home_visit_schedule"),
+                shape = RoundedCornerShape(14.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDFA)),
+                border = BorderStroke(1.dp, Color(0xFF5EEAD4))
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF0F766E).copy(alpha = 0.14f),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.EventAvailable,
+                                contentDescription = null,
+                                tint = Color(0xFF0F766E),
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = if (isEn) "Visit Schedule Notification" else "Pemberitahuan Jadwal Kunjungan",
+                            fontSize = 12.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF0F766E)
+                        )
+                        Text(
+                            text = "${nextVisitSession.title} • $nextDateLabel",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = when {
+                                nextVisitConf?.isHadir == true -> if (isEn) {
+                                    "Confirmed attending • Tap to open QR pass"
+                                } else {
+                                    "Sudah konfirmasi hadir • Ketuk untuk buka barcode"
+                                }
+                                nextVisitConf != null -> if (isEn) {
+                                    "Marked unable to attend • Tap to review"
+                                } else {
+                                    "Tercatat berhalangan hadir • Ketuk untuk ubah"
+                                }
+                                else -> if (isEn) {
+                                    "District $distLabel scheduled • Tap to confirm & get QR"
+                                } else {
+                                    "Wilayah $distLabel terjadwal • Ketuk untuk konfirmasi & barcode"
+                                }
+                            },
+                            fontSize = 11.sp,
+                            color = if (nextVisitConf == null) Color(0xFFB45309) else Color(0xFF0F766E)
+                        )
+                    }
+                }
+            }
         }
 
         Box(modifier = Modifier.padding(horizontal = 16.dp)) {

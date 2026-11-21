@@ -489,6 +489,8 @@ class WaliGalleryRobolectricTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("parent_gallery_content").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("parent_gallery_content")
+            .performScrollToNode(hasTestTag("card_parent_gallery_post_9571"))
         composeTestRule.onNodeWithTag("card_parent_gallery_post_9571").assertExists()
         composeTestRule.onNodeWithTag("card_parent_gallery_post_9572").assertDoesNotExist()
 

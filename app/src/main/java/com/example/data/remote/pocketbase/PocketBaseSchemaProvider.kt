@@ -357,6 +357,35 @@ object PocketBaseSchemaProvider {
             indexes = listOf("CREATE INDEX idx_vr_school ON visit_records (school_id)")
         ),
         PocketBaseCollectionMeta(
+            collectionName = "visit_confirmations",
+            description = "Konfirmasi kehadiran orang tua (RSVP) beserta token barcode kunjungan",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("session_id", "number"),
+                PbFieldDef("session_title", "text"),
+                PbFieldDef("visit_date", "number"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nik", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("student_district", "text"),
+                PbFieldDef("parent_username", "text"),
+                PbFieldDef("visitor_name", "text"),
+                PbFieldDef("visitor_relation", "text"),
+                PbFieldDef("attendance_status", "text"),
+                PbFieldDef("estimated_arrival_time", "text"),
+                PbFieldDef("notes", "text"),
+                PbFieldDef("barcode_token", "text"),
+                PbFieldDef("confirmed_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_vc_school ON visit_confirmations (school_id)")
+        ),
+        PocketBaseCollectionMeta(
             collectionName = "parent_access_links",
             description = "Kartu akses login orang tua & pilihan izin modul per siswa",
             multiTenantField = "school_id",
@@ -388,6 +417,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("student_photo_url", "text"),
                 PbFieldDef("student_photo_fallback_url", "text"),
                 PbFieldDef("student_religion", "text"),
+                PbFieldDef("student_district", "text"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")
             ),

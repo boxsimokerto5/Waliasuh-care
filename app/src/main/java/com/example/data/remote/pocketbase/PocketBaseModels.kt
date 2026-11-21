@@ -37,6 +37,7 @@ import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitHelper
+import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
@@ -1243,6 +1244,92 @@ data class PbVisitRecordDto(
 }
 
 @JsonClass(generateAdapter = true)
+data class PbVisitConfirmationDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "session_id") val sessionId: Long = 0L,
+    @Json(name = "session_title") val sessionTitle: String? = null,
+    @Json(name = "visit_date") val visitDate: Long? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "student_district") val studentDistrict: String? = null,
+    @Json(name = "parent_username") val parentUsername: String? = null,
+    @Json(name = "visitor_name") val visitorName: String? = null,
+    @Json(name = "visitor_relation") val visitorRelation: String? = null,
+    @Json(name = "attendance_status") val attendanceStatus: String? = null,
+    @Json(name = "estimated_arrival_time") val estimatedArrivalTime: String? = null,
+    @Json(name = "notes") val notes: String? = null,
+    @Json(name = "barcode_token") val barcodeToken: String? = null,
+    @Json(name = "confirmed_at") val confirmedAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): VisitConfirmation {
+        val now = System.currentTimeMillis()
+        val resolvedConfirmed = confirmedAt?.takeIf { it > 0L } ?: now
+        return VisitConfirmation(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            sessionId = sessionId,
+            sessionTitle = sessionTitle.orEmpty(),
+            visitDate = visitDate ?: 0L,
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            studentDistrict = VisitHelper.normalizeDistrict(studentDistrict),
+            parentUsername = parentUsername.orEmpty(),
+            visitorName = visitorName.orEmpty(),
+            visitorRelation = visitorRelation?.ifBlank { "Orang Tua / Wali" } ?: "Orang Tua / Wali",
+            attendanceStatus = attendanceStatus?.ifBlank { VisitConfirmation.STATUS_HADIR } ?: VisitConfirmation.STATUS_HADIR,
+            estimatedArrivalTime = estimatedArrivalTime.orEmpty(),
+            notes = notes.orEmpty(),
+            barcodeToken = barcodeToken?.takeIf { it.isNotBlank() } ?: VisitHelper.buildBarcodeToken(sessionId, studentId),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            confirmedAt = resolvedConfirmed,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedConfirmed
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: VisitConfirmation): PbVisitConfirmationDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "visit_conf:${model.schoolId}:${model.sessionId}:${model.studentId}:${model.studentName}"
+            )
+            return PbVisitConfirmationDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                sessionId = model.sessionId,
+                sessionTitle = model.sessionTitle,
+                visitDate = model.visitDate,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                studentDistrict = VisitHelper.normalizeDistrict(model.studentDistrict),
+                parentUsername = model.parentUsername,
+                visitorName = model.visitorName,
+                visitorRelation = model.visitorRelation,
+                attendanceStatus = model.attendanceStatus,
+                estimatedArrivalTime = model.estimatedArrivalTime,
+                notes = model.notes,
+                barcodeToken = model.barcodeToken,
+                confirmedAt = model.confirmedAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
 data class PbParentAccessLinkDto(
     @Json(name = "id") val id: String? = null,
     @Json(name = "local_id") val localId: Long? = null,
@@ -1272,6 +1359,7 @@ data class PbParentAccessLinkDto(
     @Json(name = "student_photo_url") val studentPhotoUrl: String? = null,
     @Json(name = "student_photo_fallback_url") val studentPhotoFallbackUrl: String? = null,
     @Json(name = "student_religion") val studentReligion: String? = null,
+    @Json(name = "student_district") val studentDistrict: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
 ) {
@@ -1306,6 +1394,7 @@ data class PbParentAccessLinkDto(
             studentPhotoUrl = studentPhotoUrl?.trim().orEmpty(),
             studentPhotoFallbackUrl = studentPhotoFallbackUrl?.trim().orEmpty(),
             studentReligion = com.example.data.model.StudentReligionHelper.normalize(studentReligion),
+            studentDistrict = VisitHelper.normalizeDistrict(studentDistrict),
             createdAt = resolvedCreated,
             updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
         )
@@ -1345,6 +1434,7 @@ data class PbParentAccessLinkDto(
                 studentPhotoUrl = model.studentPhotoUrl.trim(),
                 studentPhotoFallbackUrl = model.studentPhotoFallbackUrl.trim(),
                 studentReligion = com.example.data.model.StudentReligionHelper.normalize(model.studentReligion),
+                studentDistrict = VisitHelper.normalizeDistrict(model.studentDistrict),
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )

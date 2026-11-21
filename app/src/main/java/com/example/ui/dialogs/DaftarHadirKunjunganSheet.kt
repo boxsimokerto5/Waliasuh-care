@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
+import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
@@ -99,6 +100,7 @@ fun DaftarHadirKunjunganSheet(
     sessions: List<VisitSession>,
     students: List<ChildStudent>,
     visitRecords: List<VisitRecord>,
+    visitConfirmations: List<VisitConfirmation> = emptyList(),
     schoolProfile: SchoolProfile,
     waliName: String,
     initialTab: Int = 0,
@@ -128,6 +130,7 @@ fun DaftarHadirKunjunganSheet(
         sessions.sortedWith(
             compareByDescending<VisitSession> { it.isActive }
                 .thenByDescending { it.monthYear }
+                .thenBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
                 .thenByDescending { it.createdAt }
         )
     }
@@ -139,7 +142,7 @@ fun DaftarHadirKunjunganSheet(
     val dateSlots = remember(selectedSession) {
         val today = VisitHelper.normalizeDayStart(System.currentTimeMillis())
         val base = selectedSession?.getVisitDatesList().orEmpty()
-        (base + today).distinct().sorted()
+        base.ifEmpty { listOf(today) }
     }
     var selectedVisitDateMillis by remember(selectedSession?.id, dateSlots) {
         val today = VisitHelper.normalizeDayStart(System.currentTimeMillis())
@@ -206,7 +209,13 @@ fun DaftarHadirKunjunganSheet(
         }.take(20)
     }
 
-    fun triggerCheckIn(student: ChildStudent, method: String, bypassOutOfScheduleCheck: Boolean = false) {
+    fun triggerCheckIn(
+        student: ChildStudent,
+        method: String,
+        bypassOutOfScheduleCheck: Boolean = false,
+        visitorRelationOverride: String? = null,
+        visitorNameOverride: String? = null
+    ) {
         val sess = selectedSession ?: return
         val outOfSchedule = sess.getDistrictsList().isNotEmpty() &&
             !VisitHelper.isStudentInSessionSchedule(sess, student)
@@ -214,12 +223,18 @@ fun DaftarHadirKunjunganSheet(
             outOfScheduleStudentConfirm = student to method
             return
         }
+        val matchedConf = VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, student, selectedVisitDateMillis)
+        val effectiveRelation = visitorRelationOverride?.takeIf { it.isNotBlank() }
+            ?: matchedConf?.visitorRelation?.takeIf { visitorNameInput.isBlank() && it.isNotBlank() }
+            ?: selectedVisitorRelation
+        val effectiveName = visitorNameOverride?.takeIf { it.isNotBlank() }
+            ?: visitorNameInput.ifBlank { matchedConf?.visitorName.orEmpty() }
         onRecordVisitCheckIn(
             sess,
             student,
             selectedVisitDateMillis,
-            selectedVisitorRelation,
-            visitorNameInput,
+            effectiveRelation,
+            effectiveName,
             method
         ) { added, message, _ ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
@@ -229,7 +244,8 @@ fun DaftarHadirKunjunganSheet(
                     id = System.nanoTime(),
                     status = ScannerFeedbackStatus.SUCCESS,
                     title = if (isEn) "Checked in: ${student.name}" else "Hadir Kunjungan: ${student.name}",
-                    subtitle = "$dist • ${student.classGrade}"
+                    subtitle = "$dist • ${student.classGrade}" +
+                        if (effectiveName.isNotBlank()) " • $effectiveRelation ($effectiveName)" else ""
                 )
             } else {
                 ScannerFloatingFeedback(
@@ -589,13 +605,12 @@ fun DaftarHadirKunjunganSheet(
 
                             itemsIndexed(scanSearchResults, key = { _, st -> "visit_quick_${st.id}" }) { _, st ->
                                 val existingRec = VisitHelper.findVisitForStudent(sessionRecordsForDate, st, selectedVisitDateMillis)
+                                val confRec = selectedSession?.let { sess ->
+                                    VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, st, selectedVisitDateMillis)
+                                }
                                 val dist = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
                                 Card(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable(enabled = existingRec == null) {
-                                            triggerCheckIn(st, VisitRecord.METHOD_BARCODE)
-                                        },
+                                    modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (existingRec != null) Color(0xFFF8FAFC) else MaterialTheme.colorScheme.surface
@@ -609,7 +624,7 @@ fun DaftarHadirKunjunganSheet(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        Column(modifier = Modifier.weight(1f)) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                             Text(st.name, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                             Text(
                                                 text = "$dist • ${st.classGrade.ifBlank { "-" }} • ${st.dormitory.ifBlank { "-" }}",
@@ -618,16 +633,51 @@ fun DaftarHadirKunjunganSheet(
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis
                                             )
+                                            if (confRec != null && existingRec == null) {
+                                                Surface(
+                                                    shape = RoundedCornerShape(6.dp),
+                                                    color = if (confRec.isHadir) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
+                                                    modifier = Modifier.testTag("badge_visit_scan_confirmed_${st.id}")
+                                                ) {
+                                                    Text(
+                                                        text = if (confRec.isHadir) {
+                                                            val who = listOf(confRec.visitorRelation, confRec.visitorName).filter { it.isNotBlank() }.joinToString(": ")
+                                                            if (isEn) "RSVP Confirmed • $who" else "Sudah Konfirmasi Hadir • $who"
+                                                        } else {
+                                                            if (isEn) "RSVP: Unable to Attend" else "Konfirmasi Berhalangan"
+                                                        },
+                                                        fontSize = 9.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = if (confRec.isHadir) Color(0xFF15803D) else Color(0xFFB45309),
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    )
+                                                }
+                                            }
                                         }
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         if (existingRec != null) {
                                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF16A34A), modifier = Modifier.size(18.dp))
                                         } else {
-                                            Text(
-                                                text = if (isEn) "+ Check in" else "+ Hadir",
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = tealPrimary
-                                            )
+                                            Surface(
+                                                onClick = { triggerCheckIn(st, VisitRecord.METHOD_BARCODE) },
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = tealLight.copy(alpha = 0.7f),
+                                                modifier = Modifier
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("btn_scan_quick_checkin_${st.id}")
+                                            ) {
+                                                Box(
+                                                    contentAlignment = Alignment.Center,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                ) {
+                                                    Text(
+                                                        text = if (isEn) "+ Check in" else "+ Hadir",
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = tealPrimary
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -728,14 +778,19 @@ fun DaftarHadirKunjunganSheet(
                                             FilterChip(
                                                 selected = selectedDistrictFilter == "Semua",
                                                 onClick = { selectedDistrictFilter = "Semua" },
-                                                label = { Text(if (isEn) "All (${scheduledStudents.size})" else "Semua (${scheduledStudents.size})", fontSize = 11.sp) }
+                                                label = { Text(if (isEn) "All (${scheduledStudents.size})" else "Semua (${scheduledStudents.size})", fontSize = 11.sp) },
+                                                modifier = Modifier.testTag("chip_visit_dist_filter_all")
                                             )
                                             distList.forEach { dKey ->
                                                 val isSel = selectedDistrictFilter.equals(dKey, ignoreCase = true)
+                                                val distCount = scheduledStudents.count {
+                                                    VisitHelper.resolveStudentDistrictKey(it).equals(dKey, ignoreCase = true)
+                                                }
                                                 FilterChip(
                                                     selected = isSel,
                                                     onClick = { selectedDistrictFilter = if (isSel) "Semua" else dKey },
-                                                    label = { Text(VisitHelper.displayDistrict(dKey, isEn), fontSize = 11.sp) }
+                                                    label = { Text("${VisitHelper.displayDistrict(dKey, isEn)} ($distCount)", fontSize = 11.sp) },
+                                                    modifier = Modifier.testTag("chip_visit_dist_filter_$dKey")
                                                 )
                                             }
                                         }
@@ -757,16 +812,27 @@ fun DaftarHadirKunjunganSheet(
 
                             itemsIndexed(filteredManualRoster, key = { _, st -> "manual_row_${st.id}" }) { idx, st ->
                                 val matchedRec = VisitHelper.findVisitForStudent(sessionRecordsForDate, st, selectedVisitDateMillis)
+                                val matchedConf = selectedSession?.let { sess ->
+                                    VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, st, selectedVisitDateMillis)
+                                }
                                 val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(10.dp),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = if (matchedRec != null) Color(0xFFF0FDF4) else MaterialTheme.colorScheme.surface
+                                        containerColor = when {
+                                            matchedRec != null -> Color(0xFFF0FDF4)
+                                            matchedConf?.isHadir == true -> Color(0xFFF0FDFA)
+                                            else -> MaterialTheme.colorScheme.surface
+                                        }
                                     ),
                                     border = BorderStroke(
                                         1.dp,
-                                        if (matchedRec != null) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant
+                                        when {
+                                            matchedRec != null -> Color(0xFF86EFAC)
+                                            matchedConf?.isHadir == true -> Color(0xFF5EEAD4)
+                                            else -> MaterialTheme.colorScheme.outlineVariant
+                                        }
                                     )
                                 ) {
                                     Row(
@@ -784,7 +850,7 @@ fun DaftarHadirKunjunganSheet(
                                                 color = indigoPrimary
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
-                                            Column(modifier = Modifier.weight(1f)) {
+                                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                                 Text(st.name, fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 Text(
                                                     text = "$distLabel • ${st.classGrade.ifBlank { "-" }} • ${st.dormitory.ifBlank { "-" }}",
@@ -793,8 +859,36 @@ fun DaftarHadirKunjunganSheet(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
+                                                if (matchedConf != null) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = if (matchedConf.isHadir) Color(0xFFDCFCE7) else Color(0xFFFEF3C7),
+                                                        modifier = Modifier.testTag("badge_visit_confirmed_${st.id}")
+                                                    ) {
+                                                        val who = listOf(matchedConf.visitorRelation, matchedConf.visitorName)
+                                                            .filter { it.isNotBlank() }
+                                                            .joinToString(": ")
+                                                        val etaSuffix = matchedConf.estimatedArrivalTime.takeIf { it.isNotBlank() }
+                                                            ?.let { " • $it" }
+                                                            .orEmpty()
+                                                        Text(
+                                                            text = if (matchedConf.isHadir) {
+                                                                if (isEn) "Confirmed Hadir ($who$etaSuffix)" else "Sudah Konfirmasi Hadir ($who$etaSuffix)"
+                                                            } else {
+                                                                if (isEn) "Unable to Attend" else "Konfirmasi Berhalangan"
+                                                            },
+                                                            fontSize = 9.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (matchedConf.isHadir) Color(0xFF15803D) else Color(0xFFB45309),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
                                             }
                                         }
+                                        Spacer(modifier = Modifier.width(6.dp))
                                         if (matchedRec != null) {
                                             Surface(
                                                 onClick = { onDeleteVisitRecord(matchedRec) },
@@ -838,16 +932,47 @@ fun DaftarHadirKunjunganSheet(
         BarcodeScannerDialog(
             femaleStudents = students,
             onScanned = { scannedCode ->
-                val matched = StudentClassifier.findMatchingStudent(students, scannedCode)
-                if (matched == null) {
-                    scannerFeedback = ScannerFloatingFeedback(
-                        id = System.nanoTime(),
-                        status = ScannerFeedbackStatus.ERROR,
-                        title = if (isEn) "Card Not Found" else "Kartu Tidak Dikenal",
-                        subtitle = if (isEn) "Code \"$scannedCode\" is not registered in this school" else "Kode \"$scannedCode\" tidak ditemukan di data sekolah"
-                    )
+                val visitQr = VisitHelper.parseVisitBarcodePayload(scannedCode)
+                if (visitQr != null) {
+                    val matchedStudent = students.firstOrNull { st ->
+                        (visitQr.studentId > 0L && st.id == visitQr.studentId) ||
+                            (visitQr.studentNik.isNotBlank() && com.example.util.StudentCsvParser.cleanDigitsOnly(st.nik) == visitQr.studentNik)
+                    }
+                    if (matchedStudent == null) {
+                        scannerFeedback = ScannerFloatingFeedback(
+                            id = System.nanoTime(),
+                            status = ScannerFeedbackStatus.ERROR,
+                            title = if (isEn) "Visit Pass Student Not Found" else "Barcode Kunjungan Tidak Cocok",
+                            subtitle = if (isEn) "Code \"$scannedCode\" does not match any student" else "Kode \"$scannedCode\" tidak cocok dengan data siswa sekolah ini"
+                        )
+                    } else {
+                        val conf = visitConfirmations.firstOrNull {
+                            it.sessionId == visitQr.sessionId && it.studentId == matchedStudent.id
+                        } ?: VisitHelper.findConfirmationForStudent(visitConfirmations, selectedSession.id, matchedStudent, selectedVisitDateMillis)
+                        val confRel = conf?.visitorRelation?.takeIf { it.isNotBlank() }
+                        val confName = conf?.visitorName?.takeIf { it.isNotBlank() }
+                        if (confRel != null) selectedVisitorRelation = confRel
+                        if (confName != null) visitorNameInput = confName
+                        triggerCheckIn(
+                            student = matchedStudent,
+                            method = VisitRecord.METHOD_BARCODE,
+                            bypassOutOfScheduleCheck = true,
+                            visitorRelationOverride = confRel,
+                            visitorNameOverride = confName
+                        )
+                    }
                 } else {
-                    triggerCheckIn(matched, VisitRecord.METHOD_BARCODE, bypassOutOfScheduleCheck = true)
+                    val matched = StudentClassifier.findMatchingStudent(students, scannedCode)
+                    if (matched == null) {
+                        scannerFeedback = ScannerFloatingFeedback(
+                            id = System.nanoTime(),
+                            status = ScannerFeedbackStatus.ERROR,
+                            title = if (isEn) "Card Not Found" else "Kartu Tidak Dikenal",
+                            subtitle = if (isEn) "Code \"$scannedCode\" is not registered in this school" else "Kode \"$scannedCode\" tidak ditemukan di data sekolah"
+                        )
+                    } else {
+                        triggerCheckIn(matched, VisitRecord.METHOD_BARCODE, bypassOutOfScheduleCheck = true)
+                    }
                 }
             },
             onDismiss = {
@@ -935,7 +1060,9 @@ fun DaftarHadirKunjunganSheet(
                             existingRecords = sessionRecordsForDate,
                             targetDateMillis = selectedVisitDateMillis,
                             waliName = waliName,
-                            schoolProfile = schoolProfile
+                            schoolProfile = schoolProfile,
+                            selectedDistrictFilter = selectedDistrictFilter,
+                            visitConfirmations = visitConfirmations
                         )
                         if (file == null) {
                             Toast.makeText(

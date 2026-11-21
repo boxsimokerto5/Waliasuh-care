@@ -52,9 +52,11 @@ import com.example.data.model.TabunganTransaction
 import com.example.data.model.IncomingTandemRequestBundle
 import com.example.data.model.TandemWaliHelper
 import com.example.data.model.UploadedBannerMedia
+import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionDraft
 import com.example.data.model.WaliAccount
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
@@ -152,7 +154,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.christianWorshipDao(),
             db.christianWorshipLocalSaveDao(),
             db.bibleBookmarkDao(),
-            db.bibleNoteDao()
+            db.bibleNoteDao(),
+            db.visitConfirmationDao()
         )
     }
 
@@ -1887,6 +1890,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val visitConfirmations: StateFlow<List<VisitConfirmation>> = combine(
+        repository.allVisitConfirmations,
+        _schoolProfile,
+        _currentUserRole
+    ) { confirmations, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            confirmations
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            confirmations.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     // ==========================================
     // HUBUNGAN ORANG TUA (ANAK BINAAN, KARTU AKSES, IZIN & CHAT 2 ARAH)
     // ==========================================
@@ -2036,6 +2052,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 studentReligion = StudentReligionHelper.normalize(student.religion),
                 studentPhotoUrl = student.photoUrl.ifBlank { existing.studentPhotoUrl },
                 studentPhotoFallbackUrl = student.photoFallbackUrl.ifBlank { existing.studentPhotoFallbackUrl },
+                studentDistrict = VisitHelper.normalizeDistrict(student.district).ifBlank { existing.studentDistrict },
                 updatedAt = now
             )
         } else {
@@ -2062,6 +2079,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 canViewSholat = true,
                 schoolId = activeSchool,
                 studentReligion = StudentReligionHelper.normalize(student.religion),
+                studentDistrict = VisitHelper.normalizeDistrict(student.district),
                 studentPhotoUrl = student.photoUrl,
                 studentPhotoFallbackUrl = student.photoFallbackUrl,
                 createdAt = now,
@@ -4374,6 +4392,104 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun createVisitSessionsBatch(
+        drafts: List<VisitSessionDraft>,
+        onComplete: (created: List<VisitSession>, message: String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val role = _currentUserRole.value
+        if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+            onComplete(
+                emptyList(),
+                if (isEn) "Only School Admin can create visit sessions." else "Hanya Admin Sekolah yang dapat membuat sesi kunjungan."
+            )
+            return
+        }
+        val limitedDrafts = drafts.take(4)
+        if (limitedDrafts.isEmpty()) {
+            onComplete(
+                emptyList(),
+                if (isEn) "At least 1 visit session is required." else "Minimal harus ada 1 sesi kunjungan."
+            )
+            return
+        }
+        val normalizedDates = limitedDrafts.map { VisitHelper.normalizeDayStart(it.visitDateMillis) }
+        if (normalizedDates.any { it <= 0L } || normalizedDates.distinct().size != normalizedDates.size) {
+            onComplete(
+                emptyList(),
+                if (isEn) {
+                    "Each session must have a distinct visit date."
+                } else {
+                    "Setiap sesi wajib memiliki tanggal kunjungan yang berbeda."
+                }
+            )
+            return
+        }
+        // Enforce strict disjointness of districts across batch drafts
+        val seenDistrictsLower = mutableSetOf<String>()
+        limitedDrafts.forEach { d ->
+            d.selectedDistricts.forEach { rawDist ->
+                val lower = rawDist.trim().lowercase(java.util.Locale.US)
+                if (lower.isNotBlank() && !seenDistrictsLower.add(lower)) {
+                    onComplete(
+                        emptyList(),
+                        if (isEn) {
+                            "A district (${VisitHelper.displayDistrict(rawDist, true)}) cannot appear in more than one session."
+                        } else {
+                            "Kecamatan ${VisitHelper.displayDistrict(rawDist, false)} tidak dapat dipilih di lebih dari satu sesi."
+                        }
+                    )
+                    return
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val creator = _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
+            val createdList = mutableListOf<VisitSession>()
+            limitedDrafts.forEachIndexed { idx, draft ->
+                val now = System.currentTimeMillis() + idx
+                val dayStart = VisitHelper.normalizeDayStart(draft.visitDateMillis)
+                val resolvedMonthYear = draft.monthYear.trim().ifBlank {
+                    VisitHelper.buildDefaultMonthYear(dayStart)
+                }
+                val newSession = VisitSession(
+                    id = PocketBaseSyncManager.generateCloudSafeId() + idx,
+                    title = draft.title.trim().ifBlank {
+                        VisitHelper.defaultSessionTitleForMonthYear(
+                            resolvedMonthYear,
+                            AppLanguageManager.getLanguage(getApplication()).locale,
+                            isEn
+                        ) + " - Sesi ${idx + 1}"
+                    },
+                    monthYear = resolvedMonthYear,
+                    sessionDatesCsv = VisitHelper.formatDatesCsv(listOf(dayStart)),
+                    selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(draft.selectedDistricts),
+                    description = draft.description.trim(),
+                    isActive = true,
+                    createdBy = creator,
+                    schoolId = activeSchool,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                repository.insertVisitSession(newSession)
+                createdList.add(newSession)
+            }
+            val msg = if (isEn) {
+                "${createdList.size} visit session(s) created!"
+            } else {
+                "${createdList.size} sesi kunjungan berhasil dibuat!"
+            }
+            onComplete(createdList, msg)
+            if (!isUnitTestEnvironment()) {
+                createdList.forEach { sess ->
+                    PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), sess)
+                }
+            }
+        }
+    }
+
     fun updateVisitSession(
         session: VisitSession,
         title: String,
@@ -4520,6 +4636,88 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun saveVisitConfirmation(
+        session: VisitSession,
+        student: ChildStudent,
+        visitDate: Long = session.getVisitDatesList().firstOrNull() ?: System.currentTimeMillis(),
+        visitorName: String = "",
+        visitorRelation: String = "Orang Tua / Wali",
+        attendanceStatus: String = VisitConfirmation.STATUS_HADIR,
+        estimatedArrivalTime: String = "",
+        notes: String = "",
+        parentUsername: String = _currentUsername.value.orEmpty(),
+        onResult: (VisitConfirmation?, String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val now = System.currentTimeMillis()
+            val normalizedDate = VisitHelper.normalizeDayStart(visitDate)
+            val existing = repository.getVisitConfirmationBySessionAndStudent(session.id, student.id)
+            val activeSchool = session.schoolId.ifBlank {
+                student.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            }
+            val resolvedToken = existing?.barcodeToken?.takeIf { it.isNotBlank() }
+                ?: VisitHelper.buildBarcodeToken(session.id, student.id)
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            val cleanDistrict = VisitHelper.normalizeDistrict(student.district)
+            val confirmation = VisitConfirmation(
+                id = existing?.id?.takeIf { it > 0L } ?: PocketBaseSyncManager.generateCloudSafeId(),
+                sessionId = session.id,
+                sessionTitle = session.title,
+                visitDate = normalizedDate,
+                studentId = student.id,
+                studentName = student.name,
+                studentNik = cleanNik,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                studentDistrict = cleanDistrict,
+                parentUsername = parentUsername.trim().ifBlank { existing?.parentUsername.orEmpty() },
+                visitorName = visitorName.trim(),
+                visitorRelation = visitorRelation.trim().ifBlank { "Orang Tua / Wali" },
+                attendanceStatus = if (attendanceStatus.equals(VisitConfirmation.STATUS_BERHALANGAN, ignoreCase = true)) {
+                    VisitConfirmation.STATUS_BERHALANGAN
+                } else {
+                    VisitConfirmation.STATUS_HADIR
+                },
+                estimatedArrivalTime = estimatedArrivalTime.trim(),
+                notes = notes.trim(),
+                barcodeToken = resolvedToken,
+                schoolId = activeSchool,
+                confirmedAt = existing?.confirmedAt?.takeIf { it > 0L } ?: now,
+                updatedAt = now
+            )
+            repository.insertVisitConfirmation(confirmation)
+            val msg = if (confirmation.isHadir) {
+                if (isEn) {
+                    "Visit attendance confirmed! Barcode pass is ready."
+                } else {
+                    "Konfirmasi hadir tersimpan! Barcode kunjungan siap digunakan."
+                }
+            } else {
+                if (isEn) {
+                    "Absence notice recorded."
+                } else {
+                    "Pemberitahuan berhalangan hadir tersimpan."
+                }
+            }
+            onResult(confirmation, msg)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitConfirmation(getApplication(), confirmation)
+            }
+        }
+    }
+
+    fun deleteVisitConfirmation(confirmation: VisitConfirmation, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            repository.deleteVisitConfirmation(confirmation)
+            onComplete()
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteVisitConfirmation(getApplication(), confirmation.id)
+            }
+        }
+    }
+
     fun syncVisitsOnlineQuietly() {
         if (isUnitTestEnvironment()) return
         val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
@@ -4568,6 +4766,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteWaliAccountsBySchool(targetId)
             repository.deleteShiftMessagesBySchool(targetId)
             repository.deleteHaidRecordsBySchool(targetId)
+            repository.deleteVisitConfirmationsBySchool(targetId)
             repository.deleteVisitRecordsBySchool(targetId)
             repository.deleteVisitSessionsBySchool(targetId)
             onComplete()
@@ -7135,6 +7334,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteParentAccessLinksBySchool(targetSchoolId)
                 repository.deleteFastingRecordsBySchool(targetSchoolId)
                 repository.deleteFastingSessionsBySchool(targetSchoolId)
+                repository.deleteVisitConfirmationsBySchool(targetSchoolId)
                 repository.deleteVisitRecordsBySchool(targetSchoolId)
                 repository.deleteVisitSessionsBySchool(targetSchoolId)
                 repository.deleteMengajiRecordsBySchool(targetSchoolId)

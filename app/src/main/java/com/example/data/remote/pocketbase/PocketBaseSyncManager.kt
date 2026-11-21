@@ -44,6 +44,7 @@ import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
 import com.example.data.model.UploadedBannerMedia
 import com.example.data.model.UploadedInfoPentingMedia
+import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliAccount
@@ -525,6 +526,7 @@ object PocketBaseSyncManager {
             try {
                 val service = PocketBaseClient.getService(context) ?: return@withContext
                 deleteCollectionByFilter(service, "visit_records", buildSessionFilter(sessionId))
+                runCatching { deleteCollectionByFilter(service, "visit_confirmations", buildSessionFilter(sessionId)) }
                 service.deleteRecord("visit_sessions", PocketBaseIdCodec.toPbId(sessionId))
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteVisitSession ke PocketBase", e)
@@ -551,6 +553,29 @@ object PocketBaseSyncManager {
                 service.deleteRecord("visit_records", PocketBaseIdCodec.toPbId(recordId))
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteVisitRecord ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleVisitConfirmation(context: Context, confirmation: VisitConfirmation) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbVisitConfirmationDto.fromDomain(confirmation)
+                upsertSingleDto(service, "visit_confirmations", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleVisitConfirmation ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteVisitConfirmation(context: Context, confirmationId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("visit_confirmations", PocketBaseIdCodec.toPbId(confirmationId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteVisitConfirmation ke PocketBase", e)
             }
         }
 
@@ -1841,6 +1866,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
+            runCatching { deleteCollectionByFilter(service, "visit_confirmations", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_records", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_sessions", filter) }
             runCatching { deleteCollectionByFilter(service, "sholat_records", filter) }
@@ -2026,6 +2052,7 @@ object PocketBaseSyncManager {
 
         runCatching { syncVisitSessionsMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncVisitRecordsMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncVisitConfirmationsMerged(service, cleanSchoolId, filter, repository) }
     }
 
     suspend fun syncParentRelationsOnlineQuietly(
@@ -2626,6 +2653,43 @@ object PocketBaseSyncManager {
         }
     }
 
+    private suspend fun syncVisitConfirmationsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localConfirmations = repository.getVisitConfirmationsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listVisitConfirmations(page = page, perPage = 500, filter = filter)
+        }
+        val remoteDtos = remoteRes.getOrNull() ?: return
+        val remoteConfirmations = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
+
+        val localById = localConfirmations.associateBy { it.id }
+        val remoteById = remoteConfirmations.associateBy { it.id }
+
+        val toInsertLocal = remoteConfirmations.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllVisitConfirmations(toInsertLocal)
+        }
+
+        val toPushRemote = localConfirmations.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { conf ->
+                val dto = PbVisitConfirmationDto.fromDomain(conf)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "visit_confirmations", pairs)
+        }
+    }
+
     private suspend fun syncFastingSessionsMerged(
         service: PocketBaseService,
         cleanSchoolId: String,
@@ -3196,12 +3260,15 @@ object PocketBaseSyncManager {
                 syncSholatRecordsMerged(service, cleanSchoolId, filter, repository, deletedSholatIds)
             }
 
-            // 8. Sinkronkan Sesi & Daftar Hadir Kunjungan Orang Tua (visit_sessions & visit_records)
+            // 8. Sinkronkan Sesi, Konfirmasi & Daftar Hadir Kunjungan Orang Tua (visit_sessions, visit_records, visit_confirmations)
             runCatching {
                 syncVisitSessionsMerged(service, cleanSchoolId, filter, repository)
             }
             runCatching {
                 syncVisitRecordsMerged(service, cleanSchoolId, filter, repository)
+            }
+            runCatching {
+                syncVisitConfirmationsMerged(service, cleanSchoolId, filter, repository)
             }
 
             // 9. Sinkronkan Kartu Akses, Pesan & Harapan Karakter Orang Tua

@@ -2322,6 +2322,7 @@ private fun DashboardVisitAndParentModalsHost(
     val isEn = LocalAppStrings.current.isEnglish
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val visitConfirmations by viewModel.visitConfirmations.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     val incomingTandemBundles by viewModel.incomingTandemRequestBundles.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
@@ -2373,6 +2374,7 @@ private fun DashboardVisitAndParentModalsHost(
             sessions = visitSessions,
             students = students,
             visitRecords = visitRecords,
+            visitConfirmations = visitConfirmations,
             schoolProfile = schoolProfile,
             waliName = waliName,
             initialTab = modalState.daftarHadirKunjunganInitialTab,
@@ -2434,7 +2436,15 @@ private fun DashboardVisitAndParentModalsHost(
         CreateVisitSessionDialog(
             students = students,
             initialSession = modalState.visitSessionToEdit,
+            existingSessions = visitSessions,
             onDismiss = {
+                modalState.showCreateVisitSessionDialog = false
+                modalState.visitSessionToEdit = null
+            },
+            onConfirmBatch = { drafts ->
+                viewModel.createVisitSessionsBatch(drafts) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
                 modalState.showCreateVisitSessionDialog = false
                 modalState.visitSessionToEdit = null
             },

@@ -1694,9 +1694,9 @@ fun AdminScreen(
 
                                 Text(
                                     text = if (isEn) {
-                                        "Set monthly visit sessions with multiple scheduled dates (e.g., Week 2–4 Sundays) and select participating districts (Kecamatan) extracted from your school's students."
+                                        "Create 1–4 visit sessions per month with a distinct date per session and exclusive districts (Kecamatan) so parents know their exact visit schedule."
                                     } else {
-                                        "Atur jadwal kunjungan per bulan dengan beberapa tanggal (mis. Minggu ke-2, ke-3, ke-4) dan pilih kecamatan peserta secara dinamis sesuai data siswa sekolah."
+                                        "Buat 1–4 sesi kunjungan per bulan dengan tanggal berbeda di tiap sesi serta pembagian kecamatan eksklusif agar jadwal tampil otomatis di Portal Orang Tua."
                                     },
                                     fontSize = 11.5.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -3170,7 +3170,15 @@ fun AdminScreen(
         CreateVisitSessionDialog(
             students = schoolStudents,
             initialSession = visitSessionToEdit,
+            existingSessions = schoolVisitSessions,
             onDismiss = {
+                showCreateVisitSessionDialog = false
+                visitSessionToEdit = null
+            },
+            onConfirmBatch = { drafts ->
+                viewModel.createVisitSessionsBatch(drafts) { created, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
                 showCreateVisitSessionDialog = false
                 visitSessionToEdit = null
             },

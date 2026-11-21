@@ -62,6 +62,61 @@ data class VisitRecord(
     }
 }
 
+@Entity(tableName = "visit_confirmations")
+data class VisitConfirmation(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionId: Long,
+    val sessionTitle: String = "",
+    val visitDate: Long = 0L,
+    val studentId: Long = 0L,
+    val studentName: String,
+    val studentNik: String = "",
+    val studentNis: String = "",
+    val studentClass: String = "",
+    val studentDorm: String = "",
+    val studentDistrict: String = "",
+    val parentUsername: String = "",
+    val visitorName: String = "",
+    val visitorRelation: String = "Orang Tua / Wali",
+    val attendanceStatus: String = STATUS_HADIR,
+    val estimatedArrivalTime: String = "",
+    val notes: String = "",
+    val barcodeToken: String = "",
+    val schoolId: String = "SRT1-KDR",
+    val confirmedAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+) {
+    val isHadir: Boolean
+        get() = attendanceStatus.equals(STATUS_HADIR, ignoreCase = true)
+
+    fun qrPayload(): String = VisitHelper.buildVisitBarcodePayload(
+        sessionId = sessionId,
+        studentId = studentId,
+        token = barcodeToken,
+        studentNik = studentNik
+    )
+
+    companion object {
+        const val STATUS_HADIR = "HADIR"
+        const val STATUS_BERHALANGAN = "BERHALANGAN"
+    }
+}
+
+data class VisitSessionDraft(
+    val title: String,
+    val monthYear: String,
+    val visitDateMillis: Long,
+    val selectedDistricts: List<String>,
+    val description: String = ""
+)
+
+data class VisitQrPayload(
+    val sessionId: Long,
+    val studentId: Long,
+    val token: String,
+    val studentNik: String = ""
+)
+
 data class DistrictStudentGroup(
     val normalizedKey: String,
     val displayName: String,
@@ -70,6 +125,7 @@ data class DistrictStudentGroup(
 
 object VisitHelper {
     const val UNASSIGNED_DISTRICT = "__UNASSIGNED__"
+    const val QR_PREFIX = "WALIVISIT"
 
     private val leadingPrefixRegex = Regex("""^(?:kec\.?|kecamatan)\s+""", RegexOption.IGNORE_CASE)
     private val multiSpaceRegex = Regex("""\s+""")
@@ -230,6 +286,113 @@ object VisitHelper {
             matchesRecordToStudent(rec, student) &&
                 (normalizedTarget == null || normalizeDayStart(rec.visitDate) == normalizedTarget)
         }
+    }
+
+    fun matchesConfirmationToStudent(conf: VisitConfirmation, student: ChildStudent): Boolean {
+        if (student.id > 0L && conf.studentId == student.id) return true
+        val studentNik = StudentCsvParser.cleanDigitsOnly(student.nik)
+        val confNik = StudentCsvParser.cleanDigitsOnly(conf.studentNik)
+        if (studentNik.isNotBlank() && studentNik == confNik) return true
+        if (student.nis.isNotBlank() && conf.studentNis.equals(student.nis, ignoreCase = true)) return true
+        return student.name.isNotBlank() &&
+            conf.studentName.trim().equals(student.name.trim(), ignoreCase = true)
+    }
+
+    fun findConfirmationForStudent(
+        confirmations: List<VisitConfirmation>,
+        sessionId: Long,
+        student: ChildStudent,
+        targetDayStart: Long? = null
+    ): VisitConfirmation? {
+        val normalizedTarget = targetDayStart?.takeIf { it > 0L }?.let { normalizeDayStart(it) }
+        val inSession = confirmations.filter { it.sessionId == sessionId && matchesConfirmationToStudent(it, student) }
+        if (inSession.isEmpty()) return null
+        if (normalizedTarget != null) {
+            inSession.firstOrNull { it.visitDate > 0L && normalizeDayStart(it.visitDate) == normalizedTarget }?.let {
+                return it
+            }
+        }
+        return inSession.maxByOrNull { it.updatedAt }
+    }
+
+    fun buildBarcodeToken(sessionId: Long, studentId: Long): String {
+        val sPart = sessionId.coerceAtLeast(0L).toString(36).uppercase(Locale.US)
+        val uPart = studentId.coerceAtLeast(0L).toString(36).uppercase(Locale.US)
+        val sumPart = ((sessionId * 31L + studentId * 17L) and 0xFFFFL).toString(16).uppercase(Locale.US).padStart(4, '0')
+        return "VST-$sPart-$uPart-$sumPart"
+    }
+
+    fun buildVisitBarcodePayload(
+        sessionId: Long,
+        studentId: Long,
+        token: String,
+        studentNik: String = ""
+    ): String {
+        val safeToken = token.trim().ifBlank { buildBarcodeToken(sessionId, studentId) }
+        val cleanNik = StudentCsvParser.cleanDigitsOnly(studentNik)
+        return "$QR_PREFIX|$sessionId|$studentId|$safeToken|$cleanNik"
+    }
+
+    fun parseVisitBarcodePayload(raw: String): VisitQrPayload? {
+        val trimmed = raw.trim()
+        if (!trimmed.startsWith("$QR_PREFIX|", ignoreCase = true)) return null
+        val parts = trimmed.split("|")
+        if (parts.size < 4) return null
+        val sessionId = parts[1].trim().toLongOrNull() ?: return null
+        val studentId = parts[2].trim().toLongOrNull() ?: return null
+        val token = parts[3].trim()
+        val nik = parts.getOrNull(4)?.trim().orEmpty()
+        return VisitQrPayload(
+            sessionId = sessionId,
+            studentId = studentId,
+            token = token,
+            studentNik = StudentCsvParser.cleanDigitsOnly(nik)
+        )
+    }
+
+    /**
+     * Mengembalikan map kecamatan (lowercase) -> indeks sesi yang sudah memilih kecamatan tsb,
+     * kecuali sesi [excludeIndex]. Memastikan 1 kecamatan hanya dipilih oleh 1 sesi.
+     */
+    fun usedDistrictsByOtherDrafts(
+        draftDistricts: List<Set<String>>,
+        excludeIndex: Int
+    ): Map<String, Int> {
+        val map = linkedMapOf<String, Int>()
+        draftDistricts.forEachIndexed { idx, keys ->
+            if (idx != excludeIndex) {
+                keys.forEach { key ->
+                    val normLower = key.trim().lowercase(Locale.US)
+                    if (normLower.isNotBlank() && normLower !in map) {
+                        map[normLower] = idx
+                    }
+                }
+            }
+        }
+        return map
+    }
+
+    /**
+     * Mengembalikan map kecamatan (lowercase) -> judul sesi aktif lain di bulan yang sama.
+     */
+    fun usedDistrictsInExistingSessions(
+        sessions: List<VisitSession>,
+        monthYear: String,
+        excludeSessionId: Long = -1L
+    ): Map<String, String> {
+        val cleanMonth = monthYear.trim()
+        val map = linkedMapOf<String, String>()
+        sessions
+            .filter { it.isActive && it.id != excludeSessionId && (cleanMonth.isBlank() || it.monthYear.equals(cleanMonth, ignoreCase = true)) }
+            .forEach { sess ->
+                sess.getDistrictsList().forEach { dist ->
+                    val normLower = dist.trim().lowercase(Locale.US)
+                    if (normLower.isNotBlank() && normLower !in map) {
+                        map[normLower] = sess.title
+                    }
+                }
+            }
+        return map
     }
 
     fun formatMonthYearLabel(monthYear: String, locale: Locale): String {

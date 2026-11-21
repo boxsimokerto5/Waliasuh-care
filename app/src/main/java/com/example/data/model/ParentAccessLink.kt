@@ -32,6 +32,7 @@ data class ParentAccessLink(
     val studentPhotoUrl: String = "",
     val studentPhotoFallbackUrl: String = "",
     val studentReligion: String = "",
+    val studentDistrict: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis()
 )

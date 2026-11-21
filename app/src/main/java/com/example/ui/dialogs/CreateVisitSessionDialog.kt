@@ -20,12 +20,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,6 +46,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -59,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionDraft
 import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -67,12 +71,24 @@ import java.util.Locale
 
 private val VisitIndigo = Color(0xFF1D4ED8)
 private val VisitIndigoLight = Color(0xFFDBEAFE)
+private val VisitTeal = Color(0xFF0F766E)
+private val VisitTealLight = Color(0xFFCCFBF1)
+
+private data class SessionDraftUiState(
+    val title: String,
+    val hasCustomTitle: Boolean,
+    val dateMillis: Long,
+    val selectedDistricts: Set<String>,
+    val description: String
+)
 
 @Composable
 fun CreateVisitSessionDialog(
     students: List<ChildStudent>,
     initialSession: VisitSession? = null,
+    existingSessions: List<VisitSession> = emptyList(),
     onDismiss: () -> Unit,
+    onConfirmBatch: ((List<VisitSessionDraft>) -> Unit)? = null,
     onConfirm: (
         title: String,
         monthYear: String,
@@ -85,6 +101,7 @@ fun CreateVisitSessionDialog(
     val isEn = s.isEnglish
     val locale = s.language.locale
 
+    val isEditMode = initialSession != null
     val defaultMonthYear = remember(initialSession) {
         initialSession?.monthYear?.ifBlank { VisitHelper.buildDefaultMonthYear() }
             ?: VisitHelper.buildDefaultMonthYear()
@@ -106,42 +123,93 @@ fun CreateVisitSessionDialog(
     }
 
     var selectedMonthYear by remember { mutableStateOf(defaultMonthYear) }
-    var title by remember {
-        mutableStateOf(
-            initialSession?.title ?: VisitHelper.defaultSessionTitleForMonthYear(defaultMonthYear, locale, isEn)
-        )
-    }
-    var hasCustomTitle by remember { mutableStateOf(initialSession != null) }
+    var sessionCount by remember { mutableIntStateOf(1) }
+    var activeSessionIdx by remember { mutableIntStateOf(0) }
 
-    var selectedDates by remember {
-        mutableStateOf(
-            initialSession?.getVisitDatesList()?.takeIf { it.isNotEmpty() }
-                ?: computeDefaultVisitSundays(defaultMonthYear).take(2)
-        )
+    val initialSundays = remember(defaultMonthYear) {
+        computeDistinctMonthVisitDates(defaultMonthYear, 4)
     }
-    var showDatePicker by remember { mutableStateOf(false) }
+
+    val drafts = remember(initialSession) {
+        mutableStateListOf<SessionDraftUiState>().apply {
+            if (initialSession != null) {
+                add(
+                    SessionDraftUiState(
+                        title = initialSession.title,
+                        hasCustomTitle = true,
+                        dateMillis = initialSession.getVisitDatesList().firstOrNull()
+                            ?: initialSundays.firstOrNull()
+                            ?: VisitHelper.normalizeDayStart(System.currentTimeMillis()),
+                        selectedDistricts = initialSession.getDistrictsList().toSet(),
+                        description = initialSession.description
+                    )
+                )
+            } else {
+                val baseTitle = VisitHelper.defaultSessionTitleForMonthYear(defaultMonthYear, locale, isEn)
+                for (i in 0 until 4) {
+                    add(
+                        SessionDraftUiState(
+                            title = "$baseTitle - Sesi ${i + 1}",
+                            hasCustomTitle = false,
+                            dateMillis = initialSundays.getOrElse(i) {
+                                initialSundays.firstOrNull() ?: VisitHelper.normalizeDayStart(System.currentTimeMillis())
+                            },
+                            selectedDistricts = emptySet(),
+                            description = ""
+                        )
+                    )
+                }
+            }
+        }
+    }
+
+    var datePickerSessionIdx by remember { mutableStateOf<Int?>(null) }
+    var validationBanner by remember { mutableStateOf<String?>(null) }
 
     val dynamicDistricts = remember(students, isEn) {
         VisitHelper.extractDynamicDistricts(students, isEn)
     }
+    val dateFormatter = remember(locale) { SimpleDateFormat("EEE, d MMM yyyy", locale) }
+    val shortDateFmt = remember(locale) { SimpleDateFormat("d MMM", locale) }
 
-    var selectedDistrictKeys by remember {
-        mutableStateOf(
-            initialSession?.getDistrictsList()?.toSet() ?: emptySet()
+    val activeDraftCount = if (isEditMode) 1 else sessionCount.coerceIn(1, 4)
+    val safeActiveIdx = activeSessionIdx.coerceIn(0, activeDraftCount - 1)
+    val currentDraft = drafts[safeActiveIdx]
+
+    // Districts locked by other sessions in this batch (for indices 0 until activeDraftCount)
+    val lockedByBatch = remember(
+        drafts.toList(),
+        safeActiveIdx,
+        activeDraftCount
+    ) {
+        VisitHelper.usedDistrictsByOtherDrafts(
+            draftDistricts = drafts.take(activeDraftCount).map { it.selectedDistricts },
+            excludeIndex = safeActiveIdx
         )
     }
-    var description by remember { mutableStateOf(initialSession?.description ?: "") }
 
-    val dateFormatter = remember(locale) { SimpleDateFormat("EEE, d MMM yyyy", locale) }
+    // Districts locked by existing active sessions in the same month (excluding self when editing)
+    val lockedByExisting = remember(existingSessions, selectedMonthYear, initialSession?.id) {
+        VisitHelper.usedDistrictsInExistingSessions(
+            sessions = existingSessions,
+            monthYear = selectedMonthYear,
+            excludeSessionId = initialSession?.id ?: -1L
+        )
+    }
 
-    val totalScheduledCount = remember(students, selectedDistrictKeys) {
-        if (selectedDistrictKeys.isEmpty()) 0
-        else {
-            val allowedLower = selectedDistrictKeys.map { it.lowercase(Locale.US) }.toSet()
-            students.count { st ->
-                VisitHelper.resolveStudentDistrictKey(st).lowercase(Locale.US) in allowedLower
-            }
+    val activeDateDuplicates = remember(drafts.toList(), activeDraftCount) {
+        val dates = drafts.take(activeDraftCount).map { VisitHelper.normalizeDayStart(it.dateMillis) }
+        dates.distinct().size != dates.size
+    }
+
+    val allDraftsValid = remember(drafts.toList(), activeDraftCount, dynamicDistricts.size) {
+        val slice = drafts.take(activeDraftCount)
+        val allTitlesOk = slice.all { it.title.isNotBlank() }
+        val datesOk = slice.map { VisitHelper.normalizeDayStart(it.dateMillis) }.let { list ->
+            list.all { it > 0L } && list.distinct().size == list.size
         }
+        val districtsOk = if (dynamicDistricts.isEmpty()) true else slice.all { it.selectedDistricts.isNotEmpty() }
+        allTitlesOk && datesOk && districtsOk
     }
 
     AlertDialog(
@@ -151,27 +219,24 @@ fun CreateVisitSessionDialog(
                 Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = VisitIndigo)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (initialSession != null) {
+                    text = if (isEditMode) {
                         if (isEn) "Edit Visit Session" else "Edit Sesi Kunjungan"
                     } else {
-                        if (isEn) "Create Monthly Visit Session" else "Buat Sesi Kunjungan Bulanan"
+                        if (isEn) "Create Visit Sessions (1–4)" else "Buat Jadwal Kunjungan (1–4 Sesi)"
                     },
-                    fontSize = 16.sp,
+                    fontSize = 15.5.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         },
         text = {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 500.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // 1. Pilihan Bulan Sesi
+                // 1. Bulan Sesi
                 Text(
-                    text = if (isEn) "1. Session Month:" else "1. Bulan Sesi Kunjungan:",
+                    text = if (isEn) "1. Visit Month:" else "1. Bulan Jadwal Kunjungan:",
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     color = VisitIndigo
@@ -188,8 +253,25 @@ fun CreateVisitSessionDialog(
                             selected = selected,
                             onClick = {
                                 selectedMonthYear = ym
-                                if (!hasCustomTitle) {
-                                    title = VisitHelper.defaultSessionTitleForMonthYear(ym, locale, isEn)
+                                validationBanner = null
+                                val monthDates = computeDistinctMonthVisitDates(ym, 4)
+                                val baseTitle = VisitHelper.defaultSessionTitleForMonthYear(ym, locale, isEn)
+                                for (i in 0 until drafts.size) {
+                                    val prev = drafts[i]
+                                    val updatedDate = if (!isEditMode) {
+                                        monthDates.getOrElse(i) { prev.dateMillis }
+                                    } else {
+                                        prev.dateMillis
+                                    }
+                                    val updatedTitle = if (!prev.hasCustomTitle) {
+                                        if (sessionCount == 1 && !isEditMode) baseTitle else "$baseTitle - Sesi ${i + 1}"
+                                    } else {
+                                        prev.title
+                                    }
+                                    drafts[i] = prev.copy(
+                                        title = updatedTitle,
+                                        dateMillis = updatedDate
+                                    )
                                 }
                             },
                             label = {
@@ -208,330 +290,539 @@ fun CreateVisitSessionDialog(
                     }
                 }
 
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = {
-                        title = it
-                        hasCustomTitle = true
-                    },
-                    label = { Text(if (isEn) "Session Title *" else "Nama Sesi Kunjungan *") },
-                    placeholder = { Text(if (isEn) "e.g., Parent Visit November 2026" else "Contoh: Kunjungan November 2026") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("input_visit_session_title")
-                )
-
-                // 2. Beberapa Tanggal dalam Satu Sesi (Minggu 2, 3, 4, dll.)
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = if (isEn) {
-                            "2. Visit Dates in This Session (${selectedDates.size} dates):"
-                        } else {
-                            "2. Tanggal Jadwal dalam Sesi Ini (${selectedDates.size} tanggal):"
-                        },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = VisitIndigo
-                    )
-                    Text(
-                        text = if (isEn) {
-                            "One monthly session can have multiple dates (e.g., 2nd Sunday, 3rd Sunday, 4th Sunday)."
-                        } else {
-                            "Satu sesi bulan dapat memiliki beberapa tanggal (mis. Minggu ke-2, ke-3, atau ke-4)."
-                        },
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    if (selectedDates.isNotEmpty()) {
-                        FlowRow(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            selectedDates.forEachIndexed { idx, millis ->
-                                Surface(
-                                    onClick = {
-                                        if (selectedDates.size > 1) {
-                                            selectedDates = selectedDates.filterNot { it == millis }
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    color = VisitIndigoLight,
-                                    border = BorderStroke(1.dp, VisitIndigo.copy(alpha = 0.35f)),
-                                    modifier = Modifier.testTag("chip_visit_date_$idx")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            Icons.Default.EventAvailable,
-                                            contentDescription = null,
-                                            tint = VisitIndigo,
-                                            modifier = Modifier.size(14.dp)
-                                        )
-                                        Text(
-                                            text = dateFormatter.format(Date(millis)),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold,
-                                            color = VisitIndigo
-                                        )
-                                        if (selectedDates.size > 1) {
-                                            Icon(
-                                                Icons.Default.Close,
-                                                contentDescription = if (isEn) "Remove date" else "Hapus tanggal",
-                                                tint = VisitIndigo,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { showDatePicker = true },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_add_visit_date")
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp), tint = VisitIndigo)
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (isEn) "Add Date" else "Tambah Tanggal",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = VisitIndigo,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                        OutlinedButton(
-                            onClick = {
-                                val sundays = computeDefaultVisitSundays(selectedMonthYear)
-                                if (sundays.isNotEmpty()) {
-                                    selectedDates = (selectedDates + sundays)
-                                        .map { VisitHelper.normalizeDayStart(it) }
-                                        .distinct()
-                                        .sorted()
-                                }
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                            modifier = Modifier
-                                .weight(1.1f)
-                                .heightIn(min = 48.dp)
-                                .testTag("btn_fill_sundays_visit")
-                        ) {
-                            Text(
-                                text = if (isEn) "Sundays W2-W4" else "+ Minggu 2, 3, 4",
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.SemiBold,
-                                color = Color(0xFF0F766E),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                }
-
-                // 3. Pilihan Kecamatan Dinamis dari Data Siswa Sekolah Ini
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                // 2. Pilihan Jumlah Sesi (1 - 4 Sesi) saat mode Buat Baru
+                if (!isEditMode) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = if (isEn) {
-                                "3. Participating Districts (${selectedDistrictKeys.size}):"
-                            } else {
-                                "3. Pilih Kecamatan Peserta (${selectedDistrictKeys.size}):"
-                            },
+                            text = if (isEn) "2. Number of Sessions (1–4):" else "2. Jumlah Sesi Kunjungan (1–4 Sesi):",
                             fontSize = 12.sp,
                             fontWeight = FontWeight.Bold,
-                            color = VisitIndigo,
-                            modifier = Modifier.weight(1f)
+                            color = VisitIndigo
                         )
-                        if (dynamicDistricts.isNotEmpty()) {
-                            TextButton(
-                                onClick = {
-                                    selectedDistrictKeys = if (selectedDistrictKeys.size == dynamicDistricts.size) {
-                                        emptySet()
-                                    } else {
-                                        dynamicDistricts.map { it.normalizedKey }.toSet()
-                                    }
-                                },
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                                modifier = Modifier.testTag("btn_toggle_all_visit_districts")
-                            ) {
-                                Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (selectedDistrictKeys.size == dynamicDistricts.size) {
-                                        if (isEn) "Clear" else "Kosongkan"
-                                    } else {
-                                        if (isEn) "Select All" else "Pilih Semua"
-                                    },
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-
-                    if (dynamicDistricts.isEmpty()) {
-                        Card(
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))
-                        ) {
-                            Text(
-                                text = if (isEn) {
-                                    "No student data in this school yet. Import/add students with their District (Kecamatan) first so districts appear automatically here."
-                                } else {
-                                    "Belum ada data siswa di sekolah ini. Tambahkan/impor siswa beserta kolom Kecamatan terlebih dahulu agar daftar kecamatan muncul otomatis."
-                                },
-                                fontSize = 11.sp,
-                                color = Color(0xFF92400E),
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    } else {
-                        FlowRow(
+                        Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            dynamicDistricts.forEach { group ->
-                                val isSelected = selectedDistrictKeys.any {
-                                    it.equals(group.normalizedKey, ignoreCase = true)
-                                }
+                            (1..4).forEach { count ->
+                                val isSel = sessionCount == count
                                 FilterChip(
-                                    selected = isSelected,
+                                    selected = isSel,
                                     onClick = {
-                                        selectedDistrictKeys = if (isSelected) {
-                                            selectedDistrictKeys.filterNot {
-                                                it.equals(group.normalizedKey, ignoreCase = true)
-                                            }.toSet()
-                                        } else {
-                                            selectedDistrictKeys + group.normalizedKey
+                                        sessionCount = count
+                                        activeSessionIdx = activeSessionIdx.coerceIn(0, count - 1)
+                                        validationBanner = null
+                                        val baseTitle = VisitHelper.defaultSessionTitleForMonthYear(selectedMonthYear, locale, isEn)
+                                        for (i in 0 until count) {
+                                            val cur = drafts[i]
+                                            if (!cur.hasCustomTitle) {
+                                                drafts[i] = cur.copy(
+                                                    title = if (count == 1) baseTitle else "$baseTitle - Sesi ${i + 1}"
+                                                )
+                                            }
                                         }
                                     },
                                     label = {
                                         Text(
-                                            text = "${group.displayName} (${group.students.size})",
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.LocationOn,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(13.dp)
+                                            text = if (isEn) "$count Sess" else "$count Sesi",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium
                                         )
                                     },
                                     colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFFCCFBF1),
-                                        selectedLabelColor = Color(0xFF0F766E),
-                                        selectedLeadingIconColor = Color(0xFF0F766E)
+                                        selectedContainerColor = VisitIndigo,
+                                        selectedLabelColor = Color.White
                                     ),
                                     modifier = Modifier
-                                        .heightIn(min = 36.dp)
-                                        .testTag("chip_admin_district_${group.normalizedKey}")
+                                        .weight(1f)
+                                        .heightIn(min = 38.dp)
+                                        .testTag("chip_visit_session_count_$count")
                                 )
                             }
                         }
 
-                        Card(
-                            shape = RoundedCornerShape(10.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (totalScheduledCount > 0) Color(0xFFF0FDF4) else Color(0xFFF8FAFC)
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                if (totalScheduledCount > 0) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant
-                            )
-                        ) {
-                            Box(
+                        // Switcher antar Sesi 1..N
+                        if (sessionCount > 1) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                for (idx in 0 until activeDraftCount) {
+                                    val draftItem = drafts[idx]
+                                    val isCurrent = idx == safeActiveIdx
+                                    val isComplete = draftItem.title.isNotBlank() &&
+                                        (dynamicDistricts.isEmpty() || draftItem.selectedDistricts.isNotEmpty())
+                                    Surface(
+                                        onClick = { activeSessionIdx = idx },
+                                        shape = RoundedCornerShape(10.dp),
+                                        color = when {
+                                            isCurrent -> VisitIndigo
+                                            isComplete -> Color(0xFFECFDF5)
+                                            else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                        },
+                                        border = BorderStroke(
+                                            1.dp,
+                                            when {
+                                                isCurrent -> VisitIndigo
+                                                isComplete -> Color(0xFF10B981)
+                                                else -> MaterialTheme.colorScheme.outlineVariant
+                                            }
+                                        ),
+                                        modifier = Modifier.testTag("tab_visit_draft_$idx")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            if (isComplete && !isCurrent) {
+                                                Icon(
+                                                    Icons.Default.CheckCircle,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF059669),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                            }
+                                            Column {
+                                                Text(
+                                                    text = if (isEn) "Session ${idx + 1}" else "Sesi ${idx + 1}",
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isCurrent) Color.White else MaterialTheme.colorScheme.onSurface
+                                                )
+                                                Text(
+                                                    text = "${shortDateFmt.format(Date(draftItem.dateMillis))} • ${draftItem.selectedDistricts.size} Kec.",
+                                                    fontSize = 9.5.sp,
+                                                    color = if (isCurrent) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Scrollable container for Section 3 (Active session details, summary & warning)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f, fill = false)
+                        .heightIn(max = 380.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                // 3. Detail Sesi Aktif (Nama, 1 Tanggal Pasti & Berbeda, Kecamatan Eksklusif)
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)),
+                    border = BorderStroke(1.dp, VisitIndigo.copy(alpha = 0.22f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        if (!isEditMode && activeDraftCount > 1) {
+                            Text(
+                                text = if (isEn) {
+                                    "Configuring Session ${safeActiveIdx + 1} of $activeDraftCount"
+                                } else {
+                                    "Pengaturan Sesi ${safeActiveIdx + 1} dari $activeDraftCount"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = VisitIndigo
+                            )
+                        }
+
+                        OutlinedTextField(
+                            value = currentDraft.title,
+                            onValueChange = { newTitle ->
+                                drafts[safeActiveIdx] = currentDraft.copy(
+                                    title = newTitle,
+                                    hasCustomTitle = true
+                                )
+                            },
+                            label = { Text(if (isEn) "Session Title *" else "Nama Sesi Kunjungan *") },
+                            placeholder = {
+                                Text(if (isEn) "e.g., Visit Nov 2026 - Session ${safeActiveIdx + 1}" else "Contoh: Kunjungan November - Sesi ${safeActiveIdx + 1}")
+                            },
+                            singleLine = true,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_visit_session_title")
+                        )
+
+                        // Tanggal Sesi Tunggal (wajib berbeda antar sesi)
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Text(
+                                text = if (isEn) {
+                                    "Visit Date (Unique per Session):"
+                                } else {
+                                    "Tanggal Kunjungan Sesi Ini (Berbeda tiap sesi):"
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = VisitIndigo
+                            )
+                            OutlinedButton(
+                                onClick = { datePickerSessionIdx = safeActiveIdx },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+                                border = BorderStroke(1.dp, VisitIndigo.copy(alpha = 0.5f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_pick_visit_date_$safeActiveIdx")
+                            ) {
+                                Icon(
+                                    Icons.Default.EventAvailable,
+                                    contentDescription = null,
+                                    tint = VisitIndigo,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = dateFormatter.format(Date(currentDraft.dateMillis)),
+                                    fontSize = 12.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = VisitIndigo,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Text(
+                                    text = if (isEn) "Change" else "Ubah Tanggal",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = VisitTeal
+                                )
+                            }
+                        }
+
+                        // Kecamatan (Eksklusif per sesi: yang sudah dipakai sesi lain terkunci)
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (totalScheduledCount > 0) {
-                                        if (isEn) {
-                                            "Estimated participants: $totalScheduledCount students across ${selectedDistrictKeys.size} districts"
-                                        } else {
-                                            "Estimasi peserta terjadwal: $totalScheduledCount siswa dari ${selectedDistrictKeys.size} kecamatan"
-                                        }
+                                    text = if (isEn) {
+                                        "Districts (${currentDraft.selectedDistricts.size} selected):"
                                     } else {
-                                        if (isEn) {
-                                            "Select 1 or more districts above to assign visit participants."
-                                        } else {
-                                            "Pilih 1 atau lebih kecamatan di atas untuk menentukan peserta kunjungan."
-                                        }
+                                        "Pilih Kecamatan Sesi Ini (${currentDraft.selectedDistricts.size}):"
                                     },
                                     fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = if (totalScheduledCount > 0) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant
+                                    fontWeight = FontWeight.Bold,
+                                    color = VisitIndigo,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                if (dynamicDistricts.isNotEmpty()) {
+                                    val unlockedKeys = dynamicDistricts.map { it.normalizedKey }.filter { key ->
+                                        val low = key.lowercase(Locale.US)
+                                        low !in lockedByBatch && low !in lockedByExisting
+                                    }
+                                    val allUnlockedSelected = unlockedKeys.isNotEmpty() && unlockedKeys.all { uKey ->
+                                        currentDraft.selectedDistricts.any { it.equals(uKey, ignoreCase = true) }
+                                    }
+                                    TextButton(
+                                        onClick = {
+                                            val updatedSet = if (allUnlockedSelected) {
+                                                emptySet()
+                                            } else {
+                                                unlockedKeys.toSet()
+                                            }
+                                            drafts[safeActiveIdx] = currentDraft.copy(selectedDistricts = updatedSet)
+                                            validationBanner = null
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                        modifier = Modifier.testTag("btn_toggle_all_visit_districts")
+                                    ) {
+                                        Icon(Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = if (allUnlockedSelected) {
+                                                if (isEn) "Clear" else "Kosongkan"
+                                            } else {
+                                                if (isEn) "Pick Remaining" else "Pilih Sisa"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            if (dynamicDistricts.isEmpty()) {
+                                Card(
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))
+                                ) {
+                                    Text(
+                                        text = if (isEn) {
+                                            "No student data in this school yet. Import/add students with their District (Kecamatan) first so districts appear automatically."
+                                        } else {
+                                            "Belum ada data siswa di sekolah ini. Tambahkan/impor siswa beserta Kecamatan terlebih dahulu agar daftar kecamatan muncul otomatis."
+                                        },
+                                        fontSize = 11.sp,
+                                        color = Color(0xFF92400E),
+                                        modifier = Modifier.padding(10.dp)
+                                    )
+                                }
+                            } else {
+                                FlowRow(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    dynamicDistricts.forEach { group ->
+                                        val normLower = group.normalizedKey.lowercase(Locale.US)
+                                        val batchOwnerIdx = lockedByBatch[normLower]
+                                        val existingOwnerTitle = lockedByExisting[normLower]
+                                        val isLocked = batchOwnerIdx != null || existingOwnerTitle != null
+
+                                        val isSelected = !isLocked && currentDraft.selectedDistricts.any {
+                                            it.equals(group.normalizedKey, ignoreCase = true)
+                                        }
+
+                                        val lockSuffix = when {
+                                            batchOwnerIdx != null -> if (isEn) " • S${batchOwnerIdx + 1}" else " • Sesi ${batchOwnerIdx + 1}"
+                                            existingOwnerTitle != null -> if (isEn) " • Used" else " • Terjadwal"
+                                            else -> " (${group.students.size})"
+                                        }
+
+                                        FilterChip(
+                                            selected = isSelected,
+                                            enabled = !isLocked,
+                                            onClick = {
+                                                if (!isLocked) {
+                                                    val nextSet = if (isSelected) {
+                                                        currentDraft.selectedDistricts.filterNot {
+                                                            it.equals(group.normalizedKey, ignoreCase = true)
+                                                        }.toSet()
+                                                    } else {
+                                                        currentDraft.selectedDistricts + group.normalizedKey
+                                                    }
+                                                    drafts[safeActiveIdx] = currentDraft.copy(selectedDistricts = nextSet)
+                                                    validationBanner = null
+                                                }
+                                            },
+                                            label = {
+                                                Text(
+                                                    text = "${group.displayName}$lockSuffix",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = if (isLocked) Icons.Default.Lock else Icons.Default.LocationOn,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                            },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = VisitTealLight,
+                                                selectedLabelColor = VisitTeal,
+                                                selectedLeadingIconColor = VisitTeal,
+                                                disabledContainerColor = Color(0xFFF1F5F9),
+                                                disabledLabelColor = Color(0xFF94A3B8),
+                                                disabledLeadingIconColor = Color(0xFF94A3B8)
+                                            ),
+                                            modifier = Modifier
+                                                .heightIn(min = 36.dp)
+                                                .testTag("chip_admin_district_${group.normalizedKey}")
+                                        )
+                                    }
+                                }
+
+                                val sessionStudentCount = remember(students, currentDraft.selectedDistricts) {
+                                    if (currentDraft.selectedDistricts.isEmpty()) 0
+                                    else {
+                                        val allowedLower = currentDraft.selectedDistricts.map { it.lowercase(Locale.US) }.toSet()
+                                        students.count { st ->
+                                            VisitHelper.resolveStudentDistrictKey(st).lowercase(Locale.US) in allowedLower
+                                        }
+                                    }
+                                }
+
+                                Card(
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (sessionStudentCount > 0) Color(0xFFF0FDF4) else Color(0xFFF8FAFC)
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (sessionStudentCount > 0) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (sessionStudentCount > 0) {
+                                            if (isEn) {
+                                                "Session ${safeActiveIdx + 1}: $sessionStudentCount students from ${currentDraft.selectedDistricts.size} district(s)"
+                                            } else {
+                                                "Sesi ${safeActiveIdx + 1}: $sessionStudentCount siswa dari ${currentDraft.selectedDistricts.size} kecamatan terpilih"
+                                            }
+                                        } else {
+                                            if (isEn) {
+                                                "Districts selected in another session are locked automatically."
+                                            } else {
+                                                "Pilih kecamatan untuk sesi ini. Kecamatan di sesi lain otomatis terkunci agar tidak bentrok."
+                                            }
+                                        },
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = if (sessionStudentCount > 0) Color(0xFF15803D) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = currentDraft.description,
+                            onValueChange = { desc ->
+                                drafts[safeActiveIdx] = currentDraft.copy(description = desc)
+                            },
+                            label = { Text(if (isEn) "Notes (Optional)" else "Keterangan Jadwal (Opsional)") },
+                            placeholder = {
+                                Text(
+                                    if (isEn) "e.g., Visiting hours 08:00–14:00 WIB at West Hall" else "Contoh: Jam kunjung 08.00–14.00 WIB di Aula Utama"
+                                )
+                            },
+                            maxLines = 2,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+
+                // Ringkasan 1-4 Sesi sebelum simpan
+                if (!isEditMode && activeDraftCount > 1) {
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFEFF6FF)),
+                        border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = if (isEn) "Sessions Summary ($activeDraftCount):" else "Ringkasan $activeDraftCount Sesi Kunjungan:",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = VisitIndigo
+                            )
+                            for (i in 0 until activeDraftCount) {
+                                val d = drafts[i]
+                                val distList = d.selectedDistricts.toList().sorted()
+                                val distSummary = if (distList.isEmpty()) {
+                                    if (isEn) "No districts yet" else "Belum pilih kecamatan"
+                                } else {
+                                    distList.joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+                                }
+                                Text(
+                                    text = "• Sesi ${i + 1} (${shortDateFmt.format(Date(d.dateMillis))}): $distSummary",
+                                    fontSize = 10.5.sp,
+                                    color = if (distList.isEmpty()) Color(0xFFB45309) else Color(0xFF1E3A8A),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
                     }
                 }
 
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(if (isEn) "Notes (Optional)" else "Keterangan Jadwal (Opsional)") },
-                    placeholder = {
-                        Text(
-                            if (isEn) "e.g., Visiting hours 08:00–14:00 WIB at West Hall" else "Contoh: Jam kunjung 08.00–14.00 WIB di Aula Utama"
-                        )
-                    },
-                    maxLines = 2,
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val shownWarning = validationBanner ?: when {
+                    activeDateDuplicates -> if (isEn) {
+                        "Every session must have a different date."
+                    } else {
+                        "Tanggal antar sesi wajib berbeda."
+                    }
+                    !allDraftsValid && dynamicDistricts.isNotEmpty() -> if (isEn) {
+                        "Please select at least 1 district for every active session."
+                    } else {
+                        "Pastikan setiap sesi (${1}–$activeDraftCount) memiliki minimal 1 kecamatan terpilih."
+                    }
+                    else -> null
+                }
+                if (shownWarning != null) {
+                    Card(
+                        shape = RoundedCornerShape(10.dp),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF3C7))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Icon(Icons.Default.WarningAmber, contentDescription = null, tint = Color(0xFFB45309), modifier = Modifier.size(16.dp))
+                            Text(
+                                text = shownWarning,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color(0xFF92400E)
+                            )
+                        }
+                    }
+                }
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    if (title.isNotBlank() && selectedDates.isNotEmpty()) {
+                    val slice = drafts.take(activeDraftCount)
+                    val uniqueDates = slice.map { VisitHelper.normalizeDayStart(it.dateMillis) }.distinct()
+                    if (uniqueDates.size != slice.size) {
+                        validationBanner = if (isEn) {
+                            "Every session must have a different date."
+                        } else {
+                            "Tanggal tiap sesi tidak boleh sama."
+                        }
+                        return@Button
+                    }
+                    if (!isEditMode && onConfirmBatch != null && (activeDraftCount > 1 || slice.size == 1)) {
+                        val batchDrafts = slice.map { d ->
+                            VisitSessionDraft(
+                                title = d.title.trim(),
+                                monthYear = selectedMonthYear,
+                                visitDateMillis = VisitHelper.normalizeDayStart(d.dateMillis),
+                                selectedDistricts = d.selectedDistricts.toList(),
+                                description = d.description.trim()
+                            )
+                        }
+                        onConfirmBatch(batchDrafts)
+                    } else {
+                        val d = slice.first()
                         onConfirm(
-                            title.trim(),
+                            d.title.trim(),
                             selectedMonthYear,
-                            selectedDates,
-                            selectedDistrictKeys.toList(),
-                            description.trim()
+                            listOf(VisitHelper.normalizeDayStart(d.dateMillis)),
+                            d.selectedDistricts.toList(),
+                            d.description.trim()
                         )
                     }
                 },
-                enabled = title.isNotBlank() && selectedDates.isNotEmpty(),
+                enabled = allDraftsValid,
                 colors = ButtonDefaults.buttonColors(containerColor = VisitIndigo),
                 modifier = Modifier
                     .heightIn(min = 48.dp)
                     .testTag("btn_save_visit_session")
             ) {
                 Text(
-                    text = if (initialSession != null) {
-                        if (isEn) "Save Changes" else "Simpan Perubahan"
-                    } else {
-                        if (isEn) "Create Session" else "Simpan Sesi"
+                    text = when {
+                        isEditMode -> if (isEn) "Save Changes" else "Simpan Perubahan"
+                        activeDraftCount > 1 -> if (isEn) "Save $activeDraftCount Sessions" else "Simpan $activeDraftCount Sesi"
+                        else -> if (isEn) "Create Session" else "Simpan Sesi"
                     },
                     fontWeight = FontWeight.Bold
                 )
@@ -547,24 +838,36 @@ fun CreateVisitSessionDialog(
         }
     )
 
-    if (showDatePicker) {
-        val initialPickerDate = selectedDates.lastOrNull() ?: System.currentTimeMillis()
+    datePickerSessionIdx?.let { targetIdx ->
+        val initialPickerDate = drafts[targetIdx].dateMillis
         val datePickerState = rememberDatePickerState(initialSelectedDateMillis = initialPickerDate)
         DatePickerDialog(
-            onDismissRequest = { showDatePicker = false },
+            onDismissRequest = { datePickerSessionIdx = null },
             confirmButton = {
                 TextButton(onClick = {
                     datePickerState.selectedDateMillis?.let { picked ->
                         val norm = VisitHelper.normalizeDayStart(picked)
-                        selectedDates = (selectedDates + norm).distinct().sorted()
+                        val conflictingOther = (0 until activeDraftCount).firstOrNull { otherIdx ->
+                            otherIdx != targetIdx && VisitHelper.normalizeDayStart(drafts[otherIdx].dateMillis) == norm
+                        }
+                        if (conflictingOther != null) {
+                            validationBanner = if (isEn) {
+                                "Date is already assigned to Session ${conflictingOther + 1}. Please pick a different date."
+                            } else {
+                                "Tanggal tersebut sudah dipakai Sesi ${conflictingOther + 1}. Pilih tanggal lain agar tiap sesi berbeda."
+                            }
+                        } else {
+                            drafts[targetIdx] = drafts[targetIdx].copy(dateMillis = norm)
+                            validationBanner = null
+                        }
                     }
-                    showDatePicker = false
+                    datePickerSessionIdx = null
                 }) {
-                    Text(if (isEn) "Add Date" else "Tambahkan")
+                    Text(if (isEn) "Select Date" else "Pilih Tanggal")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
+                TextButton(onClick = { datePickerSessionIdx = null }) {
                     Text(s.cancel)
                 }
             }
@@ -574,7 +877,7 @@ fun CreateVisitSessionDialog(
     }
 }
 
-private fun computeDefaultVisitSundays(monthYear: String): List<Long> {
+private fun computeDistinctMonthVisitDates(monthYear: String, count: Int): List<Long> {
     val parts = monthYear.trim().split("-")
     val cal = Calendar.getInstance()
     if (parts.size == 2) {
@@ -595,11 +898,24 @@ private fun computeDefaultVisitSundays(monthYear: String): List<Long> {
     val sundays = mutableListOf<Long>()
     while (cal.get(Calendar.MONTH) == targetMonth) {
         if (cal.get(Calendar.DAY_OF_WEEK) == Calendar.SUNDAY) {
-            sundays.add(cal.timeInMillis)
+            sundays.add(VisitHelper.normalizeDayStart(cal.timeInMillis))
         }
         cal.add(Calendar.DAY_OF_MONTH, 1)
     }
-    // Ambil Minggu ke-2, ke-3, dan ke-4 bila tersedia (indeks 1, 2, 3)
-    val week2To4 = sundays.drop(1).take(3)
-    return week2To4.ifEmpty { sundays.take(2) }
+    val chosen = sundays.toMutableList()
+    // Ensure we always have up to [count] distinct dates in the month
+    var fallbackDay = 7
+    while (chosen.size < count) {
+        val c2 = (cal.clone() as Calendar).apply {
+            set(Calendar.YEAR, parts.getOrNull(0)?.toIntOrNull() ?: cal.get(Calendar.YEAR))
+            set(Calendar.MONTH, (parts.getOrNull(1)?.toIntOrNull()?.minus(1)) ?: targetMonth)
+            val maxDay = getActualMaximum(Calendar.DAY_OF_MONTH)
+            set(Calendar.DAY_OF_MONTH, fallbackDay.coerceAtMost(maxDay))
+        }
+        val dayMillis = VisitHelper.normalizeDayStart(c2.timeInMillis)
+        if (dayMillis !in chosen) chosen.add(dayMillis)
+        fallbackDay += 7
+        if (fallbackDay > 35) break
+    }
+    return chosen.distinct().sorted().take(count)
 }
