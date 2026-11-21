@@ -1,3 +1,5 @@
+@file:OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+
 package com.example.ui.screens
 
 import android.content.ClipData
@@ -6,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -132,14 +135,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.SupervisorAccount
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ScrollableTabRow
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingSession
 import com.example.data.model.MengajiHelper
 import com.example.data.model.VisitHelper
+import com.example.data.model.VisitLaunchStage
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
@@ -261,6 +268,9 @@ fun AdminScreen(
     var showCreateVisitSessionDialog by remember { mutableStateOf(false) }
     var visitSessionToEdit by remember { mutableStateOf<VisitSession?>(null) }
     var visitSessionToDelete by remember { mutableStateOf<VisitSession?>(null) }
+    var visitParentLaunchConfirm by remember { mutableStateOf<Pair<VisitSession, Boolean>?>(null) }
+    var visitBulkParentConfirmMonth by remember { mutableStateOf<String?>(null) }
+    var visitBulkSelectedMonth by remember { mutableStateOf("ALL") }
 
     // State untuk Kelola Data Siswa
     var studentSearchQuery by remember { mutableStateOf("") }
@@ -1642,8 +1652,27 @@ fun AdminScreen(
                 }
                 } else if (selectedAdminTab == 3) {
                     // ==========================================
-                    // TAB 3: KELOLA SESI KUNJUNGAN & KECAMATAN PESERTA
+                    // TAB 3: KELOLA SESI KUNJUNGAN & PELUNCURAN 2 TAHAP
                     // ==========================================
+                    val draftCount = schoolVisitSessions.count { it.launchStage() == VisitLaunchStage.DRAFT }
+                    val waliPreviewCount = schoolVisitSessions.count { it.launchStage() == VisitLaunchStage.WALI_PREVIEW }
+                    val parentLiveCount = schoolVisitSessions.count { it.launchStage() == VisitLaunchStage.PARENT_LIVE }
+                    val activeMonths = schoolVisitSessions
+                        .filter { it.isActive && it.monthYear.isNotBlank() }
+                        .map { it.monthYear }
+                        .distinct()
+                        .sortedDescending()
+                    val resolvedBulkMonth = if (visitBulkSelectedMonth == "ALL" || visitBulkSelectedMonth in activeMonths) {
+                        visitBulkSelectedMonth
+                    } else {
+                        "ALL"
+                    }
+                    val activeInScope = schoolVisitSessions.filter { sess ->
+                        sess.isActive && (resolvedBulkMonth == "ALL" || sess.monthYear.equals(resolvedBulkMonth, ignoreCase = true))
+                    }
+                    val pendingBulkWaliCount = activeInScope.count { !it.publishedToWali }
+                    val pendingBulkParentCount = activeInScope.count { !it.publishedToParent }
+
                     item {
                         ElevatedCard(
                             modifier = Modifier.fillMaxWidth(),
@@ -1652,14 +1681,14 @@ fun AdminScreen(
                         ) {
                             Column(
                                 modifier = Modifier.padding(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                         Icon(
                                             imageVector = Icons.Default.CalendarMonth,
                                             contentDescription = null,
@@ -1694,13 +1723,62 @@ fun AdminScreen(
 
                                 Text(
                                     text = if (isEn) {
-                                        "Create 1–4 visit sessions per month with a distinct date per session and exclusive districts (Kecamatan) so parents know their exact visit schedule."
+                                        "Safe 2-stage release workflow: new sessions save as Draft first, launch to Wali Asuh for internal preview, then launch live to Students' Parents when fixed."
                                     } else {
-                                        "Buat 1–4 sesi kunjungan per bulan dengan tanggal berbeda di tiap sesi serta pembagian kecamatan eksklusif agar jadwal tampil otomatis di Portal Orang Tua."
+                                        "Alur rilis aman 2 tahap: jadwal baru tersimpan sebagai Draf agar bebas direvisi, luncurkan ke Wali Asuh untuk pengecekan internal, lalu luncurkan ke Wali Siswa / Orang Tua saat jadwal sudah pasti."
                                     },
                                     fontSize = 11.5.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 16.sp
                                 )
+
+                                FlowRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("badge_admin_visit_summary_counts"),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFFEF3C7),
+                                        border = BorderStroke(1.dp, Color(0xFFFDE68A))
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "$draftCount Draft" else "$draftCount Draf",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF92400E),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFDBEAFE),
+                                        border = BorderStroke(1.dp, Color(0xFFBFDBFE))
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "$waliPreviewCount Wali Preview" else "$waliPreviewCount Preview Wali",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF1D4ED8),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFFDCFCE7),
+                                        border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "$parentLiveCount Parent Live" else "$parentLiveCount Live Wali Siswa",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF15803D),
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
 
                                 Button(
                                     onClick = {
@@ -1711,15 +1789,118 @@ fun AdminScreen(
                                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1D4ED8)),
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
                                         .testTag("btn_admin_create_visit_session")
                                 ) {
                                     Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = if (isEn) "Create Monthly Visit Session" else "Buat Sesi Kunjungan Baru",
-                                        fontSize = 12.sp,
+                                        fontSize = 12.5.sp,
                                         fontWeight = FontWeight.Bold
                                     )
+                                }
+                            }
+                        }
+                    }
+
+                    if (activeInScope.isNotEmpty() || activeMonths.isNotEmpty()) {
+                        item(key = "admin_visit_bulk_launch_card") {
+                            ElevatedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("card_admin_visit_bulk_launch"),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Quick Batch Launch" else "Luncurkan Jadwal Sekaligus",
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    if (activeMonths.size > 1) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .horizontalScroll(rememberScrollState()),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            FilterChip(
+                                                selected = resolvedBulkMonth == "ALL",
+                                                onClick = { visitBulkSelectedMonth = "ALL" },
+                                                label = { Text(if (isEn) "All Active Months" else "Semua Bulan Aktif", fontSize = 11.sp) }
+                                            )
+                                            activeMonths.forEach { ym ->
+                                                FilterChip(
+                                                    selected = resolvedBulkMonth == ym,
+                                                    onClick = { visitBulkSelectedMonth = ym },
+                                                    label = { Text(VisitHelper.formatMonthYearLabel(ym, appLanguage.locale), fontSize = 11.sp) }
+                                                )
+                                            }
+                                        }
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = {
+                                                viewModel.bulkLaunchMonthVisitSessions(resolvedBulkMonth, "WALI") { _, msg ->
+                                                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            enabled = pendingBulkWaliCount > 0,
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = BorderStroke(
+                                                1.dp,
+                                                if (pendingBulkWaliCount > 0) Color(0xFF1D4ED8) else MaterialTheme.colorScheme.outlineVariant
+                                            ),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_admin_bulk_launch_wali")
+                                        ) {
+                                            Icon(Icons.Default.SupervisorAccount, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Launch to Wali ($pendingBulkWaliCount)"
+                                                } else {
+                                                    "Luncurkan ke Wali Asuh ($pendingBulkWaliCount)"
+                                                },
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 2
+                                            )
+                                        }
+                                        Button(
+                                            onClick = { visitBulkParentConfirmMonth = resolvedBulkMonth },
+                                            enabled = pendingBulkParentCount > 0,
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_admin_bulk_launch_parent")
+                                        ) {
+                                            Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(5.dp))
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Launch to Parents ($pendingBulkParentCount)"
+                                                } else {
+                                                    "Luncurkan ke Wali Siswa ($pendingBulkParentCount)"
+                                                },
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 2
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1753,11 +1934,37 @@ fun AdminScreen(
                         }
                     } else {
                         val visitDateFmt = SimpleDateFormat("EEE, d MMM", appLanguage.locale)
+                        val launchStampFmt = SimpleDateFormat("d MMM HH:mm", appLanguage.locale)
                         items(schoolVisitSessions, key = { "admin_visit_${it.id}" }) { session ->
                             val scheduledList = VisitHelper.scheduledStudentsForSession(session, schoolStudents)
                             val sessionRecs = visitRecords.filter { it.sessionId == session.id }
                             val datesList = session.getVisitDatesList()
                             val districtsList = session.getDistrictsList()
+                            val stage = session.launchStage()
+                            val stageBg = when (stage) {
+                                VisitLaunchStage.PARENT_LIVE -> Color(0xFFDCFCE7)
+                                VisitLaunchStage.WALI_PREVIEW -> Color(0xFFDBEAFE)
+                                VisitLaunchStage.DRAFT -> Color(0xFFFEF3C7)
+                                VisitLaunchStage.CLOSED -> Color(0xFFE2E8F0)
+                            }
+                            val stageBorder = when (stage) {
+                                VisitLaunchStage.PARENT_LIVE -> Color(0xFF86EFAC)
+                                VisitLaunchStage.WALI_PREVIEW -> Color(0xFF93C5FD)
+                                VisitLaunchStage.DRAFT -> Color(0xFFFDE68A)
+                                VisitLaunchStage.CLOSED -> Color(0xFFCBD5E1)
+                            }
+                            val stageColor = when (stage) {
+                                VisitLaunchStage.PARENT_LIVE -> Color(0xFF15803D)
+                                VisitLaunchStage.WALI_PREVIEW -> Color(0xFF1D4ED8)
+                                VisitLaunchStage.DRAFT -> Color(0xFFB45309)
+                                VisitLaunchStage.CLOSED -> Color(0xFF475569)
+                            }
+                            val stageLabel = when (stage) {
+                                VisitLaunchStage.PARENT_LIVE -> if (isEn) "Live to Parents & Students' Guardians" else "Live ke Wali Siswa / Orang Tua"
+                                VisitLaunchStage.WALI_PREVIEW -> if (isEn) "Wali Asuh Preview (Not Live to Parents)" else "Preview Wali Asuh (Belum Live Ortu)"
+                                VisitLaunchStage.DRAFT -> if (isEn) "Draft — Not Published Yet" else "Draf — Belum Diluncurkan"
+                                VisitLaunchStage.CLOSED -> if (isEn) "Closed / Completed" else "Selesai / Ditutup"
+                            }
 
                             ElevatedCard(
                                 modifier = Modifier
@@ -1803,6 +2010,71 @@ fun AdminScreen(
                                             Switch(
                                                 checked = session.isActive,
                                                 onCheckedChange = { viewModel.toggleVisitSessionActive(session) }
+                                            )
+                                        }
+                                    }
+
+                                    FlowRow(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = stageBg,
+                                            border = BorderStroke(1.dp, stageBorder),
+                                            modifier = Modifier
+                                                .semantics(mergeDescendants = true) {}
+                                                .testTag("badge_visit_stage_${session.id}")
+                                        ) {
+                                            Text(
+                                                text = stageLabel,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = stageColor,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                            )
+                                        }
+                                        if (session.updatedNoticeAfterParentLaunch) {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFFEF3C7),
+                                                border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                                                modifier = Modifier
+                                                    .semantics(mergeDescendants = true) {}
+                                                    .testTag("badge_visit_updated_${session.id}")
+                                            ) {
+                                                Text(
+                                                    text = if (isEn) "Edited After Live" else "Jadwal Diedit Saat Live",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF92400E),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    if (session.waliLaunchedAt > 0L || session.parentLaunchedAt > 0L) {
+                                        val stampParts = buildList {
+                                            if (session.publishedToWali && session.waliLaunchedAt > 0L) {
+                                                add(
+                                                    if (isEn) "Wali: ${launchStampFmt.format(Date(session.waliLaunchedAt))}"
+                                                    else "Wali Asuh: ${launchStampFmt.format(Date(session.waliLaunchedAt))}"
+                                                )
+                                            }
+                                            if (session.publishedToParent && session.parentLaunchedAt > 0L) {
+                                                add(
+                                                    if (isEn) "Parents: ${launchStampFmt.format(Date(session.parentLaunchedAt))}"
+                                                    else "Wali Siswa: ${launchStampFmt.format(Date(session.parentLaunchedAt))}"
+                                                )
+                                            }
+                                        }
+                                        if (stampParts.isNotEmpty()) {
+                                            Text(
+                                                text = stampParts.joinToString(" • "),
+                                                fontSize = 10.5.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }
@@ -1883,6 +2155,116 @@ fun AdminScreen(
                                         )
                                     }
 
+                                    // Tombol Peluncuran Terkontrol (Wali Asuh & Wali Siswa / Orang Tua)
+                                    if (session.isActive) {
+                                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                OutlinedButton(
+                                                    onClick = {
+                                                        val targetWali = !session.publishedToWali
+                                                        viewModel.setVisitSessionWaliLaunch(session, targetWali) { _, msg ->
+                                                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    },
+                                                    enabled = !session.publishedToParent,
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    border = BorderStroke(
+                                                        1.dp,
+                                                        when {
+                                                            session.publishedToParent -> MaterialTheme.colorScheme.outlineVariant
+                                                            session.publishedToWali -> Color(0xFFF59E0B)
+                                                            else -> Color(0xFF1D4ED8)
+                                                        }
+                                                    ),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .heightIn(min = 48.dp)
+                                                        .testTag("btn_launch_visit_wali_${session.id}")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = if (session.publishedToWali) Icons.Default.CheckCircle else Icons.Default.SupervisorAccount,
+                                                        contentDescription = null,
+                                                        tint = when {
+                                                            session.publishedToParent -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                            session.publishedToWali -> Color(0xFFB45309)
+                                                            else -> Color(0xFF1D4ED8)
+                                                        },
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(5.dp))
+                                                    Text(
+                                                        text = when {
+                                                            session.publishedToParent -> if (isEn) "In Wali ✓" else "Sudah di Wali ✓"
+                                                            session.publishedToWali -> if (isEn) "Pull from Wali" else "Tarik dari Wali Asuh"
+                                                            else -> if (isEn) "Launch to Wali Asuh" else "Luncurkan ke Wali Asuh"
+                                                        },
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = when {
+                                                            session.publishedToParent -> MaterialTheme.colorScheme.onSurfaceVariant
+                                                            session.publishedToWali -> Color(0xFFB45309)
+                                                            else -> Color(0xFF1D4ED8)
+                                                        },
+                                                        maxLines = 2
+                                                    )
+                                                }
+
+                                                if (!session.publishedToParent) {
+                                                    Button(
+                                                        onClick = { visitParentLaunchConfirm = session to true },
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .heightIn(min = 48.dp)
+                                                            .testTag("btn_launch_visit_parent_${session.id}")
+                                                    ) {
+                                                        Icon(Icons.Default.Campaign, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                        Spacer(modifier = Modifier.width(5.dp))
+                                                        Text(
+                                                            text = if (isEn) "Launch to Parents" else "Luncurkan ke Wali Siswa",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 2
+                                                        )
+                                                    }
+                                                } else {
+                                                    OutlinedButton(
+                                                        onClick = { visitParentLaunchConfirm = session to false },
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        border = BorderStroke(1.dp, Color(0xFFDC2626)),
+                                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                        modifier = Modifier
+                                                            .weight(1f)
+                                                            .heightIn(min = 48.dp)
+                                                            .testTag("btn_launch_visit_parent_${session.id}")
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.VisibilityOff,
+                                                            contentDescription = null,
+                                                            tint = Color(0xFFDC2626),
+                                                            modifier = Modifier.size(16.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(5.dp))
+                                                        Text(
+                                                            text = if (isEn) "Pull from Parents" else "Tarik dari Wali Siswa",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFFDC2626),
+                                                            maxLines = 2
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1904,7 +2286,7 @@ fun AdminScreen(
                                                     showCreateVisitSessionDialog = true
                                                 },
                                                 modifier = Modifier
-                                                    .size(36.dp)
+                                                    .size(48.dp)
                                                     .testTag("btn_edit_visit_session_${session.id}")
                                             ) {
                                                 Icon(
@@ -1916,7 +2298,7 @@ fun AdminScreen(
                                             }
                                             IconButton(
                                                 onClick = { visitSessionToDelete = session },
-                                                modifier = Modifier.size(36.dp)
+                                                modifier = Modifier.size(48.dp)
                                             ) {
                                                 Icon(
                                                     imageVector = Icons.Default.DeleteOutline,
@@ -3258,6 +3640,170 @@ fun AdminScreen(
             },
             dismissButton = {
                 OutlinedButton(onClick = { visitSessionToDelete = null }) {
+                    Text(appStrings.cancel)
+                }
+            }
+        )
+    }
+
+    visitParentLaunchConfirm?.let { (session, targetLive) ->
+        val scheduledCount = VisitHelper.scheduledStudentsForSession(session, schoolStudents).size
+        val dateFmtConfirm = SimpleDateFormat("EEE, d MMM yyyy", appLanguage.locale)
+        val datesSummary = session.getVisitDatesList().joinToString(", ") { dateFmtConfirm.format(Date(it)) }
+            .ifBlank { "-" }
+        AlertDialog(
+            onDismissRequest = { visitParentLaunchConfirm = null },
+            modifier = Modifier.testTag("dialog_confirm_launch_visit_parent"),
+            icon = {
+                Icon(
+                    imageVector = if (targetLive) Icons.Default.Campaign else Icons.Default.VisibilityOff,
+                    contentDescription = null,
+                    tint = if (targetLive) Color(0xFF0F766E) else Color(0xFFDC2626)
+                )
+            },
+            title = {
+                Text(
+                    text = if (targetLive) {
+                        if (isEn) "Launch Schedule to Parents?" else "Luncurkan Jadwal ke Wali Siswa?"
+                    } else {
+                        if (isEn) "Pull Schedule from Parents?" else "Tarik Jadwal dari Wali Siswa?"
+                    },
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = if (targetLive) {
+                            if (isEn) {
+                                "Once launched, \"${session.title}\" goes LIVE immediately in the Parent Portal for $scheduledCount student(s)."
+                            } else {
+                                "Setelah diluncurkan, jadwal \"${session.title}\" akan langsung LIVE di Portal Orang Tua / Wali Siswa untuk $scheduledCount siswa."
+                            }
+                        } else {
+                            if (isEn) {
+                                "Parents will temporarily stop seeing \"${session.title}\" until you launch it again. Existing check-ins remain safe."
+                            } else {
+                                "Jadwal \"${session.title}\" akan disembunyikan sementara dari Portal Orang Tua agar bisa direvisi (Wali Asuh tetap bisa melihat pratinjau)."
+                            }
+                        },
+                        fontSize = 13.sp
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Text("${session.title} (${VisitHelper.formatMonthYearLabel(session.monthYear, appLanguage.locale)})", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(
+                                text = if (isEn) "Dates: $datesSummary" else "Tanggal: $datesSummary",
+                                fontSize = 11.5.sp,
+                                color = Color(0xFF1D4ED8)
+                            )
+                            Text(
+                                text = if (isEn) "Hours: ${session.displayTimeRange()}" else "Jam: ${session.displayTimeRange()}",
+                                fontSize = 11.5.sp
+                            )
+                            Text(
+                                text = if (isEn) {
+                                    "Districts: ${session.getDistrictsList().size} • Students: $scheduledCount"
+                                } else {
+                                    "Kecamatan: ${session.getDistrictsList().size} wilayah • Siswa: $scheduledCount anak"
+                                },
+                                fontSize = 11.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.setVisitSessionParentLaunch(session, targetLive) { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                        visitParentLaunchConfirm = null
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (targetLive) Color(0xFF0F766E) else Color(0xFFDC2626)
+                    ),
+                    modifier = Modifier.testTag("btn_confirm_launch_visit_parent")
+                ) {
+                    Text(
+                        if (targetLive) {
+                            if (isEn) "Yes, Launch Live" else "Ya, Luncurkan Live"
+                        } else {
+                            if (isEn) "Yes, Pull Schedule" else "Ya, Tarik Jadwal"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { visitParentLaunchConfirm = null },
+                    modifier = Modifier.testTag("btn_cancel_launch_visit_parent")
+                ) {
+                    Text(appStrings.cancel)
+                }
+            }
+        )
+    }
+
+    visitBulkParentConfirmMonth?.let { targetMonth ->
+        val pendingSessions = schoolVisitSessions.filter { sess ->
+            sess.isActive && !sess.publishedToParent &&
+                (targetMonth == "ALL" || sess.monthYear.equals(targetMonth, ignoreCase = true))
+        }
+        val monthTitle = if (targetMonth == "ALL") {
+            if (isEn) "All Active Months" else "Semua Bulan Aktif"
+        } else {
+            VisitHelper.formatMonthYearLabel(targetMonth, appLanguage.locale)
+        }
+        val totalImpactedStudents = pendingSessions.sumOf {
+            VisitHelper.scheduledStudentsForSession(it, schoolStudents).size
+        }
+        AlertDialog(
+            onDismissRequest = { visitBulkParentConfirmMonth = null },
+            modifier = Modifier.testTag("dialog_confirm_bulk_launch_visit_parent"),
+            icon = { Icon(Icons.Default.Campaign, contentDescription = null, tint = Color(0xFF0F766E)) },
+            title = {
+                Text(
+                    if (isEn) "Launch All to Parents?" else "Luncurkan ${pendingSessions.size} Jadwal ke Wali Siswa?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    if (isEn) {
+                        "This will publish ${pendingSessions.size} active session(s) ($monthTitle, $totalImpactedStudents scheduled students) live to Wali Asuh & the Parent Portal."
+                    } else {
+                        "Sebanyak ${pendingSessions.size} sesi aktif ($monthTitle, $totalImpactedStudents siswa terjadwal) akan langsung diluncurkan live ke Wali Asuh & Portal Orang Tua / Wali Siswa."
+                    }
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.bulkLaunchMonthVisitSessions(targetMonth, "PARENT") { _, msg ->
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                        visitBulkParentConfirmMonth = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                    modifier = Modifier.testTag("btn_confirm_bulk_launch_visit_parent")
+                ) {
+                    Text(if (isEn) "Launch All Live" else "Luncurkan Semua", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { visitBulkParentConfirmMonth = null }) {
                     Text(appStrings.cancel)
                 }
             }

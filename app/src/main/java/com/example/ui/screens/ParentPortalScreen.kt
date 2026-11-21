@@ -226,7 +226,7 @@ fun ParentPortalScreen(
     val chatLocalSavesByMsgId = remember(chatMediaLocalSaves) {
         chatMediaLocalSaves.associateBy { it.messageId }
     }
-    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.parentVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val visitConfirmations by viewModel.visitConfirmations.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
@@ -1242,7 +1242,7 @@ private fun ParentOverviewContent(
     val matchedActiveVisitSessions = remember(visitSessions, student) {
         if (student == null) emptyList()
         else visitSessions
-            .filter { it.isActive && VisitHelper.isStudentInSessionSchedule(it, student) }
+            .filter { it.publishedToParent && it.isActive && VisitHelper.isStudentInSessionSchedule(it, student) }
             .sortedBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
     }
     val nextVisitSession = matchedActiveVisitSessions.firstOrNull()
@@ -1633,12 +1633,32 @@ private fun ParentOverviewContent(
                     }
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isEn) "Parent Visit Invitation" else "Undangan Kunjungan Orang Tua",
-                            fontSize = 12.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF0F766E)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (isEn) "Parent Visit Invitation" else "Undangan Kunjungan Orang Tua",
+                                fontSize = 12.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0F766E)
+                            )
+                            if (nextVisitSession.updatedNoticeAfterParentLaunch) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFFEF3C7),
+                                    border = BorderStroke(1.dp, Color(0xFFF59E0B))
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Updated" else "Diperbarui",
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF92400E),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             text = "${nextVisitSession.title} • $nextDateLabel",
                             fontSize = 11.5.sp,

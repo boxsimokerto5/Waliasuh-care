@@ -332,19 +332,31 @@ fun JadwalKunjunganSheet(
                                                 )
                                             }
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                                val stage = sess.launchStage()
                                                 Surface(
                                                     shape = RoundedCornerShape(8.dp),
-                                                    color = if (sess.isActive) Color(0xFFDCFCE7) else Color(0xFFE2E8F0)
+                                                    color = when (stage) {
+                                                        com.example.data.model.VisitLaunchStage.PARENT_LIVE -> Color(0xFFDCFCE7)
+                                                        com.example.data.model.VisitLaunchStage.WALI_PREVIEW -> Color(0xFFDBEAFE)
+                                                        com.example.data.model.VisitLaunchStage.DRAFT -> Color(0xFFFEF3C7)
+                                                        com.example.data.model.VisitLaunchStage.CLOSED -> Color(0xFFE2E8F0)
+                                                    }
                                                 ) {
                                                     Text(
-                                                        text = if (sess.isActive) {
-                                                            if (isEn) "Active" else "Aktif"
-                                                        } else {
-                                                            if (isEn) "Closed" else "Selesai"
+                                                        text = when (stage) {
+                                                            com.example.data.model.VisitLaunchStage.PARENT_LIVE -> if (isEn) "Live to Parents" else "Live Ortu"
+                                                            com.example.data.model.VisitLaunchStage.WALI_PREVIEW -> if (isEn) "Wali Preview" else "Preview Wali"
+                                                            com.example.data.model.VisitLaunchStage.DRAFT -> if (isEn) "Draft" else "Draf Admin"
+                                                            com.example.data.model.VisitLaunchStage.CLOSED -> if (isEn) "Closed" else "Selesai"
                                                         },
                                                         fontSize = 10.sp,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = if (sess.isActive) Color(0xFF15803D) else Color(0xFF475569),
+                                                        color = when (stage) {
+                                                            com.example.data.model.VisitLaunchStage.PARENT_LIVE -> Color(0xFF15803D)
+                                                            com.example.data.model.VisitLaunchStage.WALI_PREVIEW -> Color(0xFF1D4ED8)
+                                                            com.example.data.model.VisitLaunchStage.DRAFT -> Color(0xFFB45309)
+                                                            com.example.data.model.VisitLaunchStage.CLOSED -> Color(0xFF475569)
+                                                        },
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                                     )
                                                 }

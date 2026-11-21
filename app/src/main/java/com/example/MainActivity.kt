@@ -257,7 +257,7 @@ private fun WaliAsuhCareAppContent(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
-    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.waliVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()

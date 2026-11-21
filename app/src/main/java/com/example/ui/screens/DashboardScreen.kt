@@ -242,7 +242,7 @@ fun DashboardScreen(
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
     val isSavingChristianWorship by viewModel.isSavingChristianWorship.collectAsStateWithLifecycle()
-    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.waliVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
@@ -2320,7 +2320,8 @@ private fun DashboardVisitAndParentModalsHost(
 ) {
     val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
-    val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val allVisitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
+    val visitSessions by viewModel.waliVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val visitConfirmations by viewModel.visitConfirmations.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
@@ -2436,7 +2437,7 @@ private fun DashboardVisitAndParentModalsHost(
         CreateVisitSessionDialog(
             students = students,
             initialSession = modalState.visitSessionToEdit,
-            existingSessions = visitSessions,
+            existingSessions = allVisitSessions,
             onDismiss = {
                 modalState.showCreateVisitSessionDialog = false
                 modalState.visitSessionToEdit = null

@@ -1126,9 +1126,9 @@ internal fun LazyListScope.kunjunganCategoryItems(
                 if (activeSession == null) {
                     Text(
                         text = if (isEn) {
-                            "No monthly visit session configured yet. School Admin picks scheduled dates and districts (Kecamatan) in Admin → Visit tab."
+                            "No visit session has been launched to Wali Asuh yet. School Admin can create & launch sessions in Admin → Visit tab."
                         } else {
-                            "Belum ada sesi kunjungan aktif. Admin Sekolah dapat membuat sesi kunjungan per bulan beserta multi-tanggal dan kecamatan di Halaman Admin → Tab Kunjungan."
+                            "Belum ada jadwal kunjungan yang diluncurkan ke Wali Asuh. Admin Sekolah dapat membuat & meluncurkan jadwal di Halaman Admin → Tab Kunjungan."
                         },
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -1151,6 +1151,7 @@ internal fun LazyListScope.kunjunganCategoryItems(
                 } else {
                     val dateFmt = java.text.SimpleDateFormat("d MMM", lang.locale)
                     val dateBadges = activeSession.getVisitDatesList().joinToString(" • ") { dateFmt.format(java.util.Date(it)) }
+                    val hubStage = activeSession.launchStage()
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -1164,6 +1165,34 @@ internal fun LazyListScope.kunjunganCategoryItems(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = when (hubStage) {
+                                com.example.data.model.VisitLaunchStage.PARENT_LIVE -> Color(0xFFDCFCE7)
+                                com.example.data.model.VisitLaunchStage.WALI_PREVIEW -> Color(0xFFDBEAFE)
+                                com.example.data.model.VisitLaunchStage.DRAFT -> Color(0xFFFEF3C7)
+                                com.example.data.model.VisitLaunchStage.CLOSED -> Color(0xFFE2E8F0)
+                            }
+                        ) {
+                            Text(
+                                text = when (hubStage) {
+                                    com.example.data.model.VisitLaunchStage.PARENT_LIVE -> if (isEn) "Live to Parents" else "Live Ortu"
+                                    com.example.data.model.VisitLaunchStage.WALI_PREVIEW -> if (isEn) "Wali Preview" else "Preview Wali"
+                                    com.example.data.model.VisitLaunchStage.DRAFT -> if (isEn) "Draft" else "Draf"
+                                    com.example.data.model.VisitLaunchStage.CLOSED -> if (isEn) "Closed" else "Selesai"
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = when (hubStage) {
+                                    com.example.data.model.VisitLaunchStage.PARENT_LIVE -> Color(0xFF15803D)
+                                    com.example.data.model.VisitLaunchStage.WALI_PREVIEW -> Color(0xFF1D4ED8)
+                                    com.example.data.model.VisitLaunchStage.DRAFT -> Color(0xFFB45309)
+                                    com.example.data.model.VisitLaunchStage.CLOSED -> Color(0xFF475569)
+                                },
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                             )
                         }
                     }

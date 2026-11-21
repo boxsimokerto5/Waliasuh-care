@@ -310,6 +310,7 @@ fun CreateVisitSessionDialog(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
 
+
                 // Bagian Pinned: Pilihan Bulan, Jumlah Sesi (1-4), & Switcher Sesi
                 Column(
                     modifier = Modifier
@@ -515,6 +516,62 @@ fun CreateVisitSessionDialog(
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // Info Tahap Rilis Jadwal (Draf vs Preview Wali vs Live Ortu)
+                    val dialogBannerBg = when {
+                        initialSession?.publishedToParent == true -> Color(0xFFFEF3C7)
+                        initialSession?.publishedToWali == true -> Color(0xFFDBEAFE)
+                        else -> Color(0xFFF0FDF4)
+                    }
+                    val dialogBannerBorder = when {
+                        initialSession?.publishedToParent == true -> Color(0xFFF59E0B)
+                        initialSession?.publishedToWali == true -> Color(0xFF93C5FD)
+                        else -> Color(0xFF86EFAC)
+                    }
+                    val dialogBannerTextColor = when {
+                        initialSession?.publishedToParent == true -> Color(0xFF92400E)
+                        initialSession?.publishedToWali == true -> Color(0xFF1E40AF)
+                        else -> Color(0xFF166534)
+                    }
+                    val dialogBannerMessage = when {
+                        initialSession?.publishedToParent == true -> if (isEn) {
+                            "This session is LIVE to Parents. Any date, hour, or district edit updates the Parent Portal immediately."
+                        } else {
+                            "Jadwal ini sudah LIVE ke Wali Siswa / Orang Tua. Perubahan tanggal, jam, atau kecamatan akan memperbarui tampilan Orang Tua."
+                        }
+                        initialSession?.publishedToWali == true -> if (isEn) {
+                            "This session is in Wali Asuh Preview (not yet live to Parents)."
+                        } else {
+                            "Jadwal ini dalam tahap Preview Wali Asuh (belum diluncurkan ke Orang Tua)."
+                        }
+                        isEditMode -> if (isEn) {
+                            "Saved as Draft — parents cannot see this schedule until you launch it in Admin → Visits."
+                        } else {
+                            "Status masih Draf — belum tampil ke Wali Asuh/Orang Tua sampai Anda menekan tombol Luncurkan."
+                        }
+                        else -> if (isEn) {
+                            "New sessions save as Draft first so you can finalize before launching to Wali Asuh & Parents."
+                        } else {
+                            "Jadwal baru otomatis tersimpan sebagai Draf dulu agar aman direvisi sebelum diluncurkan ke Wali Asuh & Orang Tua."
+                        }
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = dialogBannerBg,
+                        border = BorderStroke(1.dp, dialogBannerBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("banner_create_visit_launch_stage")
+                    ) {
+                        Text(
+                            text = dialogBannerMessage,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = dialogBannerTextColor,
+                            lineHeight = 15.sp,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                        )
+                    }
+
                     // 3. Detail Sesi Aktif (Nama, 1 Tanggal Pasti & Berbeda, Jam Kunjungan, Kecamatan Eksklusif)
                     Card(
                         modifier = Modifier.fillMaxWidth(),

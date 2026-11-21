@@ -118,7 +118,7 @@ fun ParentVisitContent(
         if (student == null) emptyList()
         else {
             sessions
-                .filter { VisitHelper.isStudentInSessionSchedule(it, student) }
+                .filter { it.publishedToParent && VisitHelper.isStudentInSessionSchedule(it, student) }
                 .sortedWith(
                     compareByDescending<VisitSession> { it.isActive }
                         .thenBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
@@ -375,20 +375,38 @@ fun ParentVisitContent(
                             verticalAlignment = Alignment.Top
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
                                     Icon(
                                         imageVector = Icons.Default.NotificationsActive,
                                         contentDescription = null,
                                         tint = tealPrimary,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
                                         text = sess.title,
                                         fontSize = 14.5.sp,
                                         fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSurface
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f, fill = false)
                                     )
+                                    if (sess.updatedNoticeAfterParentLaunch) {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = Color(0xFFFEF3C7),
+                                            border = BorderStroke(1.dp, Color(0xFFF59E0B))
+                                        ) {
+                                            Text(
+                                                text = if (isEn) "Updated" else "Diperbarui",
+                                                fontSize = 9.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF92400E),
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {

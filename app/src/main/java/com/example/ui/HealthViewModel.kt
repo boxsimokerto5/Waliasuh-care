@@ -1877,6 +1877,24 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
+    val waliVisibleVisitSessions: StateFlow<List<VisitSession>> = combine(
+        visitSessions,
+        _currentUserRole
+    ) { sessions, role ->
+        if (role == UserRole.ADMIN || role == UserRole.SUPERADMIN) {
+            sessions
+        } else {
+            sessions.filter { it.publishedToWali || it.publishedToParent }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val parentVisibleVisitSessions: StateFlow<List<VisitSession>> = combine(
+        visitSessions,
+        _currentUserRole
+    ) { sessions, _ ->
+        sessions.filter { it.publishedToParent }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
     val visitRecords: StateFlow<List<VisitRecord>> = combine(
         repository.allVisitRecords,
         _schoolProfile,
@@ -4381,6 +4399,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 description = description.trim(),
                 visitTimeRange = VisitHelper.normalizeTimeRange(visitTimeRange),
                 isActive = true,
+                publishedToWali = false,
+                publishedToParent = false,
+                waliLaunchedAt = 0L,
+                parentLaunchedAt = 0L,
+                updatedNoticeAfterParentLaunch = false,
                 createdBy = creator,
                 schoolId = activeSchool,
                 createdAt = now,
@@ -4471,6 +4494,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     description = draft.description.trim(),
                     visitTimeRange = VisitHelper.normalizeTimeRange(draft.visitTimeRange),
                     isActive = true,
+                    publishedToWali = false,
+                    publishedToParent = false,
+                    waliLaunchedAt = 0L,
+                    parentLaunchedAt = 0L,
+                    updatedNoticeAfterParentLaunch = false,
                     createdBy = creator,
                     schoolId = activeSchool,
                     createdAt = now,
@@ -4480,9 +4508,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 createdList.add(newSession)
             }
             val msg = if (isEn) {
-                "${createdList.size} visit session(s) created!"
+                "${createdList.size} visit session(s) saved as draft! Launch to Wali Asuh or Parents when ready."
             } else {
-                "${createdList.size} sesi kunjungan berhasil dibuat!"
+                "${createdList.size} sesi kunjungan tersimpan sebagai Draf! Silakan luncurkan saat jadwal sudah pasti."
             }
             onComplete(createdList, msg)
             if (!isUnitTestEnvironment()) {
@@ -4509,19 +4537,168 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         viewModelScope.launch {
+            val resolvedTitle = title.trim()
+            val resolvedMonth = monthYear.trim().ifBlank { session.monthYear }
+            val resolvedDatesCsv = VisitHelper.formatDatesCsv(visitDates)
+            val resolvedDistrictsCsv = VisitHelper.formatDistrictsCsv(selectedDistricts)
+            val resolvedTimeRange = VisitHelper.normalizeTimeRange(visitTimeRange)
+            val scheduleChanged = resolvedTitle != session.title ||
+                resolvedMonth != session.monthYear ||
+                resolvedDatesCsv != session.sessionDatesCsv ||
+                resolvedDistrictsCsv != session.selectedDistrictsCsv ||
+                resolvedTimeRange != session.displayTimeRange()
             val updated = session.copy(
-                title = title.trim(),
-                monthYear = monthYear.trim().ifBlank { session.monthYear },
-                sessionDatesCsv = VisitHelper.formatDatesCsv(visitDates),
-                selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(selectedDistricts),
+                title = resolvedTitle,
+                monthYear = resolvedMonth,
+                sessionDatesCsv = resolvedDatesCsv,
+                selectedDistrictsCsv = resolvedDistrictsCsv,
                 description = description.trim(),
-                visitTimeRange = VisitHelper.normalizeTimeRange(visitTimeRange),
+                visitTimeRange = resolvedTimeRange,
+                updatedNoticeAfterParentLaunch = session.updatedNoticeAfterParentLaunch ||
+                    (session.publishedToParent && scheduleChanged),
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateVisitSession(updated)
             onComplete(updated)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), updated)
+            }
+        }
+    }
+
+    fun setVisitSessionWaliLaunch(
+        session: VisitSession,
+        launched: Boolean,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val role = _currentUserRole.value
+        if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+            onComplete(false, if (isEn) "Admin access required." else "Hanya Admin Sekolah yang dapat mengatur peluncuran.")
+            return
+        }
+        if (!launched && session.publishedToParent) {
+            onComplete(
+                false,
+                if (isEn) {
+                    "Pull schedule from Parents first before pulling from Wali Asuh."
+                } else {
+                    "Tarik jadwal dari Wali Siswa/Orang Tua dahulu sebelum menarik dari Wali Asuh."
+                }
+            )
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val updated = session.copy(
+                publishedToWali = launched,
+                waliLaunchedAt = if (launched) (if (session.waliLaunchedAt > 0L) session.waliLaunchedAt else now) else 0L,
+                updatedAt = now
+            )
+            repository.updateVisitSession(updated)
+            val msg = if (launched) {
+                if (isEn) "\"${session.title}\" launched to Wali Asuh (Preview)." else "\"${session.title}\" diluncurkan ke Wali Asuh."
+            } else {
+                if (isEn) "\"${session.title}\" pulled back to Draft." else "\"${session.title}\" ditarik kembali menjadi Draf."
+            }
+            onComplete(true, msg)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), updated)
+            }
+        }
+    }
+
+    fun setVisitSessionParentLaunch(
+        session: VisitSession,
+        launched: Boolean,
+        onComplete: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val role = _currentUserRole.value
+        if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+            onComplete(false, if (isEn) "Admin access required." else "Hanya Admin Sekolah yang dapat meluncurkan ke Wali Siswa.")
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val updated = session.copy(
+                publishedToParent = launched,
+                publishedToWali = if (launched) true else session.publishedToWali,
+                waliLaunchedAt = if (launched && session.waliLaunchedAt <= 0L) now else session.waliLaunchedAt,
+                parentLaunchedAt = if (launched) now else 0L,
+                updatedNoticeAfterParentLaunch = false,
+                updatedAt = now
+            )
+            repository.updateVisitSession(updated)
+            val msg = if (launched) {
+                if (isEn) "\"${session.title}\" is now LIVE to Parents!" else "\"${session.title}\" resmi DILUNCURKAN ke Wali Siswa / Orang Tua!"
+            } else {
+                if (isEn) "\"${session.title}\" pulled from Parent Portal." else "\"${session.title}\" ditarik dari Portal Wali Siswa / Orang Tua."
+            }
+            onComplete(true, msg)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), updated)
+            }
+        }
+    }
+
+    fun bulkLaunchMonthVisitSessions(
+        monthYear: String,
+        target: String, // "WALI" or "PARENT"
+        onComplete: (Int, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val role = _currentUserRole.value
+        if (role != UserRole.ADMIN && role != UserRole.SUPERADMIN) {
+            onComplete(0, if (isEn) "Admin access required." else "Hanya Admin Sekolah yang dapat meluncurkan jadwal.")
+            return
+        }
+        viewModelScope.launch {
+            val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+            val cleanMonth = monthYear.trim()
+            val candidates = repository.getVisitSessionsBySchoolList(activeSchool).filter { sess ->
+                sess.isActive &&
+                    (cleanMonth.isBlank() || cleanMonth == "ALL" || sess.monthYear.equals(cleanMonth, ignoreCase = true)) &&
+                    if (target == "WALI") !sess.publishedToWali else !sess.publishedToParent
+            }
+            if (candidates.isEmpty()) {
+                onComplete(
+                    0,
+                    if (isEn) "No draft/pending sessions found for this action." else "Semua sesi aktif pada pilihan ini sudah diluncurkan."
+                )
+                return@launch
+            }
+            val now = System.currentTimeMillis()
+            val updatedList = candidates.mapIndexed { idx, sess ->
+                val ts = now + idx
+                if (target == "WALI") {
+                    sess.copy(
+                        publishedToWali = true,
+                        waliLaunchedAt = if (sess.waliLaunchedAt > 0L) sess.waliLaunchedAt else ts,
+                        updatedAt = ts
+                    )
+                } else {
+                    sess.copy(
+                        publishedToWali = true,
+                        publishedToParent = true,
+                        waliLaunchedAt = if (sess.waliLaunchedAt > 0L) sess.waliLaunchedAt else ts,
+                        parentLaunchedAt = ts,
+                        updatedNoticeAfterParentLaunch = false,
+                        updatedAt = ts
+                    )
+                }
+            }
+            updatedList.forEach { repository.updateVisitSession(it) }
+            val msg = if (target == "WALI") {
+                if (isEn) "${updatedList.size} visit session(s) launched to Wali Asuh." else "${updatedList.size} sesi kunjungan diluncurkan ke Wali Asuh!"
+            } else {
+                if (isEn) "${updatedList.size} visit session(s) launched live to Parents!" else "${updatedList.size} sesi kunjungan resmi live ke Wali Siswa / Orang Tua!"
+            }
+            onComplete(updatedList.size, msg)
+            if (!isUnitTestEnvironment()) {
+                updatedList.forEach { sess ->
+                    PocketBaseSyncManager.uploadSingleVisitSession(getApplication(), sess)
+                }
             }
         }
     }

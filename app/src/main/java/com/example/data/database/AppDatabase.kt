@@ -113,7 +113,7 @@ import com.example.data.model.WaliShiftCode
         BibleBookmark::class,
         BibleNote::class
     ],
-    version = 39,
+    version = 40,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -1071,6 +1071,25 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_39_40 = object : androidx.room.migration.Migration(39, 40) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                val alters = listOf(
+                    "ALTER TABLE visit_sessions ADD COLUMN publishedToWali INTEGER NOT NULL DEFAULT 1",
+                    "ALTER TABLE visit_sessions ADD COLUMN publishedToParent INTEGER NOT NULL DEFAULT 1",
+                    "ALTER TABLE visit_sessions ADD COLUMN waliLaunchedAt INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE visit_sessions ADD COLUMN parentLaunchedAt INTEGER NOT NULL DEFAULT 0",
+                    "ALTER TABLE visit_sessions ADD COLUMN updatedNoticeAfterParentLaunch INTEGER NOT NULL DEFAULT 0"
+                )
+                alters.forEach { sql ->
+                    try {
+                        db.execSQL(sql)
+                    } catch (_: Exception) {
+                        // Column may already exist
+                    }
+                }
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -1110,7 +1129,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_35_36,
                         MIGRATION_36_37,
                         MIGRATION_37_38,
-                        MIGRATION_38_39
+                        MIGRATION_38_39,
+                        MIGRATION_39_40
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

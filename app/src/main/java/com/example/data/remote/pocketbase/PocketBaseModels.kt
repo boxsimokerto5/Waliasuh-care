@@ -1112,6 +1112,11 @@ data class PbVisitSessionDto(
     @Json(name = "description") val description: String? = null,
     @Json(name = "visit_time_range") val visitTimeRange: String? = null,
     @Json(name = "is_active") val isActive: Boolean? = null,
+    @Json(name = "published_to_wali") val publishedToWali: Boolean? = null,
+    @Json(name = "published_to_parent") val publishedToParent: Boolean? = null,
+    @Json(name = "wali_launched_at") val waliLaunchedAt: Long? = null,
+    @Json(name = "parent_launched_at") val parentLaunchedAt: Long? = null,
+    @Json(name = "updated_notice_after_parent_launch") val updatedNoticeAfterParentLaunch: Boolean? = null,
     @Json(name = "created_by") val createdBy: String? = null,
     @Json(name = "created_at") val createdAt: Long? = null,
     @Json(name = "updated_at") val updatedAt: Long? = null
@@ -1119,6 +1124,8 @@ data class PbVisitSessionDto(
     fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): VisitSession {
         val now = System.currentTimeMillis()
         val resolvedCreated = createdAt?.takeIf { it > 0L } ?: now
+        val resolvedParentLive = publishedToParent ?: true
+        val resolvedWaliLive = (publishedToWali ?: true) || resolvedParentLive
         return VisitSession(
             id = PocketBaseIdCodec.resolveLocalId(localId, id),
             title = title.ifBlank { "Kunjungan Bulanan" },
@@ -1128,6 +1135,11 @@ data class PbVisitSessionDto(
             description = description.orEmpty(),
             visitTimeRange = VisitHelper.normalizeTimeRange(visitTimeRange),
             isActive = isActive ?: true,
+            publishedToWali = resolvedWaliLive,
+            publishedToParent = resolvedParentLive,
+            waliLaunchedAt = waliLaunchedAt ?: 0L,
+            parentLaunchedAt = parentLaunchedAt ?: 0L,
+            updatedNoticeAfterParentLaunch = updatedNoticeAfterParentLaunch ?: false,
             createdBy = createdBy?.ifBlank { "Admin Sekolah" } ?: "Admin Sekolah",
             schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
             createdAt = resolvedCreated,
@@ -1151,6 +1163,11 @@ data class PbVisitSessionDto(
                 description = model.description,
                 visitTimeRange = model.displayTimeRange(),
                 isActive = model.isActive,
+                publishedToWali = model.publishedToWali || model.publishedToParent,
+                publishedToParent = model.publishedToParent,
+                waliLaunchedAt = model.waliLaunchedAt,
+                parentLaunchedAt = model.parentLaunchedAt,
+                updatedNoticeAfterParentLaunch = model.updatedNoticeAfterParentLaunch,
                 createdBy = model.createdBy,
                 createdAt = model.createdAt,
                 updatedAt = model.updatedAt

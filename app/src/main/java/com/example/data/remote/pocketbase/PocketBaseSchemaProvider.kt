@@ -322,6 +322,11 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("description", "text"),
                 PbFieldDef("visit_time_range", "text"),
                 PbFieldDef("is_active", "bool"),
+                PbFieldDef("published_to_wali", "bool"),
+                PbFieldDef("published_to_parent", "bool"),
+                PbFieldDef("wali_launched_at", "number"),
+                PbFieldDef("parent_launched_at", "number"),
+                PbFieldDef("updated_notice_after_parent_launch", "bool"),
                 PbFieldDef("created_by", "text"),
                 PbFieldDef("created_at", "number"),
                 PbFieldDef("updated_at", "number")

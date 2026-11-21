@@ -8,6 +8,13 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+enum class VisitLaunchStage {
+    DRAFT,
+    WALI_PREVIEW,
+    PARENT_LIVE,
+    CLOSED
+}
+
 @Entity(tableName = "visit_sessions")
 data class VisitSession(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
@@ -18,6 +25,11 @@ data class VisitSession(
     val description: String = "",
     val visitTimeRange: String = DEFAULT_TIME_RANGE,
     val isActive: Boolean = true,
+    val publishedToWali: Boolean = true,
+    val publishedToParent: Boolean = true,
+    val waliLaunchedAt: Long = 0L,
+    val parentLaunchedAt: Long = 0L,
+    val updatedNoticeAfterParentLaunch: Boolean = false,
     val createdBy: String = "Admin Sekolah",
     val schoolId: String = "SRT1-KDR",
     val createdAt: Long = System.currentTimeMillis(),
@@ -32,6 +44,13 @@ data class VisitSession(
     fun isDateScheduled(dateMillis: Long): Boolean {
         val targetDay = VisitHelper.normalizeDayStart(dateMillis)
         return getVisitDatesList().any { VisitHelper.normalizeDayStart(it) == targetDay }
+    }
+
+    fun launchStage(): VisitLaunchStage = when {
+        !isActive -> VisitLaunchStage.CLOSED
+        publishedToParent -> VisitLaunchStage.PARENT_LIVE
+        publishedToWali -> VisitLaunchStage.WALI_PREVIEW
+        else -> VisitLaunchStage.DRAFT
     }
 
     companion object {
