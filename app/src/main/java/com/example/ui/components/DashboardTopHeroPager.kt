@@ -32,12 +32,21 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Grain
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Thunderstorm
+import androidx.compose.material.icons.filled.Umbrella
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +62,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,6 +74,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -73,8 +84,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.MedicalRecord
 import com.example.data.model.WaliAccount
+import com.example.util.CityWeatherForecast
 import com.example.util.IndonesiaCitySpec
 import com.example.util.PrayerTimeHelper
+import com.example.util.WeatherConditionCategory
+import com.example.util.WeatherForecastHelper
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.Calendar
@@ -98,11 +112,12 @@ fun DashboardTopHeroPager(
     onSelectInpatientRecord: (MedicalRecord) -> Unit,
     onOpenInpatientPicker: (String, List<MedicalRecord>) -> Unit,
     onOpenAbsenSholat: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    weatherFetcher: (suspend (IndonesiaCitySpec) -> String?)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 2 })
+    val pagerState = rememberPagerState(initialPage = 0, pageCount = { 3 })
 
     var savedCityId by remember { mutableStateOf(PrayerTimeHelper.getSavedCityId(context)) }
     var showCityPicker by remember { mutableStateOf(false) }
@@ -125,6 +140,54 @@ fun DashboardTopHeroPager(
             calendar = cal,
             isEn = isEn
         )
+    }
+
+    var weatherForecast by remember(activeCity.id) {
+        mutableStateOf(
+            WeatherForecastHelper.getCachedWeather(
+                context = context,
+                city = activeCity,
+                allowExpired = true
+            )
+        )
+    }
+    var isWeatherLoading by remember(activeCity.id) { mutableStateOf(false) }
+    var isWeatherError by remember(activeCity.id) { mutableStateOf(false) }
+    var weatherRefreshTrigger by remember { mutableIntStateOf(0) }
+    var lastHandledWeatherTrigger by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(activeCity.id, weatherRefreshTrigger) {
+        val force = weatherRefreshTrigger != lastHandledWeatherTrigger
+        lastHandledWeatherTrigger = weatherRefreshTrigger
+        val freshCached = if (!force) {
+            WeatherForecastHelper.getCachedWeather(
+                context = context,
+                city = activeCity,
+                allowExpired = false
+            )
+        } else null
+
+        if (freshCached != null) {
+            weatherForecast = freshCached
+            isWeatherLoading = false
+            isWeatherError = false
+        } else {
+            isWeatherLoading = true
+            isWeatherError = false
+            val result = WeatherForecastHelper.fetchWeatherForCity(
+                context = context,
+                city = activeCity,
+                forceRefresh = force,
+                customFetcher = weatherFetcher
+            )
+            result.onSuccess { fetched ->
+                weatherForecast = fetched
+                isWeatherError = false
+            }.onFailure {
+                isWeatherError = weatherForecast == null
+            }
+            isWeatherLoading = false
+        }
     }
 
     val isDarkSurface = MaterialTheme.colorScheme.surface.luminance() < 0.5f
@@ -161,7 +224,7 @@ fun DashboardTopHeroPager(
                     onOpenInpatientPicker = onOpenInpatientPicker
                 )
 
-                else -> TodayPrayerTimesHeroCard(
+                1 -> TodayPrayerTimesHeroCard(
                     schedule = prayerSchedule,
                     todayShortFormatted = todayShortFormatted,
                     isManualCity = savedCityId != null,
@@ -170,56 +233,85 @@ fun DashboardTopHeroPager(
                     onOpenCityPicker = { showCityPicker = true },
                     onOpenAbsenSholat = onOpenAbsenSholat
                 )
+
+                else -> TodayWeatherHeroCard(
+                    city = activeCity,
+                    forecast = weatherForecast,
+                    isLoading = isWeatherLoading,
+                    isError = isWeatherError,
+                    todayShortFormatted = todayShortFormatted,
+                    isEn = isEn,
+                    isDarkSurface = isDarkSurface,
+                    onOpenCityPicker = { showCityPicker = true },
+                    onRefreshWeather = { weatherRefreshTrigger++ }
+                )
             }
         }
 
-        // Compact swipe dots & quick 1-tap toggle pill between Care & Prayer Schedule
-        Row(
+        // Compact 3-tab quick selector + animated swipe dots
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 2.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            HeroPagerIndicatorChip(
-                label = if (isEn) "Today's Care" else "Berobat",
-                selected = pagerState.currentPage == 0,
-                activeColor = if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857),
-                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                modifier = Modifier.testTag("hero_pager_tab_care")
-            )
-
-            Spacer(modifier = Modifier.width(6.dp))
-
-            repeat(2) { idx ->
-                val selected = pagerState.currentPage == idx
-                val dotColor by animateColorAsState(
-                    targetValue = if (selected) {
-                        if (idx == 0) Color(0xFF047857) else Color(0xFFB45309)
-                    } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    },
-                    label = "hero_dot_color"
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                HeroPagerIndicatorChip(
+                    label = if (isEn) "Today's Care" else "Berobat",
+                    selected = pagerState.currentPage == 0,
+                    activeColor = if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857),
+                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                    modifier = Modifier.testTag("hero_pager_tab_care")
                 )
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = 2.dp)
-                        .height(5.dp)
-                        .width(if (selected) 16.dp else 5.dp)
-                        .clip(CircleShape)
-                        .background(dotColor)
+
+                HeroPagerIndicatorChip(
+                    label = if (isEn) "Prayer" else "Jadwal Sholat",
+                    selected = pagerState.currentPage == 1,
+                    activeColor = if (isDarkSurface) Color(0xFFF59E0B) else Color(0xFFB45309),
+                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                    modifier = Modifier.testTag("hero_pager_tab_prayer")
+                )
+
+                HeroPagerIndicatorChip(
+                    label = if (isEn) "Weather" else "Cuaca",
+                    selected = pagerState.currentPage == 2,
+                    activeColor = if (isDarkSurface) Color(0xFF38BDF8) else Color(0xFF0284C7),
+                    onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                    modifier = Modifier.testTag("hero_pager_tab_weather")
                 )
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
-
-            HeroPagerIndicatorChip(
-                label = if (isEn) "Prayer Times" else "Jadwal Sholat",
-                selected = pagerState.currentPage == 1,
-                activeColor = if (isDarkSurface) Color(0xFFF59E0B) else Color(0xFFB45309),
-                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                modifier = Modifier.testTag("hero_pager_tab_prayer")
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                repeat(3) { idx ->
+                    val selected = pagerState.currentPage == idx
+                    val dotColor by animateColorAsState(
+                        targetValue = if (selected) {
+                            when (idx) {
+                                0 -> if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857)
+                                1 -> if (isDarkSurface) Color(0xFFF59E0B) else Color(0xFFB45309)
+                                else -> if (isDarkSurface) Color(0xFF38BDF8) else Color(0xFF0284C7)
+                            }
+                        } else {
+                            MaterialTheme.colorScheme.outlineVariant
+                        },
+                        label = "hero_dot_color_$idx"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .height(4.5.dp)
+                            .width(if (selected) 16.dp else 5.dp)
+                            .clip(CircleShape)
+                            .background(dotColor)
+                    )
+                }
+            }
         }
     }
 
@@ -265,6 +357,8 @@ private fun HeroPagerIndicatorChip(
             fontSize = 10.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             color = if (selected) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.5.dp)
         )
     }
@@ -898,6 +992,451 @@ private fun TodayPrayerTimesHeroCard(
     }
 }
 
+@Composable
+private fun TodayWeatherHeroCard(
+    city: IndonesiaCitySpec,
+    forecast: CityWeatherForecast?,
+    isLoading: Boolean,
+    isError: Boolean,
+    todayShortFormatted: String,
+    isEn: Boolean,
+    isDarkSurface: Boolean,
+    onOpenCityPicker: () -> Unit,
+    onRefreshWeather: () -> Unit
+) {
+    val bgGradient = if (isDarkSurface) {
+        listOf(Color(0xFF0C2D48), Color(0xFF0F3D5E), Color(0xFF164E63))
+    } else {
+        listOf(Color(0xFFF0F9FF), Color(0xFFE0F2FE), Color(0xFFF0FDFA))
+    }
+    val borderColor = if (isDarkSurface) {
+        Color(0xFF38BDF8).copy(alpha = 0.45f)
+    } else {
+        Color(0xFF7DD3FC)
+    }
+    val titleColor = if (isDarkSurface) Color(0xFFF0F9FF) else Color(0xFF0369A1)
+    val subColor = if (isDarkSurface) Color(0xFFBAE6FD) else Color(0xFF0C4A6E)
+    val skyAccent = if (isDarkSurface) Color(0xFF38BDF8) else Color(0xFF0284C7)
+    val rainAlertAccent = if (isDarkSurface) Color(0xFFFBBF24) else Color(0xFFB45309)
+    val isRainHighlight = forecast != null && (forecast.currentDescriptor.isRainRisk || forecast.currentRainChancePercent >= 50)
+    val badgeBg = when {
+        isRainHighlight && isDarkSurface -> Color(0xFF78350F).copy(alpha = 0.55f)
+        isRainHighlight -> Color(0xFFFEF3C7)
+        isDarkSurface -> Color(0xFF082F49).copy(alpha = 0.72f)
+        else -> Color(0xFFE0F2FE)
+    }
+    val badgeTextColor = if (isRainHighlight) rainAlertAccent else skyAccent
+
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("card_weather_today"),
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 124.dp)
+                .background(Brush.linearGradient(bgGradient))
+                .border(1.dp, borderColor, RoundedCornerShape(14.dp))
+        ) {
+            Column(
+                modifier = Modifier.padding(horizontal = 11.dp, vertical = 7.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Header: Title + Current summary badge + Shared City Dropdown
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
+                        ) {
+                            Icon(
+                                imageVector = forecast?.let {
+                                    weatherCategoryIcon(it.currentDescriptor.category, it.isDay)
+                                } ?: Icons.Default.Cloud,
+                                contentDescription = null,
+                                tint = if (forecast?.currentDescriptor?.category == WeatherConditionCategory.SUNNY) {
+                                    Color(0xFFF59E0B)
+                                } else {
+                                    skyAccent
+                                },
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = if (isEn) "Weather" else "Prakiraan Cuaca",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = titleColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (isDarkSurface) Color(0xFF082F49) else Color.White.copy(alpha = 0.88f),
+                                border = BorderStroke(0.8.dp, borderColor.copy(alpha = 0.7f))
+                            ) {
+                                Text(
+                                    text = todayShortFormatted,
+                                    fontSize = 9.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = subColor,
+                                    maxLines = 1,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = badgeBg,
+                            modifier = Modifier.testTag("badge_weather_summary")
+                        ) {
+                            val summaryText = when {
+                                forecast != null -> {
+                                    val desc = if (isEn) forecast.currentDescriptor.labelEn else forecast.currentDescriptor.labelId
+                                    if (isRainHighlight) {
+                                        if (isEn) {
+                                            "${forecast.currentTempC}°C • $desc • Rain ${forecast.currentRainChancePercent}%"
+                                        } else {
+                                            "${forecast.currentTempC}°C • $desc • Siaga Hujan ${forecast.currentRainChancePercent}%"
+                                        }
+                                    } else {
+                                        if (isEn) {
+                                            "${forecast.currentTempC}°C • $desc • Rain ${forecast.currentRainChancePercent}%"
+                                        } else {
+                                            "${forecast.currentTempC}°C • $desc • Hujan ${forecast.currentRainChancePercent}%"
+                                        }
+                                    }
+                                }
+                                isLoading -> if (isEn) "Loading weather forecast..." else "Memuat prakiraan cuaca..."
+                                else -> if (isEn) "Weather unavailable" else "Prakiraan cuaca belum termuat"
+                            }
+                            Text(
+                                text = summaryText,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = badgeTextColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    // Shared City Dropdown Pill (synced with Prayer Times via activeCity ID)
+                    Surface(
+                        onClick = onOpenCityPicker,
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isDarkSurface) Color(0xFF082F49).copy(alpha = 0.85f) else Color.White,
+                        border = BorderStroke(1.dp, borderColor),
+                        modifier = Modifier.testTag("btn_weather_city_dropdown")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.LocationOn,
+                                contentDescription = if (isEn) "Select city" else "Pilih kota",
+                                tint = skyAccent,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = city.name
+                                    .replace("Kabupaten ", "Kab. ")
+                                    .replace("Kota ", ""),
+                                fontSize = 10.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = titleColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = if (isEn) "Change city" else "Ganti kota",
+                                tint = subColor,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+
+                // Middle Strip: Pagi / Siang / Sore / Malam forecast slots
+                if (forecast != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("row_weather_periods_strip"),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        forecast.periods.forEach { slot ->
+                            val isActive = slot.key == forecast.activePeriodKey
+                            val slotBg = when {
+                                isActive && isDarkSurface -> Color(0xFF075985).copy(alpha = 0.72f)
+                                isActive -> Color(0xFFF0F9FF)
+                                isDarkSurface -> Color(0xFF082F49).copy(alpha = 0.65f)
+                                else -> Color.White.copy(alpha = 0.88f)
+                            }
+                            val slotBorder = when {
+                                isActive -> skyAccent
+                                isDarkSurface -> Color(0xFF38BDF8).copy(alpha = 0.25f)
+                                else -> Color(0xFFBAE6FD)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(9.dp),
+                                color = slotBg,
+                                border = BorderStroke(if (isActive) 1.2.dp else 0.8.dp, slotBorder),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("slot_weather_${slot.key.lowercase()}")
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp, horizontal = 3.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(1.dp)
+                                ) {
+                                    Text(
+                                        text = if (isEn) slot.labelEn else slot.labelId,
+                                        fontSize = 9.sp,
+                                        fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Medium,
+                                        color = if (isActive) skyAccent else subColor,
+                                        maxLines = 1,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = weatherCategoryIcon(
+                                                slot.descriptor.category,
+                                                slot.targetHour in 6..17
+                                            ),
+                                            contentDescription = if (isEn) slot.descriptor.labelEn else slot.descriptor.labelId,
+                                            tint = if (slot.descriptor.category == WeatherConditionCategory.SUNNY) {
+                                                Color(0xFFF59E0B)
+                                            } else if (slot.descriptor.isRainRisk) {
+                                                skyAccent
+                                            } else {
+                                                subColor
+                                            },
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "${slot.tempC}°",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = if (isActive) skyAccent else titleColor,
+                                            maxLines = 1
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(1.5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = if (slot.rainChancePercent >= 45) {
+                                                Icons.Default.Umbrella
+                                            } else {
+                                                Icons.Default.WaterDrop
+                                            },
+                                            contentDescription = null,
+                                            tint = if (slot.rainChancePercent >= 45) rainAlertAccent else subColor.copy(alpha = 0.72f),
+                                            modifier = Modifier.size(9.dp)
+                                        )
+                                        Text(
+                                            text = "${slot.rainChancePercent}%",
+                                            fontSize = 8.5.sp,
+                                            fontWeight = if (slot.rainChancePercent >= 45) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (slot.rainChancePercent >= 45) rainAlertAccent else subColor.copy(alpha = 0.85f),
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (isError) {
+                    Surface(
+                        shape = RoundedCornerShape(9.dp),
+                        color = if (isDarkSurface) Color(0xFF082F49).copy(alpha = 0.7f) else Color.White.copy(alpha = 0.9f),
+                        border = BorderStroke(0.8.dp, borderColor),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = if (isEn) {
+                                    "Unable to reach weather service"
+                                } else {
+                                    "Gagal memuat data cuaca online"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = subColor,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                onClick = onRefreshWeather,
+                                shape = RoundedCornerShape(8.dp),
+                                color = skyAccent,
+                                modifier = Modifier.testTag("btn_weather_retry")
+                            ) {
+                                Text(
+                                    text = if (isEn) "Retry" else "Coba Lagi",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isDarkSurface) Color(0xFF082F49) else Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("row_weather_periods_loading"),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        listOf("Pagi", "Siang", "Sore", "Malam").forEach { label ->
+                            Surface(
+                                shape = RoundedCornerShape(9.dp),
+                                color = if (isDarkSurface) Color(0xFF082F49).copy(alpha = 0.55f) else Color.White.copy(alpha = 0.75f),
+                                border = BorderStroke(0.8.dp, borderColor.copy(alpha = 0.6f)),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = label,
+                                        fontSize = 9.sp,
+                                        color = subColor
+                                    )
+                                    Text(
+                                        text = "--°",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = titleColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Footer: Feels-like, humidity, wind + Manual refresh action
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val footerText = if (forecast != null) {
+                        val updatedTime = WeatherForecastHelper.formatFetchedTime(
+                            forecast.fetchedAtMillis,
+                            city.utcOffsetHours
+                        )
+                        if (isEn) {
+                            "Feels ${forecast.apparentTempC}° • Hum ${forecast.humidityPercent}% • Wind ${forecast.windKmh} km/h • $updatedTime"
+                        } else {
+                            "Terasa ${forecast.apparentTempC}° • Lembap ${forecast.humidityPercent}% • Angin ${forecast.windKmh} km/j"
+                        }
+                    } else {
+                        if (isEn) {
+                            "${city.zoneLabel} • Synced with Prayer City ID"
+                        } else {
+                            "${city.zoneLabel} • Sinkron ID Kota Sholat"
+                        }
+                    }
+                    Text(
+                        text = footerText,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = subColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Row(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable(enabled = !isLoading, onClick = onRefreshWeather)
+                            .padding(horizontal = 5.dp, vertical = 1.dp)
+                            .testTag("btn_weather_refresh"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(10.dp),
+                                strokeWidth = 1.5.dp,
+                                color = skyAccent
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = if (isEn) "Refresh weather" else "Perbarui cuaca",
+                                tint = skyAccent,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                        Text(
+                            text = when {
+                                isLoading -> if (isEn) "Updating" else "Memuat"
+                                forecast?.isFromCache == true -> if (isEn) "Cache" else "Perbarui"
+                                else -> if (isEn) "Refresh" else "Perbarui"
+                            },
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = skyAccent
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun weatherCategoryIcon(
+    category: WeatherConditionCategory,
+    isDay: Boolean
+): ImageVector {
+    return when (category) {
+        WeatherConditionCategory.SUNNY -> if (isDay) Icons.Default.WbSunny else Icons.Default.NightsStay
+        WeatherConditionCategory.PARTLY_CLOUDY -> Icons.Default.Cloud
+        WeatherConditionCategory.CLOUDY -> Icons.Default.Cloud
+        WeatherConditionCategory.FOG -> Icons.Default.Cloud
+        WeatherConditionCategory.DRIZZLE -> Icons.Default.Grain
+        WeatherConditionCategory.RAIN -> Icons.Default.WaterDrop
+        WeatherConditionCategory.THUNDERSTORM -> Icons.Default.Thunderstorm
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PrayerCityPickerSheet(
@@ -944,16 +1483,16 @@ private fun PrayerCityPickerSheet(
             ) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isEn) "Select Prayer Time City" else "Pilih Kota Jadwal Sholat",
+                        text = if (isEn) "Select City (Prayer & Weather)" else "Pilih Wilayah (Sholat & Cuaca)",
                         fontSize = 16.sp,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Text(
                         text = if (isEn) {
-                            "Offline Kemenag RI standard • Active: ${activeCity.name}"
+                            "Synced for Prayer Times & Weather • Active: ${activeCity.name}"
                         } else {
-                            "Standar Kemenag RI (Offline) • Aktif: ${activeCity.name}"
+                            "Sinkron Jadwal Sholat & Prakiraan Cuaca • Aktif: ${activeCity.name}"
                         },
                         fontSize = 11.5.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
