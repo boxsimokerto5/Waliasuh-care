@@ -1,14 +1,19 @@
 package com.example.util
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.net.Uri
 import android.text.TextPaint
 import android.text.TextUtils
+import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipRecord
@@ -19,11 +24,16 @@ import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentExpectationHelper
+import com.example.data.model.ParentMessage
+import com.example.data.model.ParentMessageHelper
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.WaliGalleryHelper
+import com.example.data.model.WaliGalleryLocalSave
+import com.example.data.model.WaliGalleryPost
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
 import java.io.File
@@ -1115,6 +1125,608 @@ object ParentPortalPdfHelper {
                 }
             )
         )
+
+        if (currentY > pageHeight - 135f) {
+            finishCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 38f
+        }
+        PdfReportGenerator.drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCanvas()
+    }
+
+    private fun wrapTextLines(text: String, paint: Paint, maxWidth: Float, maxLines: Int = 4): List<String> {
+        val clean = text.replace("\r\n", "\n").trim()
+        if (clean.isEmpty()) return emptyList()
+        val result = mutableListOf<String>()
+        val paragraphs = clean.split("\n")
+        for (para in paragraphs) {
+            val words = para.trim().split(Regex("\\s+")).filter { it.isNotBlank() }
+            if (words.isEmpty()) continue
+            var line = ""
+            for (word in words) {
+                val candidate = if (line.isEmpty()) word else "$line $word"
+                if (paint.measureText(candidate) <= maxWidth) {
+                    line = candidate
+                } else {
+                    if (line.isNotEmpty()) {
+                        result.add(line)
+                        if (result.size >= maxLines) break
+                    }
+                    line = if (paint.measureText(word) <= maxWidth) {
+                        word
+                    } else {
+                        TextUtils.ellipsize(word, TextPaint(paint), maxWidth, TextUtils.TruncateAt.END).toString()
+                    }
+                }
+            }
+            if (result.size >= maxLines) break
+            if (line.isNotEmpty()) {
+                result.add(line)
+                if (result.size >= maxLines) break
+            }
+        }
+        return result.take(maxLines)
+    }
+
+    private fun decodeLocalThumbnailBitmap(context: Context, uriOrPath: String): Bitmap? {
+        val clean = uriOrPath.trim()
+        if (clean.isBlank() || clean.startsWith("http", ignoreCase = true)) return null
+        return runCatching {
+            val optsBounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            if (clean.startsWith("content://") || clean.startsWith("file://")) {
+                val uri = Uri.parse(clean)
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, optsBounds)
+                }
+                val sample = calculateInSampleSize(optsBounds.outWidth, optsBounds.outHeight, 240, 240)
+                val optsDecode = BitmapFactory.Options().apply { inSampleSize = sample }
+                context.contentResolver.openInputStream(uri)?.use { stream ->
+                    BitmapFactory.decodeStream(stream, null, optsDecode)
+                }
+            } else {
+                val file = File(clean)
+                if (!file.exists()) return null
+                BitmapFactory.decodeFile(file.absolutePath, optsBounds)
+                val sample = calculateInSampleSize(optsBounds.outWidth, optsBounds.outHeight, 240, 240)
+                val optsDecode = BitmapFactory.Options().apply { inSampleSize = sample }
+                BitmapFactory.decodeFile(file.absolutePath, optsDecode)
+            }
+        }.getOrNull()
+    }
+
+    private fun calculateInSampleSize(width: Int, height: Int, reqWidth: Int, reqHeight: Int): Int {
+        var inSampleSize = 1
+        if (height > reqHeight || width > reqWidth) {
+            val halfHeight = height / 2
+            val halfWidth = width / 2
+            while ((halfHeight / inSampleSize) >= reqHeight && (halfWidth / inSampleSize) >= reqWidth) {
+                inSampleSize *= 2
+            }
+        }
+        return inSampleSize.coerceAtLeast(1)
+    }
+
+    /**
+     * PDF Album Dokumentasi Galeri Kegiatan Wali Asuh (untuk Portal Orang Tua).
+     */
+    fun generateStudentGalleryReportPdf(
+        context: Context,
+        student: ChildStudent,
+        posts: List<WaliGalleryPost>,
+        localSavesByPostId: Map<Long, WaliGalleryLocalSave>,
+        periodLabel: String,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        val document = PdfDocument()
+        var currentPage: PdfDocument.Page? = null
+        return try {
+            renderStudentGalleryReportPages(
+                context = context,
+                student = student,
+                posts = posts,
+                localSavesByPostId = localSavesByPostId,
+                periodLabel = periodLabel,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, num).create()
+                    currentPage = document.startPage(pageInfo)
+                    currentPage!!.canvas
+                },
+                finishCanvas = {
+                    currentPage?.let {
+                        document.finishPage(it)
+                        currentPage = null
+                    }
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanStudent = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val cleanPeriod = periodLabel.replace(Regex("[^a-zA-Z0-9]"), "_").take(20)
+            val file = File(outputDir, "Galeri_Wali_${cleanStudent}_$cleanPeriod.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            runCatching { currentPage?.let { document.finishPage(it) } }
+            runCatching { document.close() }
+        }
+    }
+
+    internal fun renderStudentGalleryReportPages(
+        context: Context,
+        student: ChildStudent,
+        posts: List<WaliGalleryPost>,
+        localSavesByPostId: Map<Long, WaliGalleryLocalSave> = emptyMap(),
+        periodLabel: String = "Semua Riwayat",
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val pageWidth = PAGE_WIDTH
+        val pageHeight = PAGE_HEIGHT
+        val marginX = 35f
+        val contentRight = pageWidth - marginX
+        val boxW = contentRight - marginX
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+
+        var currentY = 35f
+        currentY = PdfReportGenerator.drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = PdfReportGenerator.UNIT_BIMBINGAN_SPIRITUAL
+        )
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 12f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            if (isEn) "CAREGIVER ACTIVITY GALLERY REPORT" else "LAPORAN DOKUMENTASI GALERI WALI ASUH",
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        currentY += 13f
+        paint.textSize = 9.5f
+        paint.color = Color.rgb(15, 118, 110)
+        canvas.drawText(
+            (if (isEn) "PERIOD: " else "PERIODE: ") + periodLabel.uppercase(lang.locale),
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        paint.textAlign = Paint.Align.LEFT
+        currentY += 14f
+
+        currentY = PdfReportGenerator.drawStudentBio(canvas, paint, pageWidth, currentY, student, isEn)
+
+        val sorted = posts.filter { !it.isDeleted }.sortedByDescending { it.createdAt }
+        val savedLocallyCount = sorted.count { localSavesByPostId[it.id]?.localGalleryUri?.isNotBlank() == true }
+        val tagCount = sorted.map { it.activityTag.trim().uppercase() }.filter { it.isNotBlank() }.distinct().size
+
+        val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.rgb(240, 253, 250)
+        canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(153, 246, 228)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+
+        val kpis = listOf(
+            (if (isEn) "Total Moments" else "Total Momen") to "${sorted.size}",
+            (if (isEn) "Saved Locally" else "Tersimpan di HP") to "$savedLocallyCount",
+            (if (isEn) "Categories" else "Kategori") to "$tagCount"
+        )
+        val colW = (contentRight - marginX) / kpis.size
+        kpis.forEachIndexed { idx, (lbl, v) ->
+            val cx = marginX + idx * colW + colW / 2f
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 7.5f
+            paint.color = Color.rgb(17, 94, 89)
+            canvas.drawText(lbl, cx, currentY + 15f, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 10.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(v, cx, currentY + 32f, paint)
+        }
+        paint.textAlign = Paint.Align.LEFT
+        currentY += 54f
+
+        val dateFmt = SimpleDateFormat("d MMM yyyy HH:mm", lang.locale)
+        if (sorted.isEmpty()) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) "No caregiver activity gallery moments in this period." else "Belum ada dokumentasi galeri kegiatan pada periode ini.",
+                marginX + 6f,
+                currentY + 12f,
+                paint
+            )
+            currentY += 32f
+        } else {
+            sorted.forEachIndexed { idx, post ->
+                val localUri = localSavesByPostId[post.id]?.localGalleryUri.orEmpty()
+                val bitmap = decodeLocalThumbnailBitmap(context, localUri)
+                    ?: decodeLocalThumbnailBitmap(context, post.photoUrl)
+                val captionPaint = Paint(paint).apply {
+                    typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    textSize = 8.4f
+                }
+                val thumbW = 68f
+                val thumbH = 54f
+                val textMaxW = boxW - thumbW - 28f
+                val captionLines = wrapTextLines(
+                    text = post.caption.ifBlank { if (isEn) "(Activity documentation photo)" else "(Foto dokumentasi kegiatan)" },
+                    paint = captionPaint,
+                    maxWidth = textMaxW,
+                    maxLines = 3
+                )
+                val cardHeight = maxOf(70f, 34f + captionLines.size * 12.5f + 10f)
+                if (currentY + cardHeight > pageHeight - 130f) {
+                    bitmap?.recycle()
+                    finishCanvas()
+                    pageNumber++
+                    canvas = startNewCanvas(pageNumber)
+                    currentY = 38f
+                }
+
+                val cardRect = RectF(marginX, currentY, contentRight, currentY + cardHeight)
+                paint.style = Paint.Style.FILL
+                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+                canvas.drawRoundRect(cardRect, 6f, 6f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = Color.rgb(203, 213, 225)
+                paint.strokeWidth = 0.8f
+                canvas.drawRoundRect(cardRect, 6f, 6f, paint)
+                paint.style = Paint.Style.FILL
+
+                val thumbRect = RectF(marginX + 8f, currentY + 8f, marginX + 8f + thumbW, currentY + 8f + thumbH)
+                if (bitmap != null) {
+                    runCatching {
+                        val srcRect = Rect(0, 0, bitmap.width, bitmap.height)
+                        canvas.drawBitmap(bitmap, srcRect, thumbRect, paint)
+                    }
+                    bitmap.recycle()
+                } else {
+                    paint.color = Color.rgb(240, 253, 250)
+                    canvas.drawRoundRect(thumbRect, 5f, 5f, paint)
+                    paint.style = Paint.Style.STROKE
+                    paint.color = Color.rgb(153, 246, 228)
+                    canvas.drawRoundRect(thumbRect, 5f, 5f, paint)
+                    paint.style = Paint.Style.FILL
+                    paint.textAlign = Paint.Align.CENTER
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 7.5f
+                    paint.color = Color.rgb(15, 118, 110)
+                    val thumbLabel = if (post.isMediaPurgedFromServer) {
+                        if (isEn) "Archived" else "Arsip"
+                    } else if (post.photoUrl.isNotBlank()) {
+                        if (isEn) "Cloud Photo" else "Foto Cloud"
+                    } else {
+                        if (isEn) "Photo" else "Foto"
+                    }
+                    canvas.drawText(thumbLabel, thumbRect.centerX(), thumbRect.centerY() + 3f, paint)
+                    paint.textAlign = Paint.Align.LEFT
+                }
+
+                val textX = thumbRect.right + 10f
+                var ly = currentY + 17f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.5f
+                paint.color = Color.rgb(15, 118, 110)
+                val tagLabel = WaliGalleryHelper.tagLabel(post.activityTag, isEn)
+                val metaLine = "#${idx + 1} • $tagLabel • ${dateFmt.format(Date(post.createdAt))}"
+                canvas.drawText(
+                    TextUtils.ellipsize(metaLine, TextPaint(paint), textMaxW, TextUtils.TruncateAt.END).toString(),
+                    textX,
+                    ly,
+                    paint
+                )
+                ly += 12.5f
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8f
+                paint.color = Color.rgb(71, 85, 105)
+                val caregiverStatus = buildString {
+                    append(if (isEn) "Caregiver: " else "Pembina: ")
+                    append(post.waliName.ifBlank { waliName })
+                    if (localUri.isNotBlank()) {
+                        append(if (isEn) " • Saved in Phone" else " • Tersimpan di HP")
+                    }
+                }
+                canvas.drawText(
+                    TextUtils.ellipsize(caregiverStatus, TextPaint(paint), textMaxW, TextUtils.TruncateAt.END).toString(),
+                    textX,
+                    ly,
+                    paint
+                )
+                ly += 13f
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8.4f
+                paint.color = Color.rgb(15, 23, 42)
+                captionLines.forEach { line ->
+                    canvas.drawText(line, textX, ly, paint)
+                    ly += 12.5f
+                }
+
+                currentY += cardHeight + 8f
+            }
+        }
+
+        if (currentY > pageHeight - 135f) {
+            finishCanvas()
+            pageNumber++
+            canvas = startNewCanvas(pageNumber)
+            currentY = 38f
+        }
+        PdfReportGenerator.drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCanvas()
+    }
+
+    /**
+     * PDF Transkrip Percakapan Orang Tua & Wali Asuh (untuk Portal Orang Tua).
+     */
+    fun generateStudentChatTranscriptPdf(
+        context: Context,
+        student: ChildStudent,
+        messages: List<ParentMessage>,
+        localSavesByMessageId: Map<Long, ChatMediaLocalSave> = emptyMap(),
+        periodLabel: String,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        val document = PdfDocument()
+        var currentPage: PdfDocument.Page? = null
+        return try {
+            renderStudentChatTranscriptPages(
+                context = context,
+                student = student,
+                messages = messages,
+                localSavesByMessageId = localSavesByMessageId,
+                periodLabel = periodLabel,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, num).create()
+                    currentPage = document.startPage(pageInfo)
+                    currentPage!!.canvas
+                },
+                finishCanvas = {
+                    currentPage?.let {
+                        document.finishPage(it)
+                        currentPage = null
+                    }
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanStudent = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(25)
+            val cleanPeriod = periodLabel.replace(Regex("[^a-zA-Z0-9]"), "_").take(20)
+            val file = File(outputDir, "Transkrip_Pesan_${cleanStudent}_$cleanPeriod.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            runCatching { currentPage?.let { document.finishPage(it) } }
+            runCatching { document.close() }
+        }
+    }
+
+    internal fun renderStudentChatTranscriptPages(
+        context: Context,
+        student: ChildStudent,
+        messages: List<ParentMessage>,
+        localSavesByMessageId: Map<Long, ChatMediaLocalSave> = emptyMap(),
+        periodLabel: String = "Semua Riwayat",
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val pageWidth = PAGE_WIDTH
+        val pageHeight = PAGE_HEIGHT
+        val marginX = 35f
+        val contentRight = pageWidth - marginX
+        val boxW = contentRight - marginX
+
+        var pageNumber = 1
+        var canvas = startNewCanvas(pageNumber)
+        val paint = Paint().apply { isAntiAlias = true }
+
+        var currentY = 35f
+        currentY = PdfReportGenerator.drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = PdfReportGenerator.UNIT_BIMBINGAN_SPIRITUAL
+        )
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 12f
+        paint.color = Color.rgb(15, 23, 42)
+        canvas.drawText(
+            if (isEn) "PARENT & CAREGIVER CHAT TRANSCRIPT" else "TRANSKRIP PERCAKAPAN ORANG TUA & WALI ASUH",
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        currentY += 13f
+        paint.textSize = 9.5f
+        paint.color = Color.rgb(67, 56, 202)
+        canvas.drawText(
+            (if (isEn) "PERIOD: " else "PERIODE: ") + periodLabel.uppercase(lang.locale),
+            pageWidth / 2f,
+            currentY,
+            paint
+        )
+        paint.textAlign = Paint.Align.LEFT
+        currentY += 14f
+
+        currentY = PdfReportGenerator.drawStudentBio(canvas, paint, pageWidth, currentY, student, isEn)
+
+        val sorted = messages.sortedBy { it.createdAt }
+        val parentCount = sorted.count { it.senderRole.equals("PARENT", ignoreCase = true) }
+        val waliCount = sorted.size - parentCount
+        val photoCount = sorted.count { ParentMessageHelper.isPhotoMessage(it, localSavesByMessageId[it.id]) }
+
+        val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.rgb(238, 242, 255)
+        canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.color = Color.rgb(199, 210, 254)
+        paint.strokeWidth = 1f
+        canvas.drawRoundRect(kpiRect, 6f, 6f, paint)
+        paint.style = Paint.Style.FILL
+
+        val kpis = listOf(
+            (if (isEn) "Total Messages" else "Total Pesan") to "${sorted.size}",
+            (if (isEn) "From Parent" else "Dari Orang Tua") to "$parentCount",
+            (if (isEn) "From Caregiver" else "Dari Wali Asuh") to "$waliCount",
+            (if (isEn) "Photo Messages" else "Lampiran Foto") to "$photoCount"
+        )
+        val colW = (contentRight - marginX) / kpis.size
+        kpis.forEachIndexed { idx, (lbl, v) ->
+            val cx = marginX + idx * colW + colW / 2f
+            paint.textAlign = Paint.Align.CENTER
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.textSize = 7.4f
+            paint.color = Color.rgb(55, 48, 163)
+            canvas.drawText(lbl, cx, currentY + 15f, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 10.5f
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText(v, cx, currentY + 32f, paint)
+        }
+        paint.textAlign = Paint.Align.LEFT
+        currentY += 54f
+
+        val dateFmt = SimpleDateFormat("d MMM yyyy HH:mm", lang.locale)
+        if (sorted.isEmpty()) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+            paint.textSize = 9.5f
+            paint.color = Color.rgb(100, 116, 139)
+            canvas.drawText(
+                if (isEn) "No conversation messages recorded in this period." else "Belum ada riwayat percakapan pada periode ini.",
+                marginX + 6f,
+                currentY + 12f,
+                paint
+            )
+            currentY += 32f
+        } else {
+            val bodyPaint = Paint(paint).apply {
+                typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                textSize = 8.4f
+            }
+            sorted.forEach { msg ->
+                val isParent = msg.senderRole.equals("PARENT", ignoreCase = true)
+                val localSave = localSavesByMessageId[msg.id]
+                val isPhoto = ParentMessageHelper.isPhotoMessage(msg, localSave)
+                val senderTitle = buildString {
+                    append(
+                        if (isParent) {
+                            if (isEn) "Parent" else "Orang Tua"
+                        } else {
+                            if (isEn) "Wali Asuh" else "Wali Asuh"
+                        }
+                    )
+                    val name = msg.senderName.ifBlank {
+                        if (isParent) msg.parentName else msg.waliName.ifBlank { waliName }
+                    }
+                    if (name.isNotBlank()) append(" ($name)")
+                }
+                val displayBody = buildString {
+                    if (isPhoto) {
+                        append(if (isEn) "[Photo Attachment] " else "[Lampiran Foto] ")
+                    }
+                    append(msg.messageContent.trim())
+                }.ifBlank { if (isEn) "[Photo]" else "[Foto]" }
+
+                val wrappedLines = wrapTextLines(displayBody, bodyPaint, boxW - 20f, maxLines = 6)
+                val cardHeight = 24f + wrappedLines.size * 12.5f + 6f
+                if (currentY + cardHeight > pageHeight - 130f) {
+                    finishCanvas()
+                    pageNumber++
+                    canvas = startNewCanvas(pageNumber)
+                    currentY = 38f
+                }
+
+                val cardRect = RectF(marginX, currentY, contentRight, currentY + cardHeight)
+                paint.style = Paint.Style.FILL
+                paint.color = if (isParent) Color.rgb(238, 242, 255) else Color.rgb(248, 250, 252)
+                canvas.drawRoundRect(cardRect, 6f, 6f, paint)
+                paint.style = Paint.Style.STROKE
+                paint.color = if (isParent) Color.rgb(199, 210, 254) else Color.rgb(203, 213, 225)
+                paint.strokeWidth = 0.8f
+                canvas.drawRoundRect(cardRect, 6f, 6f, paint)
+                paint.style = Paint.Style.FILL
+
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                paint.textSize = 8.2f
+                paint.color = if (isParent) Color.rgb(67, 56, 202) else Color.rgb(15, 118, 110)
+                canvas.drawText(
+                    TextUtils.ellipsize(senderTitle, TextPaint(paint), boxW - 125f, TextUtils.TruncateAt.END).toString(),
+                    marginX + 10f,
+                    currentY + 14.5f,
+                    paint
+                )
+
+                paint.textAlign = Paint.Align.RIGHT
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 7.5f
+                paint.color = Color.rgb(100, 116, 139)
+                canvas.drawText(dateFmt.format(Date(msg.createdAt)), contentRight - 10f, currentY + 14.5f, paint)
+                paint.textAlign = Paint.Align.LEFT
+
+                var ly = currentY + 27f
+                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                paint.textSize = 8.4f
+                paint.color = Color.rgb(15, 23, 42)
+                wrappedLines.forEach { line ->
+                    canvas.drawText(line, marginX + 10f, ly, paint)
+                    ly += 12.5f
+                }
+
+                currentY += cardHeight + 6f
+            }
+            currentY += 6f
+        }
 
         if (currentY > pageHeight - 135f) {
             finishCanvas()

@@ -31,6 +31,7 @@ import com.example.data.model.MengajiHelper
 import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
+import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SholatDisciplineTag
 import com.example.data.model.SholatHelper
@@ -39,12 +40,15 @@ import com.example.data.model.SholatStatus
 import com.example.data.model.SholatWaktu
 import com.example.data.model.TabunganHelper
 import com.example.data.model.TabunganTransaction
+import com.example.data.model.WaliGalleryHelper
+import com.example.data.model.WaliGalleryPost
 import com.example.ui.HealthViewModel
 import com.example.ui.LoginResult
 import com.example.ui.components.ParentPdfReadyDialog
 import com.example.ui.components.ParentReadyPdfDialogData
 import com.example.ui.screens.ParentPortalScreen
 import com.example.util.ParentPortalPdfHelper
+import com.example.util.PdfReportGenerator
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
 import com.example.util.i18n.LocalAppStrings
@@ -332,6 +336,94 @@ class ParentPortalPdfRobolectricTest {
         assertTrue(compChristianText.contains("PEMBINAAN IBADAH AGAMA KRISTEN"))
         assertTrue(compChristianText.contains("Saat Teduh Pagi"))
         assertFalse(compChristianText.contains("SIKLUS HAID"))
+
+        val galleryPosts = listOf(
+            WaliGalleryPost(
+                id = 91L,
+                schoolId = "SRT1-KDR",
+                waliUsername = "ustsari",
+                waliName = "Ustadzah Sari",
+                caption = "Kegiatan kerja bakti pagi bersama kamar putri",
+                activityTag = WaliGalleryHelper.TAG_KEBERSAMAAN,
+                targetScope = WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
+                createdAt = now
+            )
+        )
+        val (galPages, galText) = captureRenderedPdfTexts { startNew ->
+            ParentPortalPdfHelper.renderStudentGalleryReportPages(
+                context = context,
+                student = femaleMuslimStudent,
+                posts = galleryPosts,
+                periodLabel = "Semua Riwayat",
+                waliName = "Ustadzah Sari",
+                schoolProfile = school,
+                startNewCanvas = startNew
+            )
+        }
+        assertTrue(galPages >= 1)
+        assertTrue(galText.contains("LAPORAN DOKUMENTASI GALERI WALI ASUH"))
+        assertTrue(galText.contains("Zahra Salsabila"))
+        assertTrue(galText.contains("kerja bakti pagi"))
+
+        val chatLogs = listOf(
+            ParentMessage(
+                id = 92L,
+                studentId = femaleMuslimStudent.id,
+                studentName = femaleMuslimStudent.name,
+                parentName = "Ibu Fatimah",
+                waliUsername = "ustsari",
+                waliName = "Ustadzah Sari",
+                senderRole = "PARENT",
+                senderName = "Ibu Fatimah",
+                messageContent = "Assalamualaikum Ustadzah, bagaimana kabar Zahra hari ini?",
+                schoolId = "SRT1-KDR",
+                createdAt = now - 60_000L
+            ),
+            ParentMessage(
+                id = 93L,
+                studentId = femaleMuslimStudent.id,
+                studentName = femaleMuslimStudent.name,
+                parentName = "Ibu Fatimah",
+                waliUsername = "ustsari",
+                waliName = "Ustadzah Sari",
+                senderRole = "WALI",
+                senderName = "Ustadzah Sari",
+                messageContent = "Waalaikumsalam Bunda, ananda sehat dan aktif belajar.",
+                schoolId = "SRT1-KDR",
+                createdAt = now
+            )
+        )
+        val (chatPages, chatText) = captureRenderedPdfTexts { startNew ->
+            ParentPortalPdfHelper.renderStudentChatTranscriptPages(
+                context = context,
+                student = femaleMuslimStudent,
+                messages = chatLogs,
+                periodLabel = "Semua Riwayat",
+                waliName = "Ustadzah Sari",
+                schoolProfile = school,
+                startNewCanvas = startNew
+            )
+        }
+        assertTrue(chatPages >= 1)
+        assertTrue(chatText.contains("TRANSKRIP PERCAKAPAN ORANG TUA & WALI ASUH"))
+        assertTrue(chatText.contains("Zahra Salsabila"))
+        assertTrue(chatText.contains("Assalamualaikum Ustadzah"))
+        assertTrue(chatText.contains("ananda sehat dan aktif belajar"))
+
+        val (sholatAllPages, sholatAllText) = captureRenderedPdfTexts { startNew ->
+            PdfReportGenerator.renderSholatStudentReportPages(
+                context = context,
+                schoolProfile = school,
+                student = femaleMuslimStudent,
+                sholatRecords = sholat,
+                monthKey = "ALL",
+                waliName = "Ustadzah Sari",
+                startNewCanvas = startNew
+            )
+        }
+        assertTrue(sholatAllPages >= 1)
+        assertTrue(sholatAllText.contains("PERIODE: SEMUA RIWAYAT"))
+        assertTrue(sholatAllText.contains("Zahra Salsabila"))
     }
 
     @Test
@@ -518,6 +610,33 @@ class ParentPortalPdfRobolectricTest {
         )
         db.parentExpectationDao().insert(exp)
 
+        val galPost = WaliGalleryPost(
+            id = 9881L,
+            schoolId = schoolId,
+            waliUsername = "ustsari_pdf",
+            waliName = "Ustadzah Sari",
+            caption = "Foto kegiatan belajar malam bersama",
+            activityTag = WaliGalleryHelper.TAG_BELAJAR,
+            targetScope = WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
+            createdAt = now
+        )
+        db.waliGalleryDao().insert(galPost)
+
+        val chatMsg = ParentMessage(
+            id = 9891L,
+            studentId = 9811L,
+            studentName = student.name,
+            parentName = "Ibu Rahmawati",
+            waliUsername = "ustsari_pdf",
+            waliName = "Ustadzah Sari",
+            senderRole = "WALI",
+            senderName = "Ustadzah Sari",
+            messageContent = "Ananda Nayla mengikuti kegiatan dengan sangat baik.",
+            schoolId = schoolId,
+            createdAt = now
+        )
+        db.parentMessageDao().insert(chatMsg)
+
         val loginRes = vm.executeLogin("ortu_nayla_9811", "Ortu#9811")
         assertTrue(loginRes is LoginResult.SuccessParent)
         var loops = 0
@@ -574,16 +693,8 @@ class ParentPortalPdfRobolectricTest {
         // 2. Profil Anak
         openHomeTileAssertPdfAndReturn("card_parent_summary_profile", "parent_profile_content", "btn_parent_profile_pdf")
 
-        // 3. Sholat 5 Waktu
-        composeTestRule.onNodeWithTag("card_parent_summary_sholat").performScrollTo().performClick()
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("btn_parent_sholat_pdf")
-            .assertIsDisplayed()
-            .assertHeightIsAtLeast(48.dp)
-            .performClick()
-        composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("btn_parent_back_home").performClick()
-        composeTestRule.waitForIdle()
+        // 3. Sholat 5 Waktu (+ filter chips)
+        openHomeTileAssertPdfAndReturn("card_parent_summary_sholat", "parent_sholat_list", "btn_parent_sholat_pdf", checkFilterAll = true)
 
         // 4. Mengaji (+ filter chips)
         openHomeTileAssertPdfAndReturn("card_parent_summary_mengaji", "parent_mengaji_list", "btn_parent_mengaji_pdf", checkFilterAll = true)
@@ -597,13 +708,33 @@ class ParentPortalPdfRobolectricTest {
         // 7. Riwayat Haid (+ filter chips)
         openHomeTileAssertPdfAndReturn("card_parent_summary_haid", "parent_haid_list", "btn_parent_haid_pdf", checkFilterAll = true)
 
-        // 8. Tabungan
-        openHomeTileAssertPdfAndReturn("card_parent_summary_tabungan", "parent_tabungan_list", "btn_parent_tabungan_pdf")
+        // 8. Tabungan (+ filter chips)
+        openHomeTileAssertPdfAndReturn("card_parent_summary_tabungan", "parent_tabungan_list", "btn_parent_tabungan_pdf", checkFilterAll = true)
 
-        // 9. Harapan Karakter
+        // 9. Galeri Wali (+ filter chips)
+        openHomeTileAssertPdfAndReturn("card_parent_summary_gallery", "parent_gallery_content", "btn_parent_gallery_pdf", checkFilterAll = true)
+
+        // 10. Harapan Karakter
         openHomeTileAssertPdfAndReturn("card_parent_summary_harapan", "parent_harapan_content", "btn_parent_harapan_pdf")
 
+        // 11. Pesan / Chat Wali (+ filter chips)
+        composeTestRule.onNodeWithTag("card_parent_summary_messages").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_parent_chat_pdf_filter_month").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_parent_chat_pdf_filter_all").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_parent_chat_pdf")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_parent_back_home").performClick()
+        composeTestRule.waitForIdle()
+
         vm.logout()
+        db.parentMessageDao().deleteBySchoolId(schoolId)
+        db.waliGalleryDao().deleteBySchoolId(schoolId)
         db.parentExpectationDao().delete(exp)
         db.tabunganTransactionDao().deleteBySchoolId(schoolId)
         db.haidRecordDao().deleteById(haidRec.id)

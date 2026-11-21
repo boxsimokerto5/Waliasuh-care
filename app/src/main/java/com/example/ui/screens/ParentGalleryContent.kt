@@ -53,13 +53,36 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.ChildStudent
+import com.example.data.model.SchoolProfile
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
+import com.example.ui.components.ParentMenuPdfHeaderCard
+import com.example.ui.components.ParentReadyPdfDialogData
 import com.example.ui.dialogs.GalleryFullscreenPreviewDialog
 import com.example.ui.dialogs.GalleryRemoteOrLocalImage
 import com.example.util.DateUtils
+import com.example.util.ParentPortalPdfHelper
+import com.example.util.PdfReportGenerator
 import com.example.util.i18n.LocalAppStrings
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+
+private fun isGalleryMillisInCurrentMonth(millis: Long): Boolean {
+    if (millis <= 0L) return false
+    val now = Calendar.getInstance()
+    val target = Calendar.getInstance().apply { timeInMillis = millis }
+    return now.get(Calendar.YEAR) == target.get(Calendar.YEAR) &&
+        now.get(Calendar.MONTH) == target.get(Calendar.MONTH)
+}
+
+private fun currentGalleryMonthLabel(isEn: Boolean): String {
+    val locale = if (isEn) Locale.US else Locale("id", "ID")
+    return SimpleDateFormat("MMMM yyyy", locale).format(Date())
+}
 
 @Composable
 fun ParentGalleryContent(
@@ -70,7 +93,10 @@ fun ParentGalleryContent(
     isSavingMedia: Boolean,
     onToggleAutoSave: (Boolean) -> Unit,
     onSavePostToDevice: (WaliGalleryPost, Boolean) -> Unit,
-    onSaveAllPending: (List<WaliGalleryPost>) -> Unit
+    onSaveAllPending: (List<WaliGalleryPost>) -> Unit,
+    student: ChildStudent? = null,
+    schoolProfile: SchoolProfile = SchoolProfile(),
+    onPdfReady: ((ParentReadyPdfDialogData) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -78,6 +104,13 @@ fun ParentGalleryContent(
     val lang = s.language
 
     var previewData by remember { mutableStateOf<Triple<WaliGalleryPost, String, String>?>(null) }
+    var monthOnly by remember { mutableStateOf(false) }
+    val displayedPosts = remember(posts, monthOnly) {
+        if (monthOnly) posts.filter { isGalleryMillisInCurrentMonth(it.createdAt) } else posts
+    }
+    val periodLabel = remember(monthOnly, isEn) {
+        if (monthOnly) currentGalleryMonthLabel(isEn) else if (isEn) "All History" else "Semua Riwayat"
+    }
 
     val pendingDownloadPosts = remember(posts, localSavesByPostId) {
         posts.filter { post ->
@@ -218,7 +251,67 @@ fun ParentGalleryContent(
             }
         }
 
-        if (posts.isEmpty()) {
+        if (student != null) {
+            item(key = "parent_gallery_pdf_header") {
+                val savedCount = displayedPosts.count { localSavesByPostId[it.id]?.localGalleryUri?.isNotBlank() == true }
+                ParentMenuPdfHeaderCard(
+                    title = if (isEn) "Caregiver Gallery Album PDF" else "Album Dokumentasi Galeri Wali",
+                    subtitle = if (isEn) {
+                        "${displayedPosts.size} photo(s) • $savedCount saved locally ($periodLabel)"
+                    } else {
+                        "${displayedPosts.size} foto • $savedCount tersimpan di HP ($periodLabel)"
+                    },
+                    accentColor = Color(0xFF0F766E),
+                    containerColor = Color(0xFFF0FDFA),
+                    borderColor = Color(0xFF99F6E4),
+                    isEn = isEn,
+                    selectedMonthOnly = monthOnly,
+                    onToggleMonthOnly = { monthOnly = it },
+                    pdfButtonTestTag = "btn_parent_gallery_pdf",
+                    onDownloadPdf = {
+                        val file = ParentPortalPdfHelper.generateStudentGalleryReportPdf(
+                            context = context,
+                            student = student,
+                            posts = displayedPosts,
+                            localSavesByPostId = localSavesByPostId,
+                            periodLabel = periodLabel,
+                            waliName = waliName.ifBlank { "Wali Asuh" },
+                            schoolProfile = schoolProfile
+                        )
+                        if (file != null) {
+                            val ready = ParentReadyPdfDialogData(
+                                file = file,
+                                title = if (isEn) "Gallery Album PDF Ready" else "PDF Album Galeri Siap",
+                                description = if (isEn) {
+                                    "Open or share the activity gallery documentation PDF for ${student.name}."
+                                } else {
+                                    "Pilih buka PDF atau bagikan album dokumentasi galeri wali untuk ${student.name}."
+                                },
+                                shareSubject = if (isEn) "Caregiver Gallery Report: ${student.name}" else "Laporan Galeri Wali: ${student.name}",
+                                shareText = if (isEn) {
+                                    "Attached caregiver gallery documentation PDF for ${student.name} ($periodLabel)."
+                                } else {
+                                    "Terlampir PDF dokumentasi galeri wali asuh ${student.name} ($periodLabel)."
+                                }
+                            )
+                            if (onPdfReady != null) {
+                                onPdfReady(ready)
+                            } else {
+                                PdfReportGenerator.openPdfFile(context, file)
+                            }
+                        } else {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Unable to create Gallery PDF" else "Gagal membuat PDF Galeri Wali",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+                )
+            }
+        }
+
+        if (displayedPosts.isEmpty()) {
             item(key = "parent_gallery_empty") {
                 Card(
                     modifier = Modifier
@@ -242,12 +335,22 @@ fun ParentGalleryContent(
                             modifier = Modifier.size(40.dp)
                         )
                         Text(
-                            text = if (isEn) "No Gallery Photos Yet" else "Belum Ada Foto dari Wali Asuh",
+                            text = if (monthOnly && posts.isNotEmpty()) {
+                                if (isEn) "No Gallery Photos This Month" else "Belum Ada Foto Bulan Ini"
+                            } else {
+                                if (isEn) "No Gallery Photos Yet" else "Belum Ada Foto dari Wali Asuh"
+                            },
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = if (isEn) {
+                            text = if (monthOnly && posts.isNotEmpty()) {
+                                if (isEn) {
+                                    "Switch to \"All History\" above to view photos from previous months."
+                                } else {
+                                    "Pilih \"Semua Riwayat\" di atas untuk melihat dokumentasi bulan sebelumnya."
+                                }
+                            } else if (isEn) {
                                 "When your child's foster caregiver posts activity photos, they will appear here and save to your gallery."
                             } else {
                                 "Saat Wali Asuh ananda membagikan foto kegiatan, fotonya akan muncul di sini dan langsung dapat tersimpan ke Galeri HP Anda."
@@ -259,7 +362,7 @@ fun ParentGalleryContent(
                 }
             }
         } else {
-            items(posts, key = { "parent_gal_${it.id}" }) { post ->
+            items(displayedPosts, key = { "parent_gal_${it.id}" }) { post ->
                 val localSave = localSavesByPostId[post.id]
                 val localUri = localSave?.localGalleryUri.orEmpty()
                 val isSavedLocally = localUri.isNotBlank()

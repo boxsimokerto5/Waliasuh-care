@@ -5497,11 +5497,20 @@ object PdfReportGenerator {
                 paint
             )
             currentY += 13f
+            val isAllPeriod = monthKey.isBlank() || monthKey.equals("ALL", ignoreCase = true)
             paint.textSize = 9.5f
             paint.color = Color.rgb(5, 150, 105)
-            val periodDisplay = SholatHelper.formatMonthKeyDisplay(monthKey, isEn)
+            val periodDisplay = if (isAllPeriod) {
+                if (isEn) "All History" else "Semua Riwayat"
+            } else {
+                SholatHelper.formatMonthKeyDisplay(monthKey, isEn)
+            }
             canvas.drawText(
-                (if (isEn) "MONTH: " else "BULAN: ") + periodDisplay.uppercase(Locale.getDefault()),
+                (if (isAllPeriod) {
+                    if (isEn) "PERIOD: " else "PERIODE: "
+                } else {
+                    if (isEn) "MONTH: " else "BULAN: "
+                }) + periodDisplay.uppercase(Locale.getDefault()),
                 pageWidth / 2f,
                 currentY,
                 paint
@@ -5512,8 +5521,12 @@ object PdfReportGenerator {
             currentY = drawStudentBio(canvas, paint, pageWidth, currentY, student, isEn)
 
             val studentRecords = SholatHelper.recordsForStudent(sholatRecords, student)
-                .filter { it.dateKey.startsWith(monthKey) }
-            val stats = SholatHelper.computeStudentAnalytics(listOf(student), studentRecords, monthKey).first()
+                .let { list -> if (isAllPeriod) list else list.filter { it.dateKey.startsWith(monthKey) } }
+            val stats = SholatHelper.computeStudentAnalytics(
+                students = listOf(student),
+                records = studentRecords,
+                monthKey = if (isAllPeriod) null else monthKey
+            ).first()
 
             val kpiRect = RectF(marginX, currentY, contentRight, currentY + 42f)
             paint.style = Paint.Style.FILL
@@ -5590,7 +5603,11 @@ object PdfReportGenerator {
                 paint.textSize = 9.5f
                 paint.color = Color.rgb(100, 116, 139)
                 canvas.drawText(
-                    if (isEn) "No prayer attendance logs recorded for this month." else "Belum ada catatan absensi sholat pada bulan ini.",
+                    if (isEn) {
+                        if (isAllPeriod) "No prayer attendance logs recorded yet." else "No prayer attendance logs recorded for this month."
+                    } else {
+                        if (isAllPeriod) "Belum ada catatan absensi sholat." else "Belum ada catatan absensi sholat pada bulan ini."
+                    },
                     marginX,
                     currentY + 12f,
                     paint

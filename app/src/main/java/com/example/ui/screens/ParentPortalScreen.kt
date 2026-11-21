@@ -64,6 +64,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -887,7 +889,8 @@ fun ParentPortalScreen(
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         },
-                        onOpenBible = { showBibleSheet = true }
+                        onOpenBible = { showBibleSheet = true },
+                        onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.SHOLAT -> ParentSholatContent(
                         student = student,
@@ -984,7 +987,10 @@ fun ParentPortalScreen(
                                 }
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
-                        }
+                        },
+                        student = student,
+                        schoolProfile = schoolProfile,
+                        onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.HARAPAN -> ParentHarapanContent(
                         student = student,
@@ -1026,6 +1032,8 @@ fun ParentPortalScreen(
                         autoSaveMediaEnabled = chatAutoSaveMediaEnabled,
                         isSendingPhoto = isSendingChatPhoto,
                         isSavingMedia = isSavingChatMedia,
+                        schoolProfile = schoolProfile,
+                        onPdfReady = { readyPdfDialogData = it },
                         onOpenWaliProfile = {
                             selectedWaliBadgeForSheet = resolvedWaliBadges.firstOrNull { it.isOnDutyNow }
                                 ?: resolvedWaliBadges.firstOrNull()
@@ -2439,32 +2447,38 @@ private fun ParentSholatContent(
     val isEn = s.isEnglish
     val currentMonthKey = remember { SholatHelper.todayDateKey().substring(0, 7) }
     val todayKey = remember { SholatHelper.todayDateKey() }
+    var monthOnly by remember { mutableStateOf(true) }
+    val selectedMonthKey = if (monthOnly) currentMonthKey else null
     val todayRecords = remember(records, todayKey) { records.filter { it.dateKey == todayKey } }
     val todayByWaktu = remember(todayRecords) { todayRecords.associateBy { SholatWaktu.fromCode(it.waktu) } }
 
-    val analytics = remember(student, records, currentMonthKey) {
+    val analytics = remember(student, records, selectedMonthKey) {
         if (student != null) {
             SholatHelper.computeStudentAnalytics(
                 students = listOf(student),
                 records = records,
-                monthKey = currentMonthKey
+                monthKey = selectedMonthKey
             ).first()
         } else {
-            val monthRows = records.filter { SholatHelper.monthKeyFromDateKey(it.dateKey) == currentMonthKey }
-            val j = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
-            val m = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.MUNFARID }
-            val u = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID }
-            val sk = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.SAKIT }
-            val iz = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.IZIN }
-            val al = monthRows.count { SholatStatus.fromCode(it.status) == SholatStatus.ALFA }
-            val ms = monthRows.count { SholatDisciplineTag.fromCode(it.disciplineTag) == SholatDisciplineTag.MASBUK }
-            val sd = monthRows.count { SholatDisciplineTag.fromCode(it.disciplineTag) == SholatDisciplineTag.SAF_DEPAN }
-            val sbJ = monthRows.count { it.waktu == SholatWaktu.SUBUH.code && it.status == SholatStatus.JAMAAH.code }
+            val periodRows = if (selectedMonthKey != null) {
+                records.filter { SholatHelper.monthKeyFromDateKey(it.dateKey) == selectedMonthKey }
+            } else {
+                records
+            }
+            val j = periodRows.count { SholatStatus.fromCode(it.status) == SholatStatus.JAMAAH }
+            val m = periodRows.count { SholatStatus.fromCode(it.status) == SholatStatus.MUNFARID }
+            val u = periodRows.count { SholatStatus.fromCode(it.status) == SholatStatus.UDZUR_HAID }
+            val sk = periodRows.count { SholatStatus.fromCode(it.status) == SholatStatus.SAKIT }
+            val iz = periodRows.count { SholatStatus.fromCode(it.status) == SholatStatus.IZIN }
+            val al = periodRows.count { SholatStatus.fromCode(it.status) == SholatStatus.ALFA }
+            val ms = periodRows.count { SholatDisciplineTag.fromCode(it.disciplineTag) == SholatDisciplineTag.MASBUK }
+            val sd = periodRows.count { SholatDisciplineTag.fromCode(it.disciplineTag) == SholatDisciplineTag.SAF_DEPAN }
+            val sbJ = periodRows.count { it.waktu == SholatWaktu.SUBUH.code && it.status == SholatStatus.JAMAAH.code }
             val denom = j + m + sk + iz + al
             val rate = if (denom > 0) ((j * 100f) / denom).toInt() else 0
             com.example.data.model.SholatStudentAnalytics(
                 student = ChildStudent(name = "Ananda", nis = "", gender = "L", age = 12, dormitory = "", classGrade = ""),
-                totalLogged = monthRows.size,
+                totalLogged = periodRows.size,
                 jamaahCount = j,
                 munfaridCount = m,
                 udzurHaidCount = u,
@@ -2487,8 +2501,15 @@ private fun ParentSholatContent(
         }
     }
 
-    val groupedByDate = remember(records) {
-        records.groupBy { it.dateKey }.entries.sortedByDescending { it.key }
+    val filteredRecords = remember(records, selectedMonthKey) {
+        if (selectedMonthKey != null) {
+            records.filter { SholatHelper.monthKeyFromDateKey(it.dateKey) == selectedMonthKey }
+        } else {
+            records
+        }
+    }
+    val groupedByDate = remember(filteredRecords) {
+        filteredRecords.groupBy { it.dateKey }.entries.sortedByDescending { it.key }
     }
 
     fun formatRespectfulStatus(status: SholatStatus): String {
@@ -2545,7 +2566,7 @@ private fun ParentSholatContent(
                                         schoolProfile = schoolProfile,
                                         student = student,
                                         sholatRecords = records,
-                                        monthKey = currentMonthKey,
+                                        monthKey = if (monthOnly) currentMonthKey else "ALL",
                                         waliName = waliName.ifBlank { "Wali Asuh" }
                                     )
                                     if (file != null) {
@@ -2669,6 +2690,43 @@ private fun ParentSholatContent(
                             )
                         }
                     }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = monthOnly,
+                            onClick = { monthOnly = true },
+                            label = {
+                                Text(
+                                    text = if (isEn) "This Month" else "Bulan Ini",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF0F766E).copy(alpha = 0.14f),
+                                selectedLabelColor = Color(0xFF0F766E)
+                            ),
+                            modifier = Modifier.testTag("btn_parent_sholat_pdf_filter_month")
+                        )
+                        FilterChip(
+                            selected = !monthOnly,
+                            onClick = { monthOnly = false },
+                            label = {
+                                Text(
+                                    text = if (isEn) "All History" else "Semua Riwayat",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFF0F766E).copy(alpha = 0.14f),
+                                selectedLabelColor = Color(0xFF0F766E)
+                            ),
+                            modifier = Modifier.testTag("btn_parent_sholat_pdf_filter_all")
+                        )
+                    }
                 }
             }
         }
@@ -2690,10 +2748,14 @@ private fun ParentSholatContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isEn) {
-                                "Monthly Discipline (${SholatHelper.formatMonthKeyDisplay(currentMonthKey, true)})"
+                            text = if (monthOnly) {
+                                if (isEn) {
+                                    "Monthly Discipline (${SholatHelper.formatMonthKeyDisplay(currentMonthKey, true)})"
+                                } else {
+                                    "Statistik Bulan ${SholatHelper.formatMonthKeyDisplay(currentMonthKey, false)}"
+                                }
                             } else {
-                                "Statistik Bulan ${SholatHelper.formatMonthKeyDisplay(currentMonthKey, false)}"
+                                if (isEn) "All-Time Prayer Statistics" else "Statistik Semua Riwayat Sholat"
                             },
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
@@ -3496,6 +3558,8 @@ private fun ParentChatContent(
     autoSaveMediaEnabled: Boolean = true,
     isSendingPhoto: Boolean = false,
     isSavingMedia: Boolean = false,
+    schoolProfile: SchoolProfile = SchoolProfile(),
+    onPdfReady: ((ParentReadyPdfDialogData) -> Unit)? = null,
     onOpenWaliProfile: (() -> Unit)? = null,
     onSend: (String) -> Unit,
     onSendPhoto: ((android.net.Uri, String) -> Unit)? = null,
@@ -3504,13 +3568,23 @@ private fun ParentChatContent(
     onPurgeServerMedia: ((ParentMessage) -> Unit)? = null,
     onDeleteMessage: (ParentMessage) -> Unit
 ) {
+    val context = LocalContext.current
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     var draft by remember { mutableStateOf("") }
+    var monthOnly by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val displayedMessages = remember(messages, monthOnly) {
+        if (monthOnly) messages.filter { isTimestampInCurrentMonth(it.createdAt) } else messages
+    }
+    val periodLabel = remember(monthOnly, isEn) {
+        if (monthOnly) currentMonthPeriodLabel(isEn) else if (isEn) "All History" else "Semua Riwayat"
+    }
 
     Column(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("parent_chat_content")
     ) {
         val onDutyBadge = waliBadges.firstOrNull { it.isOnDutyNow }
         val primaryBadge = onDutyBadge ?: waliBadges.firstOrNull()
@@ -3603,7 +3677,118 @@ private fun ParentChatContent(
                         overflow = TextOverflow.Ellipsis
                     )
                 }
+                if (student != null) {
+                    OutlinedButton(
+                        onClick = {
+                            val resolvedWali = waliDisplay.ifBlank { "Wali Asuh" }
+                            val file = ParentPortalPdfHelper.generateStudentChatTranscriptPdf(
+                                context = context,
+                                student = student,
+                                messages = displayedMessages,
+                                localSavesByMessageId = localSavesByMessageId,
+                                periodLabel = periodLabel,
+                                waliName = resolvedWali,
+                                schoolProfile = schoolProfile
+                            )
+                            if (file != null) {
+                                val ready = ParentReadyPdfDialogData(
+                                    file = file,
+                                    title = if (isEn) "Chat Transcript PDF Ready" else "PDF Transkrip Pesan Siap",
+                                    description = if (isEn) {
+                                        "Open or share the parent-caregiver chat transcript PDF for ${student.name}."
+                                    } else {
+                                        "Pilih buka PDF atau bagikan transkrip percakapan orang tua & wali untuk ${student.name}."
+                                    },
+                                    shareSubject = if (isEn) "Chat Transcript: ${student.name}" else "Transkrip Pesan: ${student.name}",
+                                    shareText = if (isEn) {
+                                        "Attached parent & caregiver chat transcript PDF for ${student.name} ($periodLabel)."
+                                    } else {
+                                        "Terlampir PDF transkrip percakapan orang tua & wali ${student.name} ($periodLabel)."
+                                    }
+                                )
+                                if (onPdfReady != null) {
+                                    onPdfReady(ready)
+                                } else {
+                                    PdfReportGenerator.openPdfFile(context, file)
+                                }
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to create Chat Transcript PDF" else "Gagal membuat PDF Transkrip Pesan",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        },
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFF4338CA)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_parent_chat_pdf")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = if (isEn) "Download chat transcript PDF" else "Unduh PDF transkrip pesan",
+                            tint = Color(0xFF4338CA),
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "PDF",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF4338CA)
+                        )
+                    }
+                }
             }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            FilterChip(
+                selected = monthOnly,
+                onClick = { monthOnly = true },
+                label = {
+                    Text(
+                        text = if (isEn) "This Month" else "Bulan Ini",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Color(0xFF4338CA).copy(alpha = 0.14f),
+                    selectedLabelColor = Color(0xFF4338CA)
+                ),
+                modifier = Modifier.testTag("btn_parent_chat_pdf_filter_month")
+            )
+            FilterChip(
+                selected = !monthOnly,
+                onClick = { monthOnly = false },
+                label = {
+                    Text(
+                        text = if (isEn) "All History" else "Semua Riwayat",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = Color(0xFF4338CA).copy(alpha = 0.14f),
+                    selectedLabelColor = Color(0xFF4338CA)
+                ),
+                modifier = Modifier.testTag("btn_parent_chat_pdf_filter_all")
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = "${displayedMessages.size} ${if (isEn) "msg" else "pesan"}",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
 
         com.example.ui.components.ChatAutoSaveToggleStrip(
@@ -3614,7 +3799,7 @@ private fun ParentChatContent(
         )
 
         ParentChatMessagesList(
-            messages = messages,
+            messages = displayedMessages,
             myRole = "PARENT",
             isEn = isEn,
             lang = s.language,
@@ -3666,9 +3851,16 @@ private fun ParentTabunganContent(
     val context = LocalContext.current
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
-    val totals = remember(transactions) { TabunganHelper.computeAggregateTotals(transactions) }
-    val holderBreakdowns = remember(transactions, waliName) {
-        transactions
+    var monthOnly by remember { mutableStateOf(false) }
+    val filteredTransactions = remember(transactions, monthOnly) {
+        if (monthOnly) transactions.filter { isTimestampInCurrentMonth(it.transactionDate) } else transactions
+    }
+    val periodLabel = remember(monthOnly, isEn) {
+        if (monthOnly) currentMonthPeriodLabel(isEn) else if (isEn) "All History" else "Semua Riwayat"
+    }
+    val totals = remember(filteredTransactions) { TabunganHelper.computeAggregateTotals(filteredTransactions) }
+    val holderBreakdowns = remember(filteredTransactions, waliName) {
+        filteredTransactions
             .groupBy { tx ->
                 tx.ownerWaliUsername.trim().ifBlank { tx.ownerWaliName.trim() }.ifBlank { "default" }.lowercase()
             }
@@ -3706,7 +3898,7 @@ private fun ParentTabunganContent(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isEn) "Current Allowance Balance" else "Saldo Tabungan Titipan Anak",
+                                text = if (isEn) "Allowance Balance ($periodLabel)" else "Saldo Tabungan Titipan ($periodLabel)",
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color(0xFF92400E)
@@ -3724,7 +3916,7 @@ private fun ParentTabunganContent(
                                     val file = PdfReportGenerator.generateTabunganStudentPdf(
                                         context = context,
                                         student = student,
-                                        transactions = transactions,
+                                        transactions = filteredTransactions,
                                         waliName = waliName.ifBlank { "Wali Asuh" },
                                         schoolProfile = schoolProfile
                                     )
@@ -3734,15 +3926,15 @@ private fun ParentTabunganContent(
                                                 file = file,
                                                 title = if (isEn) "Savings Ledger PDF Ready" else "PDF Mutasi Tabungan Siap",
                                                 description = if (isEn) {
-                                                    "Open or share ${student.name}'s allowance savings ledger PDF."
+                                                    "Open or share ${student.name}'s allowance savings ledger PDF ($periodLabel)."
                                                 } else {
-                                                    "Pilih buka PDF atau bagikan laporan mutasi tabungan titipan ${student.name}."
+                                                    "Pilih buka PDF atau bagikan laporan mutasi tabungan titipan ${student.name} ($periodLabel)."
                                                 },
                                                 shareSubject = if (isEn) "Savings Ledger: ${student.name}" else "Mutasi Tabungan: ${student.name}",
                                                 shareText = if (isEn) {
-                                                    "Attached personal allowance savings ledger PDF for ${student.name}."
+                                                    "Attached personal allowance savings ledger PDF for ${student.name} ($periodLabel)."
                                                 } else {
-                                                    "Terlampir PDF laporan tabungan titipan uang ${student.name}."
+                                                    "Terlampir PDF laporan tabungan titipan uang ${student.name} ($periodLabel)."
                                                 }
                                             )
                                         )
@@ -3776,6 +3968,43 @@ private fun ParentTabunganContent(
                                 )
                             }
                         }
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        FilterChip(
+                            selected = monthOnly,
+                            onClick = { monthOnly = true },
+                            label = {
+                                Text(
+                                    text = if (isEn) "This Month" else "Bulan Ini",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFB45309).copy(alpha = 0.14f),
+                                selectedLabelColor = Color(0xFFB45309)
+                            ),
+                            modifier = Modifier.testTag("btn_parent_tabungan_pdf_filter_month")
+                        )
+                        FilterChip(
+                            selected = !monthOnly,
+                            onClick = { monthOnly = false },
+                            label = {
+                                Text(
+                                    text = if (isEn) "All History" else "Semua Riwayat",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = Color(0xFFB45309).copy(alpha = 0.14f),
+                                selectedLabelColor = Color(0xFFB45309)
+                            ),
+                            modifier = Modifier.testTag("btn_parent_tabungan_pdf_filter_all")
+                        )
                     }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -3855,15 +4084,20 @@ private fun ParentTabunganContent(
             }
         }
 
-        if (transactions.isEmpty()) {
+        if (filteredTransactions.isEmpty()) {
             item {
                 ParentEmptyNotice(
-                    if (isEn) "No savings transactions recorded yet."
-                    else "Belum ada catatan transaksi tabungan titipan."
+                    if (monthOnly && transactions.isNotEmpty()) {
+                        if (isEn) "No savings transactions in this month." else "Belum ada transaksi tabungan pada bulan ini."
+                    } else if (isEn) {
+                        "No savings transactions recorded yet."
+                    } else {
+                        "Belum ada catatan transaksi tabungan titipan."
+                    }
                 )
             }
         } else {
-            items(transactions, key = { "ptab_${it.id}" }) { tx ->
+            items(filteredTransactions, key = { "ptab_${it.id}" }) { tx ->
                 val isIncome = TabunganHelper.isIncome(tx.transactionType)
                 val accent = if (isIncome) Color(0xFF15803D) else Color(0xFFDC2626)
                 val badgeBg = if (isIncome) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
