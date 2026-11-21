@@ -10,6 +10,7 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -21,6 +22,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
@@ -44,6 +46,7 @@ import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -167,13 +170,13 @@ class VisitMultiSessionConfirmationRobolectricTest {
         }
         assertTrue(overlapCreated.isEmpty())
 
-        // 5. Valid 3-session batch succeeds
+        // 5. Valid 3-session batch succeeds with distinct visit time ranges
         var validCreated: List<VisitSession> = emptyList()
         vm.createVisitSessionsBatch(
             drafts = listOf(
-                VisitSessionDraft("Kunjungan Nov Batch - Sesi 1", "2026-11", date1, listOf("Wates")),
-                VisitSessionDraft("Kunjungan Nov Batch - Sesi 2", "2026-11", date2, listOf("Pare")),
-                VisitSessionDraft("Kunjungan Nov Batch - Sesi 3", "2026-11", date3, listOf("Ngancar"))
+                VisitSessionDraft("Kunjungan Nov Batch - Sesi 1", "2026-11", date1, listOf("Wates"), visitTimeRange = "08.00 - 11.00 WIB"),
+                VisitSessionDraft("Kunjungan Nov Batch - Sesi 2", "2026-11", date2, listOf("Pare"), visitTimeRange = "09.00 - 12.00 WIB"),
+                VisitSessionDraft("Kunjungan Nov Batch - Sesi 3", "2026-11", date3, listOf("Ngancar"), visitTimeRange = "13.00 - 16.00 WIB")
             )
         ) { created, _ ->
             validCreated = created
@@ -185,6 +188,9 @@ class VisitMultiSessionConfirmationRobolectricTest {
             loops++
         }
         assertEquals(3, validCreated.size)
+        assertEquals("08.00 - 11.00 WIB", validCreated[0].displayTimeRange())
+        assertEquals("09.00 - 12.00 WIB", validCreated[1].displayTimeRange())
+        assertEquals("13.00 - 16.00 WIB", validCreated[2].displayTimeRange())
 
         // Clean up created sessions
         vm.logout()
@@ -207,7 +213,7 @@ class VisitMultiSessionConfirmationRobolectricTest {
                     existingSessions = emptyList(),
                     onDismiss = {},
                     onConfirmBatch = {},
-                    onConfirm = { _, _, _, _, _ -> }
+                    onConfirm = { _, _, _, _, _, _ -> }
                 )
             }
         }
@@ -216,6 +222,12 @@ class VisitMultiSessionConfirmationRobolectricTest {
         // Choose 3 sessions (pinned header above scroll)
         composeTestRule.onNodeWithTag("chip_visit_session_count_3").assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
+
+        // Default time range is 08.00 - 11.00 WIB; selecting preset updates session 1 time range
+        composeTestRule.onNodeWithTag("input_visit_time_range").performScrollTo().assertTextContains("08.00 - 11.00 WIB")
+        composeTestRule.onNodeWithTag("chip_visit_time_preset_2").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("input_visit_time_range").performScrollTo().assertTextContains("09.00 - 12.00 WIB")
 
         // In Sesi 1, pick Wates
         composeTestRule.onNodeWithTag("chip_admin_district_Wates").performScrollTo().assertIsEnabled().performClick()
@@ -275,6 +287,7 @@ class VisitMultiSessionConfirmationRobolectricTest {
             sessionDatesCsv = visitDate1.toString(),
             selectedDistrictsCsv = "Wates|Ngancar",
             description = "Kunjungan resmi wali murid",
+            visitTimeRange = "08.00 - 11.00 WIB",
             isActive = true,
             schoolId = schoolId
         )
@@ -337,8 +350,9 @@ class VisitMultiSessionConfirmationRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Home auto-displays Visit notification banner and auto-enabled Visit tile
+        // Home auto-displays Visit invitation banner with session hours and auto-enabled Visit tile
         composeTestRule.onNodeWithTag("banner_parent_home_visit_schedule").performScrollTo().assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("08.00 - 11.00 WIB", substring = true).onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_parent_summary_visit").performScrollTo().assertIsDisplayed().performClick()
         composeTestRule.waitForIdle()
 
@@ -348,13 +362,15 @@ class VisitMultiSessionConfirmationRobolectricTest {
         composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
             .performScrollToNode(hasTestTag("card_parent_visit_session_8801"))
         composeTestRule.onNodeWithTag("card_parent_visit_session_8801").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("08.00 - 11.00 WIB", substring = true).onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_parent_visit_session_8802").assertDoesNotExist()
 
         // Confirm attendance & verify QR pass renders
         composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
             .performScrollToNode(hasTestTag("input_parent_visit_visitor_name_8801"))
-        composeTestRule.onNodeWithTag("input_parent_visit_visitor_name_8801").performTextClearance()
-        composeTestRule.onNodeWithTag("input_parent_visit_visitor_name_8801").performTextInput("Ibu Aminah Wates")
+        composeTestRule.onNodeWithTag("input_parent_visit_visitor_name_8801")
+            .performTextReplacement("Ibu Aminah Wates")
+        composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
             .performScrollToNode(hasTestTag("btn_parent_visit_confirm_8801"))
@@ -362,10 +378,16 @@ class VisitMultiSessionConfirmationRobolectricTest {
             .assertHeightIsAtLeast(48.dp)
             .performClick()
 
-        repeat(20) {
+        var confLoops = 0
+        while (confLoops < 60 && vm.visitConfirmations.value.none { it.sessionId == 8801L && it.studentId == 7701L }) {
             ShadowLooper.idleMainLooper()
-            delay(30)
+            delay(50)
+            confLoops++
         }
+        assertTrue(
+            "Confirmation should appear in ViewModel StateFlow after clicking confirm",
+            vm.visitConfirmations.value.any { it.sessionId == 8801L && it.studentId == 7701L }
+        )
         composeTestRule.waitForIdle()
 
         // Barcode card & QR image appear!
@@ -404,10 +426,11 @@ class VisitMultiSessionConfirmationRobolectricTest {
         }
         assertTrue(passPages >= 1)
         assertTrue(passTexts.contains("Rizky Pratama"))
+        assertTrue(passTexts.contains("08.00 - 11.00 WIB"))
         assertTrue(passTexts.contains("Ibu Aminah Wates"))
         assertTrue(passTexts.contains(savedConf.barcodeToken))
 
-        // Verify Wali per-district manual roster PDF renders Wates & confirmation status
+        // Verify Wali per-district manual roster PDF renders Wates, visiting hours, and blank "Wali Anak Asuh" column
         var rosterPageNo = 0
         val (rosterPages, rosterTexts) = capturePdfTexts { startNew ->
             PdfReportGenerator.renderVisitManualRosterPages(
@@ -425,7 +448,11 @@ class VisitMultiSessionConfirmationRobolectricTest {
         }
         assertTrue(rosterPages >= 1)
         assertTrue(rosterTexts.contains("Rizky Pratama"))
-        assertTrue(rosterTexts.contains("WATES"))
+        assertTrue(rosterTexts.contains("Wates", ignoreCase = true))
+        assertTrue(rosterTexts.contains("08.00 - 11.00 WIB"))
+        assertTrue(rosterTexts.contains("Wali Anak Asuh"))
+        assertFalse(rosterTexts.contains("____ : ____"))
+        assertFalse(rosterTexts.contains("Konfirm"))
 
         vm.logout()
         db.visitConfirmationDao().deleteBySessionId(8801L)

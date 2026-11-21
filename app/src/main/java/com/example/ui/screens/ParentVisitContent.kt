@@ -406,6 +406,26 @@ fun ParentVisitContent(
                                         color = Color(0xFF0369A1)
                                     )
                                 }
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Schedule,
+                                        contentDescription = null,
+                                        tint = tealPrimary,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(5.dp))
+                                    Text(
+                                        text = if (isEn) {
+                                            "Visiting Hours: ${sess.displayTimeRange()}"
+                                        } else {
+                                            "Jam Kunjungan: ${sess.displayTimeRange()}"
+                                        },
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = tealPrimary
+                                    )
+                                }
                             }
                             Surface(
                                 shape = RoundedCornerShape(8.dp),

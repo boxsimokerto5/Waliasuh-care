@@ -1897,6 +1897,7 @@ object ParentPortalPdfHelper {
 
                 val infoLines = buildList {
                     add((if (isEn) "Visit Date: " else "Tanggal Kunjungan: ") + dateLabel)
+                    add((if (isEn) "Visiting Hours: " else "Jam Kunjungan (Undangan): ") + session.displayTimeRange())
                     val districtsList = session.getDistrictsList().joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
                     if (districtsList.isNotBlank()) {
                         add((if (isEn) "Session Districts: " else "Kecamatan Sesi: ") + districtsList)

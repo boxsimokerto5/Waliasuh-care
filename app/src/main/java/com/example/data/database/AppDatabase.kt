@@ -113,7 +113,7 @@ import com.example.data.model.WaliShiftCode
         BibleBookmark::class,
         BibleNote::class
     ],
-    version = 38,
+    version = 39,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -1063,6 +1063,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_38_39 = object : androidx.room.migration.Migration(38, 39) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE visit_sessions ADD COLUMN visitTimeRange TEXT NOT NULL DEFAULT '08.00 - 11.00 WIB'")
+                } catch (_: Exception) {}
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -1101,7 +1109,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_34_35,
                         MIGRATION_35_36,
                         MIGRATION_36_37,
-                        MIGRATION_37_38
+                        MIGRATION_37_38,
+                        MIGRATION_38_39
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

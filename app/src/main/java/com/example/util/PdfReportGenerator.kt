@@ -2463,7 +2463,11 @@ object PdfReportGenerator {
         paint.textSize = 8.8f
         paint.color = Color.rgb(71, 85, 105)
         val scheduleLine = TextUtils.ellipsize(
-            if (isEn) "Visit Date: $datesLabel" else "Tanggal Sesi: $datesLabel",
+            if (isEn) {
+                "Visit Date: $datesLabel  •  Hours: ${session.displayTimeRange()}"
+            } else {
+                "Tanggal Sesi: $datesLabel  •  Jam Kunjungan: ${session.displayTimeRange()}"
+            },
             TextPaint(paint),
             pageWidth - 70f,
             TextUtils.TruncateAt.END
@@ -2527,22 +2531,22 @@ object PdfReportGenerator {
         currentY = boxTop + summaryHeight + 12f
 
         val colNo = 35f
-        val colName = 60f
-        val colClass = 215f
-        val colDistrict = 310f
-        val colArrival = 395f
-        val colSign = 475f
+        val colName = 59f
+        val colClass = 185f
+        val colWaliGuest = 295f
+        val colArrival = 430f
+        val colSign = 492f
 
         fun drawManualHeader(startYPos: Float): Float {
             val hTop = startYPos
-            val hHeight = 24f
+            val hHeight = 26f
             paint.color = Color.rgb(224, 242, 254)
             canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
             paint.style = Paint.Style.STROKE
             paint.color = Color.rgb(56, 189, 248)
             paint.strokeWidth = 0.9f
             canvas.drawRect(boxLeft, hTop, boxRight, hTop + hHeight, paint)
-            listOf(colName, colClass, colDistrict, colArrival, colSign).forEach { x ->
+            listOf(colName, colClass, colWaliGuest, colArrival, colSign).forEach { x ->
                 canvas.drawLine(x, hTop, x, hTop + hHeight, paint)
             }
             paint.style = Paint.Style.FILL
@@ -2550,12 +2554,12 @@ object PdfReportGenerator {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 8.2f
             paint.color = Color.rgb(3, 105, 161)
-            val textY = hTop + 15.5f
+            val textY = hTop + 16.5f
             canvas.drawText("No", colNo + 5f, textY, paint)
             canvas.drawText(if (isEn) "Student Name" else "Nama Siswa", colName + 5f, textY, paint)
             canvas.drawText(if (isEn) "Class/Dorm" else "Kelas/Asrama", colClass + 4f, textY, paint)
-            canvas.drawText(if (isEn) "District" else "Kecamatan", colDistrict + 4f, textY, paint)
-            canvas.drawText(if (isEn) "Time/Guest" else "Jam Datang", colArrival + 4f, textY, paint)
+            canvas.drawText(if (isEn) "Wali Anak Asuh (Visitor)" else "Wali Anak Asuh", colWaliGuest + 5f, textY, paint)
+            canvas.drawText(if (isEn) "Time" else "Jam Datang", colArrival + 4f, textY, paint)
             canvas.drawText(if (isEn) "Signature" else "Paraf / TTD", colSign + 5f, textY, paint)
             return hTop + hHeight
         }
@@ -2579,7 +2583,7 @@ object PdfReportGenerator {
             currentY = emptyTop + emptyH + 14f
         } else {
             currentY = drawManualHeader(currentY)
-            val rowHeight = 25f
+            val rowHeight = 28f
             scheduledStudents.forEachIndexed { idx, st ->
                 if (currentY > pageHeight - 130f) {
                     pageNumber++
@@ -2606,12 +2610,12 @@ object PdfReportGenerator {
                 paint.color = Color.rgb(203, 213, 225)
                 paint.strokeWidth = 0.6f
                 canvas.drawRect(boxLeft, rTop, boxRight, rTop + rowHeight, paint)
-                listOf(colName, colClass, colDistrict, colArrival, colSign).forEach { x ->
+                listOf(colName, colClass, colWaliGuest, colArrival, colSign).forEach { x ->
                     canvas.drawLine(x, rTop, x, rTop + rowHeight, paint)
                 }
                 paint.style = Paint.Style.FILL
 
-                val textY = rTop + 16f
+                val textY = rTop + 17.5f
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 paint.textSize = 8.2f
                 paint.color = Color.rgb(15, 23, 42)
@@ -2623,44 +2627,36 @@ object PdfReportGenerator {
 
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 paint.color = Color.rgb(51, 65, 85)
-                val classDorm = listOf(st.classGrade.trim(), st.dormitory.trim())
-                    .filter { it.isNotBlank() }
-                    .joinToString(" • ")
-                    .ifBlank { "-" }
-                val classCell = TextUtils.ellipsize(classDorm, TextPaint(paint), colDistrict - colClass - 8f, TextUtils.TruncateAt.END).toString()
+                val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
+                val classParts = buildList {
+                    if (st.classGrade.isNotBlank()) add(st.classGrade.trim())
+                    if (st.dormitory.isNotBlank()) add(st.dormitory.trim())
+                    if (!isSpecificDistrict && distLabel.isNotBlank()) add(distLabel)
+                }
+                val classDorm = classParts.joinToString(" • ").ifBlank { "-" }
+                val classCell = TextUtils.ellipsize(classDorm, TextPaint(paint), colWaliGuest - colClass - 8f, TextUtils.TruncateAt.END).toString()
                 canvas.drawText(classCell, colClass + 4f, textY, paint)
 
-                val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
-                val distCell = TextUtils.ellipsize(distLabel, TextPaint(paint), colArrival - colDistrict - 8f, TextUtils.TruncateAt.END).toString()
-                canvas.drawText(distCell, colDistrict + 4f, textY, paint)
-
                 val matchedRec = VisitHelper.findVisitForStudent(existingRecords, st, targetDateMillis)
-                val matchedConf = VisitHelper.findConfirmationForStudent(visitConfirmations, session.id, st, targetDateMillis)
                 if (matchedRec != null) {
+                    val visitorText = listOf(matchedRec.visitorRelation, matchedRec.visitorName)
+                        .filter { it.isNotBlank() }
+                        .joinToString(": ")
+                        .ifBlank { matchedRec.visitorRelation }
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+                    paint.color = Color.rgb(15, 23, 42)
+                    val visitorCell = TextUtils.ellipsize(visitorText, TextPaint(paint), colArrival - colWaliGuest - 8f, TextUtils.TruncateAt.END).toString()
+                    canvas.drawText(visitorCell, colWaliGuest + 5f, textY, paint)
+
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                     paint.color = Color.rgb(21, 128, 61)
                     val arrivalText = "${timeFmt.format(Date(matchedRec.checkedInAt))} WIB"
                     canvas.drawText(arrivalText, colArrival + 4f, textY, paint)
                     paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                     canvas.drawText(if (isEn) "✓ Checked" else "✓ Hadir", colSign + 5f, textY, paint)
-                } else if (matchedConf != null && matchedConf.isHadir) {
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    paint.color = Color.rgb(15, 118, 110)
-                    val rsvpLabel = matchedConf.estimatedArrivalTime.ifBlank { "Konfirm" }
-                    canvas.drawText(
-                        TextUtils.ellipsize(rsvpLabel, TextPaint(paint), colSign - colArrival - 6f, TextUtils.TruncateAt.END).toString(),
-                        colArrival + 4f,
-                        textY,
-                        paint
-                    )
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    paint.color = Color.rgb(148, 163, 184)
-                    canvas.drawText("..........", colSign + 8f, textY + 2f, paint)
-                } else {
-                    paint.color = Color.rgb(148, 163, 184)
-                    canvas.drawText("____ : ____", colArrival + 4f, textY, paint)
-                    canvas.drawText("..........", colSign + 8f, textY + 2f, paint)
                 }
+                // Ketika belum check-in digital: kolom "Wali Anak Asuh", "Jam Datang", dan "Paraf / TTD"
+                // sengaja dibiarkan kosong bersih agar siap ditulis manual dengan pulpen saat absensi fisik.
 
                 currentY = rTop + rowHeight
             }

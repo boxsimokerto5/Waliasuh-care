@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -78,6 +79,7 @@ private data class SessionDraftUiState(
     val title: String,
     val hasCustomTitle: Boolean,
     val dateMillis: Long,
+    val visitTimeRange: String,
     val selectedDistricts: Set<String>,
     val description: String
 )
@@ -94,7 +96,8 @@ fun CreateVisitSessionDialog(
         monthYear: String,
         visitDates: List<Long>,
         selectedDistricts: List<String>,
-        description: String
+        description: String,
+        visitTimeRange: String
     ) -> Unit
 ) {
     val s = LocalAppStrings.current
@@ -140,6 +143,7 @@ fun CreateVisitSessionDialog(
                         dateMillis = initialSession.getVisitDatesList().firstOrNull()
                             ?: initialSundays.firstOrNull()
                             ?: VisitHelper.normalizeDayStart(System.currentTimeMillis()),
+                        visitTimeRange = initialSession.displayTimeRange(),
                         selectedDistricts = initialSession.getDistrictsList().toSet(),
                         description = initialSession.description
                     )
@@ -154,6 +158,7 @@ fun CreateVisitSessionDialog(
                             dateMillis = initialSundays.getOrElse(i) {
                                 initialSundays.firstOrNull() ?: VisitHelper.normalizeDayStart(System.currentTimeMillis())
                             },
+                            visitTimeRange = VisitHelper.DEFAULT_VISIT_TIME_RANGE,
                             selectedDistricts = emptySet(),
                             description = ""
                         )
@@ -204,7 +209,7 @@ fun CreateVisitSessionDialog(
 
     val allDraftsValid = remember(drafts.toList(), activeDraftCount, dynamicDistricts.size) {
         val slice = drafts.take(activeDraftCount)
-        val allTitlesOk = slice.all { it.title.isNotBlank() }
+        val allTitlesOk = slice.all { it.title.isNotBlank() && it.visitTimeRange.isNotBlank() }
         val datesOk = slice.map { VisitHelper.normalizeDayStart(it.dateMillis) }.let { list ->
             list.all { it > 0L } && list.distinct().size == list.size
         }
@@ -502,6 +507,65 @@ fun CreateVisitSessionDialog(
                             }
                         }
 
+                        // Rentang Jam Kunjungan Sesi Ini (tampil di undangan Portal Orang Tua)
+                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                Icon(Icons.Default.Schedule, contentDescription = null, tint = VisitIndigo, modifier = Modifier.size(14.dp))
+                                Text(
+                                    text = if (isEn) {
+                                        "Visiting Hours (Shown as Parent Invitation):"
+                                    } else {
+                                        "Rentang Jam Kunjungan (Undangan Orang Tua):"
+                                    },
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = VisitIndigo
+                                )
+                            }
+                            FlowRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                VisitHelper.VISIT_TIME_PRESETS.forEachIndexed { presetIdx, preset ->
+                                    val isPresetSel = currentDraft.visitTimeRange.equals(preset, ignoreCase = true)
+                                    FilterChip(
+                                        selected = isPresetSel,
+                                        onClick = {
+                                            drafts[safeActiveIdx] = currentDraft.copy(visitTimeRange = preset)
+                                        },
+                                        label = {
+                                            Text(
+                                                text = preset,
+                                                fontSize = 10.5.sp,
+                                                fontWeight = if (isPresetSel) FontWeight.Bold else FontWeight.Medium
+                                            )
+                                        },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = VisitIndigoLight,
+                                            selectedLabelColor = VisitIndigo
+                                        ),
+                                        modifier = Modifier
+                                            .heightIn(min = 34.dp)
+                                            .testTag("chip_visit_time_preset_$presetIdx")
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = currentDraft.visitTimeRange,
+                                onValueChange = { newTimeRange ->
+                                    drafts[safeActiveIdx] = currentDraft.copy(visitTimeRange = newTimeRange)
+                                },
+                                label = { Text(if (isEn) "Custom Time Window *" else "Jam Kunjungan Sesi *") },
+                                placeholder = { Text(VisitHelper.DEFAULT_VISIT_TIME_RANGE) },
+                                singleLine = true,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_visit_time_range")
+                            )
+                        }
+
                         // Kecamatan (Eksklusif per sesi: yang sudah dipakai sesi lain terkunci)
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Row(
@@ -730,7 +794,7 @@ fun CreateVisitSessionDialog(
                                     distList.joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
                                 }
                                 Text(
-                                    text = "• Sesi ${i + 1} (${shortDateFmt.format(Date(d.dateMillis))}): $distSummary",
+                                    text = "• Sesi ${i + 1} (${shortDateFmt.format(Date(d.dateMillis))}, ${VisitHelper.normalizeTimeRange(d.visitTimeRange)}): $distSummary",
                                     fontSize = 10.5.sp,
                                     color = if (distList.isEmpty()) Color(0xFFB45309) else Color(0xFF1E3A8A),
                                     maxLines = 1,
@@ -797,7 +861,8 @@ fun CreateVisitSessionDialog(
                                 monthYear = selectedMonthYear,
                                 visitDateMillis = VisitHelper.normalizeDayStart(d.dateMillis),
                                 selectedDistricts = d.selectedDistricts.toList(),
-                                description = d.description.trim()
+                                description = d.description.trim(),
+                                visitTimeRange = VisitHelper.normalizeTimeRange(d.visitTimeRange)
                             )
                         }
                         onConfirmBatch(batchDrafts)
@@ -808,7 +873,8 @@ fun CreateVisitSessionDialog(
                             selectedMonthYear,
                             listOf(VisitHelper.normalizeDayStart(d.dateMillis)),
                             d.selectedDistricts.toList(),
-                            d.description.trim()
+                            d.description.trim(),
+                            VisitHelper.normalizeTimeRange(d.visitTimeRange)
                         )
                     }
                 },

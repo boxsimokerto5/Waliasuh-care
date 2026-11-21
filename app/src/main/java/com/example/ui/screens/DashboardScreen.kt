@@ -2448,10 +2448,10 @@ private fun DashboardVisitAndParentModalsHost(
                 modalState.showCreateVisitSessionDialog = false
                 modalState.visitSessionToEdit = null
             },
-            onConfirm = { title, monthYear, dates, districts, desc ->
+            onConfirm = { title, monthYear, dates, districts, desc, visitTimeRange ->
                 val editing = modalState.visitSessionToEdit
                 if (editing != null) {
-                    viewModel.updateVisitSession(editing, title, monthYear, dates, districts, desc) { updated ->
+                    viewModel.updateVisitSession(editing, title, monthYear, dates, districts, desc, visitTimeRange) { updated ->
                         if (updated != null) {
                             Toast.makeText(
                                 context,
@@ -2461,7 +2461,7 @@ private fun DashboardVisitAndParentModalsHost(
                         }
                     }
                 } else {
-                    viewModel.createVisitSession(title, monthYear, dates, districts, desc) { created ->
+                    viewModel.createVisitSession(title, monthYear, dates, districts, desc, visitTimeRange) { created ->
                         if (created != null) {
                             Toast.makeText(
                                 context,

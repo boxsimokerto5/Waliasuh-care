@@ -1830,6 +1830,20 @@ fun AdminScreen(
                                                     )
                                                 }
                                             }
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .background(Color(0xFFFEF3C7))
+                                                    .border(1.dp, Color(0xFFFDE68A), RoundedCornerShape(8.dp))
+                                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) {
+                                                Text(
+                                                    text = session.displayTimeRange(),
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF92400E)
+                                                )
+                                            }
                                         }
                                     }
 
@@ -3182,10 +3196,10 @@ fun AdminScreen(
                 showCreateVisitSessionDialog = false
                 visitSessionToEdit = null
             },
-            onConfirm = { title, monthYear, dates, districts, description ->
+            onConfirm = { title, monthYear, dates, districts, description, visitTimeRange ->
                 val editing = visitSessionToEdit
                 if (editing != null) {
-                    viewModel.updateVisitSession(editing, title, monthYear, dates, districts, description) { updated ->
+                    viewModel.updateVisitSession(editing, title, monthYear, dates, districts, description, visitTimeRange) { updated ->
                         if (updated != null) {
                             Toast.makeText(
                                 context,
@@ -3195,7 +3209,7 @@ fun AdminScreen(
                         }
                     }
                 } else {
-                    viewModel.createVisitSession(title, monthYear, dates, districts, description) { created ->
+                    viewModel.createVisitSession(title, monthYear, dates, districts, description, visitTimeRange) { created ->
                         if (created != null) {
                             Toast.makeText(
                                 context,

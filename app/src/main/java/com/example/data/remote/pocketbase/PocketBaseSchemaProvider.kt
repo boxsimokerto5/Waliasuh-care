@@ -320,6 +320,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("session_dates_csv", "text"),
                 PbFieldDef("selected_districts_csv", "text"),
                 PbFieldDef("description", "text"),
+                PbFieldDef("visit_time_range", "text"),
                 PbFieldDef("is_active", "bool"),
                 PbFieldDef("created_by", "text"),
                 PbFieldDef("created_at", "number"),

@@ -1634,7 +1634,7 @@ private fun ParentOverviewContent(
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (isEn) "Visit Schedule Notification" else "Pemberitahuan Jadwal Kunjungan",
+                            text = if (isEn) "Parent Visit Invitation" else "Undangan Kunjungan Orang Tua",
                             fontSize = 12.5.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = Color(0xFF0F766E)
@@ -1644,6 +1644,16 @@ private fun ParentOverviewContent(
                             fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = Color(0xFF0F172A)
+                        )
+                        Text(
+                            text = if (isEn) {
+                                "Visiting Hours: ${nextVisitSession.displayTimeRange()} • $distLabel"
+                            } else {
+                                "Pukul ${nextVisitSession.displayTimeRange()} • Wilayah $distLabel"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF0369A1)
                         )
                         Text(
                             text = when {

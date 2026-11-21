@@ -433,6 +433,21 @@ fun DaftarHadirKunjunganSheet(
                                 )
                             )
                         }
+                        selectedSession?.let { sess ->
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFFEF3C7),
+                                border = BorderStroke(1.dp, Color(0xFFFDE68A))
+                            ) {
+                                Text(
+                                    text = sess.displayTimeRange(),
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF92400E),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                )
+                            }
+                        }
                     }
 
                     if (selectedTab == 0) {

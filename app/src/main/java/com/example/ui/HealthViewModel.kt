@@ -4360,6 +4360,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         visitDates: List<Long>,
         selectedDistricts: List<String>,
         description: String = "",
+        visitTimeRange: String = VisitHelper.DEFAULT_VISIT_TIME_RANGE,
         onComplete: (VisitSession?) -> Unit = {}
     ) {
         val role = _currentUserRole.value
@@ -4378,6 +4379,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 sessionDatesCsv = VisitHelper.formatDatesCsv(visitDates),
                 selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(selectedDistricts),
                 description = description.trim(),
+                visitTimeRange = VisitHelper.normalizeTimeRange(visitTimeRange),
                 isActive = true,
                 createdBy = creator,
                 schoolId = activeSchool,
@@ -4467,6 +4469,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     sessionDatesCsv = VisitHelper.formatDatesCsv(listOf(dayStart)),
                     selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(draft.selectedDistricts),
                     description = draft.description.trim(),
+                    visitTimeRange = VisitHelper.normalizeTimeRange(draft.visitTimeRange),
                     isActive = true,
                     createdBy = creator,
                     schoolId = activeSchool,
@@ -4497,6 +4500,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         visitDates: List<Long>,
         selectedDistricts: List<String>,
         description: String = "",
+        visitTimeRange: String = session.displayTimeRange(),
         onComplete: (VisitSession?) -> Unit = {}
     ) {
         val role = _currentUserRole.value
@@ -4511,6 +4515,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 sessionDatesCsv = VisitHelper.formatDatesCsv(visitDates),
                 selectedDistrictsCsv = VisitHelper.formatDistrictsCsv(selectedDistricts),
                 description = description.trim(),
+                visitTimeRange = VisitHelper.normalizeTimeRange(visitTimeRange),
                 updatedAt = System.currentTimeMillis()
             )
             repository.updateVisitSession(updated)

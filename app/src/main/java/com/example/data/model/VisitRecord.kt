@@ -16,6 +16,7 @@ data class VisitSession(
     val sessionDatesCsv: String = "", // Comma-separated epoch millis (day-start) supporting multiple dates per session
     val selectedDistrictsCsv: String = "", // Pipe-separated normalized kecamatan names
     val description: String = "",
+    val visitTimeRange: String = DEFAULT_TIME_RANGE,
     val isActive: Boolean = true,
     val createdBy: String = "Admin Sekolah",
     val schoolId: String = "SRT1-KDR",
@@ -26,9 +27,15 @@ data class VisitSession(
 
     fun getDistrictsList(): List<String> = VisitHelper.parseDistrictsCsv(selectedDistrictsCsv)
 
+    fun displayTimeRange(): String = VisitHelper.normalizeTimeRange(visitTimeRange)
+
     fun isDateScheduled(dateMillis: Long): Boolean {
         val targetDay = VisitHelper.normalizeDayStart(dateMillis)
         return getVisitDatesList().any { VisitHelper.normalizeDayStart(it) == targetDay }
+    }
+
+    companion object {
+        const val DEFAULT_TIME_RANGE = "08.00 - 11.00 WIB"
     }
 }
 
@@ -107,7 +114,8 @@ data class VisitSessionDraft(
     val monthYear: String,
     val visitDateMillis: Long,
     val selectedDistricts: List<String>,
-    val description: String = ""
+    val description: String = "",
+    val visitTimeRange: String = VisitHelper.DEFAULT_VISIT_TIME_RANGE
 )
 
 data class VisitQrPayload(
@@ -126,6 +134,18 @@ data class DistrictStudentGroup(
 object VisitHelper {
     const val UNASSIGNED_DISTRICT = "__UNASSIGNED__"
     const val QR_PREFIX = "WALIVISIT"
+    const val DEFAULT_VISIT_TIME_RANGE = "08.00 - 11.00 WIB"
+    val VISIT_TIME_PRESETS = listOf(
+        "08.00 - 11.00 WIB",
+        "08.00 - 12.00 WIB",
+        "09.00 - 12.00 WIB",
+        "13.00 - 16.00 WIB"
+    )
+
+    fun normalizeTimeRange(raw: String?): String {
+        val clean = raw?.trim().orEmpty().replace(Regex("""\s+"""), " ")
+        return clean.ifBlank { DEFAULT_VISIT_TIME_RANGE }
+    }
 
     private val leadingPrefixRegex = Regex("""^(?:kec\.?|kecamatan)\s+""", RegexOption.IGNORE_CASE)
     private val multiSpaceRegex = Regex("""\s+""")
