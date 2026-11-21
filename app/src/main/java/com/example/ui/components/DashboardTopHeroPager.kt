@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -194,7 +195,7 @@ fun DashboardTopHeroPager(
 
     Column(
         modifier = modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         HorizontalPager(
             state = pagerState,
@@ -248,70 +249,53 @@ fun DashboardTopHeroPager(
             }
         }
 
-        // Compact 3-tab quick selector + animated swipe dots
-        Column(
+        // Compact single-row inline text tabs with integrated active indicator
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 2.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+                .padding(horizontal = 4.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                HeroPagerIndicatorChip(
-                    label = if (isEn) "Today's Care" else "Berobat",
-                    selected = pagerState.currentPage == 0,
-                    activeColor = if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857),
-                    onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
-                    modifier = Modifier.testTag("hero_pager_tab_care")
-                )
+            HeroPagerIndicatorChip(
+                label = if (isEn) "Today's Care" else "Berobat",
+                selected = pagerState.currentPage == 0,
+                activeColor = if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857),
+                onClick = { scope.launch { pagerState.animateScrollToPage(0) } },
+                modifier = Modifier.testTag("hero_pager_tab_care")
+            )
 
-                HeroPagerIndicatorChip(
-                    label = if (isEn) "Prayer" else "Jadwal Sholat",
-                    selected = pagerState.currentPage == 1,
-                    activeColor = if (isDarkSurface) Color(0xFFF59E0B) else Color(0xFFB45309),
-                    onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
-                    modifier = Modifier.testTag("hero_pager_tab_prayer")
-                )
+            Text(
+                text = "·",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
 
-                HeroPagerIndicatorChip(
-                    label = if (isEn) "Weather" else "Cuaca",
-                    selected = pagerState.currentPage == 2,
-                    activeColor = if (isDarkSurface) Color(0xFF38BDF8) else Color(0xFF0284C7),
-                    onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
-                    modifier = Modifier.testTag("hero_pager_tab_weather")
-                )
-            }
+            HeroPagerIndicatorChip(
+                label = if (isEn) "Prayer" else "Jadwal Sholat",
+                selected = pagerState.currentPage == 1,
+                activeColor = if (isDarkSurface) Color(0xFFF59E0B) else Color(0xFFB45309),
+                onClick = { scope.launch { pagerState.animateScrollToPage(1) } },
+                modifier = Modifier.testTag("hero_pager_tab_prayer")
+            )
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(3) { idx ->
-                    val selected = pagerState.currentPage == idx
-                    val dotColor by animateColorAsState(
-                        targetValue = if (selected) {
-                            when (idx) {
-                                0 -> if (isDarkSurface) Color(0xFF10B981) else Color(0xFF047857)
-                                1 -> if (isDarkSurface) Color(0xFFF59E0B) else Color(0xFFB45309)
-                                else -> if (isDarkSurface) Color(0xFF38BDF8) else Color(0xFF0284C7)
-                            }
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        },
-                        label = "hero_dot_color_$idx"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .height(4.5.dp)
-                            .width(if (selected) 16.dp else 5.dp)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                    )
-                }
-            }
+            Text(
+                text = "·",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
+
+            HeroPagerIndicatorChip(
+                label = if (isEn) "Weather" else "Cuaca",
+                selected = pagerState.currentPage == 2,
+                activeColor = if (isDarkSurface) Color(0xFF38BDF8) else Color(0xFF0284C7),
+                onClick = { scope.launch { pagerState.animateScrollToPage(2) } },
+                modifier = Modifier.testTag("hero_pager_tab_weather")
+            )
         }
     }
 
@@ -345,21 +329,41 @@ private fun HeroPagerIndicatorChip(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(999.dp),
-        color = if (selected) activeColor.copy(alpha = 0.14f) else Color.Transparent,
-        border = if (selected) BorderStroke(0.8.dp, activeColor.copy(alpha = 0.45f)) else null,
+    val textColor by animateColorAsState(
+        targetValue = if (selected) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+        label = "hero_tab_text_$label"
+    )
+    val indicatorColor by animateColorAsState(
+        targetValue = if (selected) activeColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+        label = "hero_tab_bar_$label"
+    )
+    val indicatorWidth by animateDpAsState(
+        targetValue = if (selected) 20.dp else 5.dp,
+        label = "hero_tab_width_$label"
+    )
+
+    Column(
         modifier = modifier
+            .clip(RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 3.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Text(
             text = label,
-            fontSize = 10.sp,
+            fontSize = 11.sp,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-            color = if (selected) activeColor else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = textColor,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.5.dp)
+            overflow = TextOverflow.Ellipsis
+        )
+        Box(
+            modifier = Modifier
+                .height(2.5.dp)
+                .width(indicatorWidth)
+                .clip(CircleShape)
+                .background(indicatorColor)
         )
     }
 }
