@@ -47,6 +47,7 @@ import com.example.data.model.UploadedInfoPentingMedia
 import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliAccount
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryPost
@@ -527,6 +528,13 @@ object PocketBaseSyncManager {
                 val service = PocketBaseClient.getService(context) ?: return@withContext
                 deleteCollectionByFilter(service, "visit_records", buildSessionFilter(sessionId))
                 runCatching { deleteCollectionByFilter(service, "visit_confirmations", buildSessionFilter(sessionId)) }
+                runCatching {
+                    deleteCollectionByFilter(
+                        service,
+                        "visit_session_swaps",
+                        "from_session_id = $sessionId || to_session_id = $sessionId"
+                    )
+                }
                 service.deleteRecord("visit_sessions", PocketBaseIdCodec.toPbId(sessionId))
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteVisitSession ke PocketBase", e)
@@ -576,6 +584,29 @@ object PocketBaseSyncManager {
                 service.deleteRecord("visit_confirmations", PocketBaseIdCodec.toPbId(confirmationId))
             } catch (e: Exception) {
                 Log.e(TAG, "Silent error deleteRemoteVisitConfirmation ke PocketBase", e)
+            }
+        }
+
+    suspend fun uploadSingleVisitSessionSwap(context: Context, swap: VisitSessionSwap) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                val dto = PbVisitSessionSwapDto.fromDomain(swap)
+                upsertSingleDto(service, "visit_session_swaps", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleVisitSessionSwap ke PocketBase", e)
+            }
+        }
+
+    suspend fun deleteRemoteVisitSessionSwap(context: Context, swapId: Long) =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext
+                service.deleteRecord("visit_session_swaps", PocketBaseIdCodec.toPbId(swapId))
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error deleteRemoteVisitSessionSwap ke PocketBase", e)
             }
         }
 
@@ -1866,6 +1897,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
+            runCatching { deleteCollectionByFilter(service, "visit_session_swaps", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_confirmations", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_records", filter) }
             runCatching { deleteCollectionByFilter(service, "visit_sessions", filter) }
@@ -2053,6 +2085,7 @@ object PocketBaseSyncManager {
         runCatching { syncVisitSessionsMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncVisitRecordsMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncVisitConfirmationsMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncVisitSessionSwapsMerged(service, cleanSchoolId, filter, repository) }
     }
 
     suspend fun syncParentRelationsOnlineQuietly(
@@ -2690,6 +2723,43 @@ object PocketBaseSyncManager {
         }
     }
 
+    private suspend fun syncVisitSessionSwapsMerged(
+        service: PocketBaseService,
+        cleanSchoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localSwaps = repository.getVisitSessionSwapsBySchoolList(cleanSchoolId)
+        val remoteRes = fetchAllPages { page ->
+            service.listVisitSessionSwaps(page = page, perPage = 500, filter = filter)
+        }
+        val remoteDtos = remoteRes.getOrNull() ?: return
+        val remoteSwaps = remoteDtos.map { it.toDomainModel(cleanSchoolId) }
+
+        val localById = localSwaps.associateBy { it.id }
+        val remoteById = remoteSwaps.associateBy { it.id }
+
+        val toInsertLocal = remoteSwaps.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllVisitSessionSwaps(toInsertLocal)
+        }
+
+        val toPushRemote = localSwaps.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { swap ->
+                val dto = PbVisitSessionSwapDto.fromDomain(swap)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "visit_session_swaps", pairs)
+        }
+    }
+
     private suspend fun syncFastingSessionsMerged(
         service: PocketBaseService,
         cleanSchoolId: String,
@@ -3260,7 +3330,7 @@ object PocketBaseSyncManager {
                 syncSholatRecordsMerged(service, cleanSchoolId, filter, repository, deletedSholatIds)
             }
 
-            // 8. Sinkronkan Sesi, Konfirmasi & Daftar Hadir Kunjungan Orang Tua (visit_sessions, visit_records, visit_confirmations)
+            // 8. Sinkronkan Sesi, Konfirmasi, Daftar Hadir & Pindah Sesi Kunjungan (visit_sessions, visit_records, visit_confirmations, visit_session_swaps)
             runCatching {
                 syncVisitSessionsMerged(service, cleanSchoolId, filter, repository)
             }
@@ -3269,6 +3339,9 @@ object PocketBaseSyncManager {
             }
             runCatching {
                 syncVisitConfirmationsMerged(service, cleanSchoolId, filter, repository)
+            }
+            runCatching {
+                syncVisitSessionSwapsMerged(service, cleanSchoolId, filter, repository)
             }
 
             // 9. Sinkronkan Kartu Akses, Pesan & Harapan Karakter Orang Tua

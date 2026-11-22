@@ -73,6 +73,7 @@ import com.example.data.model.SchoolProfile
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
@@ -85,6 +86,7 @@ fun LaporanKunjunganSheet(
     sessions: List<VisitSession>,
     students: List<ChildStudent>,
     visitRecords: List<VisitRecord>,
+    visitSessionSwaps: List<VisitSessionSwap> = emptyList(),
     schoolProfile: SchoolProfile,
     waliName: String,
     onQuickMarkManual: ((VisitSession, ChildStudent, Long) -> Unit)? = null,
@@ -128,10 +130,15 @@ fun LaporanKunjunganSheet(
         (base + today).distinct().sorted()
     }
 
-    val allScheduledStudents = remember(selectedSession, students, selectedDistrictFilter) {
+    val allScheduledStudents = remember(selectedSession, students, visitSessionSwaps, sortedSessions, selectedDistrictFilter) {
         if (selectedSession == null) emptyList()
         else {
-            val base = VisitHelper.scheduledStudentsForSession(selectedSession, students)
+            val base = VisitHelper.effectiveScheduledStudentsForSession(
+                session = selectedSession,
+                allStudents = students,
+                swaps = visitSessionSwaps,
+                allSessions = sortedSessions
+            )
             if (selectedDistrictFilter == "Semua") base
             else base.filter { VisitHelper.resolveStudentDistrictKey(it).equals(selectedDistrictFilter, ignoreCase = true) }
         }
@@ -550,9 +557,11 @@ fun LaporanKunjunganSheet(
                                                 Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
+                                                    val incSwap = selectedSession?.let { VisitHelper.findIncomingSwapToSession(it.id, st, visitSessionSwaps) }
                                                     Text("${idx + 1}. ${st.name}", fontSize = 13.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                     Text(
-                                                        text = "$dist • ${st.classGrade.ifBlank { "-" }} • Wali: ${st.motherName.ifBlank { st.emergencyContact.ifBlank { "-" } }}",
+                                                        text = "$dist • ${st.classGrade.ifBlank { "-" }} • Wali: ${st.motherName.ifBlank { st.emergencyContact.ifBlank { "-" } }}" +
+                                                            if (incSwap != null) (if (isEn) " • Moved" else " • Pindahan") else "",
                                                         fontSize = 10.5.sp,
                                                         color = Color(0xFF991B1B),
                                                         maxLines = 1,

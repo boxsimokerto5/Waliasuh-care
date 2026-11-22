@@ -244,6 +244,7 @@ fun DashboardScreen(
     val isSavingChristianWorship by viewModel.isSavingChristianWorship.collectAsStateWithLifecycle()
     val visitSessions by viewModel.waliVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val visitSessionSwaps by viewModel.visitSessionSwaps.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
@@ -1182,6 +1183,7 @@ fun DashboardScreen(
                 students = students,
                 visitSessions = visitSessions,
                 visitRecords = visitRecords,
+                visitSessionSwaps = visitSessionSwaps,
                 parentAccessLinks = parentAccessLinks,
                 parentMessages = myFosterParentMessages,
                 parentExpectations = myFosterParentExpectations,
@@ -2324,6 +2326,7 @@ private fun DashboardVisitAndParentModalsHost(
     val visitSessions by viewModel.waliVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val visitConfirmations by viewModel.visitConfirmations.collectAsStateWithLifecycle()
+    val visitSessionSwaps by viewModel.visitSessionSwaps.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     val incomingTandemBundles by viewModel.incomingTandemRequestBundles.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
@@ -2350,12 +2353,32 @@ private fun DashboardVisitAndParentModalsHost(
             sessions = visitSessions,
             students = students,
             visitRecords = visitRecords,
+            visitSessionSwaps = visitSessionSwaps,
             isAdmin = isAdminUser,
+            currentUsername = currentUsername.orEmpty(),
+            waliName = waliName,
+            isAnakSuperAdmin = isAnakSuperAdmin,
             onOpenDaftarHadir = {
                 modalState.daftarHadirKunjunganInitialTab = 0
                 modalState.showDaftarHadirKunjunganSheet = true
             },
             onOpenLaporan = { modalState.showLaporanKunjunganSheet = true },
+            onSwapStudentSession = { student, fromSess, targetSess, reason, clearPriorCheckIn ->
+                viewModel.swapStudentVisitSession(
+                    student = student,
+                    fromSession = fromSess,
+                    targetSession = targetSess,
+                    reason = reason,
+                    clearPriorCheckIn = clearPriorCheckIn
+                ) { _, msg, _ ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onRevertSessionSwap = { swap ->
+                viewModel.revertVisitSessionSwap(swap) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
             onEditSession = if (isAdminUser) { sess ->
                 modalState.visitSessionToEdit = sess
                 modalState.showCreateVisitSessionDialog = true
@@ -2376,8 +2399,12 @@ private fun DashboardVisitAndParentModalsHost(
             students = students,
             visitRecords = visitRecords,
             visitConfirmations = visitConfirmations,
+            visitSessionSwaps = visitSessionSwaps,
             schoolProfile = schoolProfile,
             waliName = waliName,
+            isAdmin = isAdminUser,
+            currentUsername = currentUsername.orEmpty(),
+            isAnakSuperAdmin = isAnakSuperAdmin,
             initialTab = modalState.daftarHadirKunjunganInitialTab,
             onRecordVisitCheckIn = { sess, st, visitDate, relation, vName, method, onResult ->
                 viewModel.recordStudentVisitCheckIn(
@@ -2398,6 +2425,22 @@ private fun DashboardVisitAndParentModalsHost(
                     Toast.LENGTH_SHORT
                 ).show()
             },
+            onSwapStudentSession = { student, fromSess, targetSess, reason, clearPriorCheckIn ->
+                viewModel.swapStudentVisitSession(
+                    student = student,
+                    fromSession = fromSess,
+                    targetSession = targetSess,
+                    reason = reason,
+                    clearPriorCheckIn = clearPriorCheckIn
+                ) { _, msg, _ ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onRevertSessionSwap = { swap ->
+                viewModel.revertVisitSessionSwap(swap) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
             onDismiss = { modalState.showDaftarHadirKunjunganSheet = false }
         )
     }
@@ -2407,6 +2450,7 @@ private fun DashboardVisitAndParentModalsHost(
             sessions = visitSessions,
             students = students,
             visitRecords = visitRecords,
+            visitSessionSwaps = visitSessionSwaps,
             schoolProfile = schoolProfile,
             waliName = waliName,
             onQuickMarkManual = { sess, st, targetDate ->

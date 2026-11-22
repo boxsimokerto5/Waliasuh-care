@@ -142,6 +142,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-updated_at"
     ): Response<PbListResponse<PbVisitConfirmationDto>>
 
+    // --- Visit Session Swaps (Pindah Sesi Kunjungan per Anak Asuh) ---
+    @GET("api/collections/visit_session_swaps/records")
+    suspend fun listVisitSessionSwaps(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-updated_at"
+    ): Response<PbListResponse<PbVisitSessionSwapDto>>
+
     // --- School Profiles ---
     @GET("api/collections/school_profiles/records")
     suspend fun listSchoolProfiles(

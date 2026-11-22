@@ -629,7 +629,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(32, jsonSchema.length())
+    assertEquals(33, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -649,6 +649,7 @@ class ExampleRobolectricTest {
       "visit_sessions",
       "visit_records",
       "visit_confirmations",
+      "visit_session_swaps",
       "parent_access_links",
       "parent_messages",
       "parent_expectations",
@@ -671,7 +672,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(32, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(33, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)

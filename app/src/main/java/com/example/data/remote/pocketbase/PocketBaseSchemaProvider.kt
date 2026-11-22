@@ -392,6 +392,35 @@ object PocketBaseSchemaProvider {
             indexes = listOf("CREATE INDEX idx_vc_school ON visit_confirmations (school_id)")
         ),
         PocketBaseCollectionMeta(
+            collectionName = "visit_session_swaps",
+            description = "Pindah / tukar sesi jadwal kunjungan per siswa oleh Wali Asuh atau Admin Sekolah",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("month_year", "text"),
+                PbFieldDef("from_session_id", "number"),
+                PbFieldDef("from_session_title", "text"),
+                PbFieldDef("to_session_id", "number"),
+                PbFieldDef("to_session_title", "text"),
+                PbFieldDef("student_id", "number"),
+                PbFieldDef("student_name", "text"),
+                PbFieldDef("student_nik", "text"),
+                PbFieldDef("student_nis", "text"),
+                PbFieldDef("student_class", "text"),
+                PbFieldDef("student_dorm", "text"),
+                PbFieldDef("student_district", "text"),
+                PbFieldDef("reason", "text"),
+                PbFieldDef("had_prior_check_in", "bool"),
+                PbFieldDef("prior_check_in_at", "number"),
+                PbFieldDef("swapped_by_username", "text"),
+                PbFieldDef("swapped_by_name", "text"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_vss_school ON visit_session_swaps (school_id)")
+        ),
+        PocketBaseCollectionMeta(
             collectionName = "parent_access_links",
             description = "Kartu akses login orang tua & pilihan izin modul per siswa",
             multiTenantField = "school_id",

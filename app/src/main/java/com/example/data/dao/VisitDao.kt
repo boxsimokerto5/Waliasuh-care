@@ -9,6 +9,7 @@ import androidx.room.Update
 import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -113,5 +114,38 @@ interface VisitConfirmationDao {
     suspend fun deleteBySessionId(sessionId: Long)
 
     @Query("DELETE FROM visit_confirmations WHERE schoolId = :schoolId")
+    suspend fun deleteBySchoolId(schoolId: String)
+}
+
+@Dao
+interface VisitSessionSwapDao {
+    @Query("SELECT * FROM visit_session_swaps ORDER BY updatedAt DESC, createdAt DESC")
+    fun getAllSwaps(): Flow<List<VisitSessionSwap>>
+
+    @Query("SELECT * FROM visit_session_swaps WHERE schoolId = :schoolId ORDER BY updatedAt DESC, createdAt DESC")
+    suspend fun getSwapsBySchoolList(schoolId: String): List<VisitSessionSwap>
+
+    @Query("SELECT * FROM visit_session_swaps WHERE id = :id LIMIT 1")
+    suspend fun getById(id: Long): VisitSessionSwap?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(swap: VisitSessionSwap): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(swaps: List<VisitSessionSwap>)
+
+    @Update
+    suspend fun update(swap: VisitSessionSwap)
+
+    @Delete
+    suspend fun delete(swap: VisitSessionSwap)
+
+    @Query("DELETE FROM visit_session_swaps WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM visit_session_swaps WHERE fromSessionId = :sessionId OR toSessionId = :sessionId")
+    suspend fun deleteBySessionId(sessionId: Long)
+
+    @Query("DELETE FROM visit_session_swaps WHERE schoolId = :schoolId")
     suspend fun deleteBySchoolId(schoolId: String)
 }

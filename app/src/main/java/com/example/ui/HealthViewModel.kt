@@ -57,6 +57,7 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.VisitSessionDraft
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliAccount
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
@@ -155,7 +156,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.christianWorshipLocalSaveDao(),
             db.bibleBookmarkDao(),
             db.bibleNoteDao(),
-            db.visitConfirmationDao()
+            db.visitConfirmationDao(),
+            db.visitSessionSwapDao()
         )
     }
 
@@ -1918,6 +1920,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
             confirmations.filter { it.schoolId.equals(tenant, ignoreCase = true) }
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+
+    val visitSessionSwaps: StateFlow<List<VisitSessionSwap>> = combine(
+        repository.allVisitSessionSwaps,
+        _schoolProfile,
+        _currentUserRole
+    ) { swaps, profile, role ->
+        if (role == UserRole.SUPERADMIN) {
+            swaps
+        } else {
+            val tenant = profile.tenantCode.ifBlank { "SRT1-KDR" }
+            swaps.filter { it.schoolId.equals(tenant, ignoreCase = true) }
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
@@ -4769,8 +4784,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val activeSchool = session.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val studentCleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
             val cleanDistrict = VisitHelper.normalizeDistrict(student.district)
+            val currentSwaps = visitSessionSwaps.value
+            val allSess = visitSessions.value
             val outOfSchedule = session.getDistrictsList().isNotEmpty() &&
-                !VisitHelper.isStudentInSessionSchedule(session, student)
+                !VisitHelper.isStudentEffectiveInSession(session, student, currentSwaps, allSess)
 
             val record = VisitRecord(
                 id = PocketBaseSyncManager.generateCloudSafeId(),
@@ -4900,6 +4917,256 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun swapStudentVisitSession(
+        student: ChildStudent,
+        fromSession: VisitSession,
+        targetSession: VisitSession,
+        reason: String = "",
+        clearPriorCheckIn: Boolean = true,
+        onComplete: (success: Boolean, message: String, swap: VisitSessionSwap?) -> Unit = { _, _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            if (fromSession.id == targetSession.id) {
+                val msg = if (isEn) "Select a different target session." else "Pilih sesi tujuan yang berbeda dari sesi asal."
+                onComplete(false, msg, null)
+                return@launch
+            }
+            val role = _currentUserRole.value
+            val isAdminRole = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            val actorUsername = _currentUsername.value.orEmpty().trim()
+            val actorName = _waliName.value.ifBlank { if (isAdminRole) "Admin Sekolah" else "Wali Asuh" }
+            if (!VisitHelper.canWaliSwapStudent(student, isAdminRole, actorUsername, actorName, isAnakSuperAdmin.value)) {
+                val msg = if (isEn) {
+                    "Only the assigned Wali Asuh (or Tandem / Admin) can move this child's visit session."
+                } else {
+                    "Hanya Wali Asuh anak binaan ini (atau Tandem / Admin) yang dapat menukar sesi kunjungannya."
+                }
+                onComplete(false, msg, null)
+                return@launch
+            }
+
+            val now = System.currentTimeMillis()
+            val activeSchool = targetSession.schoolId.ifBlank {
+                fromSession.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
+            }
+
+            // Tetap izinkan pindah walaupun orang tua sudah terlanjur check-in di sesi asal (antisipasi kelalaian orang tua)
+            val fromRecords = repository.getVisitRecordsBySessionList(fromSession.id)
+                .filter { VisitHelper.matchesRecordToStudent(it, student) }
+            val latestPriorRecord = fromRecords.maxByOrNull { it.checkedInAt }
+            if (clearPriorCheckIn && fromRecords.isNotEmpty()) {
+                fromRecords.forEach { rec ->
+                    repository.deleteVisitRecord(rec)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.deleteRemoteVisitRecord(getApplication(), rec.id)
+                    }
+                }
+            }
+
+            // Sinkronkan konfirmasi / QR orang tua jika sudah dikonfirmasi di sesi asal
+            val fromConfirmations = repository.getVisitConfirmationsBySessionList(fromSession.id)
+                .filter { VisitHelper.matchesConfirmationToStudent(it, student) }
+            val existingTargetConfirmation = repository.getVisitConfirmationBySessionAndStudent(targetSession.id, student.id)
+            var migratedConfirmation: VisitConfirmation? = null
+            fromConfirmations.forEach { oldConf ->
+                repository.deleteVisitConfirmation(oldConf)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.deleteRemoteVisitConfirmation(getApplication(), oldConf.id)
+                }
+                if (oldConf.isHadir && existingTargetConfirmation == null && migratedConfirmation == null) {
+                    val targetDefaultDate = targetSession.getVisitDatesList().firstOrNull() ?: targetSession.createdAt
+                    migratedConfirmation = VisitConfirmation(
+                        id = PocketBaseSyncManager.generateCloudSafeId(),
+                        sessionId = targetSession.id,
+                        sessionTitle = targetSession.title,
+                        visitDate = VisitHelper.normalizeDayStart(targetDefaultDate),
+                        studentId = student.id,
+                        studentName = student.name,
+                        studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik),
+                        studentNis = student.nis,
+                        studentClass = student.classGrade,
+                        studentDorm = student.dormitory,
+                        studentDistrict = VisitHelper.normalizeDistrict(student.district),
+                        parentUsername = oldConf.parentUsername,
+                        visitorName = oldConf.visitorName,
+                        visitorRelation = oldConf.visitorRelation,
+                        attendanceStatus = VisitConfirmation.STATUS_HADIR,
+                        estimatedArrivalTime = oldConf.estimatedArrivalTime,
+                        notes = oldConf.notes,
+                        barcodeToken = VisitHelper.buildBarcodeToken(targetSession.id, student.id),
+                        schoolId = activeSchool,
+                        confirmedAt = oldConf.confirmedAt.takeIf { it > 0L } ?: now,
+                        updatedAt = now
+                    )
+                }
+            }
+            migratedConfirmation?.let { conf ->
+                repository.insertVisitConfirmation(conf)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.uploadSingleVisitConfirmation(getApplication(), conf)
+                }
+            }
+
+            val schoolSwaps = repository.getVisitSessionSwapsBySchoolList(activeSchool)
+            val incomingToFrom = VisitHelper.findIncomingSwapToSession(fromSession.id, student, schoolSwaps)
+            val existingOutgoing = VisitHelper.findOutgoingSwapFromSession(fromSession.id, student, schoolSwaps)
+
+            if (incomingToFrom != null && targetSession.id == incomingToFrom.fromSessionId) {
+                // Dikembalikan ke sesi asal semula -> hapus record swap
+                repository.deleteVisitSessionSwap(incomingToFrom)
+                val restoredMsg = if (isEn) {
+                    "${student.name}'s schedule restored to ${targetSession.title}."
+                } else {
+                    "Jadwal kunjungan ${student.name} dikembalikan ke ${targetSession.title}."
+                }
+                onComplete(true, restoredMsg, null)
+                if (!isUnitTestEnvironment()) {
+                    PocketBaseSyncManager.deleteRemoteVisitSessionSwap(getApplication(), incomingToFrom.id)
+                }
+                return@launch
+            }
+
+            val originalFromSessionId = incomingToFrom?.fromSessionId ?: fromSession.id
+            val originalFromSessionTitle = incomingToFrom?.fromSessionTitle?.takeIf { it.isNotBlank() } ?: fromSession.title
+            val swapId = incomingToFrom?.id ?: existingOutgoing?.id ?: PocketBaseSyncManager.generateCloudSafeId()
+            val prevHadCheckIn = incomingToFrom?.hadPriorCheckIn ?: existingOutgoing?.hadPriorCheckIn ?: false
+            val prevCheckInAt = incomingToFrom?.priorCheckInAt ?: existingOutgoing?.priorCheckInAt ?: 0L
+
+            val cleanNik = com.example.util.StudentCsvParser.cleanDigitsOnly(student.nik)
+            val cleanDistrict = VisitHelper.normalizeDistrict(student.district)
+            val swap = VisitSessionSwap(
+                id = swapId,
+                schoolId = activeSchool,
+                monthYear = targetSession.monthYear.ifBlank { fromSession.monthYear },
+                fromSessionId = originalFromSessionId,
+                fromSessionTitle = originalFromSessionTitle,
+                toSessionId = targetSession.id,
+                toSessionTitle = targetSession.title,
+                studentId = student.id,
+                studentName = student.name,
+                studentNik = cleanNik,
+                studentNis = student.nis,
+                studentClass = student.classGrade,
+                studentDorm = student.dormitory,
+                studentDistrict = cleanDistrict,
+                reason = reason.trim(),
+                hadPriorCheckIn = prevHadCheckIn || (latestPriorRecord != null),
+                priorCheckInAt = latestPriorRecord?.checkedInAt ?: prevCheckInAt,
+                swappedByUsername = actorUsername,
+                swappedByName = actorName,
+                createdAt = incomingToFrom?.createdAt ?: existingOutgoing?.createdAt ?: now,
+                updatedAt = now
+            )
+            repository.insertVisitSessionSwap(swap)
+            val msg = if (isEn) {
+                val clearedHint = if (latestPriorRecord != null && clearPriorCheckIn) " (prior check-in cleared)" else ""
+                "${student.name} moved to ${targetSession.title}$clearedHint."
+            } else {
+                val clearedHint = if (latestPriorRecord != null && clearPriorCheckIn) " (check-in lama di sesi asal dibersihkan)" else ""
+                "Jadwal ${student.name} berhasil dipindah ke ${targetSession.title}$clearedHint."
+            }
+            onComplete(true, msg, swap)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.uploadSingleVisitSessionSwap(getApplication(), swap)
+            }
+        }
+    }
+
+    fun revertVisitSessionSwap(
+        swap: VisitSessionSwap,
+        onComplete: (success: Boolean, message: String) -> Unit = { _, _ -> }
+    ) {
+        viewModelScope.launch {
+            val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+            val matchedStudent = students.value.firstOrNull { VisitHelper.matchesSwapToStudent(swap, it) }
+            val role = _currentUserRole.value
+            val isAdminRole = role == UserRole.ADMIN || role == UserRole.SUPERADMIN
+            if (matchedStudent != null && !VisitHelper.canWaliSwapStudent(
+                    student = matchedStudent,
+                    isAdmin = isAdminRole,
+                    currentUsername = _currentUsername.value.orEmpty().trim(),
+                    currentWaliName = _waliName.value,
+                    isAnakSuperAdmin = isAnakSuperAdmin.value
+                )
+            ) {
+                val msg = if (isEn) {
+                    "Only the assigned Wali Asuh (or Tandem / Admin) can restore this visit schedule."
+                } else {
+                    "Hanya Wali Asuh anak binaan ini (atau Tandem / Admin) yang dapat mengembalikan jadwal."
+                }
+                onComplete(false, msg)
+                return@launch
+            }
+
+            // Bersihkan check-in atau konfirmasi di sesi tujuan (toSessionId) agar kembali rapi ke sesi asal
+            if (matchedStudent != null) {
+                val toRecords = repository.getVisitRecordsBySessionList(swap.toSessionId)
+                    .filter { VisitHelper.matchesRecordToStudent(it, matchedStudent) }
+                toRecords.forEach { rec ->
+                    repository.deleteVisitRecord(rec)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.deleteRemoteVisitRecord(getApplication(), rec.id)
+                    }
+                }
+                val toConfs = repository.getVisitConfirmationsBySessionList(swap.toSessionId)
+                    .filter { VisitHelper.matchesConfirmationToStudent(it, matchedStudent) }
+                val originSession = visitSessions.value.firstOrNull { it.id == swap.fromSessionId }
+                val existingOriginConf = repository.getVisitConfirmationBySessionAndStudent(swap.fromSessionId, matchedStudent.id)
+                var restoredConf: VisitConfirmation? = null
+                toConfs.forEach { oldConf ->
+                    repository.deleteVisitConfirmation(oldConf)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.deleteRemoteVisitConfirmation(getApplication(), oldConf.id)
+                    }
+                    if (oldConf.isHadir && originSession != null && existingOriginConf == null && restoredConf == null) {
+                        val originDate = originSession.getVisitDatesList().firstOrNull() ?: originSession.createdAt
+                        restoredConf = VisitConfirmation(
+                            id = PocketBaseSyncManager.generateCloudSafeId(),
+                            sessionId = originSession.id,
+                            sessionTitle = originSession.title,
+                            visitDate = VisitHelper.normalizeDayStart(originDate),
+                            studentId = matchedStudent.id,
+                            studentName = matchedStudent.name,
+                            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(matchedStudent.nik),
+                            studentNis = matchedStudent.nis,
+                            studentClass = matchedStudent.classGrade,
+                            studentDorm = matchedStudent.dormitory,
+                            studentDistrict = VisitHelper.normalizeDistrict(matchedStudent.district),
+                            parentUsername = oldConf.parentUsername,
+                            visitorName = oldConf.visitorName,
+                            visitorRelation = oldConf.visitorRelation,
+                            attendanceStatus = VisitConfirmation.STATUS_HADIR,
+                            estimatedArrivalTime = oldConf.estimatedArrivalTime,
+                            notes = oldConf.notes,
+                            barcodeToken = VisitHelper.buildBarcodeToken(originSession.id, matchedStudent.id),
+                            schoolId = swap.schoolId,
+                            confirmedAt = oldConf.confirmedAt.takeIf { it > 0L } ?: System.currentTimeMillis(),
+                            updatedAt = System.currentTimeMillis()
+                        )
+                    }
+                }
+                restoredConf?.let { conf ->
+                    repository.insertVisitConfirmation(conf)
+                    if (!isUnitTestEnvironment()) {
+                        PocketBaseSyncManager.uploadSingleVisitConfirmation(getApplication(), conf)
+                    }
+                }
+            }
+
+            repository.deleteVisitSessionSwap(swap)
+            val msg = if (isEn) {
+                "${swap.studentName} restored to ${swap.fromSessionTitle.ifBlank { "original session" }}."
+            } else {
+                "Jadwal ${swap.studentName} dikembalikan ke ${swap.fromSessionTitle.ifBlank { "sesi asal" }}."
+            }
+            onComplete(true, msg)
+            if (!isUnitTestEnvironment()) {
+                PocketBaseSyncManager.deleteRemoteVisitSessionSwap(getApplication(), swap.id)
+            }
+        }
+    }
+
     fun syncVisitsOnlineQuietly() {
         if (isUnitTestEnvironment()) return
         val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
@@ -4948,6 +5215,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.deleteWaliAccountsBySchool(targetId)
             repository.deleteShiftMessagesBySchool(targetId)
             repository.deleteHaidRecordsBySchool(targetId)
+            repository.deleteVisitSessionSwapsBySchool(targetId)
             repository.deleteVisitConfirmationsBySchool(targetId)
             repository.deleteVisitRecordsBySchool(targetId)
             repository.deleteVisitSessionsBySchool(targetId)
@@ -7516,6 +7784,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteParentAccessLinksBySchool(targetSchoolId)
                 repository.deleteFastingRecordsBySchool(targetSchoolId)
                 repository.deleteFastingSessionsBySchool(targetSchoolId)
+                repository.deleteVisitSessionSwapsBySchool(targetSchoolId)
                 repository.deleteVisitConfirmationsBySchool(targetSchoolId)
                 repository.deleteVisitRecordsBySchool(targetSchoolId)
                 repository.deleteVisitSessionsBySchool(targetSchoolId)

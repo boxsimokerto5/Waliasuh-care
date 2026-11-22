@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -68,6 +69,7 @@ import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.ui.components.ParentMenuPdfHeaderCard
 import com.example.ui.components.ParentReadyPdfDialogData
 import com.example.util.ParentPortalPdfHelper
@@ -83,6 +85,8 @@ fun ParentVisitContent(
     sessions: List<VisitSession>,
     confirmations: List<VisitConfirmation>,
     visitRecords: List<VisitRecord>,
+    allVisitSessions: List<VisitSession> = sessions,
+    visitSessionSwaps: List<VisitSessionSwap> = emptyList(),
     defaultParentName: String = "",
     schoolProfile: SchoolProfile = SchoolProfile(),
     waliName: String = "Wali Asuh",
@@ -114,11 +118,15 @@ fun ParentVisitContent(
         VisitHelper.displayDistrict(studentDistrictKey, isEn)
     }
 
-    val matchedSessions = remember(sessions, student) {
+    val matchedSessions = remember(sessions, allVisitSessions, visitSessionSwaps, student) {
         if (student == null) emptyList()
         else {
+            val allSess = allVisitSessions.ifEmpty { sessions }
             sessions
-                .filter { it.publishedToParent && VisitHelper.isStudentInSessionSchedule(it, student) }
+                .filter {
+                    it.publishedToParent &&
+                        VisitHelper.isStudentEffectiveInSession(it, student, visitSessionSwaps, allSess)
+                }
                 .sortedWith(
                     compareByDescending<VisitSession> { it.isActive }
                         .thenBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
@@ -503,6 +511,65 @@ fun ParentVisitContent(
                                         color = if (isMine) tealPrimary else Color(0xFF475569),
                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                     )
+                                }
+                            }
+                        }
+
+                        val incomingSwap = remember(sess.id, targetStudent.id, visitSessionSwaps) {
+                            VisitHelper.findIncomingSwapToSession(sess.id, targetStudent, visitSessionSwaps)
+                        }
+                        if (incomingSwap != null) {
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("banner_parent_visit_swapped_${sess.id}"),
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFEEF2FF),
+                                border = BorderStroke(1.dp, Color(0xFFA5B4FC))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.SwapHoriz,
+                                        contentDescription = null,
+                                        tint = Color(0xFF4338CA),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Visit Schedule Moved to This Session"
+                                            } else {
+                                                "Jadwal Kunjungan Dipindahkan ke Sesi Ini"
+                                            },
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color(0xFF3730A3)
+                                        )
+                                        val originLabel = incomingSwap.fromSessionTitle.ifBlank {
+                                            if (isEn) "previous session" else "sesi sebelumnya"
+                                        }
+                                        Text(
+                                            text = if (isEn) {
+                                                "Adjusted by Wali Asuh from \"$originLabel\"."
+                                            } else {
+                                                "Disesuaikan oleh Wali Asuh dari sesi \"$originLabel\"."
+                                            },
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF312E81)
+                                        )
+                                        if (incomingSwap.reason.isNotBlank()) {
+                                            Text(
+                                                text = (if (isEn) "Reason: " else "Alasan: ") + incomingSwap.reason,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF4338CA)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }

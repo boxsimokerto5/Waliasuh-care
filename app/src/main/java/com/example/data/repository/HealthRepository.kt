@@ -23,6 +23,7 @@ import com.example.data.dao.MengajiRecordDao
 import com.example.data.dao.VisitConfirmationDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
+import com.example.data.dao.VisitSessionSwapDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentExpectationDao
 import com.example.data.dao.ParentMessageDao
@@ -65,6 +66,7 @@ import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
@@ -103,7 +105,8 @@ class HealthRepository(
     private val christianWorshipLocalSaveDao: ChristianWorshipLocalSaveDao? = null,
     private val bibleBookmarkDao: BibleBookmarkDao? = null,
     private val bibleNoteDao: BibleNoteDao? = null,
-    private val visitConfirmationDao: VisitConfirmationDao? = null
+    private val visitConfirmationDao: VisitConfirmationDao? = null,
+    private val visitSessionSwapDao: VisitSessionSwapDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -126,6 +129,8 @@ class HealthRepository(
     val allVisitRecords: Flow<List<VisitRecord>> = visitRecordDao?.getAllRecords() ?: emptyFlow()
     val allVisitConfirmations: Flow<List<VisitConfirmation>> =
         visitConfirmationDao?.getAllConfirmations() ?: emptyFlow()
+    val allVisitSessionSwaps: Flow<List<VisitSessionSwap>> =
+        visitSessionSwapDao?.getAllSwaps() ?: emptyFlow()
     val allParentAccessLinks: Flow<List<ParentAccessLink>> = parentAccessLinkDao?.getAllLinks() ?: emptyFlow()
     val allParentMessages: Flow<List<ParentMessage>> = parentMessageDao?.getAllMessages() ?: emptyFlow()
     val allParentExpectations: Flow<List<ParentExpectation>> = parentExpectationDao?.getAllExpectations() ?: emptyFlow()
@@ -472,6 +477,7 @@ class HealthRepository(
     suspend fun deleteVisitSession(session: VisitSession) {
         visitRecordDao?.deleteBySessionId(session.id)
         visitConfirmationDao?.deleteBySessionId(session.id)
+        visitSessionSwapDao?.deleteBySessionId(session.id)
         visitSessionDao?.delete(session)
     }
 
@@ -533,6 +539,28 @@ class HealthRepository(
 
     suspend fun deleteVisitConfirmationsBySchool(schoolId: String) {
         visitConfirmationDao?.deleteBySchoolId(schoolId)
+    }
+
+    suspend fun insertVisitSessionSwap(swap: VisitSessionSwap): Long =
+        visitSessionSwapDao?.insert(swap) ?: 0L
+
+    suspend fun insertAllVisitSessionSwaps(swaps: List<VisitSessionSwap>) {
+        visitSessionSwapDao?.insertAll(swaps)
+    }
+
+    suspend fun getVisitSessionSwapsBySchoolList(schoolId: String): List<VisitSessionSwap> =
+        visitSessionSwapDao?.getSwapsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteVisitSessionSwap(swap: VisitSessionSwap) {
+        visitSessionSwapDao?.delete(swap)
+    }
+
+    suspend fun deleteVisitSessionSwapById(id: Long) {
+        visitSessionSwapDao?.deleteById(id)
+    }
+
+    suspend fun deleteVisitSessionSwapsBySchool(schoolId: String) {
+        visitSessionSwapDao?.deleteBySchoolId(schoolId)
     }
 
     // --- Parent Access Link & Two-Way Messages (Hubungan Orang Tua) ---

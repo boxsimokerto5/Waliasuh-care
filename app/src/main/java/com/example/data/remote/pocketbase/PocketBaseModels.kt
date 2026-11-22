@@ -40,6 +40,7 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliAccount
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryPost
@@ -1343,6 +1344,92 @@ data class PbVisitConfirmationDto(
                 notes = model.notes,
                 barcodeToken = model.barcodeToken,
                 confirmedAt = model.confirmedAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
+@JsonClass(generateAdapter = true)
+data class PbVisitSessionSwapDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "month_year") val monthYear: String? = null,
+    @Json(name = "from_session_id") val fromSessionId: Long = 0L,
+    @Json(name = "from_session_title") val fromSessionTitle: String? = null,
+    @Json(name = "to_session_id") val toSessionId: Long = 0L,
+    @Json(name = "to_session_title") val toSessionTitle: String? = null,
+    @Json(name = "student_id") val studentId: Long = 0L,
+    @Json(name = "student_name") val studentName: String = "",
+    @Json(name = "student_nik") val studentNik: String? = null,
+    @Json(name = "student_nis") val studentNis: String? = null,
+    @Json(name = "student_class") val studentClass: String? = null,
+    @Json(name = "student_dorm") val studentDorm: String? = null,
+    @Json(name = "student_district") val studentDistrict: String? = null,
+    @Json(name = "reason") val reason: String? = null,
+    @Json(name = "had_prior_check_in") val hadPriorCheckIn: Boolean? = null,
+    @Json(name = "prior_check_in_at") val priorCheckInAt: Long? = null,
+    @Json(name = "swapped_by_username") val swappedByUsername: String? = null,
+    @Json(name = "swapped_by_name") val swappedByName: String? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): VisitSessionSwap {
+        val now = System.currentTimeMillis()
+        val resolvedCreated = createdAt?.takeIf { it > 0L } ?: now
+        return VisitSessionSwap(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId,
+            monthYear = monthYear.orEmpty(),
+            fromSessionId = fromSessionId,
+            fromSessionTitle = fromSessionTitle.orEmpty(),
+            toSessionId = toSessionId,
+            toSessionTitle = toSessionTitle.orEmpty(),
+            studentId = studentId,
+            studentName = studentName,
+            studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(studentNik),
+            studentNis = studentNis.orEmpty(),
+            studentClass = studentClass.orEmpty(),
+            studentDorm = studentDorm.orEmpty(),
+            studentDistrict = VisitHelper.normalizeDistrict(studentDistrict),
+            reason = reason.orEmpty(),
+            hadPriorCheckIn = hadPriorCheckIn ?: false,
+            priorCheckInAt = priorCheckInAt ?: 0L,
+            swappedByUsername = swappedByUsername.orEmpty(),
+            swappedByName = swappedByName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh",
+            createdAt = resolvedCreated,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: resolvedCreated
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: VisitSessionSwap): PbVisitSessionSwapDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "visit_swap:${model.schoolId}:${model.fromSessionId}:${model.studentId}:${model.studentName}"
+            )
+            return PbVisitSessionSwapDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                monthYear = model.monthYear,
+                fromSessionId = model.fromSessionId,
+                fromSessionTitle = model.fromSessionTitle,
+                toSessionId = model.toSessionId,
+                toSessionTitle = model.toSessionTitle,
+                studentId = model.studentId,
+                studentName = model.studentName,
+                studentNik = com.example.util.StudentCsvParser.cleanDigitsOnly(model.studentNik),
+                studentNis = model.studentNis,
+                studentClass = model.studentClass,
+                studentDorm = model.studentDorm,
+                studentDistrict = VisitHelper.normalizeDistrict(model.studentDistrict),
+                reason = model.reason,
+                hadPriorCheckIn = model.hadPriorCheckIn,
+                priorCheckInAt = model.priorCheckInAt,
+                swappedByUsername = model.swappedByUsername,
+                swappedByName = model.swappedByName,
+                createdAt = model.createdAt,
                 updatedAt = model.updatedAt
             )
         }

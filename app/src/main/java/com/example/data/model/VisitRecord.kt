@@ -128,6 +128,31 @@ data class VisitConfirmation(
     }
 }
 
+@Entity(tableName = "visit_session_swaps")
+data class VisitSessionSwap(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val schoolId: String = "SRT1-KDR",
+    val monthYear: String = "",
+    val fromSessionId: Long,
+    val fromSessionTitle: String = "",
+    val toSessionId: Long,
+    val toSessionTitle: String = "",
+    val studentId: Long = 0L,
+    val studentName: String = "",
+    val studentNik: String = "",
+    val studentNis: String = "",
+    val studentClass: String = "",
+    val studentDorm: String = "",
+    val studentDistrict: String = "",
+    val reason: String = "",
+    val hadPriorCheckIn: Boolean = false,
+    val priorCheckInAt: Long = 0L,
+    val swappedByUsername: String = "",
+    val swappedByName: String = "Wali Asuh",
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
 data class VisitSessionDraft(
     val title: String,
     val monthYear: String,
@@ -303,6 +328,106 @@ object VisitHelper {
         val allowedLower = session.getDistrictsList().map { it.lowercase(Locale.US) }.toSet()
         if (allowedLower.isEmpty()) return false
         return resolveStudentDistrictKey(student).lowercase(Locale.US) in allowedLower
+    }
+
+    fun matchesSwapToStudent(swap: VisitSessionSwap, student: ChildStudent): Boolean {
+        if (student.id > 0L && swap.studentId == student.id) return true
+        val studentNik = StudentCsvParser.cleanDigitsOnly(student.nik)
+        val swapNik = StudentCsvParser.cleanDigitsOnly(swap.studentNik)
+        if (studentNik.isNotBlank() && studentNik == swapNik) return true
+        if (student.nis.isNotBlank() && swap.studentNis.equals(student.nis, ignoreCase = true)) return true
+        return student.name.isNotBlank() &&
+            swap.studentName.trim().equals(student.name.trim(), ignoreCase = true)
+    }
+
+    fun canWaliSwapStudent(
+        student: ChildStudent,
+        isAdmin: Boolean,
+        currentUsername: String,
+        currentWaliName: String,
+        isAnakSuperAdmin: Boolean = false
+    ): Boolean {
+        if (isAdmin || isAnakSuperAdmin) return true
+        if (!TandemWaliHelper.hasPrimaryWali(student)) return true
+        return TandemWaliHelper.isAssignedWali(student, currentUsername, currentWaliName)
+    }
+
+    fun findOutgoingSwapFromSession(
+        sessionId: Long,
+        student: ChildStudent,
+        swaps: List<VisitSessionSwap>,
+        allSessions: List<VisitSession> = emptyList()
+    ): VisitSessionSwap? {
+        return swaps
+            .filter { swap ->
+                swap.fromSessionId == sessionId &&
+                    swap.toSessionId != sessionId &&
+                    matchesSwapToStudent(swap, student) &&
+                    (allSessions.isEmpty() || allSessions.any { it.id == swap.toSessionId })
+            }
+            .maxByOrNull { it.updatedAt }
+    }
+
+    fun findIncomingSwapToSession(
+        sessionId: Long,
+        student: ChildStudent,
+        swaps: List<VisitSessionSwap>
+    ): VisitSessionSwap? {
+        return swaps
+            .filter { swap ->
+                swap.toSessionId == sessionId &&
+                    swap.fromSessionId != sessionId &&
+                    matchesSwapToStudent(swap, student)
+            }
+            .maxByOrNull { it.updatedAt }
+    }
+
+    fun effectiveScheduledStudentsForSession(
+        session: VisitSession,
+        allStudents: List<ChildStudent>,
+        swaps: List<VisitSessionSwap>,
+        allSessions: List<VisitSession> = emptyList()
+    ): List<ChildStudent> {
+        if (swaps.isEmpty()) return scheduledStudentsForSession(session, allStudents)
+        val base = scheduledStudentsForSession(session, allStudents)
+            .filter { student ->
+                findOutgoingSwapFromSession(session.id, student, swaps, allSessions) == null
+            }
+        val incoming = allStudents.filter { student ->
+            findIncomingSwapToSession(session.id, student, swaps) != null
+        }
+        return (base + incoming)
+            .distinctBy { it.id }
+            .sortedWith(
+                compareBy<ChildStudent> { resolveStudentDistrictKey(it).lowercase(Locale.US) }
+                    .thenBy { it.name.lowercase(Locale.US) }
+            )
+    }
+
+    fun swappedOutFromSession(
+        session: VisitSession,
+        allStudents: List<ChildStudent>,
+        swaps: List<VisitSessionSwap>,
+        allSessions: List<VisitSession> = emptyList()
+    ): List<Pair<ChildStudent, VisitSessionSwap>> {
+        if (swaps.isEmpty()) return emptyList()
+        return scheduledStudentsForSession(session, allStudents)
+            .mapNotNull { student ->
+                findOutgoingSwapFromSession(session.id, student, swaps, allSessions)?.let { swap ->
+                    student to swap
+                }
+            }
+    }
+
+    fun isStudentEffectiveInSession(
+        session: VisitSession,
+        student: ChildStudent,
+        swaps: List<VisitSessionSwap>,
+        allSessions: List<VisitSession> = emptyList()
+    ): Boolean {
+        if (findIncomingSwapToSession(session.id, student, swaps) != null) return true
+        if (findOutgoingSwapFromSession(session.id, student, swaps, allSessions) != null) return false
+        return isStudentInSessionSchedule(session, student)
     }
 
     fun matchesRecordToStudent(record: VisitRecord, student: ChildStudent): Boolean {

@@ -36,8 +36,10 @@ import androidx.compose.material.icons.filled.ListAlt
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
@@ -80,6 +82,7 @@ import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
@@ -101,8 +104,12 @@ fun DaftarHadirKunjunganSheet(
     students: List<ChildStudent>,
     visitRecords: List<VisitRecord>,
     visitConfirmations: List<VisitConfirmation> = emptyList(),
+    visitSessionSwaps: List<VisitSessionSwap> = emptyList(),
     schoolProfile: SchoolProfile,
     waliName: String,
+    isAdmin: Boolean = false,
+    currentUsername: String = "",
+    isAnakSuperAdmin: Boolean = false,
     initialTab: Int = 0,
     onRecordVisitCheckIn: (
         session: VisitSession,
@@ -114,6 +121,8 @@ fun DaftarHadirKunjunganSheet(
         onResult: (added: Boolean, message: String, record: VisitRecord?) -> Unit
     ) -> Unit,
     onDeleteVisitRecord: (VisitRecord) -> Unit,
+    onSwapStudentSession: ((student: ChildStudent, fromSession: VisitSession, targetSession: VisitSession, reason: String, clearPriorCheckIn: Boolean) -> Unit)? = null,
+    onRevertSessionSwap: ((VisitSessionSwap) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -160,6 +169,7 @@ fun DaftarHadirKunjunganSheet(
     var scannerFeedback by remember { mutableStateOf<ScannerFloatingFeedback?>(null) }
     var outOfScheduleStudentConfirm by remember { mutableStateOf<Pair<ChildStudent, String>?>(null) }
     var pendingPdfAction by remember { mutableStateOf<VisitPdfExportAction?>(null) }
+    var swapTargetStudent by remember { mutableStateOf<ChildStudent?>(null) }
 
     val shortDateFmt = remember(locale) { SimpleDateFormat("EEE, d MMM", locale) }
     val timeFmt = remember(locale) { SimpleDateFormat("HH:mm", locale) }
@@ -174,12 +184,25 @@ fun DaftarHadirKunjunganSheet(
         }
     }
 
-    val scheduledStudents = remember(selectedSession, students) {
+    val scheduledStudents = remember(selectedSession, students, visitSessionSwaps, sortedSessions) {
         if (selectedSession == null) emptyList()
-        else {
-            val byDistrict = VisitHelper.scheduledStudentsForSession(selectedSession, students)
-            byDistrict.ifEmpty { students.sortedBy { it.name.lowercase(Locale.US) } }
+        else if (selectedSession.getDistrictsList().isEmpty() &&
+            visitSessionSwaps.none { it.toSessionId == selectedSession.id }
+        ) {
+            students.sortedBy { it.name.lowercase(Locale.US) }
+        } else {
+            VisitHelper.effectiveScheduledStudentsForSession(
+                session = selectedSession,
+                allStudents = students,
+                swaps = visitSessionSwaps,
+                allSessions = sortedSessions
+            )
         }
+    }
+
+    val swappedOutPairs = remember(selectedSession, students, visitSessionSwaps, sortedSessions) {
+        if (selectedSession == null) emptyList()
+        else VisitHelper.swappedOutFromSession(selectedSession, students, visitSessionSwaps, sortedSessions)
     }
 
     val filteredManualRoster = remember(scheduledStudents, selectedDistrictFilter, searchQuery) {
@@ -218,7 +241,7 @@ fun DaftarHadirKunjunganSheet(
     ) {
         val sess = selectedSession ?: return
         val outOfSchedule = sess.getDistrictsList().isNotEmpty() &&
-            !VisitHelper.isStudentInSessionSchedule(sess, student)
+            !VisitHelper.isStudentEffectiveInSession(sess, student, visitSessionSwaps, sortedSessions)
         if (outOfSchedule && !bypassOutOfScheduleCheck) {
             outOfScheduleStudentConfirm = student to method
             return
@@ -830,6 +853,17 @@ fun DaftarHadirKunjunganSheet(
                                 val matchedConf = selectedSession?.let { sess ->
                                     VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, st, selectedVisitDateMillis)
                                 }
+                                val incomingSwap = selectedSession?.let { sess ->
+                                    VisitHelper.findIncomingSwapToSession(sess.id, st, visitSessionSwaps)
+                                }
+                                val canSwap = selectedSession != null && onSwapStudentSession != null &&
+                                    VisitHelper.canWaliSwapStudent(
+                                        student = st,
+                                        isAdmin = isAdmin,
+                                        currentUsername = currentUsername,
+                                        currentWaliName = waliName,
+                                        isAnakSuperAdmin = isAnakSuperAdmin
+                                    )
                                 val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -874,6 +908,27 @@ fun DaftarHadirKunjunganSheet(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
+                                                if (incomingSwap != null) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = Color(0xFFEDE9FE),
+                                                        modifier = Modifier.testTag("badge_manual_swapped_in_${st.id}")
+                                                    ) {
+                                                        Text(
+                                                            text = if (isEn) {
+                                                                "Moved from ${incomingSwap.fromSessionTitle}"
+                                                            } else {
+                                                                "Pindahan dari ${incomingSwap.fromSessionTitle}"
+                                                            },
+                                                            fontSize = 9.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF6D28D9),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
                                                 if (matchedConf != null) {
                                                     Surface(
                                                         shape = RoundedCornerShape(6.dp),
@@ -904,33 +959,139 @@ fun DaftarHadirKunjunganSheet(
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        if (matchedRec != null) {
-                                            Surface(
-                                                onClick = { onDeleteVisitRecord(matchedRec) },
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = Color(0xFFDCFCE7)
-                                            ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            if (canSwap) {
+                                                OutlinedButton(
+                                                    onClick = { swapTargetStudent = st },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier
+                                                        .heightIn(min = 48.dp)
+                                                        .testTag("btn_manual_swap_${st.id}")
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.SwapHoriz,
+                                                        contentDescription = if (isEn) "Swap Session" else "Tukar Sesi",
+                                                        tint = indigoPrimary,
+                                                        modifier = Modifier.size(14.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(3.dp))
+                                                    Text(
+                                                        text = if (isEn) "Swap" else "Tukar",
+                                                        fontSize = 10.5.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = indigoPrimary
+                                                    )
+                                                }
+                                            }
+                                            if (matchedRec != null) {
+                                                Surface(
+                                                    onClick = { onDeleteVisitRecord(matchedRec) },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    color = Color(0xFFDCFCE7),
+                                                    modifier = Modifier.heightIn(min = 48.dp)
+                                                ) {
+                                                    Box(
+                                                        contentAlignment = Alignment.Center,
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = "✓ ${timeFmt.format(Date(matchedRec.checkedInAt))}",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF15803D)
+                                                        )
+                                                    }
+                                                }
+                                            } else {
+                                                OutlinedButton(
+                                                    onClick = { triggerCheckIn(st, VisitRecord.METHOD_MANUAL) },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                                    modifier = Modifier.heightIn(min = 48.dp)
+                                                ) {
+                                                    Text(
+                                                        text = if (isEn) "Mark Present" else "Hadir Manual",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = tealPrimary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (swappedOutPairs.isNotEmpty()) {
+                                item(key = "manual_swapped_out_hdr") {
+                                    Text(
+                                        text = if (isEn) {
+                                            "Moved to Another Session (${swappedOutPairs.size}):"
+                                        } else {
+                                            "Dipindah ke Sesi Lain (${swappedOutPairs.size}):"
+                                        },
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF6D28D9),
+                                        modifier = Modifier.padding(top = 6.dp)
+                                    )
+                                }
+                                itemsIndexed(swappedOutPairs, key = { _, pair -> "manual_out_${pair.first.id}" }) { _, pair ->
+                                    val st = pair.first
+                                    val swap = pair.second
+                                    val canRevert = onRevertSessionSwap != null && VisitHelper.canWaliSwapStudent(
+                                        student = st,
+                                        isAdmin = isAdmin,
+                                        currentUsername = currentUsername,
+                                        currentWaliName = waliName,
+                                        isAnakSuperAdmin = isAnakSuperAdmin
+                                    )
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("card_manual_swapped_out_${st.id}"),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF5F3FF)),
+                                        border = BorderStroke(1.dp, Color(0xFFDDD6FE))
+                                    ) {
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                                Text(st.name, fontSize = 12.5.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                                 Text(
-                                                    text = "✓ ${timeFmt.format(Date(matchedRec.checkedInAt))}",
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFF15803D),
-                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                                    text = if (isEn) {
+                                                        "→ ${swap.toSessionTitle}" + if (swap.reason.isNotBlank()) " • ${swap.reason}" else ""
+                                                    } else {
+                                                        "→ Dipindah ke: ${swap.toSessionTitle}" + if (swap.reason.isNotBlank()) " • ${swap.reason}" else ""
+                                                    },
+                                                    fontSize = 10.5.sp,
+                                                    color = Color(0xFF5B21B6),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
-                                        } else {
-                                            OutlinedButton(
-                                                onClick = { triggerCheckIn(st, VisitRecord.METHOD_MANUAL) },
-                                                shape = RoundedCornerShape(8.dp),
-                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                                modifier = Modifier.heightIn(min = 36.dp)
-                                            ) {
-                                                Text(
-                                                    text = if (isEn) "Mark Present" else "Hadir Manual",
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = tealPrimary
-                                                )
+                                            if (canRevert) {
+                                                OutlinedButton(
+                                                    onClick = { onRevertSessionSwap?.invoke(swap) },
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                                    modifier = Modifier
+                                                        .heightIn(min = 48.dp)
+                                                        .testTag("btn_manual_revert_swap_${st.id}")
+                                                ) {
+                                                    Icon(Icons.Default.Restore, contentDescription = null, tint = Color(0xFF6D28D9), modifier = Modifier.size(14.dp))
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text(if (isEn) "Restore" else "Kembalikan", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF6D28D9))
+                                                }
                                             }
                                         }
                                     }
@@ -1118,5 +1279,32 @@ fun DaftarHadirKunjunganSheet(
         } else {
             pendingPdfAction = null
         }
+    }
+
+    val swapStudent = swapTargetStudent
+    val activeSess = selectedSession
+    if (swapStudent != null && activeSess != null && onSwapStudentSession != null) {
+        val priorRec = visitRecords
+            .filter { it.sessionId == activeSess.id }
+            .let { VisitHelper.findVisitForStudent(it, swapStudent) }
+        val existingIncoming = VisitHelper.findIncomingSwapToSession(activeSess.id, swapStudent, visitSessionSwaps)
+        VisitSessionSwapDialog(
+            student = swapStudent,
+            currentSession = activeSess,
+            allSessions = sortedSessions,
+            priorRecordInCurrentSession = priorRec,
+            existingIncomingSwap = existingIncoming,
+            onConfirmSwap = { targetSession, reason, clearPrior ->
+                swapTargetStudent = null
+                onSwapStudentSession(swapStudent, activeSess, targetSession, reason, clearPrior)
+            },
+            onRevertSwap = if (onRevertSessionSwap != null) {
+                { swap ->
+                    swapTargetStudent = null
+                    onRevertSessionSwap(swap)
+                }
+            } else null,
+            onDismiss = { swapTargetStudent = null }
+        )
     }
 }

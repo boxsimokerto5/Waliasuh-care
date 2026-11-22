@@ -28,6 +28,7 @@ import com.example.data.dao.MengajiRecordDao
 import com.example.data.dao.VisitConfirmationDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
+import com.example.data.dao.VisitSessionSwapDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentExpectationDao
 import com.example.data.dao.ParentMessageDao
@@ -72,6 +73,7 @@ import com.example.data.model.TabunganTransaction
 import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
 import com.example.data.model.WaliScheduleEntry
@@ -91,6 +93,7 @@ import com.example.data.model.WaliShiftCode
         VisitSession::class,
         VisitRecord::class,
         VisitConfirmation::class,
+        VisitSessionSwap::class,
         ParentAccessLink::class,
         ParentMessage::class,
         ParentExpectation::class,
@@ -113,7 +116,7 @@ import com.example.data.model.WaliShiftCode
         BibleBookmark::class,
         BibleNote::class
     ],
-    version = 40,
+    version = 41,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -129,6 +132,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun visitSessionDao(): VisitSessionDao
     abstract fun visitRecordDao(): VisitRecordDao
     abstract fun visitConfirmationDao(): VisitConfirmationDao
+    abstract fun visitSessionSwapDao(): VisitSessionSwapDao
     abstract fun parentAccessLinkDao(): ParentAccessLinkDao
     abstract fun parentMessageDao(): ParentMessageDao
     abstract fun parentExpectationDao(): ParentExpectationDao
@@ -1090,6 +1094,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_40_41 = object : androidx.room.migration.Migration(40, 41) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS visit_session_swaps (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        monthYear TEXT NOT NULL DEFAULT '',
+                        fromSessionId INTEGER NOT NULL,
+                        fromSessionTitle TEXT NOT NULL DEFAULT '',
+                        toSessionId INTEGER NOT NULL,
+                        toSessionTitle TEXT NOT NULL DEFAULT '',
+                        studentId INTEGER NOT NULL DEFAULT 0,
+                        studentName TEXT NOT NULL DEFAULT '',
+                        studentNik TEXT NOT NULL DEFAULT '',
+                        studentNis TEXT NOT NULL DEFAULT '',
+                        studentClass TEXT NOT NULL DEFAULT '',
+                        studentDorm TEXT NOT NULL DEFAULT '',
+                        studentDistrict TEXT NOT NULL DEFAULT '',
+                        reason TEXT NOT NULL DEFAULT '',
+                        hadPriorCheckIn INTEGER NOT NULL DEFAULT 0,
+                        priorCheckInAt INTEGER NOT NULL DEFAULT 0,
+                        swappedByUsername TEXT NOT NULL DEFAULT '',
+                        swappedByName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -1130,7 +1166,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_36_37,
                         MIGRATION_37_38,
                         MIGRATION_38_39,
-                        MIGRATION_39_40
+                        MIGRATION_39_40,
+                        MIGRATION_40_41
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

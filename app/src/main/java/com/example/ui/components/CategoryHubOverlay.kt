@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.ChildStudent
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.FastingRecord
 import com.example.data.model.StudentReligionHelper
@@ -103,6 +104,7 @@ fun CategoryHubOverlay(
     students: List<ChildStudent> = emptyList(),
     visitSessions: List<VisitSession> = emptyList(),
     visitRecords: List<VisitRecord> = emptyList(),
+    visitSessionSwaps: List<VisitSessionSwap> = emptyList(),
     parentAccessLinks: List<ParentAccessLink> = emptyList(),
     parentMessages: List<ParentMessage> = emptyList(),
     parentExpectations: List<ParentExpectation> = emptyList(),
@@ -629,6 +631,7 @@ fun CategoryHubOverlay(
                                     students = students,
                                     visitSessions = visitSessions,
                                     visitRecords = visitRecords,
+                                    visitSessionSwaps = visitSessionSwaps,
                                     isAdmin = isAdmin,
                                     onOpenJadwalKunjungan = onOpenJadwalKunjungan,
                                     onOpenDaftarHadirKunjungan = onOpenDaftarHadirKunjungan,

@@ -61,6 +61,7 @@ import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.WbTwilight
+import com.example.data.model.VisitSessionSwap
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -1017,6 +1018,7 @@ internal fun LazyListScope.kunjunganCategoryItems(
     students: List<ChildStudent>,
     visitSessions: List<VisitSession>,
     visitRecords: List<VisitRecord>,
+    visitSessionSwaps: List<VisitSessionSwap> = emptyList(),
     isAdmin: Boolean,
     onOpenJadwalKunjungan: () -> Unit,
     onOpenDaftarHadirKunjungan: (Int) -> Unit,
@@ -1028,7 +1030,7 @@ internal fun LazyListScope.kunjunganCategoryItems(
     val scheduledStudents = if (activeSession == null) {
         emptyList()
     } else {
-        VisitHelper.scheduledStudentsForSession(activeSession, students)
+        VisitHelper.effectiveScheduledStudentsForSession(activeSession, students, visitSessionSwaps, visitSessions)
     }
     val sessionRecords = if (activeSession == null) {
         emptyList()

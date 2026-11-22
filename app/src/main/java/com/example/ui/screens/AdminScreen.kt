@@ -142,6 +142,7 @@ import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ScrollableTabRow
 import com.example.data.model.ChildStudent
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingSession
 import com.example.data.model.MengajiHelper
@@ -216,6 +217,7 @@ fun AdminScreen(
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val visitSessionSwaps by viewModel.visitSessionSwaps.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
     val infoPentingPosts by viewModel.infoPentingPosts.collectAsStateWithLifecycle()
@@ -1936,7 +1938,21 @@ fun AdminScreen(
                         val visitDateFmt = SimpleDateFormat("EEE, d MMM", appLanguage.locale)
                         val launchStampFmt = SimpleDateFormat("d MMM HH:mm", appLanguage.locale)
                         items(schoolVisitSessions, key = { "admin_visit_${it.id}" }) { session ->
-                            val scheduledList = VisitHelper.scheduledStudentsForSession(session, schoolStudents)
+                            val scheduledList = VisitHelper.effectiveScheduledStudentsForSession(
+                                session,
+                                schoolStudents,
+                                visitSessionSwaps,
+                                schoolVisitSessions
+                            )
+                            val swappedInCount = scheduledList.count {
+                                VisitHelper.findIncomingSwapToSession(session.id, it, visitSessionSwaps) != null
+                            }
+                            val swappedOutCount = VisitHelper.swappedOutFromSession(
+                                session,
+                                schoolStudents,
+                                visitSessionSwaps,
+                                schoolVisitSessions
+                            ).size
                             val sessionRecs = visitRecords.filter { it.sessionId == session.id }
                             val datesList = session.getVisitDatesList()
                             val districtsList = session.getDistrictsList()
@@ -2049,6 +2065,32 @@ fun AdminScreen(
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = Color(0xFF92400E),
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                        if (swappedInCount > 0 || swappedOutCount > 0) {
+                                            val swapSummaryText = buildList {
+                                                if (swappedInCount > 0) {
+                                                    add(if (isEn) "+$swappedInCount Swapped In" else "+$swappedInCount Pindahan Masuk")
+                                                }
+                                                if (swappedOutCount > 0) {
+                                                    add(if (isEn) "-$swappedOutCount Moved Out" else "-$swappedOutCount Pindah Sesi")
+                                                }
+                                            }.joinToString(" • ")
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = Color(0xFFEEF2FF),
+                                                border = BorderStroke(1.dp, Color(0xFFA5B4FC)),
+                                                modifier = Modifier
+                                                    .semantics(mergeDescendants = true) {}
+                                                    .testTag("badge_visit_swaps_${session.id}")
+                                            ) {
+                                                Text(
+                                                    text = swapSummaryText,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFF4338CA),
                                                     modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                                                 )
                                             }
@@ -3647,7 +3689,12 @@ fun AdminScreen(
     }
 
     visitParentLaunchConfirm?.let { (session, targetLive) ->
-        val scheduledCount = VisitHelper.scheduledStudentsForSession(session, schoolStudents).size
+        val scheduledCount = VisitHelper.effectiveScheduledStudentsForSession(
+            session,
+            schoolStudents,
+            visitSessionSwaps,
+            schoolVisitSessions
+        ).size
         val dateFmtConfirm = SimpleDateFormat("EEE, d MMM yyyy", appLanguage.locale)
         val datesSummary = session.getVisitDatesList().joinToString(", ") { dateFmtConfirm.format(Date(it)) }
             .ifBlank { "-" }
@@ -3767,7 +3814,12 @@ fun AdminScreen(
             VisitHelper.formatMonthYearLabel(targetMonth, appLanguage.locale)
         }
         val totalImpactedStudents = pendingSessions.sumOf {
-            VisitHelper.scheduledStudentsForSession(it, schoolStudents).size
+            VisitHelper.effectiveScheduledStudentsForSession(
+                it,
+                schoolStudents,
+                visitSessionSwaps,
+                schoolVisitSessions
+            ).size
         }
         AlertDialog(
             onDismissRequest = { visitBulkParentConfirmMonth = null },

@@ -259,6 +259,7 @@ private fun WaliAsuhCareAppContent(
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.waliVisibleVisitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
+    val visitSessionSwaps by viewModel.visitSessionSwaps.collectAsStateWithLifecycle()
     val parentAccessLinks by viewModel.parentAccessLinks.collectAsStateWithLifecycle()
     val parentMessages by viewModel.parentMessages.collectAsStateWithLifecycle()
     val parentExpectations by viewModel.parentExpectations.collectAsStateWithLifecycle()
@@ -722,6 +723,7 @@ private fun WaliAsuhCareAppContent(
                 students = students,
                 visitSessions = visitSessions,
                 visitRecords = visitRecords,
+                visitSessionSwaps = visitSessionSwaps,
                 parentAccessLinks = parentAccessLinks,
                 parentMessages = myFosterParentMessages,
                 parentExpectations = myFosterParentExpectations,

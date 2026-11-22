@@ -138,6 +138,7 @@ import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliAccount
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
@@ -227,8 +228,10 @@ fun ParentPortalScreen(
         chatMediaLocalSaves.associateBy { it.messageId }
     }
     val visitSessions by viewModel.parentVisibleVisitSessions.collectAsStateWithLifecycle()
+    val allVisitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
     val visitRecords by viewModel.visitRecords.collectAsStateWithLifecycle()
     val visitConfirmations by viewModel.visitConfirmations.collectAsStateWithLifecycle()
+    val visitSessionSwaps by viewModel.visitSessionSwaps.collectAsStateWithLifecycle()
     val waliAccounts by viewModel.waliAccounts.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
@@ -713,6 +716,8 @@ fun ParentPortalScreen(
                         galleryPosts = parentGalleryPosts,
                         localSavesByPostId = localSavesByPostId,
                         visitSessions = visitSessions,
+                        allVisitSessions = allVisitSessions,
+                        visitSessionSwaps = visitSessionSwaps,
                         visitConfirmations = visitConfirmations,
                         visitRecords = visitRecords,
                         unreadMessageCount = unreadFromWaliCount,
@@ -960,6 +965,8 @@ fun ParentPortalScreen(
                         sessions = visitSessions,
                         confirmations = visitConfirmations,
                         visitRecords = visitRecords,
+                        allVisitSessions = allVisitSessions,
+                        visitSessionSwaps = visitSessionSwaps,
                         defaultParentName = activeLink?.parentName.orEmpty(),
                         schoolProfile = schoolProfile,
                         waliName = resolvedWaliBadges.joinToString(", ") { it.name }.ifBlank {
@@ -1223,6 +1230,8 @@ private fun ParentOverviewContent(
     galleryPosts: List<WaliGalleryPost> = emptyList(),
     localSavesByPostId: Map<Long, WaliGalleryLocalSave> = emptyMap(),
     visitSessions: List<VisitSession> = emptyList(),
+    allVisitSessions: List<VisitSession> = emptyList(),
+    visitSessionSwaps: List<VisitSessionSwap> = emptyList(),
     visitConfirmations: List<VisitConfirmation> = emptyList(),
     visitRecords: List<VisitRecord> = emptyList(),
     unreadMessageCount: Int,
@@ -1239,13 +1248,25 @@ private fun ParentOverviewContent(
     val isEn = s.isEnglish
     val lang = s.language
 
-    val matchedActiveVisitSessions = remember(visitSessions, student) {
+    val matchedActiveVisitSessions = remember(visitSessions, allVisitSessions, visitSessionSwaps, student) {
         if (student == null) emptyList()
-        else visitSessions
-            .filter { it.publishedToParent && it.isActive && VisitHelper.isStudentInSessionSchedule(it, student) }
-            .sortedBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
+        else {
+            val allSess = allVisitSessions.ifEmpty { visitSessions }
+            visitSessions
+                .filter {
+                    it.publishedToParent &&
+                        it.isActive &&
+                        VisitHelper.isStudentEffectiveInSession(it, student, visitSessionSwaps, allSess)
+                }
+                .sortedBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
+        }
     }
     val nextVisitSession = matchedActiveVisitSessions.firstOrNull()
+    val nextVisitIncomingSwap = remember(nextVisitSession, student, visitSessionSwaps) {
+        val sess = nextVisitSession ?: return@remember null
+        val targetStudent = student ?: return@remember null
+        VisitHelper.findIncomingSwapToSession(sess.id, targetStudent, visitSessionSwaps)
+    }
     val nextVisitConf = remember(nextVisitSession, visitConfirmations, student) {
         val sess = nextVisitSession ?: return@remember null
         val targetStudent = student ?: return@remember null
@@ -1643,7 +1664,21 @@ private fun ParentOverviewContent(
                                 fontWeight = FontWeight.ExtraBold,
                                 color = Color(0xFF0F766E)
                             )
-                            if (nextVisitSession.updatedNoticeAfterParentLaunch) {
+                            if (nextVisitIncomingSwap != null) {
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFEEF2FF),
+                                    border = BorderStroke(1.dp, Color(0xFFA5B4FC))
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Rescheduled" else "Jadwal Dipindah",
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF4338CA),
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                    )
+                                }
+                            } else if (nextVisitSession.updatedNoticeAfterParentLaunch) {
                                 Surface(
                                     shape = RoundedCornerShape(6.dp),
                                     color = Color(0xFFFEF3C7),
