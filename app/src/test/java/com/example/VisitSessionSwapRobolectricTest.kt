@@ -82,7 +82,7 @@ class VisitSessionSwapRobolectricTest {
     @Test
     fun `VisitHelper authorization and PbVisitSessionSwapDto round-trip work accurately`() {
         val tandemJson = Json.encodeToString(
-            listOf(TandemWaliMember(username = "ustzah_siti", name = "Ustadzah Siti", role = "Tandem"))
+            listOf(TandemWaliMember(username = "ustzah_siti", name = "Ustadzah Siti"))
         )
         val student = ChildStudent(
             id = 5101L,
@@ -261,7 +261,7 @@ class VisitSessionSwapRobolectricTest {
             targetSession = session2,
             reason = "Bisanya ikut sesi tanggal 25",
             clearPriorCheckIn = true
-        ) { _, msg -> swapMsg = msg }
+        ) { _, msg, _ -> swapMsg = msg }
         waitUntil { vm.visitSessionSwaps.value.any { it.studentId == 5511L && it.toSessionId == 5602L } }
 
         assertTrue("Expected non-empty feedback", swapMsg.isNotBlank())
@@ -314,7 +314,7 @@ class VisitSessionSwapRobolectricTest {
             targetSession = session3,
             reason = "Pindah lagi ke sesi 3",
             clearPriorCheckIn = true
-        ) { _, _ -> }
+        ) { _, _, _ -> }
         waitUntil { vm.visitSessionSwaps.value.firstOrNull { it.studentId == 5511L }?.toSessionId == 5603L }
         val chained = vm.visitSessionSwaps.value.first { it.studentId == 5511L }
         assertEquals(5601L, chained.fromSessionId)
@@ -327,7 +327,7 @@ class VisitSessionSwapRobolectricTest {
             targetSession = session1,
             reason = "",
             clearPriorCheckIn = true
-        ) { _, _ -> }
+        ) { _, _, _ -> }
         waitUntil { vm.visitSessionSwaps.value.none { it.studentId == 5511L } }
         assertTrue(vm.visitConfirmations.value.any { it.studentId == 5511L && it.sessionId == 5601L })
 

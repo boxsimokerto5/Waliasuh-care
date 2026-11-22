@@ -179,11 +179,13 @@ import com.example.ui.dialogs.RekapIzinJadwalSheet
 import com.example.ui.dialogs.SchedulePinChip
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
+import com.example.ui.dialogs.VisitCircularPdfDialog
 import com.example.ui.dialogs.openJadwalExternalUrl
 import com.example.ui.dialogs.parseJadwalShiftColor
 import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
 import com.example.util.StudentCsvParser
+import com.example.util.VisitCircularPdfHelper
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
 import java.io.File
@@ -273,6 +275,8 @@ fun AdminScreen(
     var visitParentLaunchConfirm by remember { mutableStateOf<Pair<VisitSession, Boolean>?>(null) }
     var visitBulkParentConfirmMonth by remember { mutableStateOf<String?>(null) }
     var visitBulkSelectedMonth by remember { mutableStateOf("ALL") }
+    var showVisitCircularPdfDialog by remember { mutableStateOf(false) }
+    var readyVisitCircularPdf by remember { mutableStateOf<File?>(null) }
 
     // State untuk Kelola Data Siswa
     var studentSearchQuery by remember { mutableStateOf("") }
@@ -1799,6 +1803,39 @@ fun AdminScreen(
                                     Text(
                                         text = if (isEn) "Create Monthly Visit Session" else "Buat Sesi Kunjungan Baru",
                                         fontSize = 12.5.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showVisitCircularPdfDialog = true },
+                                    enabled = schoolVisitSessions.isNotEmpty(),
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (schoolVisitSessions.isNotEmpty()) Color(0xFF0F766E) else MaterialTheme.colorScheme.outlineVariant
+                                    ),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = Color(0xFF0F766E)
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_admin_visit_circular_pdf")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PictureAsPdf,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isEn) {
+                                            "Generate Monthly Circular PDF (Grouped by Session)"
+                                        } else {
+                                            "Generate PDF Edaran Bulanan (Per Sesi)"
+                                        },
+                                        fontSize = 12.sp,
                                         fontWeight = FontWeight.Bold
                                     )
                                 }
@@ -3857,6 +3894,108 @@ fun AdminScreen(
             dismissButton = {
                 OutlinedButton(onClick = { visitBulkParentConfirmMonth = null }) {
                     Text(appStrings.cancel)
+                }
+            }
+        )
+    }
+
+    if (showVisitCircularPdfDialog) {
+        VisitCircularPdfDialog(
+            sessions = schoolVisitSessions,
+            students = schoolStudents,
+            swaps = visitSessionSwaps,
+            defaultSignerName = schoolProfile.adminName.ifBlank {
+                waliName.ifBlank { if (isEn) "School Admin" else "Admin Sekolah" }
+            },
+            onDismiss = { showVisitCircularPdfDialog = false },
+            onGeneratePdf = { selectedSessions, config ->
+                val generated = VisitCircularPdfHelper.generateMonthlyCircularPdf(
+                    context = context,
+                    sessions = selectedSessions,
+                    allStudents = schoolStudents,
+                    swaps = visitSessionSwaps,
+                    allSchoolSessions = schoolVisitSessions,
+                    schoolProfile = schoolProfile,
+                    config = config
+                )
+                if (generated != null) {
+                    showVisitCircularPdfDialog = false
+                    readyVisitCircularPdf = generated
+                } else {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Unable to generate monthly visit circular PDF" else "Gagal membuat PDF edaran kunjungan bulanan",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        )
+    }
+
+    readyVisitCircularPdf?.let { pdfFile ->
+        AlertDialog(
+            onDismissRequest = { readyVisitCircularPdf = null },
+            modifier = Modifier.testTag("dialog_visit_circular_pdf_ready"),
+            title = {
+                Text(
+                    text = if (isEn) "Monthly Circular PDF Ready" else "PDF Edaran Kunjungan Siap",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    if (isEn) {
+                        "Your combined circular letter and session-grouped student roster PDF is ready to open, print, or share manually."
+                    } else {
+                        "Dokumen gabungan Surat Edaran Pemberitahuan & Lampiran Daftar Anak per Sesi sudah siap dibuka, dicetak, atau dibagikan secara manual."
+                    }
+                )
+            },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            readyVisitCircularPdf = null
+                            PdfReportGenerator.shareDocumentPdf(
+                                context = context,
+                                pdfFile = pdfFile,
+                                subject = if (isEn) "Official Parent Visit Circular" else "Edaran Resmi Jadwal Kunjungan Bulanan",
+                                text = if (isEn) {
+                                    "Attached is the official monthly parent visit schedule circular and grouped student list."
+                                } else {
+                                    "Terlampir surat edaran pemberitahuan jadwal kunjungan orang tua beserta lampiran daftar siswa sesuai sesi."
+                                },
+                                chooserTitle = if (isEn) "Share Visit Circular PDF" else "Bagikan PDF Edaran Kunjungan"
+                            )
+                        },
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_share_visit_circular_pdf")
+                    ) {
+                        Text(if (isEn) "Share" else "Bagikan")
+                    }
+                    Button(
+                        onClick = {
+                            readyVisitCircularPdf = null
+                            PdfReportGenerator.openPdfFile(context, pdfFile)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                        modifier = Modifier
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_open_visit_circular_pdf")
+                    ) {
+                        Text(if (isEn) "Open PDF" else "Buka PDF", fontWeight = FontWeight.Bold)
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { readyVisitCircularPdf = null },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_close_visit_circular_pdf")
+                ) {
+                    Text(appStrings.close)
                 }
             }
         )
