@@ -4,6 +4,7 @@ package com.example.ui.dialogs
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -25,32 +27,37 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -63,7 +70,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -150,8 +159,8 @@ fun JadwalKunjunganSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        dragHandle = { CompactVisitSheetHandle() },
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Box(
@@ -164,11 +173,11 @@ fun JadwalKunjunganSheet(
                     .widthIn(max = 640.dp)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Header
+                // Header ringkas
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -180,7 +189,7 @@ fun JadwalKunjunganSheet(
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(softBlue),
                             contentAlignment = Alignment.Center
@@ -189,24 +198,28 @@ fun JadwalKunjunganSheet(
                                 Icons.Default.CalendarMonth,
                                 contentDescription = null,
                                 tint = primaryBlue,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (isEn) "Parent Visit Schedule" else "Jadwal Kunjungan Bulanan",
-                                fontSize = 15.5.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
                                 text = if (isEn) {
-                                    "Monthly sessions, multi-date schedule & selected districts"
+                                    "Monthly sessions, dates & districts"
                                 } else {
-                                    "Jadwal per sesi bulan, multi-tanggal & kecamatan peserta"
+                                    "Per sesi bulan, tanggal & kecamatan"
                                 },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -217,7 +230,7 @@ fun JadwalKunjunganSheet(
                             .size(48.dp)
                             .testTag("btn_close_jadwal_kunjungan")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(18.dp))
                     }
                 }
 
@@ -269,40 +282,19 @@ fun JadwalKunjunganSheet(
                         }
                     }
                 } else {
-                    // Selector Sesi Bulanan
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        sortedSessions.forEach { sess ->
-                            val selected = selectedSession?.id == sess.id
-                            FilterChip(
-                                selected = selected,
-                                onClick = { selectedSessionId = sess.id },
-                                label = {
-                                    Text(
-                                        text = sess.title,
-                                        fontSize = 11.5.sp,
-                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                        maxLines = 1
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CalendarMonth, contentDescription = null, modifier = Modifier.size(14.dp))
-                                },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = softBlue,
-                                    selectedLabelColor = primaryBlue,
-                                    selectedLeadingIconColor = primaryBlue
-                                ),
-                                modifier = Modifier
-                                    .heightIn(min = 36.dp)
-                                    .testTag("chip_jadwal_session_${sess.id}")
-                            )
-                        }
-                    }
+                    // Dropdown Pemilih Sesi Bulanan
+                    VisitSessionDropdownSelector(
+                        sessions = sortedSessions,
+                        selectedSession = selectedSession,
+                        locale = locale,
+                        isEn = isEn,
+                        accentColor = primaryBlue,
+                        containerColor = Color(0xFFEFF6FF),
+                        borderColor = Color(0xFF93C5FD),
+                        dropdownTag = "dropdown_jadwal_session",
+                        optionTagPrefix = "option_jadwal_session",
+                        onSelectSession = { sess -> selectedSessionId = sess.id }
+                    )
 
                     selectedSession?.let { sess ->
                         val datesList = sess.getVisitDatesList()
@@ -313,19 +305,19 @@ fun JadwalKunjunganSheet(
                                 .fillMaxWidth()
                                 .weight(1f, fill = false)
                                 .testTag("list_jadwal_kunjungan"),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             // Card Info Sesi + Multi-Tanggal + Kecamatan
                             item(key = "session_overview") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp),
+                                    shape = RoundedCornerShape(12.dp),
                                     colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
                                     border = BorderStroke(1.dp, Color(0xFFCBD5E1))
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -335,14 +327,18 @@ fun JadwalKunjunganSheet(
                                             Column(modifier = Modifier.weight(1f)) {
                                                 Text(
                                                     text = sess.title,
-                                                    fontSize = 14.5.sp,
-                                                    fontWeight = FontWeight.Bold
+                                                    fontSize = 13.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                                 Text(
                                                     text = "${VisitHelper.formatMonthYearLabel(sess.monthYear, locale)} • ${scheduledStudents.size} ${if (isEn) "Students Scheduled" else "Siswa Terjadwal"}",
-                                                    fontSize = 11.5.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = primaryBlue
+                                                    color = primaryBlue,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
                                                 )
                                             }
                                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -400,15 +396,15 @@ fun JadwalKunjunganSheet(
 
                                         // Daftar Multi-Tanggal Kunjungan
                                         Text(
-                                            text = if (isEn) "Scheduled Dates (${datesList.size} days):" else "Tanggal Pelaksanaan Kunjungan (${datesList.size} hari):",
-                                            fontSize = 11.sp,
+                                            text = if (isEn) "Visit Dates (${datesList.size}d):" else "Tanggal Kunjungan (${datesList.size} hari):",
+                                            fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         FlowRow(
                                             modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             datesList.forEach { dMillis ->
                                                 val isTodayDate = DateUtils.isToday(dMillis)
@@ -416,7 +412,7 @@ fun JadwalKunjunganSheet(
                                                     VisitHelper.normalizeDayStart(it.visitDate) == VisitHelper.normalizeDayStart(dMillis)
                                                 }
                                                 Surface(
-                                                    shape = RoundedCornerShape(10.dp),
+                                                    shape = RoundedCornerShape(8.dp),
                                                     color = if (isTodayDate) Color(0xFFDCFCE7) else softBlue,
                                                     border = BorderStroke(
                                                         1.dp,
@@ -424,15 +420,15 @@ fun JadwalKunjunganSheet(
                                                     )
                                                 ) {
                                                     Row(
-                                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                                                     ) {
                                                         Icon(
                                                             Icons.Default.EventAvailable,
                                                             contentDescription = null,
                                                             tint = if (isTodayDate) Color(0xFF15803D) else primaryBlue,
-                                                            modifier = Modifier.size(14.dp)
+                                                            modifier = Modifier.size(13.dp)
                                                         )
                                                         Text(
                                                             text = buildString {
@@ -440,7 +436,7 @@ fun JadwalKunjunganSheet(
                                                                 if (isTodayDate) append(if (isEn) " (Today)" else " (Hari Ini)")
                                                                 if (dayCheckInCount > 0) append(" • $dayCheckInCount✓")
                                                             },
-                                                            fontSize = 11.sp,
+                                                            fontSize = 10.5.sp,
                                                             fontWeight = FontWeight.SemiBold,
                                                             color = if (isTodayDate) Color(0xFF15803D) else Color(0xFF1E3A8A)
                                                         )
@@ -554,28 +550,15 @@ fun JadwalKunjunganSheet(
                                 }
                             }
 
-                            // Cari Siswa Terjadwal
+                            // Cari Siswa Terjadwal (1 baris ringkas)
                             item(key = "jadwal_search") {
-                                OutlinedTextField(
+                                CompactVisitInputField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
-                                    placeholder = {
-                                        Text(
-                                            if (isEn) "Search scheduled student or district..." else "Cari siswa terjadwal atau kecamatan...",
-                                            fontSize = 12.sp
-                                        )
-                                    },
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                                    trailingIcon = {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(onClick = { searchQuery = "" }) {
-                                                Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-                                    },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    placeholder = if (isEn) "Search student or district..." else "Cari siswa atau kecamatan...",
+                                    leadingIcon = Icons.Default.Search,
+                                    clearDescription = s.nav.close,
+                                    modifier = Modifier.testTag("input_jadwal_search")
                                 )
                             }
 
@@ -832,3 +815,240 @@ fun JadwalKunjunganSheet(
         )
     }
 }
+
+@Composable
+internal fun CompactVisitSheetHandle() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 8.dp, bottom = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .width(34.dp)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.32f))
+        )
+    }
+}
+
+@Composable
+internal fun VisitSessionDropdownSelector(
+    sessions: List<VisitSession>,
+    selectedSession: VisitSession?,
+    locale: Locale,
+    isEn: Boolean,
+    accentColor: Color,
+    containerColor: Color,
+    borderColor: Color,
+    dropdownTag: String,
+    optionTagPrefix: String,
+    onSelectSession: (VisitSession) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val active = selectedSession ?: sessions.firstOrNull() ?: return
+    val monthLabel = VisitHelper.formatMonthYearLabel(active.monthYear, locale)
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Surface(
+            onClick = { expanded = true },
+            shape = RoundedCornerShape(10.dp),
+            color = containerColor,
+            border = BorderStroke(1.dp, borderColor),
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 48.dp)
+                .testTag(dropdownTag)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CalendarMonth,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(16.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = active.title,
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = "$monthLabel • ${active.displayTimeRange()}",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (sessions.size > 1) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = accentColor.copy(alpha = 0.12f)
+                    ) {
+                        Text(
+                            text = if (isEn) "${sessions.size} Sessions" else "${sessions.size} Sesi",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accentColor,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isEn) "Select session" else "Pilih sesi",
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.widthIn(min = 260.dp, max = 420.dp)
+        ) {
+            sessions.forEachIndexed { idx, sess ->
+                val isSel = sess.id == active.id
+                val sessMonth = VisitHelper.formatMonthYearLabel(sess.monthYear, locale)
+                DropdownMenuItem(
+                    text = {
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(
+                                text = sess.title,
+                                fontSize = 12.5.sp,
+                                fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSel) accentColor else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "$sessMonth • ${sess.displayTimeRange()}",
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.CalendarMonth,
+                            contentDescription = null,
+                            tint = if (isSel) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    trailingIcon = if (isSel) {
+                        {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    } else null,
+                    onClick = {
+                        expanded = false
+                        onSelectSession(sess)
+                    },
+                    modifier = Modifier.testTag("${optionTagPrefix}_${sess.id}")
+                )
+                if (idx < sessions.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CompactVisitInputField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    clearDescription: String = "Clear",
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)),
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            if (leadingIcon != null) {
+                Icon(
+                    imageVector = leadingIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(17.dp)
+                )
+            }
+            Box(
+                modifier = Modifier.weight(1f),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                if (value.isEmpty()) {
+                    Text(
+                        text = placeholder,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                BasicTextField(
+                    value = value,
+                    onValueChange = onValueChange,
+                    singleLine = true,
+                    textStyle = TextStyle(
+                        fontSize = 12.5.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    ),
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+            if (value.isNotEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .clickable { onValueChange("") },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = clearDescription,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(15.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+

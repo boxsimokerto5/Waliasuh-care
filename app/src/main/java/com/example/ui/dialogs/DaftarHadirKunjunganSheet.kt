@@ -42,7 +42,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -54,7 +53,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -284,8 +282,8 @@ fun DaftarHadirKunjunganSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        dragHandle = { CompactVisitSheetHandle() },
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Box(
@@ -298,11 +296,11 @@ fun DaftarHadirKunjunganSheet(
                     .widthIn(max = 640.dp)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                // Header
+                // Header ringkas
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -311,24 +309,28 @@ fun DaftarHadirKunjunganSheet(
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(32.dp)
                                 .clip(CircleShape)
                                 .background(tealLight),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.HowToReg, contentDescription = null, tint = tealPrimary, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.HowToReg, contentDescription = null, tint = tealPrimary, modifier = Modifier.size(18.dp))
                         }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (isEn) "Parent Visit Attendance" else "Daftar Hadir Kunjungan",
-                                fontSize = 15.5.sp,
-                                fontWeight = FontWeight.Bold
+                                fontSize = 14.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Text(
-                                text = if (isEn) "Barcode Scan & Printable Manual PDF Sheet" else "2 Kategori: Scan Barcode & List Cetak PDF Manual",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                text = if (isEn) "Barcode Scan & Manual PDF Sheet" else "Scan Barcode & List PDF Manual",
+                                fontSize = 10.5.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -338,7 +340,7 @@ fun DaftarHadirKunjunganSheet(
                             .size(48.dp)
                             .testTag("btn_close_daftar_hadir_kunjungan")
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(20.dp))
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(18.dp))
                     }
                 }
 
@@ -402,37 +404,30 @@ fun DaftarHadirKunjunganSheet(
                         )
                     }
                 } else {
-                    // Selector Sesi & Tanggal Kunjungan
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        sortedSessions.forEach { sess ->
-                            val isSel = selectedSession?.id == sess.id
-                            FilterChip(
-                                selected = isSel,
-                                onClick = { selectedSessionId = sess.id },
-                                label = { Text(sess.title, fontSize = 11.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = indigoLight,
-                                    selectedLabelColor = indigoPrimary
-                                )
-                            )
-                        }
-                    }
+                    // Dropdown Pemilih Sesi & Baris Tanggal Kunjungan Ringkas
+                    VisitSessionDropdownSelector(
+                        sessions = sortedSessions,
+                        selectedSession = selectedSession,
+                        locale = locale,
+                        isEn = isEn,
+                        accentColor = indigoPrimary,
+                        containerColor = Color(0xFFEFF6FF),
+                        borderColor = Color(0xFF93C5FD),
+                        dropdownTag = "dropdown_visit_attendance_session",
+                        optionTagPrefix = "option_visit_attendance_session",
+                        onSelectSession = { sess -> selectedSessionId = sess.id }
+                    )
 
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = if (isEn) "Visit Date:" else "Tanggal:",
-                            fontSize = 11.sp,
+                            text = if (isEn) "Date:" else "Tgl:",
+                            fontSize = 10.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -464,10 +459,10 @@ fun DaftarHadirKunjunganSheet(
                             ) {
                                 Text(
                                     text = sess.displayTimeRange(),
-                                    fontSize = 10.5.sp,
+                                    fontSize = 10.sp,
                                     fontWeight = FontWeight.SemiBold,
                                     color = Color(0xFF92400E),
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                                 )
                             }
                         }
@@ -482,7 +477,7 @@ fun DaftarHadirKunjunganSheet(
                                 .fillMaxWidth()
                                 .weight(1f, fill = false)
                                 .testTag("list_visit_barcode_tab"),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             item(key = "scan_visitor_controls") {
                                 Card(
@@ -492,12 +487,12 @@ fun DaftarHadirKunjunganSheet(
                                     border = BorderStroke(1.dp, Color(0xFF99F6E4))
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Text(
                                             text = if (isEn) "Visitor Relation & Quick Barcode Scan:" else "Hubungan Pengunjung & Scan Kartu:",
-                                            fontSize = 11.5.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = tealPrimary
                                         )
@@ -521,13 +516,11 @@ fun DaftarHadirKunjunganSheet(
                                             }
                                         }
 
-                                        OutlinedTextField(
+                                        CompactVisitInputField(
                                             value = visitorNameInput,
                                             onValueChange = { visitorNameInput = it },
-                                            label = { Text(if (isEn) "Visitor Name (Optional)" else "Nama Orang Tua / Wali (Opsional)", fontSize = 11.sp) },
-                                            singleLine = true,
-                                            shape = RoundedCornerShape(10.dp),
-                                            modifier = Modifier.fillMaxWidth()
+                                            placeholder = if (isEn) "Visitor Name (Optional)" else "Nama Orang Tua / Wali (Opsional)",
+                                            clearDescription = s.nav.close
                                         )
 
                                         Button(
@@ -552,21 +545,12 @@ fun DaftarHadirKunjunganSheet(
                             }
 
                             item(key = "scan_search_box") {
-                                OutlinedTextField(
+                                CompactVisitInputField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
-                                    placeholder = { Text(if (isEn) "Or search student name / NIK to check in..." else "Atau cari nama / NIK / kecamatan siswa...", fontSize = 12.sp) },
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                                    trailingIcon = {
-                                        if (searchQuery.isNotEmpty()) {
-                                            IconButton(onClick = { searchQuery = "" }) {
-                                                Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(16.dp))
-                                            }
-                                        }
-                                    },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    placeholder = if (isEn) "Search name / NIK / district..." else "Cari nama / NIK / kecamatan...",
+                                    leadingIcon = Icons.Default.Search,
+                                    clearDescription = s.nav.close
                                 )
                             }
 
@@ -730,7 +714,7 @@ fun DaftarHadirKunjunganSheet(
                                 .fillMaxWidth()
                                 .weight(1f, fill = false)
                                 .testTag("list_visit_manual_tab"),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             item(key = "manual_pdf_actions") {
                                 Card(
@@ -740,8 +724,8 @@ fun DaftarHadirKunjunganSheet(
                                     border = BorderStroke(1.dp, Color(0xFFBFDBFE))
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(10.dp),
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalArrangement = Arrangement.spacedBy(6.dp)
                                     ) {
                                         Text(
                                             text = if (isEn) {
@@ -837,14 +821,12 @@ fun DaftarHadirKunjunganSheet(
                             }
 
                             item(key = "manual_search") {
-                                OutlinedTextField(
+                                CompactVisitInputField(
                                     value = searchQuery,
                                     onValueChange = { searchQuery = it },
-                                    placeholder = { Text(if (isEn) "Filter roster list..." else "Cari nama siswa / kecamatan di daftar...", fontSize = 12.sp) },
-                                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                                    singleLine = true,
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier.fillMaxWidth()
+                                    placeholder = if (isEn) "Filter roster list..." else "Cari nama / kecamatan di daftar...",
+                                    leadingIcon = Icons.Default.Search,
+                                    clearDescription = s.nav.close
                                 )
                             }
 

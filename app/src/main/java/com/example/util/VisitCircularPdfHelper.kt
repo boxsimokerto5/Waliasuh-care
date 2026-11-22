@@ -7,8 +7,6 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
-import android.text.TextPaint
-import android.text.TextUtils
 import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.data.model.VisitHelper
@@ -66,6 +64,7 @@ object VisitCircularPdfHelper {
 
     private fun wrapParagraphLines(text: String, paint: Paint, maxWidth: Float): List<String> {
         if (text.isBlank()) return emptyList()
+        val safeMaxW = maxWidth.coerceAtLeast(24f)
         val result = mutableListOf<String>()
         text.split('\n').forEach { rawPara ->
             val trimmed = rawPara.trim()
@@ -74,17 +73,37 @@ object VisitCircularPdfHelper {
             } else {
                 val words = trimmed.split(Regex("\\s+"))
                 var current = StringBuilder()
+
+                fun appendOversizedToken(token: String) {
+                    var start = 0
+                    while (start < token.length) {
+                        var end = start + 1
+                        while (end < token.length && paint.measureText(token.substring(start, end + 1)) <= safeMaxW) {
+                            end++
+                        }
+                        val chunk = token.substring(start, end)
+                        if (end < token.length) {
+                            result.add(chunk)
+                        } else {
+                            current = StringBuilder(chunk)
+                        }
+                        start = end
+                    }
+                }
+
                 for (w in words) {
-                    val candidate = if (current.isEmpty()) w else "${current} $w"
-                    if (paint.measureText(candidate) <= maxWidth) {
+                    val candidate = if (current.isEmpty()) w else "$current $w"
+                    if (paint.measureText(candidate) <= safeMaxW) {
                         current = StringBuilder(candidate)
                     } else {
                         if (current.isNotEmpty()) {
                             result.add(current.toString())
+                            current = StringBuilder()
+                        }
+                        if (paint.measureText(w) <= safeMaxW) {
                             current = StringBuilder(w)
                         } else {
-                            result.add(w)
-                            current = StringBuilder()
+                            appendOversizedToken(w)
                         }
                     }
                 }
@@ -92,6 +111,33 @@ object VisitCircularPdfHelper {
             }
         }
         return result
+    }
+
+    private fun measureWrappedLines(
+        text: String,
+        paint: Paint,
+        textSize: Float,
+        isBold: Boolean,
+        maxWidth: Float,
+        fallback: String = "-"
+    ): List<String> {
+        paint.typeface = Typeface.create(Typeface.DEFAULT, if (isBold) Typeface.BOLD else Typeface.NORMAL)
+        paint.textSize = textSize
+        val lines = wrapParagraphLines(text, paint, maxWidth).filter { it.isNotEmpty() }
+        return if (lines.isEmpty()) listOf(fallback) else lines
+    }
+
+    private fun drawWrappedLines(
+        canvas: Canvas,
+        lines: List<String>,
+        x: Float,
+        firstBaselineY: Float,
+        lineHeight: Float,
+        paint: Paint
+    ) {
+        lines.forEachIndexed { idx, line ->
+            canvas.drawText(line, x, firstBaselineY + idx * lineHeight, paint)
+        }
     }
 
     fun generateMonthlyCircularPdf(
@@ -234,31 +280,64 @@ object VisitCircularPdfHelper {
         )
 
         paint.textAlign = Paint.Align.CENTER
-        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        paint.textSize = 12.5f
+        val mainTitleLines = measureWrappedLines(
+            text = if (isEn) "PARENT VISIT SCHEDULE CIRCULAR" else "EDARAN PEMBAGIAN JADWAL KUNJUNGAN WALI SISWA",
+            paint = paint,
+            textSize = 12.5f,
+            isBold = true,
+            maxWidth = contentW
+        )
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText(
-            if (isEn) "PARENT VISIT SCHEDULE CIRCULAR" else "EDARAN PEMBAGIAN JADWAL KUNJUNGAN WALI SISWA",
-            PAGE_WIDTH / 2f,
-            currentY + 6f,
-            paint
-        )
-        currentY += 20f
+        mainTitleLines.forEachIndexed { idx, line ->
+            canvas.drawText(line, PAGE_WIDTH / 2f, currentY + 6f + idx * 15f, paint)
+        }
+        currentY += 6f + (mainTitleLines.size - 1) * 15f + 14f
 
-        paint.textSize = 9.5f
+        val periodLines = measureWrappedLines(
+            text = (if (isEn) "PERIOD: " else "PERIODE: ") + periodLabel.uppercase(lang.locale),
+            paint = paint,
+            textSize = 9.5f,
+            isBold = true,
+            maxWidth = contentW
+        )
         paint.color = Color.rgb(15, 118, 110)
-        canvas.drawText(
-            (if (isEn) "PERIOD: " else "PERIODE: ") + periodLabel.uppercase(lang.locale),
-            PAGE_WIDTH / 2f,
-            currentY,
-            paint
-        )
+        periodLines.forEachIndexed { idx, line ->
+            canvas.drawText(line, PAGE_WIDTH / 2f, currentY + idx * 12f, paint)
+        }
         paint.textAlign = Paint.Align.LEFT
-        currentY += 16f
+        currentY += (periodLines.size - 1) * 12f + 16f
 
-        // Metadata box (Nomor, Perihal, Tanggal Cetak)
+        // Metadata box (Nomor, Perihal, Tanggal Cetak) dengan wrap otomatis
         val cleanNo = config.circularNumber.trim()
-        val metaHeight = if (cleanNo.isNotBlank()) 52f else 38f
+        val metaTextMaxW = contentW - 20f
+        val refLines = if (cleanNo.isNotBlank()) {
+            measureWrappedLines(
+                if (isEn) "Ref No   : $cleanNo" else "Nomor    : $cleanNo",
+                paint, 8.6f, true, metaTextMaxW
+            )
+        } else {
+            emptyList()
+        }
+        val subjectLines = measureWrappedLines(
+            if (isEn) {
+                "Subject  : Parent Visit Schedule & Student Grouping ($periodLabel)"
+            } else {
+                "Perihal  : Pemberitahuan Jadwal & Pengelompokan Sesi Kunjungan ($periodLabel)"
+            },
+            paint, 8.6f, true, metaTextMaxW
+        )
+        val issuedLines = measureWrappedLines(
+            if (isEn) {
+                "Issued   : ${printDateFmt.format(Date())}  •  ${orderedSessions.size} Session(s)  •  ${coveredStudentIds.size} Student(s)"
+            } else {
+                "Tanggal  : ${printDateFmt.format(Date())}  •  ${orderedSessions.size} Sesi Terjadwal  •  ${coveredStudentIds.size} Anak Asuh"
+            },
+            paint, 8.6f, false, metaTextMaxW
+        )
+        val metaLineH = 12.5f
+        val totalMetaLines = refLines.size + subjectLines.size + issuedLines.size
+        val metaHeight = 10f + totalMetaLines * metaLineH + 4f
+
         paint.style = Paint.Style.FILL
         paint.color = Color.rgb(248, 250, 252)
         canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + metaHeight), 6f, 6f, paint)
@@ -268,39 +347,22 @@ object VisitCircularPdfHelper {
         canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + metaHeight), 6f, 6f, paint)
         paint.style = Paint.Style.FILL
 
-        var metaY = currentY + 14f
+        var metaY = currentY + 14.5f
         paint.textSize = 8.6f
-        if (cleanNo.isNotBlank()) {
+        if (refLines.isNotEmpty()) {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText(if (isEn) "Ref No   : $cleanNo" else "Nomor    : $cleanNo", boxLeft + 10f, metaY, paint)
-            metaY += 13f
+            drawWrappedLines(canvas, refLines, boxLeft + 10f, metaY, metaLineH, paint)
+            metaY += refLines.size * metaLineH
         }
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         paint.color = Color.rgb(15, 23, 42)
-        canvas.drawText(
-            if (isEn) {
-                "Subject  : Parent Visit Schedule & Student Grouping ($periodLabel)"
-            } else {
-                "Perihal  : Pemberitahuan Jadwal & Pengelompokan Sesi Kunjungan ($periodLabel)"
-            },
-            boxLeft + 10f,
-            metaY,
-            paint
-        )
-        metaY += 13f
+        drawWrappedLines(canvas, subjectLines, boxLeft + 10f, metaY, metaLineH, paint)
+        metaY += subjectLines.size * metaLineH
+
         paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
         paint.color = Color.rgb(71, 85, 105)
-        canvas.drawText(
-            if (isEn) {
-                "Issued   : ${printDateFmt.format(Date())}  •  ${orderedSessions.size} Session(s)  •  ${coveredStudentIds.size} Student(s)"
-            } else {
-                "Tanggal  : ${printDateFmt.format(Date())}  •  ${orderedSessions.size} Sesi Terjadwal  •  ${coveredStudentIds.size} Anak Asuh"
-            },
-            boxLeft + 10f,
-            metaY,
-            paint
-        )
+        drawWrappedLines(canvas, issuedLines, boxLeft + 10f, metaY, metaLineH, paint)
         currentY += metaHeight + 12f
 
         // Opening Paragraph
@@ -338,10 +400,10 @@ object VisitCircularPdfHelper {
         currentY += 8f
 
         val sColNo = boxLeft
-        val sColTitle = boxLeft + 26f
-        val sColDate = boxLeft + 178f
-        val sColDist = boxLeft + 332f
-        val sColCount = boxRight - 56f
+        val sColTitle = boxLeft + 24f
+        val sColDate = boxLeft + 154f
+        val sColDist = boxLeft + 292f
+        val sColCount = boxRight - 58f
 
         fun drawSummaryHeader(yPos: Float): Float {
             val hH = 22f
@@ -381,13 +443,52 @@ object VisitCircularPdfHelper {
             currentY += 28f
         } else {
             currentY = drawSummaryHeader(currentY)
+            val sumLineH = 10.5f
             sessionStudentPairs.forEachIndexed { idx, (sess, roster) ->
-                if (currentY > PAGE_HEIGHT - 120f) {
+                val titleLines = measureWrappedLines(
+                    sess.title.ifBlank { "-" },
+                    paint, 8f, true, sColDate - sColTitle - 10f
+                )
+                val datesLabel = sess.getVisitDatesList()
+                    .joinToString(", ") { dateShortFmt.format(Date(it)) }
+                    .ifBlank { "-" }
+                val dateLines = measureWrappedLines(
+                    datesLabel,
+                    paint, 7.6f, false, sColDist - sColDate - 10f
+                )
+                val timeLines = measureWrappedLines(
+                    sess.displayTimeRange(),
+                    paint, 7.6f, false, sColDist - sColDate - 10f
+                )
+                val distSummary = sess.getDistrictsList()
+                    .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+                    .ifBlank { "-" }
+                val distLines = measureWrappedLines(
+                    distSummary,
+                    paint, 7.8f, false, sColCount - sColDist - 10f
+                )
+                val countLabel = if (isEn) "${roster.size} ch." else "${roster.size} anak"
+                val countLines = measureWrappedLines(
+                    countLabel,
+                    paint, 8.2f, true, boxRight - sColCount - 10f
+                )
+
+                val maxLines = maxOf(
+                    1,
+                    titleLines.size,
+                    dateLines.size + timeLines.size,
+                    distLines.size,
+                    countLines.size
+                )
+                val contentBlockH = maxLines * sumLineH
+                val rH = maxOf(26f, contentBlockH + 10f)
+
+                if (currentY + rH > PAGE_HEIGHT - 70f) {
                     canvas = nextPage()
                     currentY = 40f
                     currentY = drawSummaryHeader(currentY)
                 }
-                val rH = 26f
+
                 paint.style = Paint.Style.FILL
                 paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
                 canvas.drawRect(boxLeft, currentY, boxRight, currentY + rH, paint)
@@ -400,59 +501,39 @@ object VisitCircularPdfHelper {
                 }
                 paint.style = Paint.Style.FILL
 
-                val ty = currentY + 16.5f
+                val firstBaseY = currentY + (rH - contentBlockH) / 2f + 7.6f
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 paint.textSize = 8f
                 paint.color = Color.rgb(15, 23, 42)
-                canvas.drawText("${idx + 1}.", sColNo + 6f, ty, paint)
+                canvas.drawText("${idx + 1}.", sColNo + 5f, firstBaseY, paint)
 
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText(
-                    TextUtils.ellipsize(sess.title, TextPaint(paint), sColDate - sColTitle - 8f, TextUtils.TruncateAt.END).toString(),
-                    sColTitle + 5f,
-                    ty,
-                    paint
-                )
+                paint.textSize = 8f
+                drawWrappedLines(canvas, titleLines, sColTitle + 5f, firstBaseY, sumLineH, paint)
 
-                val datesLabel = sess.getVisitDatesList()
-                    .joinToString(", ") { dateShortFmt.format(Date(it)) }
-                    .ifBlank { "-" }
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
                 paint.textSize = 7.6f
-                canvas.drawText(
-                    TextUtils.ellipsize(datesLabel, TextPaint(paint), sColDist - sColDate - 8f, TextUtils.TruncateAt.END).toString(),
-                    sColDate + 5f,
-                    currentY + 11.5f,
-                    paint
-                )
+                paint.color = Color.rgb(15, 23, 42)
+                drawWrappedLines(canvas, dateLines, sColDate + 5f, firstBaseY, sumLineH, paint)
                 paint.color = Color.rgb(15, 118, 110)
-                canvas.drawText(
-                    TextUtils.ellipsize(sess.displayTimeRange(), TextPaint(paint), sColDist - sColDate - 8f, TextUtils.TruncateAt.END).toString(),
+                drawWrappedLines(
+                    canvas,
+                    timeLines,
                     sColDate + 5f,
-                    currentY + 21.5f,
+                    firstBaseY + dateLines.size * sumLineH,
+                    sumLineH,
                     paint
                 )
 
+                paint.textSize = 7.8f
                 paint.color = Color.rgb(51, 65, 85)
-                val distSummary = sess.getDistrictsList()
-                    .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
-                    .ifBlank { "-" }
-                canvas.drawText(
-                    TextUtils.ellipsize(distSummary, TextPaint(paint), sColCount - sColDist - 8f, TextUtils.TruncateAt.END).toString(),
-                    sColDist + 5f,
-                    ty,
-                    paint
-                )
+                drawWrappedLines(canvas, distLines, sColDist + 5f, firstBaseY, sumLineH, paint)
 
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 paint.textSize = 8.2f
                 paint.color = Color.rgb(29, 78, 216)
-                canvas.drawText(
-                    if (isEn) "${roster.size} ch." else "${roster.size} anak",
-                    sColCount + 5f,
-                    ty,
-                    paint
-                )
+                drawWrappedLines(canvas, countLines, sColCount + 5f, firstBaseY, sumLineH, paint)
+
                 currentY += rH
             }
             currentY += 12f
@@ -466,7 +547,8 @@ object VisitCircularPdfHelper {
         paint.textSize = 8.4f
         val guideLines = wrapParagraphLines(effectiveGuidelines, paint, contentW - 20f)
         if (guideLines.isNotEmpty()) {
-            val gBoxH = 26f + guideLines.size * 12.5f + 6f
+            val gContentH = guideLines.sumOf { if (it.isNotEmpty()) 12.5 else 5.0 }.toFloat()
+            val gBoxH = 30f + gContentH + 8f
             if (currentY + gBoxH > PAGE_HEIGHT - 135f) {
                 canvas = nextPage()
                 currentY = 40f
@@ -528,10 +610,10 @@ object VisitCircularPdfHelper {
         // ============================================================
         val cColNo = boxLeft
         val cColName = boxLeft + 24f
-        val cColClass = boxLeft + 150f
-        val cColDist = boxLeft + 252f
-        val cColWali = boxLeft + 336f
-        val cColNote = boxLeft + 424f
+        val cColClass = boxLeft + 144f
+        val cColDist = boxLeft + 236f
+        val cColWali = boxLeft + 314f
+        val cColNote = boxLeft + 402f
 
         fun drawStudentTableHeader(yPos: Float): Float {
             val hH = 22f
@@ -559,8 +641,37 @@ object VisitCircularPdfHelper {
             return yPos + hH
         }
 
-        fun drawSessionSectionHeader(sessionIndex: Int, session: VisitSession, count: Int, yPos: Float): Float {
-            val bannerH = 44f
+        fun measureSessionBanner(
+            sessionIndex: Int,
+            session: VisitSession,
+            count: Int
+        ): Triple<List<String>, List<String>, Float> {
+            val titleText = if (isEn) {
+                "APPENDIX ${sessionIndex + 1}: ${session.title.uppercase(lang.locale)} ($count Students)"
+            } else {
+                "LAMPIRAN ${sessionIndex + 1}: ${session.title.uppercase(lang.locale)} ($count Anak)"
+            }
+            val titleLines = measureWrappedLines(titleText, paint, 10f, true, contentW - 18f)
+
+            val datesText = session.getVisitDatesList()
+                .joinToString(", ") { dateFullFmt.format(Date(it)) }
+                .ifBlank { "-" }
+            val distsText = session.getDistrictsList()
+                .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+                .ifBlank { "-" }
+            val metaText = "$datesText  •  ${session.displayTimeRange()}  •  Kec: $distsText"
+            val metaLines = measureWrappedLines(metaText, paint, 8f, false, contentW - 18f)
+
+            val bannerH = 8f + titleLines.size * 13f + 3f + metaLines.size * 11f + 6f
+            return Triple(titleLines, metaLines, bannerH)
+        }
+
+        fun drawSessionSectionHeader(
+            titleLines: List<String>,
+            metaLines: List<String>,
+            bannerH: Float,
+            yPos: Float
+        ): Float {
             paint.style = Paint.Style.FILL
             paint.color = Color.rgb(239, 246, 255)
             canvas.drawRoundRect(RectF(boxLeft, yPos, boxRight, yPos + bannerH), 6f, 6f, paint)
@@ -573,39 +684,128 @@ object VisitCircularPdfHelper {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 10f
             paint.color = Color.rgb(29, 78, 216)
-            val titleText = if (isEn) {
-                "APPENDIX ${sessionIndex + 1}: ${session.title.uppercase(lang.locale)} ($count Students)"
-            } else {
-                "LAMPIRAN ${sessionIndex + 1}: ${session.title.uppercase(lang.locale)} ($count Anak)"
-            }
-            canvas.drawText(
-                TextUtils.ellipsize(titleText, TextPaint(paint), contentW - 18f, TextUtils.TruncateAt.END).toString(),
-                boxLeft + 9f,
-                yPos + 16f,
-                paint
-            )
+            drawWrappedLines(canvas, titleLines, boxLeft + 9f, yPos + 17f, 13f, paint)
 
-            val datesText = session.getVisitDatesList()
-                .joinToString(", ") { dateFullFmt.format(Date(it)) }
-                .ifBlank { "-" }
-            val distsText = session.getDistrictsList()
-                .joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
-                .ifBlank { "-" }
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             paint.textSize = 8f
             paint.color = Color.rgb(51, 65, 85)
-            canvas.drawText(
-                TextUtils.ellipsize(
-                    "$datesText  •  ${session.displayTimeRange()}  •  Kec: $distsText",
-                    TextPaint(paint),
-                    contentW - 18f,
-                    TextUtils.TruncateAt.END
-                ).toString(),
-                boxLeft + 9f,
-                yPos + 32f,
-                paint
-            )
+            val metaStartY = yPos + 8f + titleLines.size * 13f + 3f + 8.5f
+            drawWrappedLines(canvas, metaLines, boxLeft + 9f, metaStartY, 11f, paint)
             return yPos + bannerH + 6f
+        }
+
+        fun drawStudentRow(
+            rowIdx: Int,
+            student: ChildStudent,
+            distColor: Int,
+            noteLabel: String,
+            noteColor: Int,
+            noteBold: Boolean,
+            continuationTitle: String?
+        ) {
+            val cellFontSize = 7.9f
+            val rowLineH = 10f
+            val nameLines = measureWrappedLines(
+                student.name.ifBlank { "-" },
+                paint, cellFontSize, true, cColClass - cColName - 8f
+            )
+            val classDorm = listOf(student.classGrade.trim(), student.dormitory.trim())
+                .filter { it.isNotBlank() }
+                .joinToString(" • ")
+                .ifBlank { "-" }
+            val classLines = measureWrappedLines(
+                classDorm,
+                paint, cellFontSize, false, cColDist - cColClass - 8f
+            )
+            val distKey = VisitHelper.resolveStudentDistrictKey(student)
+            val distLabel = VisitHelper.displayDistrict(distKey, isEn)
+            val distLines = measureWrappedLines(
+                distLabel,
+                paint, cellFontSize, false, cColWali - cColDist - 8f
+            )
+            val waliText = student.assignedWaliName.ifBlank { student.assignedWaliUsername }.ifBlank { "-" }
+            val waliLines = measureWrappedLines(
+                waliText,
+                paint, cellFontSize, false, cColNote - cColWali - 8f
+            )
+            val noteLines = measureWrappedLines(
+                noteLabel,
+                paint, cellFontSize, noteBold, boxRight - cColNote - 8f
+            )
+
+            val maxLines = maxOf(
+                1,
+                nameLines.size,
+                classLines.size,
+                distLines.size,
+                waliLines.size,
+                noteLines.size
+            )
+            val contentBlockH = maxLines * rowLineH
+            val rowH = maxOf(22f, contentBlockH + 8f)
+
+            if (currentY + rowH > PAGE_HEIGHT - 42f) {
+                canvas = nextPage()
+                currentY = 38f
+                if (!continuationTitle.isNullOrBlank()) {
+                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                    paint.textSize = 8.6f
+                    paint.color = Color.rgb(100, 116, 139)
+                    canvas.drawText(
+                        if (isEn) {
+                            "Continued: $continuationTitle (Page $pageNumber)"
+                        } else {
+                            "Lanjutan Lampiran: $continuationTitle (Halaman $pageNumber)"
+                        },
+                        boxLeft,
+                        currentY,
+                        paint
+                    )
+                    currentY += 10f
+                }
+                currentY = drawStudentTableHeader(currentY)
+            }
+
+            paint.style = Paint.Style.FILL
+            paint.color = if (rowIdx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
+            canvas.drawRect(boxLeft, currentY, boxRight, currentY + rowH, paint)
+            paint.style = Paint.Style.STROKE
+            paint.color = Color.rgb(203, 213, 225)
+            paint.strokeWidth = 0.5f
+            canvas.drawRect(boxLeft, currentY, boxRight, currentY + rowH, paint)
+            listOf(cColName, cColClass, cColDist, cColWali, cColNote).forEach { x ->
+                canvas.drawLine(x, currentY, x, currentY + rowH, paint)
+            }
+            paint.style = Paint.Style.FILL
+
+            val firstBaseY = currentY + (rowH - contentBlockH) / 2f + 7.4f
+            paint.textSize = cellFontSize
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.color = Color.rgb(15, 23, 42)
+            canvas.drawText("${rowIdx + 1}.", cColNo + 4f, firstBaseY, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            drawWrappedLines(canvas, nameLines, cColName + 4f, firstBaseY, rowLineH, paint)
+
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            paint.color = Color.rgb(51, 65, 85)
+            drawWrappedLines(canvas, classLines, cColClass + 4f, firstBaseY, rowLineH, paint)
+
+            paint.color = distColor
+            drawWrappedLines(canvas, distLines, cColDist + 4f, firstBaseY, rowLineH, paint)
+
+            paint.color = Color.rgb(51, 65, 85)
+            drawWrappedLines(canvas, waliLines, cColWali + 4f, firstBaseY, rowLineH, paint)
+
+            paint.color = noteColor
+            paint.typeface = Typeface.create(
+                Typeface.DEFAULT,
+                if (noteBold) Typeface.BOLD else Typeface.NORMAL
+            )
+            drawWrappedLines(canvas, noteLines, cColNote + 4f, firstBaseY, rowLineH, paint)
+
+            currentY += rowH
         }
 
         if (sessionStudentPairs.isNotEmpty()) {
@@ -614,15 +814,17 @@ object VisitCircularPdfHelper {
         }
 
         sessionStudentPairs.forEachIndexed { sIdx, (sess, roster) ->
+            val (titleLines, metaLines, bannerH) = measureSessionBanner(sIdx, sess, roster.size)
+            val minNeededAfterBanner = bannerH + 6f + 22f + 26f
             if (sIdx > 0) {
-                if (config.pageBreakPerSession || currentY > PAGE_HEIGHT - 140f) {
+                if (config.pageBreakPerSession || currentY + minNeededAfterBanner > PAGE_HEIGHT - 45f) {
                     canvas = nextPage()
                     currentY = 38f
                 } else {
                     currentY += 14f
                 }
             }
-            currentY = drawSessionSectionHeader(sIdx, sess, roster.size, currentY)
+            currentY = drawSessionSectionHeader(titleLines, metaLines, bannerH, currentY)
 
             if (roster.isEmpty()) {
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
@@ -637,83 +839,7 @@ object VisitCircularPdfHelper {
                 currentY += 28f
             } else {
                 currentY = drawStudentTableHeader(currentY)
-                val rowH = 22f
                 roster.forEachIndexed { rowIdx, st ->
-                    if (currentY > PAGE_HEIGHT - 55f) {
-                        canvas = nextPage()
-                        currentY = 38f
-                        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                        paint.textSize = 8.6f
-                        paint.color = Color.rgb(100, 116, 139)
-                        canvas.drawText(
-                            if (isEn) {
-                                "Continued: ${sess.title} (Page $pageNumber)"
-                            } else {
-                                "Lanjutan Lampiran: ${sess.title} (Halaman $pageNumber)"
-                            },
-                            boxLeft,
-                            currentY,
-                            paint
-                        )
-                        currentY += 10f
-                        currentY = drawStudentTableHeader(currentY)
-                    }
-
-                    paint.style = Paint.Style.FILL
-                    paint.color = if (rowIdx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
-                    canvas.drawRect(boxLeft, currentY, boxRight, currentY + rowH, paint)
-                    paint.style = Paint.Style.STROKE
-                    paint.color = Color.rgb(203, 213, 225)
-                    paint.strokeWidth = 0.5f
-                    canvas.drawRect(boxLeft, currentY, boxRight, currentY + rowH, paint)
-                    listOf(cColName, cColClass, cColDist, cColWali, cColNote).forEach { x ->
-                        canvas.drawLine(x, currentY, x, currentY + rowH, paint)
-                    }
-                    paint.style = Paint.Style.FILL
-
-                    val ty = currentY + 14.5f
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    paint.textSize = 7.9f
-                    paint.color = Color.rgb(15, 23, 42)
-                    canvas.drawText("${rowIdx + 1}.", cColNo + 5f, ty, paint)
-
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                    canvas.drawText(
-                        TextUtils.ellipsize(st.name, TextPaint(paint), cColClass - cColName - 7f, TextUtils.TruncateAt.END).toString(),
-                        cColName + 4f,
-                        ty,
-                        paint
-                    )
-
-                    paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                    paint.color = Color.rgb(51, 65, 85)
-                    val classDorm = listOf(st.classGrade.trim(), st.dormitory.trim())
-                        .filter { it.isNotBlank() }
-                        .joinToString(" • ")
-                        .ifBlank { "-" }
-                    canvas.drawText(
-                        TextUtils.ellipsize(classDorm, TextPaint(paint), cColDist - cColClass - 7f, TextUtils.TruncateAt.END).toString(),
-                        cColClass + 4f,
-                        ty,
-                        paint
-                    )
-
-                    val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
-                    canvas.drawText(
-                        TextUtils.ellipsize(distLabel, TextPaint(paint), cColWali - cColDist - 7f, TextUtils.TruncateAt.END).toString(),
-                        cColDist + 4f,
-                        ty,
-                        paint
-                    )
-
-                    val waliText = st.assignedWaliName.ifBlank { st.assignedWaliUsername }.ifBlank { "-" }
-                    canvas.drawText(
-                        TextUtils.ellipsize(waliText, TextPaint(paint), cColNote - cColWali - 7f, TextUtils.TruncateAt.END).toString(),
-                        cColWali + 4f,
-                        ty,
-                        paint
-                    )
-
                     val incomingSwap = VisitHelper.findIncomingSwapToSession(sess.id, st, swaps)
                     val noteLabel = if (incomingSwap != null) {
                         val originName = incomingSwap.fromSessionTitle.ifBlank {
@@ -723,32 +849,35 @@ object VisitCircularPdfHelper {
                     } else {
                         sess.title
                     }
-                    paint.color = if (incomingSwap != null) Color.rgb(67, 56, 202) else Color.rgb(100, 116, 139)
-                    paint.typeface = Typeface.create(
-                        Typeface.DEFAULT,
-                        if (incomingSwap != null) Typeface.BOLD else Typeface.NORMAL
+                    drawStudentRow(
+                        rowIdx = rowIdx,
+                        student = st,
+                        distColor = Color.rgb(51, 65, 85),
+                        noteLabel = noteLabel,
+                        noteColor = if (incomingSwap != null) Color.rgb(67, 56, 202) else Color.rgb(100, 116, 139),
+                        noteBold = incomingSwap != null,
+                        continuationTitle = sess.title
                     )
-                    canvas.drawText(
-                        TextUtils.ellipsize(noteLabel, TextPaint(paint), boxRight - cColNote - 7f, TextUtils.TruncateAt.END).toString(),
-                        cColNote + 4f,
-                        ty,
-                        paint
-                    )
-
-                    currentY += rowH
                 }
             }
         }
 
         // Optional Unscheduled Students Appendix
         if (unscheduledStudents.isNotEmpty()) {
-            if (currentY > PAGE_HEIGHT - 140f) {
+            val warnText = if (isEn) {
+                "NOTICE: STUDENTS NOT YET ASSIGNED TO SELECTED SESSIONS (${unscheduledStudents.size} Students)"
+            } else {
+                "CATATAN: SISWA BELUM MASUK KELOMPOK SESI TERPILIH (${unscheduledStudents.size} Anak)"
+            }
+            val warnLines = measureWrappedLines(warnText, paint, 9.2f, true, contentW - 18f)
+            val warnH = 12f + warnLines.size * 12.5f + 6f
+
+            if (currentY + warnH + 6f + 22f + 26f > PAGE_HEIGHT - 45f) {
                 canvas = nextPage()
                 currentY = 38f
             } else {
                 currentY += 16f
             }
-            val warnH = 34f
             paint.style = Paint.Style.FILL
             paint.color = Color.rgb(255, 251, 235)
             canvas.drawRoundRect(RectF(boxLeft, currentY, boxRight, currentY + warnH), 6f, 6f, paint)
@@ -760,86 +889,26 @@ object VisitCircularPdfHelper {
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
             paint.textSize = 9.2f
             paint.color = Color.rgb(146, 64, 14)
-            canvas.drawText(
-                if (isEn) {
-                    "NOTICE: STUDENTS NOT YET ASSIGNED TO SELECTED SESSIONS (${unscheduledStudents.size} Students)"
-                } else {
-                    "CATATAN: SISWA BELUM MASUK KELOMPOK SESI TERPILIH (${unscheduledStudents.size} Anak)"
-                },
-                boxLeft + 9f,
-                currentY + 21f,
-                paint
-            )
+            drawWrappedLines(canvas, warnLines, boxLeft + 9f, currentY + 19f, 12.5f, paint)
+
             currentY += warnH + 6f
             currentY = drawStudentTableHeader(currentY)
-            val rowH = 22f
             unscheduledStudents.forEachIndexed { idx, st ->
-                if (currentY > PAGE_HEIGHT - 55f) {
-                    canvas = nextPage()
-                    currentY = 38f
-                    currentY = drawStudentTableHeader(currentY)
-                }
-                paint.style = Paint.Style.FILL
-                paint.color = if (idx % 2 == 0) Color.WHITE else Color.rgb(248, 250, 252)
-                canvas.drawRect(boxLeft, currentY, boxRight, currentY + rowH, paint)
-                paint.style = Paint.Style.STROKE
-                paint.color = Color.rgb(203, 213, 225)
-                paint.strokeWidth = 0.5f
-                canvas.drawRect(boxLeft, currentY, boxRight, currentY + rowH, paint)
-                listOf(cColName, cColClass, cColDist, cColWali, cColNote).forEach { x ->
-                    canvas.drawLine(x, currentY, x, currentY + rowH, paint)
-                }
-                paint.style = Paint.Style.FILL
-                val ty = currentY + 14.5f
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                paint.textSize = 7.9f
-                paint.color = Color.rgb(15, 23, 42)
-                canvas.drawText("${idx + 1}.", cColNo + 5f, ty, paint)
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText(
-                    TextUtils.ellipsize(st.name, TextPaint(paint), cColClass - cColName - 7f, TextUtils.TruncateAt.END).toString(),
-                    cColName + 4f,
-                    ty,
-                    paint
-                )
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
-                paint.color = Color.rgb(51, 65, 85)
-                val classDorm = listOf(st.classGrade.trim(), st.dormitory.trim()).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "-" }
-                canvas.drawText(
-                    TextUtils.ellipsize(classDorm, TextPaint(paint), cColDist - cColClass - 7f, TextUtils.TruncateAt.END).toString(),
-                    cColClass + 4f,
-                    ty,
-                    paint
-                )
                 val distKey = VisitHelper.resolveStudentDistrictKey(st)
-                val distLabel = VisitHelper.displayDistrict(distKey, isEn)
-                paint.color = if (distKey == VisitHelper.UNASSIGNED_DISTRICT) Color.rgb(180, 83, 9) else Color.rgb(51, 65, 85)
-                canvas.drawText(
-                    TextUtils.ellipsize(distLabel, TextPaint(paint), cColWali - cColDist - 7f, TextUtils.TruncateAt.END).toString(),
-                    cColDist + 4f,
-                    ty,
-                    paint
+                val noteText = if (distKey == VisitHelper.UNASSIGNED_DISTRICT) {
+                    if (isEn) "No District" else "Kecamatan Kosong"
+                } else {
+                    if (isEn) "Unassigned" else "Belum Masuk Sesi"
+                }
+                drawStudentRow(
+                    rowIdx = idx,
+                    student = st,
+                    distColor = if (distKey == VisitHelper.UNASSIGNED_DISTRICT) Color.rgb(180, 83, 9) else Color.rgb(51, 65, 85),
+                    noteLabel = noteText,
+                    noteColor = Color.rgb(180, 83, 9),
+                    noteBold = false,
+                    continuationTitle = if (isEn) "Unassigned Students" else "Siswa Belum Masuk Sesi"
                 )
-                paint.color = Color.rgb(51, 65, 85)
-                val waliText = st.assignedWaliName.ifBlank { st.assignedWaliUsername }.ifBlank { "-" }
-                canvas.drawText(
-                    TextUtils.ellipsize(waliText, TextPaint(paint), cColNote - cColWali - 7f, TextUtils.TruncateAt.END).toString(),
-                    cColWali + 4f,
-                    ty,
-                    paint
-                )
-                paint.color = Color.rgb(180, 83, 9)
-                canvas.drawText(
-                    if (distKey == VisitHelper.UNASSIGNED_DISTRICT) {
-                        if (isEn) "No District" else "Kecamatan Kosong"
-                    } else {
-                        if (isEn) "Unassigned" else "Belum Masuk Sesi"
-                    },
-                    cColNote + 4f,
-                    ty,
-                    paint
-                )
-                currentY += rowH
             }
         }
 

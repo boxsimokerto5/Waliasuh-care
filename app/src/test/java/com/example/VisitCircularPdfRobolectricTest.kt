@@ -221,24 +221,27 @@ class VisitCircularPdfRobolectricTest {
         // Page 1 = Cover Letter + Session summary table; Page 2 = Appendix 1; Page 3 = Appendix 2 (+ unscheduled)
         assertEquals(3, pageBreakPages.size)
         val coverText = pageBreakPages[0]
-        assertTrue(coverText.contains("EDARAN PEMBAGIAN JADWAL KUNJUNGAN WALI SISWA"))
-        assertTrue(coverText.contains("B-12/SRT1/XI/2026"))
-        assertTrue(coverText.contains("Kunjungan November 2026 - Sesi 1"))
-        assertTrue(coverText.contains("Kunjungan November 2026 - Sesi 2"))
-        assertTrue(coverText.contains("Drs. Ahmad Koordinator"))
+        val coverFlat = coverText.replace(" | ", " ")
+        assertTrue(coverFlat.contains("EDARAN PEMBAGIAN JADWAL KUNJUNGAN WALI SISWA"))
+        assertTrue(coverFlat.contains("B-12/SRT1/XI/2026"))
+        assertTrue(coverFlat.contains("Kunjungan November 2026 - Sesi 1"))
+        assertTrue(coverFlat.contains("Kunjungan November 2026 - Sesi 2"))
+        assertTrue(coverFlat.contains("Drs. Ahmad Koordinator"))
 
         val app1Text = pageBreakPages[1]
-        assertTrue(app1Text.contains("LAMPIRAN 1"))
-        assertTrue(app1Text.contains("Belum ada siswa terjadwal pada sesi ini."))
-        assertFalse("Swapped student Budi must no longer appear under Sesi 1", app1Text.contains("Budi Santoso"))
+        val app1Flat = app1Text.replace(" | ", " ")
+        assertTrue(app1Flat.contains("LAMPIRAN 1"))
+        assertTrue(app1Flat.contains("Belum ada siswa terjadwal pada sesi ini."))
+        assertFalse("Swapped student Budi must no longer appear under Sesi 1", app1Flat.contains("Budi Santoso"))
 
         val app2Text = pageBreakPages[2]
-        assertTrue(app2Text.contains("LAMPIRAN 2"))
-        assertTrue("Budi Santoso must appear under Sesi 2", app2Text.contains("Budi Santoso"))
-        assertTrue(app2Text.contains("Pindahan (Kunjungan November 2026 - Sesi 1)"))
-        assertTrue("Citra Lestari must appear under Sesi 2", app2Text.contains("Citra Lestari"))
-        assertTrue("Unscheduled student Dina must appear in unscheduled appendix", app2Text.contains("Dina Rahmawati"))
-        assertTrue(app2Text.contains("BELUM MASUK KELOMPOK SESI TERPILIH"))
+        val app2Flat = app2Text.replace(" | ", " ")
+        assertTrue(app2Flat.contains("LAMPIRAN 2"))
+        assertTrue("Budi Santoso must appear under Sesi 2", app2Flat.contains("Budi Santoso"))
+        assertTrue(app2Flat.contains("Pindahan (Kunjungan November 2026 - Sesi 1)"))
+        assertTrue("Citra Lestari must appear under Sesi 2", app2Flat.contains("Citra Lestari"))
+        assertTrue("Unscheduled student Dina must appear in unscheduled appendix", app2Flat.contains("Dina Rahmawati"))
+        assertTrue(app2Flat.contains("BELUM MASUK KELOMPOK SESI TERPILIH"))
 
         // Compact mode (no forced page break per session) merges Appendix 1 and 2 together on Page 2
         val compactPages = capturePagesTexts { startNew, finish ->
@@ -274,6 +277,107 @@ class VisitCircularPdfRobolectricTest {
         assertTrue(outFile!!.exists())
         assertTrue(outFile.length() > 0L)
         outFile.delete()
+    }
+
+    @Test
+    fun `VisitCircularPdfHelper wraps long districts titles and student notes without ellipsis truncation`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val schoolId = "SRT1-KDR"
+        val date1 = dayMillis(2026, Calendar.NOVEMBER, 15)
+        val date2 = dayMillis(2026, Calendar.NOVEMBER, 22)
+        val longTitle = "Kunjungan November 2026 Gelombang Pertama"
+        val manyDistricts = "Badas,Gurah,Kandangan,Grogol,Gampengrejo,Banyakan,Kandat,Kayen Kidul"
+
+        val session = VisitSession(
+            id = 6199L,
+            title = longTitle,
+            monthYear = "2026-11",
+            sessionDatesCsv = "$date1,$date2",
+            selectedDistrictsCsv = manyDistricts,
+            visitTimeRange = "08.00 - 11.30 WIB",
+            isActive = true,
+            publishedToWali = true,
+            publishedToParent = true,
+            schoolId = schoolId
+        )
+        val student = ChildStudent(
+            id = 6299L,
+            name = "Muhammad Aditya Pratama Kusuma",
+            nis = "6299",
+            nik = "3506629900010001",
+            gender = "L",
+            age = 14,
+            dormitory = "Asrama Putra Gedek",
+            classGrade = "VIII-Unggulan",
+            district = "Kayen Kidul",
+            assignedWaliUsername = "ust_hendra",
+            assignedWaliName = "Ustadz Hendra Wijaya Kusuma",
+            schoolId = schoolId
+        )
+
+        val rectHeights = mutableListOf<Float>()
+        val roundRectHeights = mutableListOf<Float>()
+        val pages = mutableListOf<MutableList<String>>()
+        val bitmaps = mutableListOf<Bitmap>()
+        try {
+            VisitCircularPdfHelper.renderMonthlyCircularPages(
+                context = app,
+                sessions = listOf(session),
+                allStudents = listOf(student),
+                swaps = emptyList(),
+                allSchoolSessions = listOf(session),
+                schoolProfile = SchoolProfile(
+                    schoolName = "Sekolah Rakyat Kabupaten Kediri",
+                    shortName = "SR Kab. Kediri",
+                    tenantCode = schoolId
+                ),
+                config = VisitCircularPdfConfig(
+                    monthYear = "2026-11",
+                    includeUnscheduledAppendix = false
+                ),
+                startNewCanvas = {
+                    val bmp = Bitmap.createBitmap(595, 842, Bitmap.Config.ARGB_8888)
+                    bitmaps.add(bmp)
+                    val pageTexts = mutableListOf<String>()
+                    pages.add(pageTexts)
+                    object : Canvas(bmp) {
+                        override fun drawText(text: String, x: Float, y: Float, paint: Paint) {
+                            pageTexts.add(text)
+                            super.drawText(text, x, y, paint)
+                        }
+
+                        override fun drawRect(left: Float, top: Float, right: Float, bottom: Float, paint: Paint) {
+                            rectHeights.add(bottom - top)
+                            super.drawRect(left, top, right, bottom, paint)
+                        }
+
+                        override fun drawRoundRect(rect: android.graphics.RectF, rx: Float, ry: Float, paint: Paint) {
+                            roundRectHeights.add(rect.height())
+                            super.drawRoundRect(rect, rx, ry, paint)
+                        }
+                    }
+                },
+                finishCanvas = {}
+            )
+        } finally {
+            bitmaps.forEach { it.recycle() }
+        }
+
+        assertEquals(2, pages.size)
+        val coverJoined = pages[0].joinToString(" | ")
+        val coverFlat = coverJoined.replace(" | ", " ")
+        assertFalse("Summary page must not ellipsize long districts or titles", coverJoined.contains("..."))
+        assertTrue("Full last district must appear on summary page", coverFlat.contains("Kayen Kidul"))
+        assertTrue("Full session title must appear on summary page", coverFlat.contains(longTitle))
+
+        val appJoined = pages[1].joinToString(" | ")
+        val appFlat = appJoined.replace(" | ", " ")
+        assertFalse("Appendix page must not ellipsize long titles, banners, or notes", appJoined.contains("..."))
+        assertTrue("Appendix banner must show last district without clipping", appFlat.contains("Kayen Kidul"))
+        assertTrue("Student table must render full long session note", appFlat.contains(longTitle))
+        assertTrue("Student table must render full long student name", appFlat.contains("Muhammad Aditya Pratama Kusuma"))
+        assertTrue("Summary or student rows must expand beyond single-line height", rectHeights.any { it > 28f })
+        assertTrue("Session banner roundRect must expand beyond 44f for wrapped districts", roundRectHeights.any { it > 46f })
     }
 
     @Test
@@ -384,5 +488,160 @@ class VisitCircularPdfRobolectricTest {
         db.visitSessionDao().deleteById(6501L)
         db.visitSessionDao().deleteById(6502L)
         db.childStudentDao().delete(student)
+    }
+
+    @Test
+    fun `JadwalKunjunganSheet and DaftarHadirKunjunganSheet use dropdown session selector and compact inputs`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val date1 = dayMillis(2026, Calendar.NOVEMBER, 15)
+        val date2 = dayMillis(2026, Calendar.NOVEMBER, 22)
+        val s1 = VisitSession(
+            id = 6701L,
+            title = "Kunjungan Sesi 1 (Wates)",
+            monthYear = "2026-11",
+            sessionDatesCsv = date1.toString(),
+            selectedDistrictsCsv = "Wates",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToWali = true,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+        val s2 = VisitSession(
+            id = 6702L,
+            title = "Kunjungan Sesi 2 (Pare)",
+            monthYear = "2026-11",
+            sessionDatesCsv = date2.toString(),
+            selectedDistrictsCsv = "Pare",
+            visitTimeRange = "09.00 - 12.00 WIB",
+            isActive = true,
+            publishedToWali = true,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+        val stWates = ChildStudent(
+            id = 6801L,
+            name = "Siswa Wates Satu",
+            nis = "6801",
+            gender = "L",
+            age = 13,
+            classGrade = "VII-A",
+            dormitory = "Asrama Putra",
+            district = "Wates",
+            schoolId = "SRT1-KDR"
+        )
+        val stPare = ChildStudent(
+            id = 6802L,
+            name = "Siswa Pare Dua",
+            nis = "6802",
+            gender = "P",
+            age = 14,
+            classGrade = "VIII-B",
+            dormitory = "Asrama Putri",
+            district = "Pare",
+            schoolId = "SRT1-KDR"
+        )
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.dialogs.JadwalKunjunganSheet(
+                    sessions = listOf(s1, s2),
+                    students = listOf(stWates, stPare),
+                    visitRecords = emptyList(),
+                    onOpenDaftarHadir = {},
+                    onOpenLaporan = {},
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("dropdown_jadwal_session")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("option_jadwal_session_6702").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("list_jadwal_kunjungan")
+            .performScrollToNode(androidx.compose.ui.test.hasText("Siswa Pare Dua"))
+    }
+
+    @Test
+    fun `DaftarHadirKunjunganSheet uses dropdown session selector to switch rosters`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val date1 = dayMillis(2026, Calendar.NOVEMBER, 15)
+        val date2 = dayMillis(2026, Calendar.NOVEMBER, 22)
+        val s1 = VisitSession(
+            id = 6711L,
+            title = "Daftar Hadir Sesi 1 (Wates)",
+            monthYear = "2026-11",
+            sessionDatesCsv = date1.toString(),
+            selectedDistrictsCsv = "Wates",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            schoolId = "SRT1-KDR"
+        )
+        val s2 = VisitSession(
+            id = 6712L,
+            title = "Daftar Hadir Sesi 2 (Pare)",
+            monthYear = "2026-11",
+            sessionDatesCsv = date2.toString(),
+            selectedDistrictsCsv = "Pare",
+            visitTimeRange = "09.00 - 12.00 WIB",
+            isActive = true,
+            schoolId = "SRT1-KDR"
+        )
+        val stWates = ChildStudent(
+            id = 6811L,
+            name = "Hadir Wates Satu",
+            nis = "6811",
+            gender = "L",
+            age = 13,
+            classGrade = "VII-A",
+            dormitory = "Asrama Putra",
+            district = "Wates",
+            schoolId = "SRT1-KDR"
+        )
+        val stPare = ChildStudent(
+            id = 6812L,
+            name = "Hadir Pare Dua",
+            nis = "6812",
+            gender = "P",
+            age = 14,
+            classGrade = "VIII-B",
+            dormitory = "Asrama Putri",
+            district = "Pare",
+            schoolId = "SRT1-KDR"
+        )
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.dialogs.DaftarHadirKunjunganSheet(
+                    sessions = listOf(s1, s2),
+                    students = listOf(stWates, stPare),
+                    visitRecords = emptyList(),
+                    schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", shortName = "SRT 1"),
+                    waliName = "Ustadz Budi",
+                    initialTab = 1,
+                    onRecordVisitCheckIn = { _, _, _, _, _, _, _ -> },
+                    onDeleteVisitRecord = {},
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("dropdown_visit_attendance_session")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("option_visit_attendance_session_6712").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("list_visit_manual_tab")
+            .performScrollToNode(androidx.compose.ui.test.hasText("Hadir Pare Dua"))
     }
 }
