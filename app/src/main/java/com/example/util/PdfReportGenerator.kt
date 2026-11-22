@@ -4629,7 +4629,7 @@ object PdfReportGenerator {
                 }
             )
 
-            val outputDir = File(context.cacheDir, "reports").apply { mkdirs() }
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
             val safeMonth = monthKey.replace(Regex("[^0-9A-Za-z_-]"), "")
             val outFile = File(outputDir, "Jadwal_Resmi_Wali_Asuh_${safeMonth}_${System.currentTimeMillis()}.pdf")
             FileOutputStream(outFile).use { fos ->

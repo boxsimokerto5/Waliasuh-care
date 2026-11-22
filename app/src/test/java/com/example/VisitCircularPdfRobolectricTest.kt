@@ -741,4 +741,38 @@ class VisitCircularPdfRobolectricTest {
             .performClick()
         composeTestRule.waitForIdle()
     }
+
+    @Test
+    fun `PdfReportGenerator generateJadwalMatriksPdf writes to allowed directory and resolves FileProvider URI`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val entries = listOf(
+            com.example.data.model.WaliScheduleEntry(
+                id = 1L,
+                monthKey = "2026-11",
+                waliUsername = "zainudin",
+                waliName = "A. Zainudin Sholeh",
+                waliCode = "A",
+                dayCodesJson = "{\"1\":\"S2A\",\"2\":\"S2A\"}",
+                sortOrder = 1
+            )
+        )
+        val outFile = com.example.util.PdfReportGenerator.generateJadwalMatriksPdf(
+            context = app,
+            monthKey = "2026-11",
+            entries = entries,
+            shiftCodes = emptyList(),
+            waliName = "Admin Sekolah",
+            schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", shortName = "SRT 1")
+        )
+        assertNotNull("Matriks PDF file must be generated", outFile)
+        assertTrue(outFile!!.exists())
+        assertTrue(outFile.length() > 0L)
+        val uri = androidx.core.content.FileProvider.getUriForFile(
+            app,
+            "${app.packageName}.provider",
+            outFile
+        )
+        assertNotNull("FileProvider URI must resolve without IllegalArgumentException", uri)
+        outFile.delete()
+    }
 }
