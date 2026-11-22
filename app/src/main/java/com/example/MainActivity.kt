@@ -842,6 +842,10 @@ private fun WaliAsuhCareAppContent(
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.showSiswaPerKecamatanSheet = true
                 },
+                onOpenEdaranOrangTua = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showEdaranOrangTuaSheet = true
+                },
                 onOpenCreateVisitSession = {
                     TopOnAdManager.onUserActionClick(context)
                     dashboardModalState.visitSessionToEdit = null

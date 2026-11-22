@@ -1024,6 +1024,7 @@ internal fun LazyListScope.kunjunganCategoryItems(
     onOpenDaftarHadirKunjungan: (Int) -> Unit,
     onOpenLaporanKunjungan: () -> Unit,
     onOpenSiswaPerKecamatan: () -> Unit,
+    onOpenEdaranOrangTua: () -> Unit = {},
     onOpenCreateVisitSession: () -> Unit
 ) {
     val activeSession = visitSessions.firstOrNull { it.isActive } ?: visitSessions.firstOrNull()
@@ -1111,6 +1112,19 @@ internal fun LazyListScope.kunjunganCategoryItems(
                     modifier = Modifier.weight(1f)
                 )
             }
+            CartoonMenuCard(
+                title = if (isEn) "Parent Circular" else "Edaran Orang Tua",
+                subtitle = if (isEn) "Generate Schedule, Sessions & Rules" else "Generate Jadwal, Sesi & Aturan",
+                imageRes = R.drawable.img_menu_orang_tua,
+                badgeText = if (isEn) "Generate Edaran" else "Edaran PDF",
+                badgeBg = Color(0xFFE0E7FF),
+                badgeColor = Color(0xFF3730A3),
+                bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.65f)),
+                borderColor = Color(0xFFC7D2FE),
+                onClick = onOpenEdaranOrangTua,
+                testTag = "tile_edaran_orang_tua",
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 

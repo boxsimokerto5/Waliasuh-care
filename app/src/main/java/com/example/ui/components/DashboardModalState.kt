@@ -64,6 +64,7 @@ class DashboardModalState {
     var daftarHadirKunjunganInitialTab by mutableStateOf(0)
     var showLaporanKunjunganSheet by mutableStateOf(false)
     var showSiswaPerKecamatanSheet by mutableStateOf(false)
+    var showEdaranOrangTuaSheet by mutableStateOf(false)
     var showCreateVisitSessionDialog by mutableStateOf(false)
     var visitSessionToEdit by mutableStateOf<VisitSession?>(null)
     var visitStudentForDetail by mutableStateOf<ChildStudent?>(null)

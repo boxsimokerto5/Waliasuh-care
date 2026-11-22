@@ -137,6 +137,7 @@ fun CategoryHubOverlay(
     onOpenDaftarHadirKunjungan: (Int) -> Unit = {},
     onOpenLaporanKunjungan: () -> Unit = {},
     onOpenSiswaPerKecamatan: () -> Unit = {},
+    onOpenEdaranOrangTua: () -> Unit = {},
     onOpenCreateVisitSession: () -> Unit = {},
     onOpenPilihAnakAsuh: () -> Unit = {},
     incomingTandemRequestCount: Int = 0,
@@ -637,6 +638,7 @@ fun CategoryHubOverlay(
                                     onOpenDaftarHadirKunjungan = onOpenDaftarHadirKunjungan,
                                     onOpenLaporanKunjungan = onOpenLaporanKunjungan,
                                     onOpenSiswaPerKecamatan = onOpenSiswaPerKecamatan,
+                                    onOpenEdaranOrangTua = onOpenEdaranOrangTua,
                                     onOpenCreateVisitSession = onOpenCreateVisitSession
                                 )
                                 DashboardCategoryHub.ORANG_TUA -> orangTuaCategoryItems(

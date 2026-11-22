@@ -644,4 +644,101 @@ class VisitCircularPdfRobolectricTest {
         composeTestRule.onNodeWithTag("list_visit_manual_tab")
             .performScrollToNode(androidx.compose.ui.test.hasText("Hadir Pare Dua"))
     }
+
+    @Test
+    fun `Kunjungan hub displays Edaran Orang Tua menu tile and triggers callback`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        var openedEdaran = false
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                androidx.compose.foundation.lazy.LazyColumn {
+                    com.example.ui.components.kunjunganCategoryItems(
+                        isEn = false,
+                        lang = AppLanguage.INDONESIAN,
+                        students = emptyList(),
+                        visitSessions = emptyList(),
+                        visitRecords = emptyList(),
+                        isAdmin = false,
+                        onOpenJadwalKunjungan = {},
+                        onOpenDaftarHadirKunjungan = {},
+                        onOpenLaporanKunjungan = {},
+                        onOpenSiswaPerKecamatan = {},
+                        onOpenEdaranOrangTua = { openedEdaran = true },
+                        onOpenCreateVisitSession = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tile_edaran_orang_tua")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        assertTrue(openedEdaran)
+    }
+
+    @Test
+    fun `EdaranOrangTuaKunjunganSheet displays rules student roster and generates circular PDF`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val date1 = dayMillis(2026, Calendar.NOVEMBER, 15)
+        val s1 = VisitSession(
+            id = 6901L,
+            title = "Kunjungan November 2026 - Sesi 1",
+            monthYear = "2026-11",
+            sessionDatesCsv = date1.toString(),
+            selectedDistrictsCsv = "Wates",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToWali = true,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+        val st1 = ChildStudent(
+            id = 6911L,
+            name = "Aulia Rahma",
+            nis = "6911",
+            gender = "P",
+            age = 13,
+            classGrade = "VII-B",
+            dormitory = "Asrama Putri",
+            district = "Wates",
+            schoolId = "SRT1-KDR"
+        )
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.dialogs.EdaranOrangTuaKunjunganSheet(
+                    sessions = listOf(s1),
+                    students = listOf(st1),
+                    myFosterStudents = emptyList(),
+                    visitSessionSwaps = emptyList(),
+                    schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", shortName = "SRT 1"),
+                    defaultSignerName = "Ustadz Budi",
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("btn_generate_edaran_orang_tua")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("list_edaran_orang_tua_students")
+            .performScrollToNode(hasTestTag("card_edaran_student_6911"))
+        composeTestRule.onNodeWithTag("card_edaran_student_6911").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("btn_generate_edaran_orang_tua").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("dialog_edaran_orang_tua_pdf_ready").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_open_edaran_pdf").assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_share_edaran_pdf").assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_close_edaran_pdf_ready")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+    }
 }

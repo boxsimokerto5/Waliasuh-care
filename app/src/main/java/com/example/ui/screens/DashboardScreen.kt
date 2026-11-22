@@ -145,6 +145,7 @@ import com.example.ui.dialogs.DashboardBannerEditorSheet
 import com.example.ui.dialogs.DashboardLayoutEditorSheet
 import com.example.ui.dialogs.DepartReferralDialog
 import com.example.ui.dialogs.DirectTreatmentDialog
+import com.example.ui.dialogs.EdaranOrangTuaKunjunganSheet
 import com.example.ui.dialogs.EditJadwalSelDialog
 import com.example.ui.dialogs.FaskesReferralSheet
 import com.example.ui.dialogs.FiqihHaidDialog
@@ -1240,6 +1241,7 @@ fun DashboardScreen(
                 },
                 onOpenLaporanKunjungan = { modalState.showLaporanKunjunganSheet = true },
                 onOpenSiswaPerKecamatan = { modalState.showSiswaPerKecamatanSheet = true },
+                onOpenEdaranOrangTua = { modalState.showEdaranOrangTuaSheet = true },
                 onOpenCreateVisitSession = {
                     modalState.visitSessionToEdit = null
                     modalState.showCreateVisitSessionDialog = true
@@ -1989,6 +1991,7 @@ fun DashboardScreen(
         modalState.showDaftarHadirKunjunganSheet,
         modalState.showLaporanKunjunganSheet,
         modalState.showSiswaPerKecamatanSheet,
+        modalState.showEdaranOrangTuaSheet,
         modalState.activeCategoryHub
     ) {
         if (modalState.showInputPuasaDialog || modalState.showDaftarPuasaSheet ||
@@ -2002,6 +2005,7 @@ fun DashboardScreen(
         }
         if (modalState.showJadwalKunjunganSheet || modalState.showDaftarHadirKunjunganSheet ||
             modalState.showLaporanKunjunganSheet || modalState.showSiswaPerKecamatanSheet ||
+            modalState.showEdaranOrangTuaSheet ||
             modalState.activeCategoryHub == DashboardCategoryHub.KUNJUNGAN
         ) {
             viewModel.syncVisitsOnlineQuietly()
@@ -2474,6 +2478,18 @@ private fun DashboardVisitAndParentModalsHost(
             visitSessions = visitSessions,
             onStudentClick = { st -> modalState.visitStudentForDetail = st },
             onDismiss = { modalState.showSiswaPerKecamatanSheet = false }
+        )
+    }
+
+    if (modalState.showEdaranOrangTuaSheet) {
+        EdaranOrangTuaKunjunganSheet(
+            sessions = visitSessions,
+            students = students,
+            myFosterStudents = myFosterStudents,
+            visitSessionSwaps = visitSessionSwaps,
+            schoolProfile = schoolProfile,
+            defaultSignerName = schoolProfile.adminName.ifBlank { waliName.ifBlank { if (isEn) "School Admin" else "Admin Sekolah" } },
+            onDismiss = { modalState.showEdaranOrangTuaSheet = false }
         )
     }
 
