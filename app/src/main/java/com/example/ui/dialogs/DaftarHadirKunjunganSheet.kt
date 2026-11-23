@@ -600,9 +600,36 @@ fun DaftarHadirKunjunganSheet(
                                                     overflow = TextOverflow.Ellipsis
                                                 )
                                             }
+                                            val matchedStudent = scheduledStudents.firstOrNull { VisitHelper.matchesRecordToStudent(rec, it) }
+                                                ?: students.firstOrNull { VisitHelper.matchesRecordToStudent(rec, it) }
+                                            val canSwapCheckedIn = matchedStudent != null &&
+                                                selectedSession != null &&
+                                                onSwapStudentSession != null &&
+                                                VisitHelper.canWaliSwapStudent(
+                                                    student = matchedStudent,
+                                                    isAdmin = isAdmin,
+                                                    currentUsername = currentUsername,
+                                                    currentWaliName = waliName,
+                                                    isAnakSuperAdmin = isAnakSuperAdmin
+                                                )
+                                            if (canSwapCheckedIn && matchedStudent != null) {
+                                                IconButton(
+                                                    onClick = { swapTargetStudent = matchedStudent },
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .testTag("btn_swap_visit_session_${matchedStudent.id}")
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.SwapHoriz,
+                                                        contentDescription = if (isEn) "Swap Session" else "Tukar Sesi",
+                                                        tint = indigoPrimary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
                                             IconButton(
                                                 onClick = { onDeleteVisitRecord(rec) },
-                                                modifier = Modifier.size(40.dp)
+                                                modifier = Modifier.size(48.dp)
                                             ) {
                                                 Icon(
                                                     Icons.Default.DeleteOutline,

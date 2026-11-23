@@ -4938,9 +4938,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val actorName = _waliName.value.ifBlank { if (isAdminRole) "Admin Sekolah" else "Wali Asuh" }
             if (!VisitHelper.canWaliSwapStudent(student, isAdminRole, actorUsername, actorName, isAnakSuperAdmin.value)) {
                 val msg = if (isEn) {
-                    "Only the assigned Wali Asuh (or Tandem / Admin) can move this child's visit session."
+                    "Only this child's assigned Wali Asuh (or Tandem Wali) is authorized to swap visit sessions."
                 } else {
-                    "Hanya Wali Asuh anak binaan ini (atau Tandem / Admin) yang dapat menukar sesi kunjungannya."
+                    "Hanya Wali Asuh anak binaan ini (atau Wali Tandemnya) yang berwenang menukar sesi kunjungannya."
                 }
                 onComplete(false, msg, null)
                 return@launch
@@ -5091,9 +5091,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
             ) {
                 val msg = if (isEn) {
-                    "Only the assigned Wali Asuh (or Tandem / Admin) can restore this visit schedule."
+                    "Only this child's assigned Wali Asuh (or Tandem Wali) is authorized to restore this visit schedule."
                 } else {
-                    "Hanya Wali Asuh anak binaan ini (atau Tandem / Admin) yang dapat mengembalikan jadwal."
+                    "Hanya Wali Asuh anak binaan ini (atau Wali Tandemnya) yang berwenang mengembalikan jadwal."
                 }
                 onComplete(false, msg)
                 return@launch

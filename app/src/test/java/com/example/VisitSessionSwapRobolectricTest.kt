@@ -99,11 +99,19 @@ class VisitSessionSwapRobolectricTest {
             tandemWalisJson = tandemJson
         )
 
+        val unclaimedStudent = student.copy(
+            id = 5102L,
+            assignedWaliUsername = "",
+            assignedWaliName = "",
+            tandemWalisJson = ""
+        )
+
         assertTrue(VisitHelper.canWaliSwapStudent(student, false, "ust_budi", "Ustadz Budi"))
         assertTrue(VisitHelper.canWaliSwapStudent(student, false, "ustzah_siti", "Ustadzah Siti"))
-        assertTrue(VisitHelper.canWaliSwapStudent(student, true, "admin1", "Admin"))
-        assertTrue(VisitHelper.canWaliSwapStudent(student, false, "other", "Other", isAnakSuperAdmin = true))
+        assertFalse(VisitHelper.canWaliSwapStudent(student, true, "admin1", "Admin"))
+        assertFalse(VisitHelper.canWaliSwapStudent(student, false, "other", "Other", isAnakSuperAdmin = true))
         assertFalse(VisitHelper.canWaliSwapStudent(student, false, "ust_lain", "Ustadz Lain"))
+        assertFalse(VisitHelper.canWaliSwapStudent(unclaimedStudent, false, "ust_budi", "Ustadz Budi"))
 
         val swap = VisitSessionSwap(
             id = 701L,
@@ -601,5 +609,112 @@ class VisitSessionSwapRobolectricTest {
         db.visitSessionDao().deleteById(5812L)
         db.parentAccessLinkDao().delete(parentLink)
         db.childStudentDao().delete(student)
+    }
+
+    @Test
+    fun `Option B shows swap button only for own foster child while keeping district rosters intact`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val date1 = dayMillis(2026, Calendar.DECEMBER, 18)
+        val session = VisitSession(
+            id = 5851L,
+            title = "Kunjungan Wates Sesi 1",
+            monthYear = "2026-12",
+            sessionDatesCsv = date1.toString(),
+            selectedDistrictsCsv = "Wates",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToWali = true,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+        val myKid = ChildStudent(
+            id = 5861L,
+            name = "Binaanku Satu",
+            nis = "5861",
+            gender = "L",
+            age = 13,
+            classGrade = "VII-A",
+            dormitory = "Asrama Putra",
+            district = "Wates",
+            assignedWaliUsername = "ust_budi",
+            assignedWaliName = "Ustadz Budi",
+            schoolId = "SRT1-KDR"
+        )
+        val otherWaliKid = ChildStudent(
+            id = 5862L,
+            name = "Binaan Wali Lain",
+            nis = "5862",
+            gender = "L",
+            age = 13,
+            classGrade = "VII-B",
+            dormitory = "Asrama Putra",
+            district = "Wates",
+            assignedWaliUsername = "ust_andi",
+            assignedWaliName = "Ustadz Andi",
+            schoolId = "SRT1-KDR"
+        )
+        val unclaimedKid = ChildStudent(
+            id = 5863L,
+            name = "Siswa Belum Diklaim",
+            nis = "5863",
+            gender = "P",
+            age = 14,
+            classGrade = "VIII-A",
+            dormitory = "Asrama Putri",
+            district = "Wates",
+            schoolId = "SRT1-KDR"
+        )
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.dialogs.JadwalKunjunganSheet(
+                    sessions = listOf(session),
+                    students = listOf(myKid, otherWaliKid, unclaimedKid),
+                    visitRecords = emptyList(),
+                    isAdmin = true,
+                    currentUsername = "ust_budi",
+                    waliName = "Ustadz Budi",
+                    isAnakSuperAdmin = true,
+                    onOpenDaftarHadir = {},
+                    onOpenLaporan = {},
+                    onSwapStudentSession = { _, _, _, _, _ -> },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Semua siswa kecamatan Wates terlihat, namun tombol Tukar HANYA muncul untuk Binaanku Satu
+        composeTestRule.onNodeWithTag("list_jadwal_kunjungan")
+            .performScrollToNode(hasTestTag("btn_jadwal_swap_5861"))
+        composeTestRule.onNodeWithTag("btn_jadwal_swap_5861")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("badge_jadwal_my_foster_5861").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_jadwal_swap_5862").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("btn_jadwal_swap_5863").assertDoesNotExist()
+
+        // Filter Binaan Saya menyembunyikan anak non-binaan dengan tetap menyediakan filter Semua Siswa
+        composeTestRule.onNodeWithTag("list_jadwal_kunjungan")
+            .performScrollToNode(hasTestTag("chip_jadwal_scope_foster"))
+        composeTestRule.onNodeWithTag("chip_jadwal_scope_foster")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("btn_jadwal_swap_5861").assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Binaan Wali Lain", substring = false).fetchSemanticsNodes().let {
+            assertEquals(0, it.size)
+        }
+        composeTestRule.onAllNodesWithText("Siswa Belum Diklaim", substring = false).fetchSemanticsNodes().let {
+            assertEquals(0, it.size)
+        }
+
+        composeTestRule.onNodeWithTag("chip_jadwal_scope_all")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("list_jadwal_kunjungan")
+            .performScrollToNode(androidx.compose.ui.test.hasText("Siswa Belum Diklaim"))
     }
 }

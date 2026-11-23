@@ -78,6 +78,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
+import com.example.data.model.TandemWaliHelper
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
@@ -124,6 +125,7 @@ fun JadwalKunjunganSheet(
     val selectedSession = sortedSessions.firstOrNull { it.id == selectedSessionId } ?: sortedSessions.firstOrNull()
 
     var selectedDistrictFilter by remember(selectedSession?.id) { mutableStateOf("Semua") }
+    var onlyMyFosterStudents by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     var swapTargetStudent by remember { mutableStateOf<ChildStudent?>(null) }
 
@@ -135,24 +137,39 @@ fun JadwalKunjunganSheet(
         if (selectedSession == null) emptyList()
         else VisitHelper.effectiveScheduledStudentsForSession(selectedSession, students, visitSessionSwaps, sortedSessions)
     }
+    val myFosterInSessionCount = remember(scheduledStudents, currentUsername, waliName) {
+        scheduledStudents.count { st ->
+            TandemWaliHelper.hasPrimaryWali(st) && TandemWaliHelper.isAssignedWali(st, currentUsername, waliName)
+        }
+    }
     val swappedOutPairs = remember(selectedSession, students, visitSessionSwaps, sortedSessions) {
         if (selectedSession == null) emptyList()
         else VisitHelper.swappedOutFromSession(selectedSession, students, visitSessionSwaps, sortedSessions)
+    }
+    val visibleSwappedOutPairs = remember(swappedOutPairs, onlyMyFosterStudents, currentUsername, waliName) {
+        if (!onlyMyFosterStudents) swappedOutPairs
+        else swappedOutPairs.filter { (st, _) ->
+            TandemWaliHelper.hasPrimaryWali(st) && TandemWaliHelper.isAssignedWali(st, currentUsername, waliName)
+        }
     }
     val sessionRecords = remember(visitRecords, selectedSession) {
         if (selectedSession == null) emptyList()
         else visitRecords.filter { it.sessionId == selectedSession.id }
     }
-    val filteredStudents = remember(scheduledStudents, selectedDistrictFilter, searchQuery) {
+    val filteredStudents = remember(scheduledStudents, selectedDistrictFilter, onlyMyFosterStudents, currentUsername, waliName, searchQuery) {
         val q = searchQuery.trim().lowercase(Locale.US)
         scheduledStudents.filter { st ->
             val key = VisitHelper.resolveStudentDistrictKey(st)
             val distMatch = selectedDistrictFilter == "Semua" || key.equals(selectedDistrictFilter, ignoreCase = true)
+            val fosterMatch = !onlyMyFosterStudents || (
+                TandemWaliHelper.hasPrimaryWali(st) &&
+                    TandemWaliHelper.isAssignedWali(st, currentUsername, waliName)
+                )
             val queryMatch = q.isEmpty() ||
                 st.name.lowercase(Locale.US).contains(q) ||
                 st.classGrade.lowercase(Locale.US).contains(q) ||
                 key.lowercase(Locale.US).contains(q)
-            distMatch && queryMatch
+            distMatch && fosterMatch && queryMatch
         }
     }
 
@@ -550,6 +567,64 @@ fun JadwalKunjunganSheet(
                                 }
                             }
 
+                            // Filter cepat Semua Siswa vs Binaan Saya (untuk fokus Tukar Sesi anak binaan)
+                            if (currentUsername.isNotBlank() || waliName.isNotBlank()) {
+                                item(key = "jadwal_foster_scope") {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        val allSel = !onlyMyFosterStudents
+                                        Surface(
+                                            onClick = { onlyMyFosterStudents = false },
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (allSel) primaryBlue else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("chip_jadwal_scope_all")
+                                        ) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isEn) "All (${scheduledStudents.size})" else "Semua Siswa (${scheduledStudents.size})",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (allSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                        Surface(
+                                            onClick = { onlyMyFosterStudents = true },
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = if (!allSel) Color(0xFF0F766E) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .heightIn(min = 48.dp)
+                                                .testTag("chip_jadwal_scope_foster")
+                                        ) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+                                            ) {
+                                                Text(
+                                                    text = if (isEn) "My Foster ($myFosterInSessionCount)" else "Binaan Saya ($myFosterInSessionCount)",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (!allSel) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             // Cari Siswa Terjadwal (1 baris ringkas)
                             item(key = "jadwal_search") {
                                 CompactVisitInputField(
@@ -636,6 +711,21 @@ fun JadwalKunjunganSheet(
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
+                                                if (canSwap) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = Color(0xFFCCFBF1),
+                                                        modifier = Modifier.testTag("badge_jadwal_my_foster_${st.id}")
+                                                    ) {
+                                                        Text(
+                                                            text = if (isEn) "My Foster Child" else "Anak Binaan Saya",
+                                                            fontSize = 9.5.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFF0F766E),
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                }
                                                 if (incomingSwap != null) {
                                                     Surface(
                                                         shape = RoundedCornerShape(6.dp),
@@ -712,13 +802,13 @@ fun JadwalKunjunganSheet(
                                 }
                             }
 
-                            if (swappedOutPairs.isNotEmpty()) {
+                            if (visibleSwappedOutPairs.isNotEmpty()) {
                                 item(key = "jadwal_swapped_out_hdr") {
                                     Text(
                                         text = if (isEn) {
-                                            "Moved to Another Session (${swappedOutPairs.size}):"
+                                            "Moved to Another Session (${visibleSwappedOutPairs.size}):"
                                         } else {
-                                            "Dipindah ke Sesi Lain (${swappedOutPairs.size}):"
+                                            "Dipindah ke Sesi Lain (${visibleSwappedOutPairs.size}):"
                                         },
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold,
@@ -726,7 +816,7 @@ fun JadwalKunjunganSheet(
                                         modifier = Modifier.padding(top = 6.dp)
                                     )
                                 }
-                                itemsIndexed(swappedOutPairs, key = { _, pair -> "jadwal_out_${pair.first.id}" }) { _, pair ->
+                                itemsIndexed(visibleSwappedOutPairs, key = { _, pair -> "jadwal_out_${pair.first.id}" }) { _, pair ->
                                     val st = pair.first
                                     val swap = pair.second
                                     val canRevert = onRevertSessionSwap != null && VisitHelper.canWaliSwapStudent(

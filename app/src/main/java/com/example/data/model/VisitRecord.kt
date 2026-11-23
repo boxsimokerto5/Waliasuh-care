@@ -342,13 +342,12 @@ object VisitHelper {
 
     fun canWaliSwapStudent(
         student: ChildStudent,
-        isAdmin: Boolean,
+        isAdmin: Boolean = false,
         currentUsername: String,
         currentWaliName: String,
         isAnakSuperAdmin: Boolean = false
     ): Boolean {
-        if (isAdmin || isAnakSuperAdmin) return true
-        if (!TandemWaliHelper.hasPrimaryWali(student)) return true
+        if (!TandemWaliHelper.hasPrimaryWali(student)) return false
         return TandemWaliHelper.isAssignedWali(student, currentUsername, currentWaliName)
     }
 
