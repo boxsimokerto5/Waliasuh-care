@@ -20,6 +20,8 @@ import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
 import com.example.data.model.DashboardIconKey
+import com.example.data.model.JournalChecklistItem
+import com.example.data.model.JournalImageAttachment
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
@@ -90,7 +92,7 @@ class SharedJournalRobolectricTest {
     }
 
     @Test
-    fun `SharedJournalSheet creates card via plus button and opens detail dialog on card click`() {
+    fun `SharedJournalSheet opens full screen editor with checklist support and saves new card cleanly`() {
         val indonesianStrings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
 
         composeTestRule.setContent {
@@ -120,7 +122,7 @@ class SharedJournalRobolectricTest {
                     currentWaliName = "Eko Wahyudi",
                     isAdmin = false,
                     isAnakSuperAdmin = false,
-                    onSaveNote = { existing, category, title, content, isPinned, onResult ->
+                    onSaveNote = { existing, category, title, content, checklistJson, imageUrlsJson, isPinned, _, onResult ->
                         val nextId = existing?.id ?: (200L + notesState.size)
                         val saved = SharedJournalNote(
                             id = nextId,
@@ -128,6 +130,8 @@ class SharedJournalRobolectricTest {
                             category = category,
                             title = title,
                             content = content,
+                            checklistJson = checklistJson,
+                            imageUrlsJson = imageUrlsJson,
                             isPinned = isPinned,
                             authorUsername = "wali_eko",
                             authorName = "Eko Wahyudi",
@@ -153,45 +157,93 @@ class SharedJournalRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Kartu awal muncul dengan rapi; detail belum terbuka sebelum kartu diklik
+        // Daftar full-screen muncul dan editor belum aktif
+        composeTestRule.onNodeWithTag("screen_shared_journal_list").assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_shared_journal_101").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("dialog_shared_journal_detail").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("screen_shared_journal_editor").assertDoesNotExist()
 
-        // Klik kartu untuk membuka dialog detail
+        // Klik kartu untuk membuka tampilan layar penuh catatan
         composeTestRule.onNodeWithTag("card_shared_journal_101").performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("dialog_shared_journal_detail").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("screen_shared_journal_editor").assertIsDisplayed()
         composeTestRule.onNodeWithText("Seluruh siswa wajib sudah berada di kamar masing-masing pukul 21.30 WIB.")
             .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_toolbar_checklist").assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_toolbar_image").assertHeightIsAtLeast(48.dp)
 
-        // Tutup detail
-        composeTestRule.onNodeWithTag("btn_close_detail_shared_journal").performClick()
+        // Kembali ke daftar catatan
+        composeTestRule.onNodeWithTag("btn_back_shared_journal_editor").performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("dialog_shared_journal_detail").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("screen_shared_journal_list").assertIsDisplayed()
 
-        // Tambah catatan baru lewat tombol +
+        // Tambah catatan baru dengan checklist melalui tombol FAB +
         composeTestRule.onNodeWithTag("btn_add_shared_journal")
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
             .performClick()
         composeTestRule.waitForIdle()
-        composeTestRule.onNodeWithTag("dialog_shared_journal_form").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("screen_shared_journal_editor").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag("btn_category_jurnal").performClick()
         composeTestRule.onNodeWithTag("input_shared_journal_title")
-            .performTextReplacement("Jurnal Pendampingan Sore")
-        composeTestRule.onNodeWithTag("input_shared_journal_content")
-            .performTextReplacement("Evaluasi kebersihan kamar putra berjalan tertib hari ini.")
+            .performTextReplacement("Persiapan Apel Pagi")
+        composeTestRule.onNodeWithTag("btn_toolbar_checklist").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("checklist_input_0")
+            .performTextReplacement("Cek seragam rapi seluruh anak asuh")
+        composeTestRule.onNodeWithTag("checklist_checkbox_0").performClick()
         composeTestRule.onNodeWithTag("btn_save_shared_journal").performClick()
         composeTestRule.waitForIdle()
 
-        // Kartu baru muncul pada daftar
+        // Kembali ke daftar & kartu baru menampilkan judul + ringkasan progres checklist
+        composeTestRule.onNodeWithTag("screen_shared_journal_list").assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_shared_journal_201").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Jurnal Pendampingan Sore").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Persiapan Apel Pagi").assertIsDisplayed()
+        composeTestRule.onNodeWithText("☑ 1/1 selesai • Cek seragam rapi seluruh anak asuh")
+            .assertIsDisplayed()
     }
 
     @Test
-    fun `SharedJournalNote persists in Room, enforces school & author permissions, and round-trips PocketBase DTO`() = runBlocking {
+    fun `SharedJournalSheet enforces read-only view for non-author wali`() {
+        val indonesianStrings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides indonesianStrings) {
+                SharedJournalSheet(
+                    notes = listOf(
+                        SharedJournalNote(
+                            id = 301L,
+                            schoolId = "SRT1-KDR",
+                            category = SharedJournalHelper.CATEGORY_ATURAN,
+                            title = "Aturan Pemakaian Air",
+                            content = "Matikan keran setelah digunakan.",
+                            authorUsername = "wali_eko",
+                            authorName = "Eko Wahyudi"
+                        )
+                    ),
+                    currentUsername = "wali_budi",
+                    currentWaliName = "Budi Santoso",
+                    isAdmin = false,
+                    isAnakSuperAdmin = false,
+                    onSaveNote = { _, _, _, _, _, _, _, _, _ -> },
+                    onTogglePin = { _, _ -> },
+                    onDeleteNote = { _, _ -> },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("card_shared_journal_301").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("screen_shared_journal_editor").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("badge_journal_read_only").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_save_shared_journal").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("btn_delete_shared_journal").assertDoesNotExist()
+    }
+
+    @Test
+    fun `SharedJournalNote persists checklist & images in Room, enforces permissions, and round-trips PocketBase DTO`() = runBlocking {
         val app = ApplicationProvider.getApplicationContext<Application>()
         app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
         val db = AppDatabase.getDatabase(app)
@@ -229,11 +281,29 @@ class SharedJournalRobolectricTest {
         vm.executeLogin("wali_penulis", "Password1!", rememberMe = false)
         ShadowLooper.idleMainLooper()
 
+        val checklistJson = SharedJournalHelper.serializeChecklist(
+            listOf(
+                JournalChecklistItem(id = "c1", text = "Kunci pintu dapur", isChecked = false),
+                JournalChecklistItem(id = "c2", text = "Matikan kompor", isChecked = true)
+            )
+        )
+        val imageUrlsJson = SharedJournalHelper.serializeImages(
+            listOf(
+                JournalImageAttachment(
+                    id = "img1",
+                    url = "https://cdn.example.com/jrn/test.webp",
+                    fallbackUrl = "https://pb.example.com/api/files/shared_journal_notes/rec/test.webp"
+                )
+            )
+        )
+
         var saveSuccess = false
         vm.saveSharedJournalNote(
             category = SharedJournalHelper.CATEGORY_ATURAN,
             title = "Aturan Piket Dapur",
             content = "Piket dilakukan bergilir setiap pagi setelah apel.",
+            checklistJson = checklistJson,
+            imageUrlsJson = imageUrlsJson,
             isPinned = true
         ) { ok, _ -> saveSuccess = ok }
         delay(200)
@@ -246,6 +316,19 @@ class SharedJournalRobolectricTest {
         assertEquals(SharedJournalHelper.CATEGORY_ATURAN, note.category)
         assertTrue(note.isPinned)
         assertEquals("wali_penulis", note.authorUsername)
+        assertEquals(2, SharedJournalHelper.parseChecklist(note.checklistJson).size)
+        assertEquals(1, SharedJournalHelper.parseImages(note.imageUrlsJson).size)
+
+        // Toggle item checklist via ViewModel
+        var toggleOk = false
+        vm.toggleSharedJournalChecklistItem(note, "c1") { ok, _ -> toggleOk = ok }
+        delay(150)
+        ShadowLooper.idleMainLooper()
+        assertTrue(toggleOk)
+        val updatedChecklist = SharedJournalHelper.parseChecklist(
+            dao.getNotesBySchoolList("SCH-JRN-A").first().checklistJson
+        )
+        assertTrue(updatedChecklist.first { it.id == "c1" }.isChecked)
 
         // Multi-tenant isolation: sekolah lain kosong
         assertEquals(0, dao.getNotesBySchoolList("SCH-JRN-B").size)
@@ -279,14 +362,17 @@ class SharedJournalRobolectricTest {
             )
         )
 
-        // PocketBase DTO round-trip
-        val dto = PbSharedJournalNoteDto.fromDomain(note)
+        // PocketBase DTO round-trip including checklistJson & imageUrlsJson
+        val latestNote = dao.getNotesBySchoolList("SCH-JRN-A").first()
+        val dto = PbSharedJournalNoteDto.fromDomain(latestNote)
         val restored = dto.toDomainModel("SCH-JRN-A")
-        assertEquals(note.id, restored.id)
-        assertEquals(note.title, restored.title)
-        assertEquals(note.content, restored.content)
-        assertEquals(note.category, restored.category)
-        assertEquals(note.isPinned, restored.isPinned)
-        assertEquals(note.authorUsername, restored.authorUsername)
+        assertEquals(latestNote.id, restored.id)
+        assertEquals(latestNote.title, restored.title)
+        assertEquals(latestNote.content, restored.content)
+        assertEquals(latestNote.checklistJson, restored.checklistJson)
+        assertEquals(latestNote.imageUrlsJson, restored.imageUrlsJson)
+        assertEquals(latestNote.category, restored.category)
+        assertEquals(latestNote.isPinned, restored.isPinned)
+        assertEquals(latestNote.authorUsername, restored.authorUsername)
     }
 }

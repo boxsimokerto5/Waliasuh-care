@@ -40,6 +40,7 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.ParentMessageHelper
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.JournalImageAttachment
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
 import com.example.data.model.ShiftMessage
@@ -9495,28 +9496,48 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    suspend fun prepareLocalJournalImageAttachment(uri: Uri): JournalImageAttachment? =
+        withContext(Dispatchers.IO) {
+            val appContext = getApplication<Application>()
+            val bytes = WaliGalleryMediaHelper.compressGalleryPhotoBytes(appContext, uri)
+                ?: return@withContext null
+            val dir = java.io.File(appContext.filesDir, "journal_images").apply { mkdirs() }
+            val fileName = "jrn_${System.currentTimeMillis()}_${java.util.UUID.randomUUID().toString().take(6)}.webp"
+            val target = java.io.File(dir, fileName)
+            target.writeBytes(bytes)
+            JournalImageAttachment(
+                localPath = target.absolutePath
+            )
+        }
+
     fun saveSharedJournalNote(
         existingNote: SharedJournalNote? = null,
         category: String = SharedJournalHelper.CATEGORY_JURNAL,
         title: String,
         content: String,
+        checklistJson: String = "",
+        imageUrlsJson: String = "",
         isPinned: Boolean = false,
+        silent: Boolean = false,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val isEn = _appLanguage.value == AppLanguage.ENGLISH
         val cleanTitle = title.trim()
         val cleanContent = content.trim()
-        if (cleanTitle.isBlank()) {
+        val cleanChecklist = SharedJournalHelper.serializeChecklist(
+            SharedJournalHelper.parseChecklist(checklistJson).filter { it.text.isNotBlank() }
+        )
+        val cleanImages = SharedJournalHelper.serializeImages(
+            SharedJournalHelper.parseImages(imageUrlsJson)
+        )
+        val hasChecklistContent = SharedJournalHelper.parseChecklist(cleanChecklist).isNotEmpty()
+        val hasImageContent = SharedJournalHelper.parseImages(cleanImages).isNotEmpty()
+
+        if (cleanTitle.isBlank() && cleanContent.isBlank() && !hasChecklistContent && !hasImageContent) {
             onResult(
                 false,
-                if (isEn) "Please enter a title first." else "Judul catatan atau aturan belum diisi."
-            )
-            return
-        }
-        if (cleanContent.isBlank()) {
-            onResult(
-                false,
-                if (isEn) "Please write the content first." else "Isi catatan atau aturan belum diisi."
+                if (isEn) "Write a title, note, checklist, or attach a photo first."
+                else "Isi judul, catatan, daftar centang, atau unggah gambar terlebih dahulu."
             )
             return
         }
@@ -9550,6 +9571,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     category = normalizedCategory,
                     title = cleanTitle,
                     content = cleanContent,
+                    checklistJson = cleanChecklist,
+                    imageUrlsJson = cleanImages,
                     isPinned = isPinned,
                     isDeleted = false,
                     updatedAt = maxOf(now, existingNote.updatedAt + 1L)
@@ -9558,7 +9581,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 updated
             } else {
                 val deterministicId = PocketBaseIdCodec.stablePositiveHash(
-                    "shared_journal:$schoolId:$authorUser:$now:${cleanTitle.hashCode()}"
+                    "shared_journal:$schoolId:$authorUser:$now:${cleanTitle.hashCode()}:${cleanContent.hashCode()}"
                 )
                 val inserted = SharedJournalNote(
                     id = deterministicId,
@@ -9566,6 +9589,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     category = normalizedCategory,
                     title = cleanTitle,
                     content = cleanContent,
+                    checklistJson = cleanChecklist,
+                    imageUrlsJson = cleanImages,
                     isPinned = isPinned,
                     authorUsername = authorUser,
                     authorName = authorDisplay,
@@ -9578,12 +9603,61 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
-                PocketBaseSyncManager.uploadSingleSharedJournalNote(getApplication(), saved)
+                val withUploadedImages = PocketBaseSyncManager.uploadPendingSharedJournalImages(getApplication(), saved)
+                val finalToSync = if (withUploadedImages != null && withUploadedImages.imageUrlsJson != saved.imageUrlsJson) {
+                    repository.updateSharedJournalNote(withUploadedImages)
+                    withUploadedImages
+                } else {
+                    saved
+                }
+                PocketBaseSyncManager.uploadSingleSharedJournalNote(getApplication(), finalToSync)
             }
             onResult(
                 true,
-                if (isEn) "Journal note & rule saved!" else "Catatan jurnal & aturan tersimpan!"
+                if (silent) ""
+                else if (isEn) "Journal note & rule saved!" else "Catatan jurnal & aturan tersimpan!"
             )
+        }
+    }
+
+    fun toggleSharedJournalChecklistItem(
+        note: SharedJournalNote,
+        itemId: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val isAdminUser = _currentUserRole.value == UserRole.ADMIN || _currentUserRole.value == UserRole.SUPERADMIN
+        if (!SharedJournalHelper.canManageNote(
+                note = note,
+                currentUsername = _currentUsername.value,
+                currentWaliName = _waliName.value,
+                isAdmin = isAdminUser,
+                isAnakSuperAdmin = isAnakSuperAdmin.value
+            )
+        ) {
+            onResult(
+                false,
+                if (isEn) "Only the author or Admin can update checklist items."
+                else "Hanya pembuat catatan atau Admin yang dapat mencentang item."
+            )
+            return
+        }
+        val items = SharedJournalHelper.parseChecklist(note.checklistJson)
+        if (items.none { it.id == itemId }) return
+        val updatedItems = items.map { item ->
+            if (item.id == itemId) item.copy(isChecked = !item.isChecked) else item
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val updated = note.copy(
+                checklistJson = SharedJournalHelper.serializeChecklist(updatedItems),
+                updatedAt = maxOf(now, note.updatedAt + 1L)
+            )
+            repository.updateSharedJournalNote(updated)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleSharedJournalNote(getApplication(), updated)
+            }
+            onResult(true, "")
         }
     }
 

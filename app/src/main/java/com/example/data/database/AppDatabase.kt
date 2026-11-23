@@ -119,7 +119,7 @@ import com.example.data.model.WaliShiftCode
         BibleNote::class,
         SharedJournalNote::class
     ],
-    version = 42,
+    version = 43,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -1140,6 +1140,8 @@ abstract class AppDatabase : RoomDatabase() {
                         category TEXT NOT NULL DEFAULT 'JURNAL',
                         title TEXT NOT NULL DEFAULT '',
                         content TEXT NOT NULL DEFAULT '',
+                        checklistJson TEXT NOT NULL DEFAULT '',
+                        imageUrlsJson TEXT NOT NULL DEFAULT '',
                         isPinned INTEGER NOT NULL DEFAULT 0,
                         authorUsername TEXT NOT NULL DEFAULT '',
                         authorName TEXT NOT NULL DEFAULT 'Wali Asuh',
@@ -1149,6 +1151,17 @@ abstract class AppDatabase : RoomDatabase() {
                     )
                     """.trimIndent()
                 )
+            }
+        }
+
+        val MIGRATION_42_43 = object : androidx.room.migration.Migration(42, 43) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                try {
+                    db.execSQL("ALTER TABLE shared_journal_notes ADD COLUMN checklistJson TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
+                try {
+                    db.execSQL("ALTER TABLE shared_journal_notes ADD COLUMN imageUrlsJson TEXT NOT NULL DEFAULT ''")
+                } catch (_: Exception) {}
             }
         }
 
@@ -1194,7 +1207,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_38_39,
                         MIGRATION_39_40,
                         MIGRATION_40_41,
-                        MIGRATION_41_42
+                        MIGRATION_41_42,
+                        MIGRATION_42_43
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

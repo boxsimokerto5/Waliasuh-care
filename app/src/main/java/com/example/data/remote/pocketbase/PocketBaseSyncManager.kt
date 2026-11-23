@@ -37,6 +37,7 @@ import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatRecord
@@ -5006,6 +5007,115 @@ object PocketBaseSyncManager {
                 false
             }
         }
+
+    suspend fun uploadPendingSharedJournalImages(
+        context: Context,
+        note: SharedJournalNote
+    ): SharedJournalNote? = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext null
+        val baseUrl = PocketBaseConfig.getBaseUrl(context).trim().trimEnd('/')
+        if (!baseUrl.startsWith("http")) return@withContext null
+
+        val attachments = SharedJournalHelper.parseImages(note.imageUrlsJson)
+        val pending = attachments.filter { it.url.isBlank() && it.localPath.isNotBlank() }
+        if (pending.isEmpty()) return@withContext note
+
+        val existingPendingFiles = pending.mapNotNull { item ->
+            val file = java.io.File(item.localPath)
+            if (file.exists() && file.length() > 0L) item to file else null
+        }
+        if (existingPendingFiles.isEmpty()) return@withContext note
+
+        val pbId = PocketBaseIdCodec.toPbId(note.id)
+        fun buildMultipart(includeId: Boolean): MultipartBody {
+            val builder = MultipartBody.Builder().setType(MultipartBody.FORM)
+            if (includeId) builder.addFormDataPart("id", pbId)
+            builder.addFormDataPart("local_id", note.id.toString())
+            builder.addFormDataPart("school_id", note.schoolId.ifBlank { "SRT1-KDR" })
+            builder.addFormDataPart("category", SharedJournalHelper.normalizeCategory(note.category))
+            builder.addFormDataPart("title", note.title)
+            builder.addFormDataPart("content", note.content)
+            builder.addFormDataPart("checklist_json", note.checklistJson)
+            builder.addFormDataPart("is_pinned", note.isPinned.toString())
+            builder.addFormDataPart("author_username", note.authorUsername)
+            builder.addFormDataPart("author_name", note.authorName)
+            builder.addFormDataPart("is_deleted", note.isDeleted.toString())
+            builder.addFormDataPart("created_at", note.createdAt.toString())
+            builder.addFormDataPart("updated_at", note.updatedAt.toString())
+            existingPendingFiles.forEachIndexed { idx, (_, file) ->
+                builder.addFormDataPart(
+                    "image_files+",
+                    "jrn_${note.id}_${idx}_${System.currentTimeMillis()}.webp",
+                    file.readBytes().toRequestBody("image/webp".toMediaType())
+                )
+            }
+            return builder.build()
+        }
+
+        val client = OkHttpClient.Builder()
+            .connectTimeout(20, TimeUnit.SECONDS)
+            .readTimeout(120, TimeUnit.SECONDS)
+            .writeTimeout(120, TimeUnit.SECONDS)
+            .build()
+
+        return@withContext runCatching {
+            val patchReq = Request.Builder()
+                .url("$baseUrl/api/collections/shared_journal_notes/records/$pbId")
+                .patch(buildMultipart(includeId = false))
+                .build()
+            var respCode = 0
+            var respBody = ""
+            var ok = false
+            client.newCall(patchReq).execute().use { resp ->
+                respCode = resp.code
+                respBody = resp.body?.string().orEmpty()
+                ok = resp.isSuccessful
+            }
+            if (!ok && respCode == 404) {
+                val postReq = Request.Builder()
+                    .url("$baseUrl/api/collections/shared_journal_notes/records")
+                    .post(buildMultipart(includeId = true))
+                    .build()
+                client.newCall(postReq).execute().use { resp ->
+                    respCode = resp.code
+                    respBody = resp.body?.string().orEmpty()
+                    ok = resp.isSuccessful
+                }
+            }
+            if (!ok || respBody.isBlank()) return@runCatching null
+            val json = JSONObject(respBody)
+            val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
+            val collectionId = json.optString("collectionId", "shared_journal_notes").ifBlank { "shared_journal_notes" }
+            val filenames = mutableListOf<String>()
+            val arr = json.optJSONArray("image_files")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val fn = arr.optString(i, "").trim()
+                    if (fn.isNotBlank()) filenames.add(fn)
+                }
+            } else {
+                val single = json.optString("image_files", "").trim()
+                if (single.isNotBlank()) filenames.add(single)
+            }
+            if (filenames.isEmpty()) return@runCatching null
+
+            val newlyUploaded = filenames.takeLast(existingPendingFiles.size)
+            var idx = 0
+            val updatedAttachments = attachments.map { item ->
+                if (item.url.isBlank() && item.localPath.isNotBlank()) {
+                    val fn = newlyUploaded.getOrNull(idx++).orEmpty()
+                    if (fn.isNotBlank()) {
+                        val cdn = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, fn)
+                        val pb = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, fn)
+                        item.copy(url = cdn.ifBlank { pb }, fallbackUrl = pb)
+                    } else item
+                } else {
+                    item
+                }
+            }
+            note.copy(imageUrlsJson = SharedJournalHelper.serializeImages(updatedAttachments))
+        }.getOrNull()
+    }
 
     private suspend fun syncSharedJournalNotesMerged(
         service: PocketBaseService,

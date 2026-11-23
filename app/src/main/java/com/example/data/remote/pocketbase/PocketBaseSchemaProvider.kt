@@ -978,7 +978,7 @@ object PocketBaseSchemaProvider {
         ),
         PocketBaseCollectionMeta(
             collectionName = "shared_journal_notes",
-            description = "Catatan jurnal pengasuhan dan aturan bersama Wali Asuh per sekolah",
+            description = "Catatan jurnal pengasuhan dan aturan bersama Wali Asuh per sekolah (checklist & lampiran gambar)",
             multiTenantField = "school_id",
             fields = listOf(
                 PbFieldDef("local_id", "number"),
@@ -986,6 +986,15 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("category", "text"),
                 PbFieldDef("title", "text"),
                 PbFieldDef("content", "text"),
+                PbFieldDef("checklist_json", "text"),
+                PbFieldDef("image_urls_json", "text"),
+                PbFieldDef(
+                    name = "image_files",
+                    type = "file",
+                    fileMaxSelect = 8,
+                    fileMaxSize = 10_485_760L,
+                    fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
+                ),
                 PbFieldDef("is_pinned", "bool"),
                 PbFieldDef("author_username", "text"),
                 PbFieldDef("author_name", "text"),

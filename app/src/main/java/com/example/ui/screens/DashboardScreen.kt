@@ -2319,13 +2319,19 @@ fun DashboardScreen(
             currentWaliName = waliName,
             isAdmin = isAdminUser,
             isAnakSuperAdmin = isAnakSuperAdmin,
-            onSaveNote = { existing, category, title, content, isPinned, onResult ->
+            onPrepareImageUri = { uri ->
+                viewModel.prepareLocalJournalImageAttachment(uri)
+            },
+            onSaveNote = { existing, category, title, content, checklistJson, imageUrlsJson, isPinned, silent, onResult ->
                 viewModel.saveSharedJournalNote(
                     existingNote = existing,
                     category = category,
                     title = title,
                     content = content,
+                    checklistJson = checklistJson,
+                    imageUrlsJson = imageUrlsJson,
                     isPinned = isPinned,
+                    silent = silent,
                     onResult = onResult
                 )
             },
