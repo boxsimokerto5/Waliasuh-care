@@ -4,17 +4,22 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -153,18 +158,30 @@ fun VisitCircularPdfDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
-        Surface(
+        BoxWithConstraints(
             modifier = Modifier
-                .fillMaxWidth(0.95f)
-                .widthIn(max = 560.dp)
-                .testTag("dialog_visit_circular_pdf"),
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 6.dp
+                .fillMaxSize()
+                .systemBarsPadding()
+                .imePadding()
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            val adaptiveScrollMaxHeight = (maxHeight * 0.68f).coerceIn(240.dp, 540.dp)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 560.dp)
+                    .testTag("dialog_visit_circular_pdf"),
+                shape = RoundedCornerShape(20.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 6.dp
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
                 // Header
                 Row(
                     modifier = Modifier
@@ -222,7 +239,7 @@ fun VisitCircularPdfDialog(
                 Column(
                     modifier = Modifier
                         .weight(1f, fill = false)
-                        .heightIn(max = 520.dp)
+                        .heightIn(max = adaptiveScrollMaxHeight)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -638,6 +655,7 @@ fun VisitCircularPdfDialog(
                     }
                 }
             }
+        }
         }
     }
 }

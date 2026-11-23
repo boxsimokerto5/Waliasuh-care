@@ -777,6 +777,9 @@ fun BarcodeScannerDialog(
                 ModalBottomSheet(
                     onDismissRequest = { showManualPickerSheet = false },
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    modifier = Modifier.windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                    ),
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     dragHandle = { BottomSheetDefaults.DragHandle() },
                     containerColor = MaterialTheme.colorScheme.surface
