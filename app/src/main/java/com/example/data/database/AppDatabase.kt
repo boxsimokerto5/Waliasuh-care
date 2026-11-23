@@ -40,6 +40,7 @@ import com.example.data.dao.InfoPentingCommentDao
 import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
+import com.example.data.dao.SharedJournalNoteDao
 import com.example.data.dao.ChatMediaLocalSaveDao
 import com.example.data.dao.BibleBookmarkDao
 import com.example.data.dao.BibleNoteDao
@@ -67,6 +68,7 @@ import com.example.data.model.MengajiRecord
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
+import com.example.data.model.SharedJournalNote
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -114,9 +116,10 @@ import com.example.data.model.WaliShiftCode
         ChristianWorshipRecord::class,
         ChristianWorshipLocalSave::class,
         BibleBookmark::class,
-        BibleNote::class
+        BibleNote::class,
+        SharedJournalNote::class
     ],
-    version = 41,
+    version = 42,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -154,6 +157,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun christianWorshipLocalSaveDao(): ChristianWorshipLocalSaveDao
     abstract fun bibleBookmarkDao(): BibleBookmarkDao
     abstract fun bibleNoteDao(): BibleNoteDao
+    abstract fun sharedJournalNoteDao(): SharedJournalNoteDao
 
     companion object {
         @Volatile
@@ -1126,6 +1130,28 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_41_42 = object : androidx.room.migration.Migration(41, 42) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS shared_journal_notes (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        category TEXT NOT NULL DEFAULT 'JURNAL',
+                        title TEXT NOT NULL DEFAULT '',
+                        content TEXT NOT NULL DEFAULT '',
+                        isPinned INTEGER NOT NULL DEFAULT 0,
+                        authorUsername TEXT NOT NULL DEFAULT '',
+                        authorName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -1167,7 +1193,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_37_38,
                         MIGRATION_38_39,
                         MIGRATION_39_40,
-                        MIGRATION_40_41
+                        MIGRATION_40_41,
+                        MIGRATION_41_42
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

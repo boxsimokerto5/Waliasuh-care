@@ -18,10 +18,11 @@ enum class DashboardIconKey(val key: String) {
     JADWAL_WALI("JADWAL_WALI"),
     KLAIM_ANAK_ASUH("KLAIM_ANAK_ASUH"),
     INFO_PENTING("INFO_PENTING"),
+    JURNAL_ATURAN("JURNAL_ATURAN"),
     BIBLE("BIBLE");
 
     companion object {
-        val DEFAULT_ORDER: List<DashboardIconKey> = entries.toList()
+        val DEFAULT_ORDER: List<DashboardIconKey> = entries.filter { it != BIBLE }
 
         fun fromKey(raw: String?): DashboardIconKey? {
             val clean = raw?.trim()?.uppercase().orEmpty()
@@ -33,8 +34,9 @@ enum class DashboardIconKey(val key: String) {
             val result = mutableListOf<DashboardIconKey>()
             for (raw in rawKeys) {
                 val parsed = fromKey(raw)
-                if (parsed != null && parsed !in result) {
-                    result.add(parsed)
+                val mapped = if (parsed == BIBLE) JURNAL_ATURAN else parsed
+                if (mapped != null && mapped != BIBLE && mapped !in result) {
+                    result.add(mapped)
                 }
             }
             for (fallback in DEFAULT_ORDER) {

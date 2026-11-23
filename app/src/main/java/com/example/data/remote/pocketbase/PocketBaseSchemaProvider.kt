@@ -975,6 +975,25 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_bible_note_owner ON bible_notes (school_id, owner_wali_username)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "shared_journal_notes",
+            description = "Catatan jurnal pengasuhan dan aturan bersama Wali Asuh per sekolah",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("category", "text"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("content", "text"),
+                PbFieldDef("is_pinned", "bool"),
+                PbFieldDef("author_username", "text"),
+                PbFieldDef("author_name", "text"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_sjn_school ON shared_journal_notes (school_id, updated_at)")
         )
     )
 

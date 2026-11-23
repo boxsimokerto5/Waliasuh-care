@@ -37,6 +37,7 @@ import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.SharedJournalNote
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganHelper
@@ -1894,6 +1895,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "christian_worship_records", filter) }
             runCatching { deleteCollectionByFilter(service, "bible_bookmarks", filter) }
             runCatching { deleteCollectionByFilter(service, "bible_notes", filter) }
+            runCatching { deleteCollectionByFilter(service, "shared_journal_notes", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
@@ -3425,6 +3427,11 @@ object PocketBaseSyncManager {
             runCatching {
                 syncBibleBookmarksMerged(service, cleanSchoolId, filter, repository)
                 syncBibleNotesMerged(service, cleanSchoolId, filter, repository)
+            }
+
+            // 15. Sinkronkan Catatan Jurnal & Aturan Bersama (shared_journal_notes)
+            runCatching {
+                syncSharedJournalNotesMerged(service, cleanSchoolId, filter, repository)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
@@ -4985,5 +4992,67 @@ object PocketBaseSyncManager {
         val filter = buildSchoolFilter(cleanSchoolId)
         runCatching { syncBibleBookmarksMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncBibleNotesMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    suspend fun uploadSingleSharedJournalNote(context: Context, note: SharedJournalNote): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext false
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext false
+                val dto = PbSharedJournalNoteDto.fromDomain(note)
+                upsertSingleDto(service, "shared_journal_notes", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleSharedJournalNote ke PocketBase", e)
+                false
+            }
+        }
+
+    private suspend fun syncSharedJournalNotesMerged(
+        service: PocketBaseService,
+        schoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localAll = repository.getAllSharedJournalNotesIncludingDeletedList()
+            .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
+        val remoteRes = fetchAllPages { page ->
+            service.listSharedJournalNotes(page = page, perPage = 500, filter = filter)
+        }
+        val remoteList = remoteRes.getOrNull()?.map { it.toDomainModel(schoolId) } ?: return
+
+        val localById = localAll.associateBy { it.id }
+        val remoteById = remoteList.associateBy { it.id }
+
+        val toInsertLocal = remoteList.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllSharedJournalNotes(toInsertLocal)
+        }
+
+        val toPushRemote = localAll.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            val pairs = toPushRemote.map { item ->
+                val dto = PbSharedJournalNoteDto.fromDomain(item)
+                dto.id!! to dto
+            }
+            upsertBatchOrFallback(service, "shared_journal_notes", pairs)
+        }
+    }
+
+    suspend fun syncSharedJournalNotesOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+        runCatching { syncSharedJournalNotesMerged(service, cleanSchoolId, filter, repository) }
     }
 }

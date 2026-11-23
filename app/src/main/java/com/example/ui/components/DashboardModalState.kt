@@ -129,6 +129,9 @@ class DashboardModalState {
     // Modul Alkitab Digital & Catatan Pribadi
     var showBibleSheet by mutableStateOf(false)
 
+    // Modul Catatan Jurnal & Aturan Bersama
+    var showSharedJournalSheet by mutableStateOf(false)
+
     // Modul Al-Qur'an Digital Berbingkai Kaligrafi (di Hub Mengaji)
     var showQuranSheet by mutableStateOf(false)
 

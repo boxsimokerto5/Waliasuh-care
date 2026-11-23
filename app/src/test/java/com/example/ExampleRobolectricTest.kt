@@ -629,7 +629,7 @@ class ExampleRobolectricTest {
     val schema = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SCHEMA_SUMMARY
     val jsonSchema = org.json.JSONArray(com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_COLLECTIONS_JSON)
     val sshScript = com.example.data.remote.pocketbase.PocketBaseSchemaProvider.POCKETBASE_SSH_SYNC_SCRIPT
-    assertEquals(33, jsonSchema.length())
+    assertEquals(34, jsonSchema.length())
     org.junit.Assert.assertTrue(sshScript.contains("/api/collections"))
     org.junit.Assert.assertTrue(sshScript.contains("is_sahur_checked"))
     org.junit.Assert.assertTrue(sshScript.contains("fluency_status"))
@@ -663,7 +663,8 @@ class ExampleRobolectricTest {
       "wali_schedule_entries",
       "important_info_posts",
       "important_info_reactions",
-      "important_info_comments"
+      "important_info_comments",
+      "shared_journal_notes"
     )
     expectedCollections.forEach { col ->
       org.junit.Assert.assertTrue(
@@ -672,7 +673,7 @@ class ExampleRobolectricTest {
       )
       org.junit.Assert.assertTrue("Missing $col in schema summary", schema.contains(col))
     }
-    assertEquals(33, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
+    assertEquals(34, com.example.data.remote.pocketbase.PocketBaseSchemaProvider.COLLECTIONS.size)
 
     // Pastikan tidak ada nama SQLite index yang kembar antar tabel (penyebab Failed to import collections)
     val indexNameRegex = Regex("""CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?[`"']?([A-Za-z0-9_]+)[`"']?""", RegexOption.IGNORE_CASE)
@@ -4369,7 +4370,9 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.JADWAL_WALI,
       com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH,
       com.example.data.model.DashboardIconKey.INFO_PENTING,
-      com.example.data.model.DashboardIconKey.SHOLAT
+      com.example.data.model.DashboardIconKey.SHOLAT,
+      com.example.data.model.DashboardIconKey.KRISTEN,
+      com.example.data.model.DashboardIconKey.JURNAL_ATURAN
     )
     var saveOk = false
     vm.saveDashboardIconOrder(customOrder) { success, _ -> saveOk = success }
@@ -4420,7 +4423,9 @@ class ExampleRobolectricTest {
       com.example.data.model.DashboardIconKey.JADWAL_WALI,
       com.example.data.model.DashboardIconKey.KLAIM_ANAK_ASUH,
       com.example.data.model.DashboardIconKey.INFO_PENTING,
-      com.example.data.model.DashboardIconKey.SHOLAT
+      com.example.data.model.DashboardIconKey.SHOLAT,
+      com.example.data.model.DashboardIconKey.KRISTEN,
+      com.example.data.model.DashboardIconKey.JURNAL_ATURAN
     )
     vm.applyRemoteDashboardIconOrder(cloudOrder, System.currentTimeMillis() + 60_000L)
     org.junit.Assert.assertEquals(cloudOrder, vm.dashboardIconOrder.value)

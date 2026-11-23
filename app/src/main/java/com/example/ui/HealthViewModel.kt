@@ -40,6 +40,8 @@ import com.example.data.model.ParentMessage
 import com.example.data.model.ParentMessageHelper
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.SharedJournalHelper
+import com.example.data.model.SharedJournalNote
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatDisciplineTag
 import com.example.data.model.SholatHelper
@@ -157,7 +159,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.bibleBookmarkDao(),
             db.bibleNoteDao(),
             db.visitConfirmationDao(),
-            db.visitSessionSwapDao()
+            db.visitSessionSwapDao(),
+            db.sharedJournalNoteDao()
         )
     }
 
@@ -9460,6 +9463,205 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 PocketBaseSyncManager.uploadSingleBibleNote(getApplication(), deleted)
             }
             onResult(if (isEn) "Note deleted." else "Catatan dihapus.")
+        }
+    }
+
+    // --- Catatan Jurnal & Aturan Bersama (Sinkron Antar Wali Asuh per Sekolah) ---
+
+    val sharedJournalNotes: StateFlow<List<SharedJournalNote>> = combine(
+        repository.allSharedJournalNotes,
+        _schoolProfile
+    ) { list, profile ->
+        val activeSchool = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        list.filter { item ->
+            !item.isDeleted && item.schoolId.equals(activeSchool, ignoreCase = true)
+        }.sortedWith(
+            compareByDescending<SharedJournalNote> { it.isPinned }
+                .thenByDescending { it.updatedAt }
+                .thenByDescending { it.createdAt }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun syncSharedJournalNotesOnlineQuietly() {
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.syncSharedJournalNotesOnlineQuietly(
+                    context = getApplication(),
+                    schoolId = schoolId,
+                    repository = repository
+                )
+            }
+        }
+    }
+
+    fun saveSharedJournalNote(
+        existingNote: SharedJournalNote? = null,
+        category: String = SharedJournalHelper.CATEGORY_JURNAL,
+        title: String,
+        content: String,
+        isPinned: Boolean = false,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanTitle = title.trim()
+        val cleanContent = content.trim()
+        if (cleanTitle.isBlank()) {
+            onResult(
+                false,
+                if (isEn) "Please enter a title first." else "Judul catatan atau aturan belum diisi."
+            )
+            return
+        }
+        if (cleanContent.isBlank()) {
+            onResult(
+                false,
+                if (isEn) "Please write the content first." else "Isi catatan atau aturan belum diisi."
+            )
+            return
+        }
+
+        val isAdminUser = _currentUserRole.value == UserRole.ADMIN || _currentUserRole.value == UserRole.SUPERADMIN
+        if (existingNote != null && !SharedJournalHelper.canManageNote(
+                note = existingNote,
+                currentUsername = _currentUsername.value,
+                currentWaliName = _waliName.value,
+                isAdmin = isAdminUser,
+                isAnakSuperAdmin = isAnakSuperAdmin.value
+            )
+        ) {
+            onResult(
+                false,
+                if (isEn) "Only the author or Admin can edit this entry."
+                else "Hanya pembuat catatan atau Admin yang dapat mengubah data ini."
+            )
+            return
+        }
+
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        val authorUser = _currentUsername.value?.trim().orEmpty()
+        val authorDisplay = _waliName.value.trim().ifBlank { "Wali Asuh" }
+        val normalizedCategory = SharedJournalHelper.normalizeCategory(category)
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val saved = if (existingNote != null) {
+                val updated = existingNote.copy(
+                    category = normalizedCategory,
+                    title = cleanTitle,
+                    content = cleanContent,
+                    isPinned = isPinned,
+                    isDeleted = false,
+                    updatedAt = maxOf(now, existingNote.updatedAt + 1L)
+                )
+                repository.updateSharedJournalNote(updated)
+                updated
+            } else {
+                val deterministicId = PocketBaseIdCodec.stablePositiveHash(
+                    "shared_journal:$schoolId:$authorUser:$now:${cleanTitle.hashCode()}"
+                )
+                val inserted = SharedJournalNote(
+                    id = deterministicId,
+                    schoolId = schoolId,
+                    category = normalizedCategory,
+                    title = cleanTitle,
+                    content = cleanContent,
+                    isPinned = isPinned,
+                    authorUsername = authorUser,
+                    authorName = authorDisplay,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                repository.insertSharedJournalNote(inserted)
+                inserted
+            }
+
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleSharedJournalNote(getApplication(), saved)
+            }
+            onResult(
+                true,
+                if (isEn) "Journal note & rule saved!" else "Catatan jurnal & aturan tersimpan!"
+            )
+        }
+    }
+
+    fun toggleSharedJournalNotePin(
+        note: SharedJournalNote,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val isAdminUser = _currentUserRole.value == UserRole.ADMIN || _currentUserRole.value == UserRole.SUPERADMIN
+        if (!SharedJournalHelper.canManageNote(
+                note = note,
+                currentUsername = _currentUsername.value,
+                currentWaliName = _waliName.value,
+                isAdmin = isAdminUser,
+                isAnakSuperAdmin = isAnakSuperAdmin.value
+            )
+        ) {
+            onResult(
+                false,
+                if (isEn) "Only the author or Admin can pin/unpin."
+                else "Hanya pembuat catatan atau Admin yang dapat menyematkan."
+            )
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val updated = note.copy(
+                isPinned = !note.isPinned,
+                updatedAt = maxOf(now, note.updatedAt + 1L)
+            )
+            repository.updateSharedJournalNote(updated)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleSharedJournalNote(getApplication(), updated)
+            }
+            val msg = if (updated.isPinned) {
+                if (isEn) "Pinned to top." else "Disematkan di paling atas."
+            } else {
+                if (isEn) "Unpinned." else "Semat dilepas."
+            }
+            onResult(true, msg)
+        }
+    }
+
+    fun deleteSharedJournalNote(
+        note: SharedJournalNote,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val isAdminUser = _currentUserRole.value == UserRole.ADMIN || _currentUserRole.value == UserRole.SUPERADMIN
+        if (!SharedJournalHelper.canManageNote(
+                note = note,
+                currentUsername = _currentUsername.value,
+                currentWaliName = _waliName.value,
+                isAdmin = isAdminUser,
+                isAnakSuperAdmin = isAnakSuperAdmin.value
+            )
+        ) {
+            onResult(
+                false,
+                if (isEn) "Only the author or Admin can delete."
+                else "Hanya pembuat catatan atau Admin yang dapat menghapus."
+            )
+            return
+        }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val deleted = note.copy(
+                isDeleted = true,
+                updatedAt = maxOf(now, note.updatedAt + 1L)
+            )
+            repository.updateSharedJournalNote(deleted)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleSharedJournalNote(getApplication(), deleted)
+            }
+            onResult(
+                true,
+                if (isEn) "Entry deleted." else "Catatan berhasil dihapus."
+            )
         }
     }
 }

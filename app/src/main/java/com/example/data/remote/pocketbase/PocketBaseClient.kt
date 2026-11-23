@@ -316,6 +316,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-updated_at"
     ): Response<PbListResponse<PbBibleNoteDto>>
 
+    // --- Catatan Jurnal & Aturan Bersama (Sinkron Antar Wali Asuh) ---
+    @GET("api/collections/shared_journal_notes/records")
+    suspend fun listSharedJournalNotes(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-updated_at"
+    ): Response<PbListResponse<PbSharedJournalNoteDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

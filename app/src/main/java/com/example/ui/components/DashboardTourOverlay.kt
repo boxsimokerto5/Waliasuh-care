@@ -98,6 +98,7 @@ enum class TourTargetId {
     ICON_KONSELING,
     ICON_JADWAL_WALI,
     ICON_INFO_PENTING,
+    ICON_JURNAL_ATURAN,
     ICON_BIBLE,
     ICON_KRISTEN,
     TOUR_REPLAY_BUTTON
@@ -118,6 +119,7 @@ fun DashboardIconKey.toTourTargetId(): TourTargetId = when (this) {
     DashboardIconKey.JADWAL_WALI -> TourTargetId.ICON_JADWAL_WALI
     DashboardIconKey.KLAIM_ANAK_ASUH -> TourTargetId.ICON_KLAIM_ANAK_ASUH
     DashboardIconKey.INFO_PENTING -> TourTargetId.ICON_INFO_PENTING
+    DashboardIconKey.JURNAL_ATURAN -> TourTargetId.ICON_JURNAL_ATURAN
     DashboardIconKey.BIBLE -> TourTargetId.ICON_BIBLE
     DashboardIconKey.KRISTEN -> TourTargetId.ICON_KRISTEN
 }
@@ -374,17 +376,17 @@ fun buildDashboardTourSteps(isEn: Boolean): List<DashboardTourStep> {
             dashboardIconKey = DashboardIconKey.INFO_PENTING
         ),
         DashboardTourStep(
-            targetId = TourTargetId.ICON_BIBLE,
-            chapter = if (isEn) "Bible" else "Alkitab",
-            title = if (isEn) "Digital Bible & Personal Notes" else "Bible (Alkitab & Catatan)",
+            targetId = TourTargetId.ICON_JURNAL_ATURAN,
+            chapter = if (isEn) "Journal & Rules" else "Jurnal & Aturan",
+            title = if (isEn) "Shared Journal & Joint Rules" else "Catatan Jurnal & Aturan Bersama",
             description = if (isEn) {
-                "Read all 66 Bible books in IND/ENG with audio reader, devotionals, stories & synced personal notes."
+                "Read and write shared caregiving journals and joint agreements neatly organized in cards."
             } else {
-                "Baca 66 kitab Alkitab dwibahasa IND/ENG lengkap dengan audio suara, renungan, kisah & catatan tersinkron."
+                "Catat dan baca jurnal pengasuhan serta aturan bersama tim wali asuh dalam daftar kartu yang rapi."
             },
-            accentColor = Color(0xFFB45309),
-            iconRes = R.drawable.img_menu_bible,
-            dashboardIconKey = DashboardIconKey.BIBLE
+            accentColor = Color(0xFFD97706),
+            iconRes = R.drawable.img_menu_jurnal_aturan,
+            dashboardIconKey = DashboardIconKey.JURNAL_ATURAN
         ),
         DashboardTourStep(
             targetId = TourTargetId.TOUR_REPLAY_BUTTON,

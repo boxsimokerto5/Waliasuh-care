@@ -24,6 +24,7 @@ import com.example.data.dao.VisitConfirmationDao
 import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.VisitSessionSwapDao
+import com.example.data.dao.SharedJournalNoteDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentExpectationDao
 import com.example.data.dao.ParentMessageDao
@@ -60,6 +61,7 @@ import com.example.data.model.ChatMediaLocalSave
 import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.ParentMessage
+import com.example.data.model.SharedJournalNote
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -106,7 +108,8 @@ class HealthRepository(
     private val bibleBookmarkDao: BibleBookmarkDao? = null,
     private val bibleNoteDao: BibleNoteDao? = null,
     private val visitConfirmationDao: VisitConfirmationDao? = null,
-    private val visitSessionSwapDao: VisitSessionSwapDao? = null
+    private val visitSessionSwapDao: VisitSessionSwapDao? = null,
+    private val sharedJournalNoteDao: SharedJournalNoteDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -163,6 +166,8 @@ class HealthRepository(
         bibleBookmarkDao?.getAllActiveBookmarks() ?: emptyFlow()
     val allBibleNotes: Flow<List<BibleNote>> =
         bibleNoteDao?.getAllActiveNotes() ?: emptyFlow()
+    val allSharedJournalNotes: Flow<List<SharedJournalNote>> =
+        sharedJournalNoteDao?.getAllActiveNotes() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -1068,5 +1073,30 @@ class HealthRepository(
 
     suspend fun deleteBibleNotesByOwner(schoolId: String, username: String) {
         bibleNoteDao?.deleteByOwner(schoolId, username)
+    }
+
+    // --- Catatan Jurnal & Aturan Bersama (Sinkron Antar Wali Asuh) ---
+    suspend fun insertSharedJournalNote(note: SharedJournalNote): Long =
+        sharedJournalNoteDao?.insert(note) ?: 0L
+
+    suspend fun insertAllSharedJournalNotes(notes: List<SharedJournalNote>) {
+        sharedJournalNoteDao?.insertAll(notes)
+    }
+
+    suspend fun updateSharedJournalNote(note: SharedJournalNote) {
+        sharedJournalNoteDao?.update(note)
+    }
+
+    suspend fun getSharedJournalNoteById(id: Long): SharedJournalNote? =
+        sharedJournalNoteDao?.getById(id)
+
+    suspend fun getAllSharedJournalNotesIncludingDeletedList(): List<SharedJournalNote> =
+        sharedJournalNoteDao?.getAllNotesIncludingDeletedList() ?: emptyList()
+
+    suspend fun getSharedJournalNotesBySchoolList(schoolId: String): List<SharedJournalNote> =
+        sharedJournalNoteDao?.getNotesBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteSharedJournalNotesBySchool(schoolId: String) {
+        sharedJournalNoteDao?.deleteBySchool(schoolId)
     }
 }

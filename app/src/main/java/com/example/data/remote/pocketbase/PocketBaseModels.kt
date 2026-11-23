@@ -28,6 +28,8 @@ import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
+import com.example.data.model.SharedJournalHelper
+import com.example.data.model.SharedJournalNote
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
@@ -2804,5 +2806,62 @@ data class PbBibleNoteDto(
         }
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class PbSharedJournalNoteDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "category") val category: String? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "content") val content: String? = null,
+    @Json(name = "is_pinned") val isPinned: Boolean? = null,
+    @Json(name = "author_username") val authorUsername: String? = null,
+    @Json(name = "author_name") val authorName: String? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): SharedJournalNote {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        return SharedJournalNote(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = resolvedSchool,
+            category = SharedJournalHelper.normalizeCategory(category),
+            title = title.orEmpty(),
+            content = content.orEmpty(),
+            isPinned = isPinned ?: false,
+            authorUsername = authorUsername.orEmpty().trim(),
+            authorName = authorName?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: SharedJournalNote): PbSharedJournalNoteDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "shared_journal:${model.schoolId}:${model.authorUsername}:${model.createdAt}:${model.title.hashCode()}"
+            )
+            return PbSharedJournalNoteDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                category = SharedJournalHelper.normalizeCategory(model.category),
+                title = model.title,
+                content = model.content,
+                isPinned = model.isPinned,
+                authorUsername = model.authorUsername,
+                authorName = model.authorName,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+    }
+}
+
 
 

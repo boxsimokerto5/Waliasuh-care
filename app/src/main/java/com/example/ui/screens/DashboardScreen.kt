@@ -273,6 +273,7 @@ fun DashboardScreen(
     val isPublishingInfoPenting by viewModel.isPublishingInfoPenting.collectAsStateWithLifecycle()
     val bibleBookmarks by viewModel.bibleBookmarks.collectAsStateWithLifecycle()
     val bibleNotes by viewModel.bibleNotes.collectAsStateWithLifecycle()
+    val sharedJournalNotes by viewModel.sharedJournalNotes.collectAsStateWithLifecycle()
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
     val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
     val isPublishingGalleryPost by viewModel.isPublishingGalleryPost.collectAsStateWithLifecycle()
@@ -305,6 +306,11 @@ fun DashboardScreen(
     LaunchedEffect(modalState.showBibleSheet) {
         if (modalState.showBibleSheet) {
             viewModel.syncBibleOnlineQuietly()
+        }
+    }
+    LaunchedEffect(modalState.showSharedJournalSheet) {
+        if (modalState.showSharedJournalSheet) {
+            viewModel.syncSharedJournalNotesOnlineQuietly()
         }
     }
     LaunchedEffect(currentUserRole) {
@@ -912,6 +918,10 @@ fun DashboardScreen(
                                 TopOnAdManager.onUserActionClick(context)
                                 modalState.showBibleSheet = true
                             },
+                            onOpenSharedJournal = {
+                                TopOnAdManager.onUserActionClick(context)
+                                modalState.showSharedJournalSheet = true
+                            },
                             todayPlansCount = totalToday,
                             inpatientCount = inpatientRecords.size,
                             studentsCount = students.size,
@@ -945,6 +955,7 @@ fun DashboardScreen(
                             konselingTotalCount = konselingStats.totalEntries,
                             unreadInfoPentingCount = unreadInfoPentingCount,
                             bibleSavedCount = bibleBookmarks.size + bibleNotes.size,
+                            sharedJournalCount = sharedJournalNotes.size,
                             christianStudentsCount = students.count { StudentReligionHelper.isChristian(it) },
                             christianWorshipTodayCount = run {
                                 val todayKey = ChristianWorshipHelper.todayDateKey()
@@ -2298,6 +2309,38 @@ fun DashboardScreen(
         DashboardQuranModalsHost(
             modalState = modalState,
             isEn = isEn
+        )
+    }
+
+    if (modalState.showSharedJournalSheet) {
+        com.example.ui.dialogs.SharedJournalSheet(
+            notes = sharedJournalNotes,
+            currentUsername = currentUsername,
+            currentWaliName = waliName,
+            isAdmin = isAdminUser,
+            isAnakSuperAdmin = isAnakSuperAdmin,
+            onSaveNote = { existing, category, title, content, isPinned, onResult ->
+                viewModel.saveSharedJournalNote(
+                    existingNote = existing,
+                    category = category,
+                    title = title,
+                    content = content,
+                    isPinned = isPinned,
+                    onResult = onResult
+                )
+            },
+            onTogglePin = { note, onResult ->
+                viewModel.toggleSharedJournalNotePin(note, onResult)
+            },
+            onDeleteNote = { note, onResult ->
+                viewModel.deleteSharedJournalNote(note, onResult)
+            },
+            onDismiss = {
+                modalState.showSharedJournalSheet = false
+            },
+            onShowMessage = { msg ->
+                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+            }
         )
     }
 }

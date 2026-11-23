@@ -144,6 +144,12 @@ fun dashboardIconUiMeta(key: DashboardIconKey, isEn: Boolean): DashboardIconUiMe
             imageRes = R.drawable.img_menu_info_penting,
             tileBg = Color(0xFFCCFBF1)
         )
+        DashboardIconKey.JURNAL_ATURAN -> DashboardIconUiMeta(
+            key = key,
+            title = if (isEn) "Journal & Rules" else "Jurnal & Aturan",
+            imageRes = R.drawable.img_menu_jurnal_aturan,
+            tileBg = Color(0xFFFFEDD5)
+        )
         DashboardIconKey.BIBLE -> DashboardIconUiMeta(
             key = key,
             title = "Bible",
@@ -219,6 +225,7 @@ fun QuickMenuTiles(
     onOpenInfoPenting: () -> Unit = {},
     onOpenAbsenSholat: () -> Unit = {},
     onOpenBible: () -> Unit = {},
+    onOpenSharedJournal: () -> Unit = {},
     todayPlansCount: Int = 0,
     inpatientCount: Int = 0,
     studentsCount: Int = 0,
@@ -245,6 +252,7 @@ fun QuickMenuTiles(
     konselingTotalCount: Int = 0,
     unreadInfoPentingCount: Int = 0,
     bibleSavedCount: Int = 0,
+    sharedJournalCount: Int = 0,
     christianStudentsCount: Int = 0,
     christianWorshipTodayCount: Int = 0,
     todayMyShiftBadge: String? = null,
@@ -258,6 +266,7 @@ fun QuickMenuTiles(
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     val normalizedOrder = DashboardIconKey.normalizeOrder(iconOrder.map { it.key })
+        .filter { it != DashboardIconKey.BIBLE }
 
     val orderedSpecs = normalizedOrder.map { key ->
         val meta = dashboardIconUiMeta(key, isEn)
@@ -458,6 +467,20 @@ fun QuickMenuTiles(
                     badgeBg = infoBadgeBg,
                     testTag = "tile_info_penting",
                     onClick = onOpenInfoPenting
+                )
+            }
+            DashboardIconKey.JURNAL_ATURAN -> {
+                val journalBadge = if (sharedJournalCount > 0) {
+                    "$sharedJournalCount"
+                } else {
+                    if (isEn) "Notes" else "Catatan"
+                }
+                GridTileSpec(
+                    meta = meta,
+                    badgeText = journalBadge,
+                    badgeBg = Color(0xFFD97706),
+                    testTag = "tile_jurnal_aturan",
+                    onClick = onOpenSharedJournal
                 )
             }
             DashboardIconKey.BIBLE -> {
