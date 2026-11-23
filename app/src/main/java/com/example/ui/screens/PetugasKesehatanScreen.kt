@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
@@ -33,9 +34,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -128,7 +126,9 @@ fun PetugasKesehatanScreen(
                 shadowElevation = 2.dp
             ) {
                 Box(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding(),
                     contentAlignment = Alignment.Center
                 ) {
                     Row(
@@ -243,46 +243,39 @@ fun PetugasKesehatanScreen(
             }
         },
         bottomBar = {
-            NavigationBar(
-                containerColor = MaterialTheme.colorScheme.surface,
-                tonalElevation = 4.dp
-            ) {
-                val items: List<Triple<PetugasKesehatanTab, String, ImageVector>> = listOf(
-                    Triple(PetugasKesehatanTab.RENCANA, if (isEn) "Plans" else "Rencana", Icons.Default.EventNote),
-                    Triple(PetugasKesehatanTab.TINDAKAN, if (isEn) "Actions" else "Tindakan", Icons.Default.MedicalServices),
-                    Triple(PetugasKesehatanTab.LAPORAN, if (isEn) "Reports" else "Laporan", Icons.Default.Assessment),
-                    Triple(PetugasKesehatanTab.ANAK_ASUH, if (isEn) "Students" else "Anak Asuh", Icons.Default.People)
+            val navItems = listOf(
+                com.example.ui.components.LuxuryNavItem(
+                    id = "RENCANA",
+                    label = if (isEn) "Plans" else "Rencana",
+                    icon = Icons.Default.EventNote,
+                    testTag = PetugasKesehatanTab.RENCANA.testTag
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "TINDAKAN",
+                    label = if (isEn) "Actions" else "Tindakan",
+                    icon = Icons.Default.MedicalServices,
+                    testTag = PetugasKesehatanTab.TINDAKAN.testTag
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "LAPORAN",
+                    label = if (isEn) "Reports" else "Laporan",
+                    icon = Icons.Default.Assessment,
+                    testTag = PetugasKesehatanTab.LAPORAN.testTag
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "ANAK_ASUH",
+                    label = if (isEn) "Students" else "Anak Asuh",
+                    icon = Icons.Default.People,
+                    testTag = PetugasKesehatanTab.ANAK_ASUH.testTag
                 )
-                items.forEach { (tab, label, icon) ->
-                    val selected = currentTab == tab
-                    NavigationBarItem(
-                        selected = selected,
-                        onClick = { currentTab = tab },
-                        icon = {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = label,
-                                fontSize = 11.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = medicalTeal,
-                            selectedTextColor = medicalTeal,
-                            indicatorColor = medicalLight.copy(alpha = 0.7f)
-                        ),
-                        modifier = Modifier.testTag(tab.testTag)
-                    )
+            )
+            com.example.ui.components.LuxuryFloatingPillBottomBar(
+                items = navItems,
+                selectedIndex = currentTab.ordinal,
+                onSelectIndex = { idx ->
+                    currentTab = PetugasKesehatanTab.entries[idx]
                 }
-            }
+            )
         }
     ) { innerPadding ->
         Box(

@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
+import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardIconKey
 import com.example.data.model.JournalChecklistItem
 import com.example.data.model.JournalImageAttachment
@@ -29,6 +30,7 @@ import com.example.data.model.WaliAccount
 import com.example.data.remote.pocketbase.PbSharedJournalNoteDto
 import com.example.ui.HealthViewModel
 import com.example.ui.components.QuickMenuTiles
+import com.example.ui.dialogs.BarcodeScannerDialog
 import com.example.ui.dialogs.SharedJournalSheet
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.AppLanguageManager
@@ -374,5 +376,64 @@ class SharedJournalRobolectricTest {
         assertEquals(latestNote.category, restored.category)
         assertEquals(latestNote.isPinned, restored.isPinned)
         assertEquals(latestNote.authorUsername, restored.authorUsername)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp")
+    fun `BarcodeScannerDialog renders bottom dock controls and manual sheet cleanly on compact devices`() {
+        val indonesianStrings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val sampleStudents = listOf(
+            ChildStudent(
+                id = 9101L,
+                name = "Siti Aisyah",
+                nis = "9101",
+                nik = "3506123456780001",
+                gender = "P",
+                age = 14,
+                dormitory = "Asrama Putri",
+                classGrade = "VIII-A"
+            )
+        )
+        var scannedValue = ""
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides indonesianStrings) {
+                BarcodeScannerDialog(
+                    femaleStudents = sampleStudents,
+                    continuousScan = true,
+                    sessionParticipantCount = 1,
+                    onScanned = { scannedValue = it },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("scanner_fullscreen_root").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_close_scanner")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithText("Arahkan Barcode / QR Kartu Siswa ke Kotak")
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_open_manual_student_picker")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_done_continuous_scan")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+
+        // Buka bottom sheet manual picker dan input NIK manual
+        composeTestRule.onNodeWithTag("btn_open_manual_student_picker").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("input_manual_nik_haid")
+            .assertIsDisplayed()
+            .performTextReplacement("3506123456780001")
+        composeTestRule.onNodeWithTag("btn_confirm_manual_nik")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("3506123456780001", scannedValue)
     }
 }

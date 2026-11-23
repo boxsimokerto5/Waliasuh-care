@@ -1,6 +1,12 @@
 package com.example
 
 import android.app.Application
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsDisplayed
@@ -224,6 +230,7 @@ class PetugasKesehatanRobolectricTest {
         composeTestRule.waitForIdle()
 
         // Tab 1: Rencana
+        composeTestRule.onNodeWithTag("bottom_nav_bar_luxury_pill").assertIsDisplayed()
         composeTestRule.onNodeWithTag("nav_petugas_rencana").assertIsDisplayed()
         composeTestRule.onNodeWithTag("fab_create_plan").assertIsDisplayed()
 
@@ -365,5 +372,42 @@ class PetugasKesehatanRobolectricTest {
         composeTestRule.onNodeWithTag("list_rekap_mengaji").assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_rekap_mengaji_889101").assertIsDisplayed()
         composeTestRule.onNodeWithText("Iqro' • Jilid 3 • Hal. 18 (Lancar)", substring = true).assertIsDisplayed()
+    }
+
+    @Test
+    fun `LuxuryCurvedCenterBottomBar keeps Jadwal at center index 2 and switches tabs cleanly`() {
+        val selectedIndex = mutableStateOf(0)
+        val items = listOf(
+            com.example.ui.components.LuxuryNavItem("DASHBOARD", "Dashboard", androidx.compose.material.icons.Icons.Default.Home, "nav_item_dashboard"),
+            com.example.ui.components.LuxuryNavItem("RENCANA", "Rencana", androidx.compose.material.icons.Icons.Default.CalendarToday, "nav_item_rencana"),
+            com.example.ui.components.LuxuryNavItem("JADWAL", "Jadwal", androidx.compose.material.icons.Icons.Default.CalendarMonth, "nav_item_jadwal"),
+            com.example.ui.components.LuxuryNavItem("ANAK_ASUH", "Anak Asuh", androidx.compose.material.icons.Icons.Default.People, "nav_item_anak_asuh"),
+            com.example.ui.components.LuxuryNavItem("PROFIL", "Profil", androidx.compose.material.icons.Icons.Default.Person, "nav_item_profil")
+        )
+
+        composeTestRule.setContent {
+            com.example.ui.components.LuxuryCurvedCenterBottomBar(
+                items = items,
+                selectedIndex = selectedIndex.value,
+                centerIndex = 2,
+                onSelectIndex = { selectedIndex.value = it }
+            )
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("bottom_nav_bar").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("nav_item_dashboard").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("nav_item_rencana").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("nav_item_jadwal").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("nav_item_anak_asuh").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("nav_item_profil").assertIsDisplayed()
+
+        composeTestRule.onNodeWithTag("nav_item_jadwal").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(2, selectedIndex.value)
+
+        composeTestRule.onNodeWithTag("nav_item_profil").performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(4, selectedIndex.value)
     }
 }

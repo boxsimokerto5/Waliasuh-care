@@ -26,21 +26,27 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -90,7 +96,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -102,6 +110,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.example.data.model.ChildStudent
+import com.example.ui.components.ConfigureEdgeToEdgeDialogWindow
 import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.delay
 
@@ -216,9 +225,13 @@ fun BarcodeScannerDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(
             usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = true
+            decorFitsSystemWindows = false
         )
     ) {
+        ConfigureEdgeToEdgeDialogWindow(
+            lightStatusBars = false,
+            lightNavigationBars = false
+        )
         BackHandler {
             if (showManualPickerSheet) {
                 showManualPickerSheet = false
@@ -227,18 +240,29 @@ fun BarcodeScannerDialog(
             }
         }
 
+        val density = LocalDensity.current
+        val layoutDirection = LocalLayoutDirection.current
+        val safeDrawingInsets = WindowInsets.safeDrawing
+        val topSafePx = safeDrawingInsets.getTop(density).toFloat()
+        val bottomSafePx = safeDrawingInsets.getBottom(density).toFloat()
+        val leftSafePx = safeDrawingInsets.getLeft(density, layoutDirection).toFloat()
+        val rightSafePx = safeDrawingInsets.getRight(density, layoutDirection).toFloat()
+
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Color(0xFF090F1A))
                 .testTag("scanner_fullscreen_root")
         ) {
-            val reticleWidthPx = with(androidx.compose.ui.platform.LocalDensity.current) {
-                (maxWidth * 0.80f).coerceIn(240.dp, 360.dp).toPx()
-            }
-            val reticleHeightPx = with(androidx.compose.ui.platform.LocalDensity.current) {
-                (maxHeight * 0.38f).coerceIn(220.dp, 320.dp).toPx()
-            }
+            val containerMaxHeight = maxHeight
+            val maxWidthPx = with(density) { maxWidth.toPx() }
+            val usableWidthPx = (maxWidthPx - leftSafePx - rightSafePx).coerceAtLeast(180f)
+            val reticleMinWidthPx = with(density) { 180.dp.toPx() }
+            val reticleMaxWidthPx = with(density) { 360.dp.toPx() }
+            val reticleWidthPx = (usableWidthPx * 0.80f).coerceIn(
+                minOf(reticleMinWidthPx, usableWidthPx * 0.88f),
+                reticleMaxWidthPx
+            )
 
             // 1. LIVE FULL-SCREEN PORTRAIT CAMERA VIEWFINDER
             if (hasCameraPermission && cameraError == null) {
@@ -266,7 +290,9 @@ fun BarcodeScannerDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 28.dp),
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 28.dp, vertical = 96.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
@@ -327,11 +353,16 @@ fun BarcodeScannerDialog(
                     .fillMaxSize()
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
             ) {
-                val rectW = reticleWidthPx.coerceAtMost(size.width * 0.86f)
-                val rectH = reticleHeightPx.coerceAtMost(size.height * 0.46f)
-                val left = (size.width - rectW) / 2f
-                // Posisi agak ke atas tengah agar seimbang antara top bar & dock bawah
-                val top = ((size.height - rectH) / 2f - 18.dp.toPx()).coerceAtLeast(88.dp.toPx())
+                val topBandPx = topSafePx + 74.dp.toPx()
+                val bottomBandPx = size.height - bottomSafePx - 130.dp.toPx()
+                val availableMidHeight = (bottomBandPx - topBandPx).coerceAtLeast(130.dp.toPx())
+                val rectW = reticleWidthPx.coerceAtMost(usableWidthPx * 0.86f)
+                val rectH = (availableMidHeight * 0.72f).coerceIn(
+                    minOf(150.dp.toPx(), availableMidHeight * 0.90f),
+                    320.dp.toPx()
+                )
+                val left = leftSafePx + (usableWidthPx - rectW) / 2f
+                val top = topBandPx + (availableMidHeight - rectH) / 2f
                 val cornerRadius = 20.dp.toPx()
 
                 // Scrim gelap lembut di luar area bidik
@@ -424,7 +455,11 @@ fun BarcodeScannerDialog(
                             )
                         )
                     )
-                    .statusBarsPadding()
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                        )
+                    )
                     .padding(horizontal = 14.dp, vertical = 12.dp)
             ) {
                 Row(
@@ -548,7 +583,11 @@ fun BarcodeScannerDialog(
                 ),
                 modifier = Modifier
                     .align(Alignment.TopCenter)
-                    .statusBarsPadding()
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                        )
+                    )
                     .padding(top = 74.dp, start = 20.dp, end = 20.dp)
                     .widthIn(max = 520.dp)
             ) {
@@ -637,8 +676,12 @@ fun BarcodeScannerDialog(
                             )
                         )
                     )
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .windowInsetsPadding(
+                        WindowInsets.safeDrawing.only(
+                            WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
+                        )
+                    )
+                    .padding(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 Column(
                     modifier = Modifier
@@ -743,9 +786,10 @@ fun BarcodeScannerDialog(
                             .fillMaxWidth()
                             .widthIn(max = 600.dp)
                             .align(Alignment.CenterHorizontally)
-                            .padding(horizontal = 16.dp)
-                            .padding(bottom = 24.dp)
+                            .navigationBarsPadding()
                             .imePadding()
+                            .padding(horizontal = 16.dp)
+                            .padding(bottom = 20.dp)
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -900,7 +944,10 @@ fun BarcodeScannerDialog(
                             LazyColumn(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 140.dp, max = 320.dp),
+                                    .heightIn(
+                                        min = 120.dp,
+                                        max = (containerMaxHeight * 0.36f).coerceIn(140.dp, 320.dp)
+                                    ),
                                 verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 items(filteredFemaleStudents, key = { it.id }) { student ->

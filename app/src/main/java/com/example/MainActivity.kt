@@ -55,9 +55,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -447,176 +444,61 @@ private fun WaliAsuhCareAppContent(
             )
         },
         bottomBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.surface),
-                contentAlignment = Alignment.Center
-            ) {
-                NavigationBar(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 640.dp)
-                        .testTag("bottom_nav_bar"),
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 6.dp
-                ) {
-                    // 1. Dashboard (from Mockup 3 & 4)
-                    NavigationBarItem(
-                        selected = currentScreen == WaliNavScreen.DASHBOARD,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            currentScreen = WaliNavScreen.DASHBOARD
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Home,
-                                contentDescription = s.nav.navHome,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = s.nav.navHome,
-                                fontWeight = if (currentScreen == WaliNavScreen.DASHBOARD) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = WaliPrimary,
-                            selectedTextColor = WaliPrimary,
-                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_dashboard")
-                    )
-
-                    // 2. Rencana (from Mockup 3 & 4)
-                    NavigationBarItem(
-                        selected = currentScreen == WaliNavScreen.RENCANA,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            currentScreen = WaliNavScreen.RENCANA
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.CalendarToday,
-                                contentDescription = s.nav.navPlans,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = s.nav.navPlans,
-                                fontWeight = if (currentScreen == WaliNavScreen.RENCANA) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = WaliPrimary,
-                            selectedTextColor = WaliPrimary,
-                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_rencana")
-                    )
-
-                    // 3. Jadwal Harian Cepat (menggantikan slot Tindakan di bottom bar; Tindakan tetap dibuka lewat Dashboard -> Berobat / Notifikasi)
-                    NavigationBarItem(
-                        selected = currentScreen == WaliNavScreen.JADWAL,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            currentScreen = WaliNavScreen.JADWAL
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.CalendarMonth,
-                                contentDescription = s.nav.navSchedule,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = s.nav.navSchedule,
-                                fontWeight = if (currentScreen == WaliNavScreen.JADWAL) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = WaliPrimary,
-                            selectedTextColor = WaliPrimary,
-                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_jadwal")
-                    )
-
-                    // 4. Anak Asuh (from Mockup 1, 2, 3, 4)
-                    NavigationBarItem(
-                        selected = currentScreen == WaliNavScreen.ANAK_ASUH,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            currentScreen = WaliNavScreen.ANAK_ASUH
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.People,
-                                contentDescription = s.nav.navStudents,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = s.nav.navStudents,
-                                fontWeight = if (currentScreen == WaliNavScreen.ANAK_ASUH) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = WaliPrimary,
-                            selectedTextColor = WaliPrimary,
-                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_anak_asuh")
-                    )
-
-                    // 5. Profil (from Mockup 1)
-                    NavigationBarItem(
-                        selected = currentScreen == WaliNavScreen.PROFIL,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            currentScreen = WaliNavScreen.PROFIL
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = s.nav.navProfile,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        },
-                        label = {
-                            Text(
-                                text = s.nav.navProfile,
-                                fontWeight = if (currentScreen == WaliNavScreen.PROFIL) FontWeight.Bold else FontWeight.Medium,
-                                fontSize = 10.sp,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = WaliPrimary,
-                            selectedTextColor = WaliPrimary,
-                            indicatorColor = WaliPrimary.copy(alpha = 0.12f)
-                        ),
-                        modifier = Modifier.testTag("nav_item_profil")
-                    )
-                }
+            val navItems = listOf(
+                com.example.ui.components.LuxuryNavItem(
+                    id = "DASHBOARD",
+                    label = s.nav.navHome,
+                    icon = Icons.Default.Home,
+                    testTag = "nav_item_dashboard"
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "RENCANA",
+                    label = s.nav.navPlans,
+                    icon = Icons.Default.CalendarToday,
+                    testTag = "nav_item_rencana"
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "JADWAL",
+                    label = s.nav.navSchedule,
+                    icon = Icons.Default.CalendarMonth,
+                    testTag = "nav_item_jadwal"
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "ANAK_ASUH",
+                    label = s.nav.navStudents,
+                    icon = Icons.Default.People,
+                    testTag = "nav_item_anak_asuh"
+                ),
+                com.example.ui.components.LuxuryNavItem(
+                    id = "PROFIL",
+                    label = s.nav.navProfile,
+                    icon = Icons.Default.Person,
+                    testTag = "nav_item_profil"
+                )
+            )
+            val selectedNavIndex = when (currentScreen) {
+                WaliNavScreen.DASHBOARD -> 0
+                WaliNavScreen.RENCANA -> 1
+                WaliNavScreen.JADWAL -> 2
+                WaliNavScreen.ANAK_ASUH -> 3
+                WaliNavScreen.PROFIL -> 4
+                WaliNavScreen.TINDAKAN -> 0
             }
+            com.example.ui.components.LuxuryCurvedCenterBottomBar(
+                items = navItems,
+                selectedIndex = selectedNavIndex,
+                centerIndex = 2,
+                onSelectIndex = { idx ->
+                    TopOnAdManager.onUserActionClick(context)
+                    currentScreen = when (idx) {
+                        0 -> WaliNavScreen.DASHBOARD
+                        1 -> WaliNavScreen.RENCANA
+                        2 -> WaliNavScreen.JADWAL
+                        3 -> WaliNavScreen.ANAK_ASUH
+                        else -> WaliNavScreen.PROFIL
+                    }
+                }
+            )
         }
     ) { innerPadding ->
         Box(

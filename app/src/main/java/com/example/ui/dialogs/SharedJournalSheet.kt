@@ -18,17 +18,22 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -101,6 +106,7 @@ import com.example.data.model.JournalChecklistItem
 import com.example.data.model.JournalImageAttachment
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
+import com.example.ui.components.ConfigureEdgeToEdgeDialogWindow
 import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.launch
 import java.io.File
@@ -145,12 +151,22 @@ fun SharedJournalSheet(
 
     val isEditorOpen = isCreatingNew || activeNote != null
 
+    val isLightDialogBars = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+
     Dialog(
         onDismissRequest = {
             if (!isEditorOpen) onDismiss()
         },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
+        ConfigureEdgeToEdgeDialogWindow(
+            lightStatusBars = isLightDialogBars,
+            lightNavigationBars = isLightDialogBars,
+            adjustSoftInput = true
+        )
         BackHandler(enabled = !isEditorOpen) {
             onDismiss()
         }
@@ -275,7 +291,8 @@ private fun SharedJournalListScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding),
             contentAlignment = Alignment.TopCenter
         ) {
             Column(
@@ -307,10 +324,11 @@ private fun SharedJournalListScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (isEn) "Journal & Rules" else "Catatan Jurnal & Aturan",
-                            fontSize = 22.sp,
+                            fontSize = 19.sp,
+                            lineHeight = 23.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
@@ -862,9 +880,16 @@ private fun SharedJournalEditorScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .imePadding()
-                        .navigationBarsPadding()
                 ) {
-                    Column {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .windowInsetsPadding(
+                                WindowInsets.navigationBars.only(
+                                    WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
+                                )
+                            )
+                    ) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
                         Row(
                             modifier = Modifier
@@ -985,7 +1010,8 @@ private fun SharedJournalEditorScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding),
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding),
             contentAlignment = Alignment.TopCenter
         ) {
             Column(
@@ -1474,8 +1500,15 @@ private fun SharedJournalEditorScreen(
 
         Dialog(
             onDismissRequest = { previewImage = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
         ) {
+            ConfigureEdgeToEdgeDialogWindow(
+                lightStatusBars = false,
+                lightNavigationBars = false
+            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1516,6 +1549,11 @@ private fun SharedJournalEditorScreen(
                     onClick = { previewImage = null },
                     modifier = Modifier
                         .align(Alignment.TopEnd)
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(
+                                WindowInsetsSides.Top + WindowInsetsSides.Horizontal
+                            )
+                        )
                         .padding(16.dp)
                         .size(48.dp)
                 ) {
