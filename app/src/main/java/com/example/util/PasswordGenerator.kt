@@ -86,6 +86,41 @@ object PasswordGenerator {
                 """.trimIndent()
             }
         }
+        if (account.isPetugasKesehatan()) {
+            return if (isEnglish) {
+                """
+                    *HEALTH OFFICER ACCESS CARD — WALI ASUH CARE*
+                    _${schoolDisplay}_
+                    
+                    Dear *${account.name}*,
+                    Here is your official login account (*Health Officer Portal*):
+                    
+                    👤 *Username:* $effectiveUser
+                    🔑 *Password:* ${account.password}
+                    🩺 *Access Scope:* Treatment Plans, Medical Actions, Monthly Health Reports & Student Medical History
+                    
+                    Use the account above to log medical plans, treatments, and monthly school health recaps.
+                    
+                    _Sent by Administrator ($adminDisplay)._
+                """.trimIndent()
+            } else {
+                """
+                    *KARTU AKSES LOGIN PETUGAS KESEHATAN — WALI ASUH CARE*
+                    _${schoolDisplay}_
+                    
+                    Yth. Bapak/Ibu *${account.name}*,
+                    Berikut adalah akun akses resmi khusus untuk **Portal Petugas Kesehatan** di aplikasi Wali Asuh Care:
+                    
+                    👤 *Username:* $effectiveUser
+                    🔑 *Password:* ${account.password}
+                    🩺 *Hak Akses:* Rencana & Tindakan Kesehatan, Laporan Bulanan, serta Profil & Riwayat Kesehatan Anak Asuh
+                    
+                    Gunakan akun di atas untuk mencatat pemeriksaan, rencana berobat, dan memantau laporan kesehatan siswa.
+                    
+                    _Pesan ini dikirim oleh Administrator ($adminDisplay)._
+                """.trimIndent()
+            }
+        }
         return if (isEnglish) {
             """
                 *WALI ASUH CARE APP LOGIN ACCESS CARD*

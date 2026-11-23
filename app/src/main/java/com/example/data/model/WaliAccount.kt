@@ -24,6 +24,10 @@ data class WaliAccount(
 ) {
     fun isGuruNgaji(): Boolean = role.trim().equals(ROLE_GURU_NGAJI, ignoreCase = true)
 
+    fun isPetugasKesehatan(): Boolean = role.trim().equals(ROLE_PETUGAS_KESEHATAN, ignoreCase = true)
+
+    fun isSpecialPortalRole(): Boolean = isGuruNgaji() || isPetugasKesehatan()
+
     fun isAnakAdminSekolah(): Boolean = role.trim().equals(ROLE_WALI_ANAK_ADMIN, ignoreCase = true)
 
     fun hasProfilePhoto(): Boolean = photoUrl.isNotBlank() || photoFallbackUrl.isNotBlank()
@@ -33,6 +37,7 @@ data class WaliAccount(
 
     fun roleLabel(isEnglish: Boolean = false): String = when {
         isGuruNgaji() -> if (isEnglish) "Mengaji Teacher" else "Guru Ngaji"
+        isPetugasKesehatan() -> if (isEnglish) "Health Officer" else "Petugas Kesehatan"
         isAnakAdminSekolah() -> if (isEnglish) "Wali Asuh • Schedule Sub-Admin" else "Wali Asuh • Anak Admin Jadwal"
         else -> "Wali Asuh"
     }
@@ -41,6 +46,7 @@ data class WaliAccount(
         const val ROLE_WALI = "WALI"
         const val ROLE_WALI_ANAK_ADMIN = "WALI_ANAK_ADMIN"
         const val ROLE_GURU_NGAJI = "GURU_NGAJI"
+        const val ROLE_PETUGAS_KESEHATAN = "PETUGAS_KESEHATAN"
         const val MAX_ANAK_ADMIN_PER_SCHOOL = 7
     }
 }

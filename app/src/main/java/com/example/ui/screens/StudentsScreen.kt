@@ -74,6 +74,7 @@ fun StudentsScreen(
     students: List<ChildStudent>,
     records: List<MedicalRecord>,
     searchQuery: String,
+    medicalOnlyMode: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -112,22 +113,24 @@ fun StudentsScreen(
         modifier = modifier.fillMaxSize(),
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    TopOnAdManager.onUserActionClick(context)
-                    showAddStudentDialog = true
-                },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.testTag("fab_add_student")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            if (!medicalOnlyMode) {
+                FloatingActionButton(
+                    onClick = {
+                        TopOnAdManager.onUserActionClick(context)
+                        showAddStudentDialog = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.testTag("fab_add_student")
                 ) {
-                    Icon(imageVector = Icons.Default.Add, contentDescription = if (isEn) "Add Student" else "Tambah Siswa", modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(text = if (isEn) "Add Student" else "Tambah Anak Asuh", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(imageVector = Icons.Default.Add, contentDescription = if (isEn) "Add Student" else "Tambah Siswa", modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(text = if (isEn) "Add Student" else "Tambah Anak Asuh", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
                 }
             }
         }
@@ -192,27 +195,29 @@ fun StudentsScreen(
                         )
                     }
 
-                    FilledTonalButton(
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            showCardGeneratorSheet = true
-                        },
-                        enabled = students.isNotEmpty(),
-                        shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                        modifier = Modifier.testTag("btn_open_card_generator")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.QrCode2,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(
-                            text = if (isEn) "Print Cards" else "Cetak Kartu",
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    if (!medicalOnlyMode) {
+                        FilledTonalButton(
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                showCardGeneratorSheet = true
+                            },
+                            enabled = students.isNotEmpty(),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                            modifier = Modifier.testTag("btn_open_card_generator")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.QrCode2,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = if (isEn) "Print Cards" else "Cetak Kartu",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
@@ -259,10 +264,14 @@ fun StudentsScreen(
                             CompactStudentCardItem(
                                 student = student,
                                 treatmentCount = studentRecordsCount,
-                                latestMengajiLabel = latestMengaji?.let { MengajiHelper.formatCompactPosition(it) },
-                                onEditClick = {
-                                    TopOnAdManager.onUserActionClick(context)
-                                    studentToEdit = student
+                                latestMengajiLabel = if (medicalOnlyMode) null else latestMengaji?.let { MengajiHelper.formatCompactPosition(it) },
+                                onEditClick = if (medicalOnlyMode) {
+                                    null
+                                } else {
+                                    {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        studentToEdit = student
+                                    }
                                 },
                                 onClick = {
                                     TopOnAdManager.onUserActionClick(context)
@@ -356,31 +365,37 @@ fun StudentsScreen(
             studentRecords = studentHistory,
             schoolProfile = schoolProfile,
             waliName = waliName,
-            mengajiRecords = studentMengaji,
-            fastingRecords = fastingRecords,
-            sholatRecords = sholatRecords,
-            haidRecords = haidRecords,
-            onInputMengaji = { target ->
+            mengajiRecords = if (medicalOnlyMode) emptyList() else studentMengaji,
+            fastingRecords = if (medicalOnlyMode) emptyList() else fastingRecords,
+            sholatRecords = if (medicalOnlyMode) emptyList() else sholatRecords,
+            haidRecords = if (medicalOnlyMode) emptyList() else haidRecords,
+            allowedTabs = if (medicalOnlyMode) {
+                listOf(com.example.ui.dialogs.StudentDetailTab.BIODATA, com.example.ui.dialogs.StudentDetailTab.BEROBAT)
+            } else {
+                com.example.ui.dialogs.StudentDetailTab.entries
+            },
+            allowCardQr = !medicalOnlyMode,
+            onInputMengaji = if (medicalOnlyMode) null else { target ->
                 selectedStudentForDetail = null
                 studentForMengajiInput = target
             },
-            onPrintKartuMengaji = { target ->
+            onPrintKartuMengaji = if (medicalOnlyMode) null else { target ->
                 selectedStudentForDetail = null
                 studentForKartuMengaji = target
             },
-            onEditStudent = { toEdit ->
+            onEditStudent = if (medicalOnlyMode) null else { toEdit ->
                 selectedStudentForDetail = null
                 studentToEdit = toEdit
             },
-            onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteMengajiRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteMengajiRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
-            onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
-            onDeleteSholatRecord = { rec -> viewModel.deleteSholatRecord(rec) },
+            onDeleteFastingRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteFastingRecord(rec) },
+            onDeleteSholatRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteSholatRecord(rec) },
             isUploadingPhoto = isUploadingStudentPhoto,
-            onUploadStudentPhoto = { target, uri, cb ->
+            onUploadStudentPhoto = if (medicalOnlyMode) null else { target, uri, cb ->
                 viewModel.uploadStudentProfilePhoto(target, uri, cb)
             },
-            onRemoveStudentPhoto = { target, cb ->
+            onRemoveStudentPhoto = if (medicalOnlyMode) null else { target, cb ->
                 viewModel.removeStudentProfilePhoto(target, cb)
             },
             onDismiss = { selectedStudentForDetail = null }

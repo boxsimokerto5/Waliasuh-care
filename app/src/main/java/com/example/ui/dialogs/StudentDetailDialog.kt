@@ -136,6 +136,8 @@ fun StudentDetailDialog(
     sholatRecords: List<SholatRecord> = emptyList(),
     haidRecords: List<HaidRecord> = emptyList(),
     initialTab: StudentDetailTab = StudentDetailTab.BIODATA,
+    allowedTabs: List<StudentDetailTab> = StudentDetailTab.entries,
+    allowCardQr: Boolean = true,
     onInputMengaji: ((ChildStudent) -> Unit)? = null,
     onInputSholat: ((ChildStudent) -> Unit)? = null,
     onPrintKartuMengaji: ((ChildStudent) -> Unit)? = null,
@@ -152,8 +154,15 @@ fun StudentDetailDialog(
     val context = LocalContext.current
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
+    val effectiveAllowedTabs = remember(allowedTabs) {
+        allowedTabs.ifEmpty { listOf(StudentDetailTab.BIODATA) }
+    }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var selectedTab by rememberSaveable(student.id) { mutableStateOf(initialTab) }
+    var selectedTab by rememberSaveable(student.id) {
+        mutableStateOf(
+            if (initialTab in effectiveAllowedTabs) initialTab else effectiveAllowedTabs.first()
+        )
+    }
     val contentScrollState = rememberScrollState()
     LaunchedEffect(selectedTab) {
         contentScrollState.scrollTo(0)
@@ -461,51 +470,61 @@ fun StudentDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(5.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SlimCategoryTabPill(
-                        label = if (isEn) "Profile" else "Biodata",
-                        icon = Icons.Default.Badge,
-                        selected = selectedTab == StudentDetailTab.BIODATA,
-                        accentColor = MaterialTheme.colorScheme.primary,
-                        countBadge = null,
-                        modifier = Modifier.testTag("tab_student_detail_biodata"),
-                        onClick = { selectedTab = StudentDetailTab.BIODATA }
-                    )
-                    SlimCategoryTabPill(
-                        label = "Mengaji",
-                        icon = Icons.AutoMirrored.Filled.MenuBook,
-                        selected = selectedTab == StudentDetailTab.MENGAJI,
-                        accentColor = emeraldPrimary,
-                        countBadge = orderedMengajiRecords.size,
-                        modifier = Modifier.testTag("tab_student_detail_mengaji"),
-                        onClick = { selectedTab = StudentDetailTab.MENGAJI }
-                    )
-                    SlimCategoryTabPill(
-                        label = if (isEn) "Prayers" else "Sholat",
-                        icon = Icons.Default.AutoAwesome,
-                        selected = selectedTab == StudentDetailTab.SHOLAT,
-                        accentColor = sholatTeal,
-                        countBadge = orderedSholatRecords.size,
-                        modifier = Modifier.testTag("tab_student_detail_sholat"),
-                        onClick = { selectedTab = StudentDetailTab.SHOLAT }
-                    )
-                    SlimCategoryTabPill(
-                        label = if (isEn) "Medical" else "Berobat",
-                        icon = Icons.Default.LocalHospital,
-                        selected = selectedTab == StudentDetailTab.BEROBAT,
-                        accentColor = medicalSky,
-                        countBadge = studentRecords.size,
-                        modifier = Modifier.testTag("tab_student_detail_berobat"),
-                        onClick = { selectedTab = StudentDetailTab.BEROBAT }
-                    )
-                    SlimCategoryTabPill(
-                        label = if (isEn) "Fasting" else "Puasa",
-                        icon = Icons.Default.NightsStay,
-                        selected = selectedTab == StudentDetailTab.PUASA,
-                        accentColor = fastingAmber,
-                        countBadge = orderedFastingRecords.size,
-                        modifier = Modifier.testTag("tab_student_detail_puasa"),
-                        onClick = { selectedTab = StudentDetailTab.PUASA }
-                    )
+                    if (StudentDetailTab.BIODATA in effectiveAllowedTabs) {
+                        SlimCategoryTabPill(
+                            label = if (isEn) "Profile" else "Biodata",
+                            icon = Icons.Default.Badge,
+                            selected = selectedTab == StudentDetailTab.BIODATA,
+                            accentColor = MaterialTheme.colorScheme.primary,
+                            countBadge = null,
+                            modifier = Modifier.testTag("tab_student_detail_biodata"),
+                            onClick = { selectedTab = StudentDetailTab.BIODATA }
+                        )
+                    }
+                    if (StudentDetailTab.MENGAJI in effectiveAllowedTabs) {
+                        SlimCategoryTabPill(
+                            label = "Mengaji",
+                            icon = Icons.AutoMirrored.Filled.MenuBook,
+                            selected = selectedTab == StudentDetailTab.MENGAJI,
+                            accentColor = emeraldPrimary,
+                            countBadge = orderedMengajiRecords.size,
+                            modifier = Modifier.testTag("tab_student_detail_mengaji"),
+                            onClick = { selectedTab = StudentDetailTab.MENGAJI }
+                        )
+                    }
+                    if (StudentDetailTab.SHOLAT in effectiveAllowedTabs) {
+                        SlimCategoryTabPill(
+                            label = if (isEn) "Prayers" else "Sholat",
+                            icon = Icons.Default.AutoAwesome,
+                            selected = selectedTab == StudentDetailTab.SHOLAT,
+                            accentColor = sholatTeal,
+                            countBadge = orderedSholatRecords.size,
+                            modifier = Modifier.testTag("tab_student_detail_sholat"),
+                            onClick = { selectedTab = StudentDetailTab.SHOLAT }
+                        )
+                    }
+                    if (StudentDetailTab.BEROBAT in effectiveAllowedTabs) {
+                        SlimCategoryTabPill(
+                            label = if (isEn) "Medical" else "Berobat",
+                            icon = Icons.Default.LocalHospital,
+                            selected = selectedTab == StudentDetailTab.BEROBAT,
+                            accentColor = medicalSky,
+                            countBadge = studentRecords.size,
+                            modifier = Modifier.testTag("tab_student_detail_berobat"),
+                            onClick = { selectedTab = StudentDetailTab.BEROBAT }
+                        )
+                    }
+                    if (StudentDetailTab.PUASA in effectiveAllowedTabs) {
+                        SlimCategoryTabPill(
+                            label = if (isEn) "Fasting" else "Puasa",
+                            icon = Icons.Default.NightsStay,
+                            selected = selectedTab == StudentDetailTab.PUASA,
+                            accentColor = fastingAmber,
+                            countBadge = orderedFastingRecords.size,
+                            modifier = Modifier.testTag("tab_student_detail_puasa"),
+                            onClick = { selectedTab = StudentDetailTab.PUASA }
+                        )
+                    }
                 }
 
                 // Konten Tab yang dapat di-scroll independen dari bar kategori atas
@@ -1664,14 +1683,16 @@ fun StudentDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    FilledTonalButton(
-                        onClick = { showCardGeneratorForStudent = true },
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.testTag("btn_open_student_card_qr")
-                    ) {
-                        Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(5.dp))
-                        Text(if (isEn) "Card & QR" else "Kartu & QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    if (allowCardQr) {
+                        FilledTonalButton(
+                            onClick = { showCardGeneratorForStudent = true },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.testTag("btn_open_student_card_qr")
+                        ) {
+                            Icon(Icons.Default.QrCode2, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(if (isEn) "Card & QR" else "Kartu & QR", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
                     }
                     if (onEditStudent != null) {
                         OutlinedButton(

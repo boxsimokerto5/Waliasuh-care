@@ -373,6 +373,18 @@ fun LoginScreen(
                                             ).show()
                                             onLoginSuccessWali(result.account.name)
                                         }
+                                        is LoginResult.SuccessPetugasKesehatan -> {
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) {
+                                                    "Welcome, ${result.account.name} (Health Officer Portal)!"
+                                                } else {
+                                                    "Selamat bertugas, ${result.account.name} (Portal Kesehatan)!"
+                                                },
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            onLoginSuccessWali(result.account.name)
+                                        }
                                         is LoginResult.SuccessParent -> {
                                             Toast.makeText(
                                                 context,

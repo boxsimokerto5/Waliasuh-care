@@ -87,8 +87,8 @@ fun RiwayatMengajiSheet(
     initialTab: Int = 0,
     onContinueStudent: (ChildStudent) -> Unit,
     onOpenKartuForStudent: (ChildStudent) -> Unit,
-    onEditRecord: (MengajiRecord) -> Unit,
-    onDeleteRecord: (MengajiRecord) -> Unit,
+    onEditRecord: ((MengajiRecord) -> Unit)? = null,
+    onDeleteRecord: ((MengajiRecord) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val s = LocalAppStrings.current
@@ -460,11 +460,15 @@ fun RiwayatMengajiSheet(
                                                 Text(if (isEn) "Card" else "Kartu", fontSize = 10.5.sp, fontWeight = FontWeight.Bold, color = Color(0xFF0369A1))
                                             }
                                             Spacer(modifier = Modifier.weight(1f))
-                                            IconButton(onClick = { onEditRecord(rec) }, modifier = Modifier.size(34.dp)) {
-                                                Icon(Icons.Default.Edit, contentDescription = if (isEn) "Edit" else "Edit", tint = emeraldPrimary, modifier = Modifier.size(16.dp))
+                                            if (onEditRecord != null) {
+                                                IconButton(onClick = { onEditRecord(rec) }, modifier = Modifier.size(34.dp)) {
+                                                    Icon(Icons.Default.Edit, contentDescription = if (isEn) "Edit" else "Edit", tint = emeraldPrimary, modifier = Modifier.size(16.dp))
+                                                }
                                             }
-                                            IconButton(onClick = { onDeleteRecord(rec) }, modifier = Modifier.size(34.dp)) {
-                                                Icon(Icons.Default.DeleteOutline, contentDescription = if (isEn) "Delete" else "Hapus", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                            if (onDeleteRecord != null) {
+                                                IconButton(onClick = { onDeleteRecord(rec) }, modifier = Modifier.size(34.dp)) {
+                                                    Icon(Icons.Default.DeleteOutline, contentDescription = if (isEn) "Delete" else "Hapus", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                                                }
                                             }
                                         }
                                     }

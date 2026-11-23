@@ -139,6 +139,8 @@ fun GuruNgajiScreen(
     var scannerFeedback by remember { mutableStateOf<ScannerFloatingFeedback?>(null) }
     var showKartuMengajiSheet by remember { mutableStateOf(false) }
     var kartuTargetStudent by remember { mutableStateOf<ChildStudent?>(null) }
+    var showRekapMengajiSheet by remember { mutableStateOf(false) }
+    var showQuranSheet by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -518,6 +520,62 @@ fun GuruNgajiScreen(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
                                         text = if (isEn) "Cards" else "Kartu PDF",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+
+                            // 2 Extra Quick Tools matching Wali Mengaji Menu: Rekap Jilid Anak & Al-Qur'an Digital
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { showRekapMengajiSheet = true },
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color.White.copy(alpha = 0.12f),
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("btn_guru_ngaji_rekap")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isEn) "Volume Recap" else "Rekap Jilid Anak",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                OutlinedButton(
+                                    onClick = { showQuranSheet = true },
+                                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color.White.copy(alpha = 0.12f),
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("btn_guru_ngaji_quran")
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.MenuBook, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isEn) "Digital Qur'an" else "Al-Qur'an Digital",
                                         fontSize = 11.5.sp,
                                         fontWeight = FontWeight.Bold,
                                         maxLines = 1,
@@ -1056,6 +1114,48 @@ fun GuruNgajiScreen(
                 showKartuMengajiSheet = false
                 kartuTargetStudent = null
             }
+        )
+    }
+
+    if (showRekapMengajiSheet) {
+        com.example.ui.dialogs.RiwayatMengajiSheet(
+            students = eligibleStudents,
+            mengajiRecords = mengajiRecords,
+            initialTab = 1, // Langsung ke Rekap Jilid Anak
+            onContinueStudent = { st ->
+                showRekapMengajiSheet = false
+                inputTargetStudent = st
+                showInputMengajiDialog = true
+            },
+            onOpenKartuForStudent = { st ->
+                showRekapMengajiSheet = false
+                kartuTargetStudent = st
+                showKartuMengajiSheet = true
+            },
+            onEditRecord = null, // Guru Ngaji hak input saja (bukan edit/hapus)
+            onDeleteRecord = null,
+            onDismiss = { showRekapMengajiSheet = false }
+        )
+    }
+
+    if (showQuranSheet) {
+        com.example.ui.dialogs.QuranReaderSheet(
+            initialEnglish = isEn,
+            onRecordToMengaji = { surah, ayah ->
+                showQuranSheet = false
+                inputTargetStudent = null
+                showInputMengajiDialog = true
+                Toast.makeText(
+                    context,
+                    if (isEn) {
+                        "Ready to record Mengaji for ${surah.nameLatin} Ayah $ayah"
+                    } else {
+                        "Siap mencatat setoran ${surah.nameLatin} Ayat $ayah"
+                    },
+                    Toast.LENGTH_SHORT
+                ).show()
+            },
+            onDismiss = { showQuranSheet = false }
         )
     }
 

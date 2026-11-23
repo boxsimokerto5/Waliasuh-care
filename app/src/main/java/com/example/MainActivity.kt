@@ -172,6 +172,12 @@ class MainActivity : ComponentActivity() {
                                     onLogout = { viewModel.logout() }
                                 )
                             }
+                            userRole == UserRole.PETUGAS_KESEHATAN -> {
+                                com.example.ui.screens.PetugasKesehatanScreen(
+                                    viewModel = viewModel,
+                                    onLogout = { viewModel.logout() }
+                                )
+                            }
                             else -> {
                                 WaliAsuhCareApp(
                                     isDarkTheme = isDarkTheme,

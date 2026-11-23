@@ -87,6 +87,49 @@ fun MonthlyReportDialog(
     schoolProfile: SchoolProfile = SchoolProfile(),
     onDismiss: () -> Unit
 ) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        dragHandle = { BottomSheetDefaults.DragHandle() },
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Box(
+            modifier = Modifier.fillMaxWidth(),
+            contentAlignment = Alignment.Center
+        ) {
+            MonthlyReportContent(
+                records = records,
+                students = students,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                showCloseButton = true,
+                fillAvailableHeight = false,
+                onDismiss = onDismiss,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .widthIn(max = 640.dp)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 20.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MonthlyReportContent(
+    records: List<MedicalRecord>,
+    students: List<ChildStudent>,
+    waliName: String,
+    schoolProfile: SchoolProfile = SchoolProfile(),
+    showCloseButton: Boolean = false,
+    fillAvailableHeight: Boolean = true,
+    onDismiss: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
@@ -260,27 +303,10 @@ fun MonthlyReportDialog(
         }
     }
 
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Box(
-            modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .widthIn(max = 640.dp)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
                 // Header
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -324,15 +350,17 @@ fun MonthlyReportDialog(
                             )
                         }
                     }
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.size(40.dp).testTag("btn_close_monthly_report")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = s.close,
-                            modifier = Modifier.size(20.dp)
-                        )
+                    if (showCloseButton) {
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.size(48.dp).testTag("btn_close_monthly_report")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = s.close,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
                     }
                 }
 
@@ -429,7 +457,13 @@ fun MonthlyReportDialog(
                 }
 
                 // Tab Content
-                Box(modifier = Modifier.weight(1f, fill = false).heightIn(min = 200.dp, max = 400.dp)) {
+                Box(
+                    modifier = if (fillAvailableHeight) {
+                        Modifier.fillMaxWidth().weight(1f)
+                    } else {
+                        Modifier.weight(1f, fill = false).heightIn(min = 200.dp, max = 400.dp)
+                    }
+                ) {
                     when (selectedTab) {
                         0 -> {
                             // Ringkasan & Statistik
@@ -815,18 +849,18 @@ fun MonthlyReportDialog(
                         }
                     }
 
-                    OutlinedButton(
-                        onClick = onDismiss,
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("btn_close_monthly_report_bottom")
-                    ) {
-                        Text(s.close, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    if (showCloseButton) {
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_close_monthly_report_bottom")
+                        ) {
+                            Text(s.close, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        }
                     }
                 }
-            }
-        }
     }
 }
 

@@ -448,6 +448,7 @@ fun AdminScreen(
             "Semua" -> true
             "Anak Admin" -> account.isAnakAdminSekolah()
             "Guru Ngaji" -> account.isGuruNgaji()
+            "Petugas Kesehatan" -> account.isPetugasKesehatan()
             else -> account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
         }
         matchSearch && matchDorm
@@ -456,6 +457,8 @@ fun AdminScreen(
     val putraCount = schoolAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
     val putriCount = schoolAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
     val anakAdminCount = schoolAccounts.count { it.isAnakAdminSekolah() }
+    val guruNgajiCount = schoolAccounts.count { it.isGuruNgaji() }
+    val petugasKesehatanCount = schoolAccounts.count { it.isPetugasKesehatan() }
 
     val filteredStudents = schoolStudents.filter { student ->
         val matchSearch = studentSearchQuery.isBlank() ||
@@ -1221,6 +1224,48 @@ fun AdminScreen(
                                 }
                             }
 
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { selectedFilterDormitory = "Guru Ngaji" }
+                                        .testTag("card_admin_summary_guru_ngaji"),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFDF5)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text(if (isEn) "Mengaji Teacher" else "Guru Ngaji", fontSize = 10.5.sp, color = Color(0xFF047857))
+                                        Text(
+                                            text = if (isEn) "$guruNgajiCount Accounts" else "$guruNgajiCount Akun",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF047857)
+                                        )
+                                    }
+                                }
+                                Card(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .clickable { selectedFilterDormitory = "Petugas Kesehatan" }
+                                        .testTag("card_admin_summary_petugas_kesehatan"),
+                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFECFEFF)),
+                                    shape = RoundedCornerShape(8.dp)
+                                ) {
+                                    Column(modifier = Modifier.padding(8.dp)) {
+                                        Text(if (isEn) "Health Officer" else "Petugas Kesehatan", fontSize = 10.5.sp, color = Color(0xFF0E7490))
+                                        Text(
+                                            text = if (isEn) "$petugasKesehatanCount Accounts" else "$petugasKesehatanCount Akun",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF0E7490)
+                                        )
+                                    }
+                                }
+                            }
+
                             Surface(
                                 shape = RoundedCornerShape(10.dp),
                                 color = Color(0xFFEEF2FF),
@@ -1338,18 +1383,27 @@ fun AdminScreen(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            listOf("Semua", "Putra", "Putri", "Anak Admin", "Guru Ngaji").forEach { dormFilter ->
+                            listOf("Semua", "Putra", "Putri", "Anak Admin", "Guru Ngaji", "Petugas Kesehatan").forEach { dormFilter ->
                                 val chipLabel = when (dormFilter) {
                                     "Semua" -> if (isEn) "All" else "Semua"
                                     "Anak Admin" -> if (isEn) "Sub-Admin ($anakAdminCount)" else "Anak Admin ($anakAdminCount)"
-                                    "Guru Ngaji" -> if (isEn) "Mengaji Teacher" else "Guru Ngaji"
+                                    "Guru Ngaji" -> if (isEn) "Mengaji Teacher ($guruNgajiCount)" else "Guru Ngaji ($guruNgajiCount)"
+                                    "Petugas Kesehatan" -> if (isEn) "Health Officer ($petugasKesehatanCount)" else "Petugas Kesehatan ($petugasKesehatanCount)"
                                     else -> dormFilter
+                                }
+                                val chipTag = when (dormFilter) {
+                                    "Guru Ngaji" -> "chip_filter_guru_ngaji"
+                                    "Petugas Kesehatan" -> "chip_filter_petugas_kesehatan"
+                                    "Anak Admin" -> "chip_filter_anak_admin"
+                                    else -> "chip_filter_${dormFilter.lowercase()}"
                                 }
                                 FilterChip(
                                     selected = selectedFilterDormitory == dormFilter,
                                     onClick = { selectedFilterDormitory = dormFilter },
                                     label = { Text(chipLabel, fontSize = 11.sp) },
-                                    modifier = Modifier.height(28.dp)
+                                    modifier = Modifier
+                                        .height(32.dp)
+                                        .testTag(chipTag)
                                 )
                             }
                         }
@@ -3210,7 +3264,7 @@ fun AdminScreen(
         val freshStudent = schoolStudents.firstOrNull { it.id == targetStudent.id } ?: targetStudent
         AdminManageTandemDialog(
             student = freshStudent,
-            waliAccounts = schoolAccounts.filter { !it.isGuruNgaji() },
+            waliAccounts = schoolAccounts.filter { !it.isSpecialPortalRole() },
             isEn = isEn,
             onSaveTeam = { primaryAcc, tandemAccs ->
                 viewModel.adminAssignPrimaryAndTandems(
@@ -4333,15 +4387,18 @@ fun WaliAccountCardItem(
     val avatarGender = if (account.dormitory.contains("putri", ignoreCase = true)) "P" else "L"
 
     val isGuruNgaji = account.isGuruNgaji()
+    val isPetugasKesehatan = account.isPetugasKesehatan()
     val isAnakAdmin = account.isAnakAdminSekolah()
     val isPutri = account.dormitory.contains("Putri", ignoreCase = true)
     val dormAccentColor = when {
+        isPetugasKesehatan -> Color(0xFF0E7490)
         isGuruNgaji -> Color(0xFF047857)
         isAnakAdmin -> Color(0xFF4338CA)
         isPutri -> Color(0xFFBE185D)
         else -> Color(0xFF0369A1)
     }
     val dormBgColor = when {
+        isPetugasKesehatan -> Color(0xFFECFEFF)
         isGuruNgaji -> Color(0xFFECFDF5)
         isAnakAdmin -> Color(0xFFEEF2FF)
         isPutri -> Color(0xFFFDF2F8)
@@ -4380,6 +4437,8 @@ fun WaliAccountCardItem(
                     Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                         Text(
                             text = when {
+                                isPetugasKesehatan && isEn -> "HEALTH OFFICER ACCESS CARD"
+                                isPetugasKesehatan -> "KARTU AKSES PETUGAS KESEHATAN"
                                 isGuruNgaji && isEn -> "MENGAJI TEACHER ACCESS CARD"
                                 isGuruNgaji -> "KARTU AKSES GURU NGAJI"
                                 isAnakAdmin && isEn -> "WALI ASUH • SCHEDULE SUB-ADMIN"
@@ -4409,7 +4468,7 @@ fun WaliAccountCardItem(
                     ) {
                         Text(
                             text = when {
-                                isGuruNgaji -> account.roleLabel(isEn)
+                                isPetugasKesehatan || isGuruNgaji -> account.roleLabel(isEn)
                                 isAnakAdmin -> if (isEn) "★ Sub-Admin" else "★ Anak Admin"
                                 else -> account.dormitory
                             },
@@ -4493,7 +4552,7 @@ fun WaliAccountCardItem(
                         }
                         if (account.phone.isNotBlank()) {
                             Text(
-                                text = if (isGuruNgaji) {
+                                text = if (isPetugasKesehatan || isGuruNgaji) {
                                     "${account.roleLabel(isEn)} • WhatsApp: ${account.phone}"
                                 } else {
                                     "WhatsApp: ${account.phone}"
@@ -4504,6 +4563,8 @@ fun WaliAccountCardItem(
                         } else {
                             Text(
                                 text = when {
+                                    isPetugasKesehatan && isEn -> "Active Health Officer • Plans, Actions, Reports & Medical History"
+                                    isPetugasKesehatan -> "Petugas Kesehatan Aktif • Rencana, Tindakan, Laporan & Riwayat Medis"
                                     isGuruNgaji && isEn -> "Active Mengaji Teacher • Mengaji Portal Only"
                                     isGuruNgaji -> "Guru Ngaji Aktif • Khusus Halaman Mengaji"
                                     isEn -> "Active Wali Asuh • ${account.dormitory}"
@@ -4641,7 +4702,7 @@ fun WaliAccountCardItem(
                 }
 
                 // Tombol Penyematan Fitur Anak Admin Jadwal (Maks 7 Wali Asuh per Sekolah)
-                if (!isGuruNgaji) {
+                if (!account.isSpecialPortalRole()) {
                     val canPinMore = isAnakAdmin || anakAdminCount < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL
                     OutlinedButton(
                         onClick = { onToggleAnakAdmin(!isAnakAdmin) },

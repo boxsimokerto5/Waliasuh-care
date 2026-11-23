@@ -229,7 +229,10 @@ fun EditWaliAccountDialog(
                         )
                         FilterChip(
                             selected = selectedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true),
-                            onClick = { selectedRole = WaliAccount.ROLE_GURU_NGAJI },
+                            onClick = {
+                                selectedRole = WaliAccount.ROLE_GURU_NGAJI
+                                selectedDormitory = "Umum"
+                            },
                             label = {
                                 Text(
                                     if (isEn) "Mengaji Teacher (Mengaji Only)" else "Guru Ngaji (Hanya Mengaji)",
@@ -239,6 +242,22 @@ fun EditWaliAccountDialog(
                             modifier = Modifier
                                 .heightIn(min = 36.dp)
                                 .testTag("chip_edit_role_guru_ngaji")
+                        )
+                        FilterChip(
+                            selected = selectedRole.equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true),
+                            onClick = {
+                                selectedRole = WaliAccount.ROLE_PETUGAS_KESEHATAN
+                                selectedDormitory = "Umum"
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Health Officer (UKS / Medical)" else "Petugas Kesehatan (UKS/Medis)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("chip_edit_role_petugas_kesehatan")
                         )
                     }
                     if (selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true)) {
@@ -252,7 +271,7 @@ fun EditWaliAccountDialog(
                             color = androidx.compose.ui.graphics.Color(0xFF0369A1),
                             lineHeight = 14.sp
                         )
-                    } else if (quotaBlocked) {
+                    } else if (quotaBlocked && selectedRole.equals(WaliAccount.ROLE_WALI, ignoreCase = true)) {
                         Text(
                             text = if (isEn) {
                                 "Quota full ($anakAdminCount/$maxAnakAdmin). Unpin another Wali Asuh first."
@@ -261,6 +280,30 @@ fun EditWaliAccountDialog(
                             },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.error,
+                            lineHeight = 14.sp
+                        )
+                    }
+                    if (selectedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true)) {
+                        Text(
+                            text = if (isEn) {
+                                "Opens the Mengaji portal only (input, scan QR, Jilid Recap, Digital Qur'an, Mengaji cards) — without medical access or deletion rights."
+                            } else {
+                                "Membuka portal Mengaji saja (input setoran, scan QR, Rekap Jilid, Al-Qur'an Digital, cetak Kartu Mengaji) — tanpa akses medis maupun hapus."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF047857),
+                            lineHeight = 14.sp
+                        )
+                    }
+                    if (selectedRole.equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true)) {
+                        Text(
+                            text = if (isEn) {
+                                "Opens the Health Officer portal: treatment plans, medical records, monthly health reports, and student Profile & Medical History only."
+                            } else {
+                                "Membuka portal Petugas Kesehatan: rencana berobat, tindakan medis, laporan bulanan, serta profil & riwayat kesehatan anak asuh saja."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF0E7490),
                             lineHeight = 14.sp
                         )
                     }

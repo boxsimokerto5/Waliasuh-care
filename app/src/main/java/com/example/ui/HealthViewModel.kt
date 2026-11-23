@@ -104,6 +104,7 @@ enum class UserRole {
     NOT_LOGGED_IN,
     WALI,
     GURU_NGAJI,
+    PETUGAS_KESEHATAN,
     ADMIN,
     SUPERADMIN,
     PARENT
@@ -114,6 +115,7 @@ sealed class LoginResult {
     object SuccessAdmin : LoginResult()
     data class SuccessWali(val account: WaliAccount) : LoginResult()
     data class SuccessGuruNgaji(val account: WaliAccount) : LoginResult()
+    data class SuccessPetugasKesehatan(val account: WaliAccount) : LoginResult()
     data class SuccessParent(val link: ParentAccessLink) : LoginResult()
     data class Error(val message: String) : LoginResult()
 }
@@ -184,6 +186,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             "ADMIN" -> UserRole.ADMIN
             "WALI" -> UserRole.WALI
             "GURU_NGAJI" -> UserRole.GURU_NGAJI
+            "PETUGAS_KESEHATAN" -> UserRole.PETUGAS_KESEHATAN
             "PARENT" -> UserRole.PARENT
             else -> UserRole.NOT_LOGGED_IN
         }
@@ -1379,7 +1382,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val creator = when (role) {
                 UserRole.ADMIN, UserRole.SUPERADMIN ->
                     _schoolProfile.value.adminName.ifBlank { _waliName.value.ifBlank { "Admin Sekolah" } }
-                UserRole.WALI, UserRole.GURU_NGAJI ->
+                UserRole.WALI, UserRole.GURU_NGAJI, UserRole.PETUGAS_KESEHATAN ->
                     _waliName.value.ifBlank { "Wali Asuh" }
                 UserRole.PARENT, UserRole.NOT_LOGGED_IN -> "Wali Asuh"
             }
@@ -3884,7 +3887,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             val tenant = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
             val accounts = repository.getWaliAccountsBySchoolList(tenant)
-                .filter { !it.isGuruNgaji() }
+                .filter { !it.isSpecialPortalRole() }
                 .sortedBy { it.name.lowercase() }
             if (accounts.isEmpty()) {
                 onResult(false, if (isEn) "No registered Wali Asuh accounts in this school yet." else "Belum ada akun Wali Asuh terdaftar di sekolah ini.")
@@ -5355,6 +5358,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 val assignedId = if (acc.id > 0L) acc.id else PocketBaseSyncManager.generateCloudSafeId()
                 val normalizedRole = when {
                     acc.role.trim().equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
+                    acc.role.trim().equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
                     acc.role.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> {
                         if (pinnedSlotsUsed < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
                             pinnedSlotsUsed++
@@ -6747,12 +6751,16 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
 
-            val resolvedRole = if (account.isGuruNgaji()) UserRole.GURU_NGAJI else UserRole.WALI
+            val resolvedRole = when {
+                account.isGuruNgaji() -> UserRole.GURU_NGAJI
+                account.isPetugasKesehatan() -> UserRole.PETUGAS_KESEHATAN
+                else -> UserRole.WALI
+            }
             _currentUserRole.value = resolvedRole
             _waliName.value = account.name
             _currentUsername.value = account.username
 
-            // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh / Guru Ngaji
+            // Sinkronkan tenant aktif sesuai sekolah akun Wali Asuh / Guru Ngaji / Petugas Kesehatan
             val activeSchoolCode = when {
                 matchedSchoolWali != null -> {
                     persistSchoolProfile(buildProfileForSchool(matchedSchoolWali), markCustomized = false)
@@ -6780,8 +6788,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             }
 
             if (rememberMe) {
+                val savedRoleStr = when (resolvedRole) {
+                    UserRole.GURU_NGAJI -> "GURU_NGAJI"
+                    UserRole.PETUGAS_KESEHATAN -> "PETUGAS_KESEHATAN"
+                    else -> "WALI"
+                }
                 authPrefs.edit()
-                    .putString("saved_role", if (resolvedRole == UserRole.GURU_NGAJI) "GURU_NGAJI" else "WALI")
+                    .putString("saved_role", savedRoleStr)
                     .putString("saved_wali_name", account.name)
                     .putString("saved_username", account.username)
                     .apply()
@@ -6792,10 +6805,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     runUnifiedSchoolCloudSync(activeSchoolCode)
                 }
             }
-            return if (resolvedRole == UserRole.GURU_NGAJI) {
-                LoginResult.SuccessGuruNgaji(account)
-            } else {
-                LoginResult.SuccessWali(account)
+            return when (resolvedRole) {
+                UserRole.GURU_NGAJI -> LoginResult.SuccessGuruNgaji(account)
+                UserRole.PETUGAS_KESEHATAN -> LoginResult.SuccessPetugasKesehatan(account)
+                else -> LoginResult.SuccessWali(account)
             }
         }
 
@@ -7185,6 +7198,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val trimmedRole = role.trim()
             val normalizedRole = when {
                 trimmedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
+                trimmedRole.equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
                 trimmedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
                 else -> WaliAccount.ROLE_WALI
             }
@@ -7265,6 +7279,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val tenant = account.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
             val normalizedRole = when {
                 account.role.trim().equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
+                account.role.trim().equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
                 account.role.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
                 else -> WaliAccount.ROLE_WALI
             }
@@ -7298,11 +7313,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     ) {
         viewModelScope.launch {
             val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
-            if (account.isGuruNgaji()) {
+            if (account.isSpecialPortalRole()) {
                 onResult(
                     false,
-                    if (isEn) "Mengaji Teacher accounts cannot be assigned as Schedule Sub-Admin."
-                    else "Akun Guru Ngaji tidak dapat disematkan sebagai Anak Admin Jadwal."
+                    if (isEn) "Special portal accounts (Mengaji Teacher / Health Officer) cannot be assigned as Schedule Sub-Admin."
+                    else "Akun portal khusus (Guru Ngaji / Petugas Kesehatan) tidak dapat disematkan sebagai Anak Admin Jadwal."
                 )
                 return@launch
             }
@@ -7448,7 +7463,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 _waliName.value = cleanName
                 _currentUsername.value = updated.username
                 val savedRole = authPrefs.getString("saved_role", "")
-                if (savedRole == "WALI" || savedRole == "GURU_NGAJI") {
+                if (savedRole == "WALI" || savedRole == "GURU_NGAJI" || savedRole == "PETUGAS_KESEHATAN") {
                     authPrefs.edit()
                         .putString("saved_wali_name", cleanName)
                         .putString("saved_username", updated.username)

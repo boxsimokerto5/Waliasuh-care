@@ -862,7 +862,7 @@ object WaliScheduleHelper {
         }
 
         waliAccounts
-            .filter { !it.isGuruNgaji() && it.name.isNotBlank() }
+            .filter { !it.isSpecialPortalRole() && it.name.isNotBlank() }
             .sortedBy { it.name.lowercase() }
             .forEach { acc ->
                 val userKey = acc.username.trim().lowercase()

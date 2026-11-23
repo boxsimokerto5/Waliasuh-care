@@ -1616,7 +1616,7 @@ fun KelolaAnakAdminDialog(
     val eligibleAccounts = remember(waliAccounts, activeSchoolId) {
         waliAccounts.filter { acc ->
             (acc.schoolId.isBlank() || acc.schoolId.equals(activeSchoolId, ignoreCase = true)) &&
-                !acc.isGuruNgaji()
+                !acc.isSpecialPortalRole()
         }.sortedWith(
             compareByDescending<WaliAccount> { it.isAnakAdminSekolah() }.thenBy { it.name.lowercase() }
         )

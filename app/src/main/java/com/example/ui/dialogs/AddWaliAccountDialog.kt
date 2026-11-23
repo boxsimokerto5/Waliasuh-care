@@ -239,6 +239,22 @@ fun AddWaliAccountDialog(
                                 .heightIn(min = 36.dp)
                                 .testTag("chip_add_role_guru_ngaji")
                         )
+                        FilterChip(
+                            selected = selectedRole == WaliAccount.ROLE_PETUGAS_KESEHATAN,
+                            onClick = {
+                                selectedRole = WaliAccount.ROLE_PETUGAS_KESEHATAN
+                                selectedDormitory = "Umum"
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Health Officer (UKS / Medical)" else "Petugas Kesehatan (UKS/Medis)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("chip_add_role_petugas_kesehatan")
+                        )
                     }
                     if (selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN) {
                         Text(
@@ -251,7 +267,7 @@ fun AddWaliAccountDialog(
                             color = androidx.compose.ui.graphics.Color(0xFF0369A1),
                             lineHeight = 14.sp
                         )
-                    } else if (quotaFull) {
+                    } else if (quotaFull && selectedRole == WaliAccount.ROLE_WALI) {
                         Text(
                             text = if (isEn) {
                                 "Schedule Sub-Admin quota reached ($anakAdminCount/$maxAnakAdmin). Unpin one first to assign another."
@@ -266,12 +282,24 @@ fun AddWaliAccountDialog(
                     if (selectedRole == WaliAccount.ROLE_GURU_NGAJI) {
                         Text(
                             text = if (isEn) {
-                                "This account opens ONLY the Mengaji portal (all students) for inputting progress, scanning student QR cards, and printing Mengaji cards — without medical/health access or deletion rights."
+                                "Opens the complete Mengaji portal (all students): input progress, scan student QR cards, view Jilid Recap, Digital Qur'an, and print Mengaji cards — without medical access or deletion rights."
                             } else {
-                                "Akun ini hanya membuka halaman Mengaji (semua siswa) untuk input setoran, scan QR kartu siswa, dan cetak Kartu Mengaji — tanpa akses data medis maupun tombol hapus."
+                                "Membuka menu Mengaji lengkap (semua siswa): input setoran, scan QR kartu siswa, Rekap Jilid, Al-Qur'an Digital, dan cetak Kartu Mengaji — tanpa akses medis maupun tombol hapus."
                             },
                             fontSize = 10.5.sp,
                             color = androidx.compose.ui.graphics.Color(0xFF047857),
+                            lineHeight = 14.sp
+                        )
+                    }
+                    if (selectedRole == WaliAccount.ROLE_PETUGAS_KESEHATAN) {
+                        Text(
+                            text = if (isEn) {
+                                "Opens the Health Officer portal: create & manage treatment plans, record medical actions, view Monthly Health Reports, and browse students' Profile & Medical History only."
+                            } else {
+                                "Membuka portal Petugas Kesehatan: buat rencana berobat & tindakan medis, lihat Laporan Bulanan Kesehatan, serta buka daftar anak asuh khusus Profil & Riwayat Kesehatannya saja."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF0E7490),
                             lineHeight = 14.sp
                         )
                     }
