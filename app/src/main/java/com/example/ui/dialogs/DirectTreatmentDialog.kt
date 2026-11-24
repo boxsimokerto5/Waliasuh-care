@@ -38,6 +38,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -54,6 +56,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -80,6 +83,7 @@ import com.example.data.model.MedicalRecord
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -177,7 +181,15 @@ fun DirectTreatmentDialog(
     var selectedControlDateMillis by remember(existingRecord?.id) {
         mutableLongStateOf(existingRecord?.controlDate ?: calIn3Days)
     }
+    var showControlDatePicker by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    fun isSameDay(a: Long, b: Long): Boolean {
+        val ca = Calendar.getInstance().apply { timeInMillis = a }
+        val cb = Calendar.getInstance().apply { timeInMillis = b }
+        return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
+            ca.get(Calendar.DAY_OF_YEAR) == cb.get(Calendar.DAY_OF_YEAR)
+    }
 
     // Tema warna senada ikon induk Tindakan Berobat (Oranye Hangat ke Biru Medis + Aksen Palang Merah)
     val warmOrange = Color(0xFFEA580C)
@@ -758,16 +770,20 @@ fun DirectTreatmentDialog(
 
                             if (needsControl) {
                                 Spacer(modifier = Modifier.height(6.dp))
+                                val isPreset3 = isSameDay(selectedControlDateMillis, calIn3Days)
+                                val isPreset5 = isSameDay(selectedControlDateMillis, calIn5Days)
+                                val isPreset7 = isSameDay(selectedControlDateMillis, calIn7Days)
+                                val isCustomDate = !isPreset3 && !isPreset5 && !isPreset7
+
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                                 ) {
                                     listOf(
-                                        Pair(if (isEn) "+3 Days" else "+3 Hari", calIn3Days),
-                                        Pair(if (isEn) "+5 Days" else "+5 Hari", calIn5Days),
-                                        Pair(if (isEn) "+1 Week" else "+1 Minggu", calIn7Days)
-                                    ).forEach { (label, millis) ->
-                                        val isSel = selectedControlDateMillis == millis
+                                        Triple(if (isEn) "+3 Days" else "+3 Hari", calIn3Days, isPreset3),
+                                        Triple(if (isEn) "+5 Days" else "+5 Hari", calIn5Days, isPreset5),
+                                        Triple(if (isEn) "+1 Week" else "+1 Minggu", calIn7Days, isPreset7)
+                                    ).forEach { (label, millis, isSel) ->
                                         Surface(
                                             shape = RoundedCornerShape(8.dp),
                                             color = if (isSel) Color(0xFFDBEAFE) else Color.White,
@@ -778,7 +794,7 @@ fun DirectTreatmentDialog(
                                                 .clickable { selectedControlDateMillis = millis }
                                         ) {
                                             Box(
-                                                modifier = Modifier.padding(vertical = 5.dp),
+                                                modifier = Modifier.padding(vertical = 6.dp),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
@@ -790,23 +806,81 @@ fun DirectTreatmentDialog(
                                             }
                                         }
                                     }
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isCustomDate) Color(0xFFDBEAFE) else Color.White,
+                                        border = BorderStroke(1.dp, if (isCustomDate) medBlue else Color(0xFFBFDBFE)),
+                                        modifier = Modifier
+                                            .weight(1.1f)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .clickable { showControlDatePicker = true }
+                                            .testTag("direct_btn_pick_control_date")
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(vertical = 6.dp, horizontal = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.Center
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CalendarMonth,
+                                                contentDescription = if (isEn) "Pick control date" else "Pilih tanggal kontrol",
+                                                tint = if (isCustomDate) Color(0xFF1E40AF) else Color(0xFF3B82F6),
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = if (isEn) "Date" else "Tanggal",
+                                                fontSize = 11.sp,
+                                                fontWeight = if (isCustomDate) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isCustomDate) Color(0xFF1E40AF) else Color(0xFF3B82F6),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = Color.White,
+                                    border = BorderStroke(1.dp, Color(0xFFBFDBFE)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { showControlDatePicker = true }
+                                        .testTag("direct_card_control_date_picker")
                                 ) {
-                                    Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = medBlue, modifier = Modifier.size(13.dp))
-                                    Text(
-                                        text = if (isEn) {
-                                            "Control Date: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
-                                        } else {
-                                            "Tanggal Kontrol: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
-                                        },
-                                        fontSize = 11.sp,
-                                        color = Color(0xFF1E40AF),
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 10.dp, vertical = 10.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                            modifier = Modifier.weight(1f)
+                                        ) {
+                                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = medBlue, modifier = Modifier.size(15.dp))
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Control Date: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                                } else {
+                                                    "Tanggal Kontrol: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                                },
+                                                fontSize = 11.5.sp,
+                                                color = Color(0xFF1E40AF),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        Text(
+                                            text = if (isEn) "Change" else "Ubah",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = medBlue
+                                        )
+                                    }
                                 }
                             } else {
                                 Spacer(modifier = Modifier.height(3.dp))
@@ -1035,5 +1109,69 @@ fun DirectTreatmentDialog(
             onSelect = { selectedStudent = it },
             onDismiss = { showStudentSearchDialog = false }
         )
+    }
+
+    if (showControlDatePicker) {
+        val initialUtcMillis = remember(selectedControlDateMillis) {
+            val cal = Calendar.getInstance().apply { timeInMillis = selectedControlDateMillis }
+            val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                clear()
+                set(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            }
+            utcCal.timeInMillis
+        }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialUtcMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showControlDatePicker = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { utcMillis ->
+                            val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                                timeInMillis = utcMillis
+                            }
+                            val localCal = Calendar.getInstance().apply {
+                                set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+                                set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+                                set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+                                set(Calendar.HOUR_OF_DAY, 8)
+                                set(Calendar.MINUTE, 30)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            selectedControlDateMillis = localCal.timeInMillis
+                        }
+                        showControlDatePicker = false
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("direct_btn_confirm_control_date_picker")
+                ) {
+                    Text(if (isEn) "Select Date" else "Pilih Tanggal")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showControlDatePicker = false },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(s.cancel)
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = {
+                    Text(
+                        text = if (isEn) "Select Follow-up Control Date" else "Pilih Tanggal Kontrol Kembali",
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = medBlue
+                    )
+                }
+            )
+        }
     }
 }

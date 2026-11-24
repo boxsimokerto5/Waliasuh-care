@@ -1,6 +1,8 @@
 package com.example.ui.dialogs
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +10,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,6 +21,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.MedicalServices
@@ -23,6 +29,8 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -30,8 +38,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -41,6 +51,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -51,6 +62,7 @@ import com.example.ui.components.FaskesBadge
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
+import java.util.TimeZone
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,7 +102,15 @@ fun InputTreatmentResultDialog(
     }
 
     var selectedControlDateMillis by remember { mutableLongStateOf(calIn3Days) }
+    var showControlDatePicker by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+    fun isSameDay(a: Long, b: Long): Boolean {
+        val ca = Calendar.getInstance().apply { timeInMillis = a }
+        val cb = Calendar.getInstance().apply { timeInMillis = b }
+        return ca.get(Calendar.YEAR) == cb.get(Calendar.YEAR) &&
+            ca.get(Calendar.DAY_OF_YEAR) == cb.get(Calendar.DAY_OF_YEAR)
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -100,7 +120,10 @@ fun InputTreatmentResultDialog(
         containerColor = MaterialTheme.colorScheme.surface
     ) {
         Box(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding(),
             contentAlignment = Alignment.Center
         ) {
             Column(
@@ -380,40 +403,108 @@ fun InputTreatmentResultDialog(
 
                         if (needsControl) {
                             Spacer(modifier = Modifier.height(6.dp))
+                            val isPreset3 = isSameDay(selectedControlDateMillis, calIn3Days)
+                            val isPreset5 = isSameDay(selectedControlDateMillis, calIn5Days)
+                            val isPreset7 = isSameDay(selectedControlDateMillis, calIn7Days)
+                            val isCustomDate = !isPreset3 && !isPreset5 && !isPreset7
+
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 FilterChip(
-                                    selected = selectedControlDateMillis == calIn3Days,
+                                    selected = isPreset3,
                                     onClick = { selectedControlDateMillis = calIn3Days },
                                     label = { Text(if (isEn) "+3 Days" else "+3 Hari", fontSize = 11.sp) },
-                                    modifier = Modifier.height(28.dp)
+                                    modifier = Modifier.height(32.dp)
                                 )
                                 FilterChip(
-                                    selected = selectedControlDateMillis == calIn5Days,
+                                    selected = isPreset5,
                                     onClick = { selectedControlDateMillis = calIn5Days },
                                     label = { Text(if (isEn) "+5 Days" else "+5 Hari", fontSize = 11.sp) },
-                                    modifier = Modifier.height(28.dp)
+                                    modifier = Modifier.height(32.dp)
                                 )
                                 FilterChip(
-                                    selected = selectedControlDateMillis == calIn7Days,
+                                    selected = isPreset7,
                                     onClick = { selectedControlDateMillis = calIn7Days },
                                     label = { Text(if (isEn) "+1 Week" else "+1 Minggu", fontSize = 11.sp) },
-                                    modifier = Modifier.height(28.dp)
+                                    modifier = Modifier.height(32.dp)
+                                )
+                                FilterChip(
+                                    selected = isCustomDate,
+                                    onClick = { showControlDatePicker = true },
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarMonth,
+                                            contentDescription = if (isEn) "Pick control date" else "Pilih tanggal kontrol",
+                                            modifier = Modifier.size(14.dp)
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = if (isEn) "Pick Date" else "Pilih Tanggal",
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isCustomDate) FontWeight.Bold else FontWeight.Medium
+                                        )
+                                    },
+                                    modifier = Modifier
+                                        .height(32.dp)
+                                        .testTag("btn_pick_control_date")
                                 )
                             }
-                            Spacer(modifier = Modifier.height(3.dp))
-                            Text(
-                                text = if (isEn) {
-                                    "Control Date: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
-                                } else {
-                                    "Tanggal Kontrol: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
-                                },
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.35f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .clickable { showControlDatePicker = true }
+                                    .testTag("card_control_date_picker")
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.CalendarMonth,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = if (isEn) {
+                                                "Control Date: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                            } else {
+                                                "Tanggal Kontrol: ${DateUtils.formatFullDate(selectedControlDateMillis)}"
+                                            },
+                                            fontSize = 11.5.sp,
+                                            color = MaterialTheme.colorScheme.error,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = if (isEn) "Change" else "Ubah",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
                         } else {
                             Spacer(modifier = Modifier.height(4.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -495,6 +586,70 @@ fun InputTreatmentResultDialog(
                     }
                 }
             }
+        }
+    }
+
+    if (showControlDatePicker) {
+        val initialUtcMillis = remember(selectedControlDateMillis) {
+            val cal = Calendar.getInstance().apply { timeInMillis = selectedControlDateMillis }
+            val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                clear()
+                set(cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH))
+            }
+            utcCal.timeInMillis
+        }
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = initialUtcMillis
+        )
+        DatePickerDialog(
+            onDismissRequest = { showControlDatePicker = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { utcMillis ->
+                            val utcCal = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+                                timeInMillis = utcMillis
+                            }
+                            val localCal = Calendar.getInstance().apply {
+                                set(Calendar.YEAR, utcCal.get(Calendar.YEAR))
+                                set(Calendar.MONTH, utcCal.get(Calendar.MONTH))
+                                set(Calendar.DAY_OF_MONTH, utcCal.get(Calendar.DAY_OF_MONTH))
+                                set(Calendar.HOUR_OF_DAY, 8)
+                                set(Calendar.MINUTE, 30)
+                                set(Calendar.SECOND, 0)
+                                set(Calendar.MILLISECOND, 0)
+                            }
+                            selectedControlDateMillis = localCal.timeInMillis
+                        }
+                        showControlDatePicker = false
+                    },
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.testTag("btn_confirm_control_date_picker")
+                ) {
+                    Text(if (isEn) "Select Date" else "Pilih Tanggal")
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { showControlDatePicker = false },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(s.cancel)
+                }
+            }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = {
+                    Text(
+                        text = if (isEn) "Select Follow-up Control Date" else "Pilih Tanggal Kontrol Kembali",
+                        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 8.dp),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            )
         }
     }
 }
