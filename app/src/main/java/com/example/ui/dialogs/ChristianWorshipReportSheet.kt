@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -106,7 +107,7 @@ fun ChristianWorshipReportSheet(
 
     var selectedTypeFilter by remember { mutableStateOf("ALL") }
     var selectedStudentId by remember { mutableStateOf<Long?>(null) }
-    var previewRecord by remember { mutableStateOf<ChristianWorshipRecord?>(null) }
+    var previewState by remember { mutableStateOf<Pair<ChristianWorshipRecord, Int>?>(null) }
     var readyPdfFile by remember { mutableStateOf<File?>(null) }
 
     val filteredRecords = remember(records, selectedTypeFilter, selectedStudentId) {
@@ -464,42 +465,53 @@ fun ChristianWorshipReportSheet(
                                                 Text(rec.notes, fontSize = 11.5.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             }
 
-                                            if (hasPhoto && !ChristianWorshipHelper.isProofExpired(rec)) {
-                                                val imgModel = rec.photoUrl.ifBlank {
-                                                    rec.photoFallbackUrl.ifBlank { rec.localPhotoPath }
-                                                }
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(130.dp)
-                                                        .clip(RoundedCornerShape(10.dp))
-                                                        .clickable { previewRecord = rec }
+                                            val photoEntries = ChristianWorshipHelper.extractPhotoEntries(rec)
+                                            if (hasPhoto && !ChristianWorshipHelper.isProofExpired(rec) && photoEntries.isNotEmpty()) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                                                 ) {
-                                                    Image(
-                                                        painter = rememberAsyncImagePainter(imgModel),
-                                                        contentDescription = rec.title.ifBlank { rec.studentName },
-                                                        contentScale = ContentScale.Crop,
-                                                        modifier = Modifier.matchParentSize()
-                                                    )
-                                                    Surface(
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        color = Color.Black.copy(alpha = 0.6f),
-                                                        modifier = Modifier
-                                                            .align(Alignment.BottomEnd)
-                                                            .padding(6.dp)
-                                                    ) {
-                                                        Row(
-                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                    photoEntries.forEachIndexed { idx, photoItem ->
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .weight(1f)
+                                                                .height(if (photoEntries.size == 1) 130.dp else 118.dp)
+                                                                .clip(RoundedCornerShape(10.dp))
+                                                                .clickable { previewState = rec to idx }
+                                                                .testTag("img_christian_report_photo_${rec.id}_$idx")
                                                         ) {
-                                                            Icon(Icons.Default.ZoomIn, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                                                            Text(
-                                                                text = if (remDays > 0) "${remDays}h" else "Foto",
-                                                                fontSize = 10.sp,
-                                                                color = Color.White,
-                                                                fontWeight = FontWeight.Bold
+                                                            Image(
+                                                                painter = rememberAsyncImagePainter(photoItem.primaryModel),
+                                                                contentDescription = rec.title.ifBlank { rec.studentName },
+                                                                contentScale = ContentScale.Crop,
+                                                                modifier = Modifier.fillMaxSize()
                                                             )
+                                                            Surface(
+                                                                shape = RoundedCornerShape(8.dp),
+                                                                color = Color.Black.copy(alpha = 0.6f),
+                                                                modifier = Modifier
+                                                                    .align(Alignment.BottomEnd)
+                                                                    .padding(6.dp)
+                                                            ) {
+                                                                Row(
+                                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                                    verticalAlignment = Alignment.CenterVertically,
+                                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                                ) {
+                                                                    Icon(Icons.Default.ZoomIn, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                                                                    val label = when {
+                                                                        photoEntries.size > 1 -> "${idx + 1}/${photoEntries.size}"
+                                                                        remDays > 0 -> "${remDays}h"
+                                                                        else -> "Foto"
+                                                                    }
+                                                                    Text(
+                                                                        text = label,
+                                                                        fontSize = 10.sp,
+                                                                        color = Color.White,
+                                                                        fontWeight = FontWeight.Bold
+                                                                    )
+                                                                }
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -515,11 +527,16 @@ fun ChristianWorshipReportSheet(
         }
     }
 
-    // Photo Zoom Sheet (Slider dari bawah)
-    previewRecord?.let { rec ->
-        val imgModel = rec.photoUrl.ifBlank { rec.photoFallbackUrl.ifBlank { rec.localPhotoPath } }
+    // Photo Zoom Sheet (Slider dari bawah, support 1-2 foto)
+    previewState?.let { (rec, initialIdx) ->
+        val entries = ChristianWorshipHelper.extractPhotoEntries(rec)
+        var activeIdx by remember(rec.id, initialIdx) {
+            mutableStateOf(initialIdx.coerceIn(0, (entries.size - 1).coerceAtLeast(0)))
+        }
+        val activeModel = entries.getOrNull(activeIdx)?.primaryModel
+            ?: rec.photoUrl.ifBlank { rec.photoFallbackUrl.ifBlank { rec.localPhotoPath } }
         ModalBottomSheet(
-            onDismissRequest = { previewRecord = null },
+            onDismissRequest = { previewState = null },
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
             dragHandle = null,
@@ -545,12 +562,12 @@ fun ChristianWorshipReportSheet(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    IconButton(onClick = { previewRecord = null }) {
+                    IconButton(onClick = { previewState = null }) {
                         Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
                     }
                 }
                 Image(
-                    painter = rememberAsyncImagePainter(imgModel),
+                    painter = rememberAsyncImagePainter(activeModel),
                     contentDescription = rec.title.ifBlank { rec.studentName },
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -558,8 +575,29 @@ fun ChristianWorshipReportSheet(
                         .height(300.dp)
                         .clip(RoundedCornerShape(14.dp))
                 )
+                if (entries.size > 1) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        entries.forEachIndexed { idx, _ ->
+                            val isSelected = idx == activeIdx
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { activeIdx = idx },
+                                label = {
+                                    Text(
+                                        text = if (isEn) "Photo ${idx + 1}" else "Foto ${idx + 1}",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                },
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                }
                 Button(
-                    onClick = { previewRecord = null },
+                    onClick = { previewState = null },
                     modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
                 ) {
                     Text(if (isEn) "Close" else "Tutup")

@@ -434,7 +434,7 @@ data class PbChristianWorshipRecordDto(
     @Json(name = "pb_record_id") val pbRecordId: String? = null,
     @Json(name = "pb_collection_id") val pbCollectionId: String? = null,
     @Json(name = "pb_filename") val pbFilename: String? = null,
-    @Json(name = "photo_file") val photoFile: String? = null,
+    @Json(name = "photo_file") val photoFile: PbFlexFileList? = null,
     @Json(name = "proof_uploaded_at") val proofUploadedAt: Long? = null,
     @Json(name = "proof_expires_at") val proofExpiresAt: Long? = null,
     @Json(name = "proof_status") val proofStatus: String? = null,
@@ -453,20 +453,25 @@ data class PbChristianWorshipRecordDto(
         val recId = pbRecordId.orEmpty().trim().ifBlank { id.orEmpty().trim() }
         val colId = pbCollectionId.orEmpty().trim().ifBlank { collectionId.orEmpty().trim() }
             .ifBlank { "christian_worship_records" }
-        val file = pbFilename.orEmpty().trim().ifBlank { photoFile.orEmpty().trim() }
+        val files = ChristianWorshipHelper.decodePhotoValues(pbFilename).ifEmpty {
+            photoFile?.files.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct().take(ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY)
+        }
+        val encodedFiles = ChristianWorshipHelper.encodePhotoValues(files)
+        val explicitPrimary = ChristianWorshipHelper.decodePhotoValues(photoUrl)
+        val explicitFallback = ChristianWorshipHelper.decodePhotoValues(photoFallbackUrl)
         val resolvedPrimary = if (purged) "" else {
-            photoUrl?.takeIf { it.isNotBlank() } ?: run {
-                if (recId.isNotBlank() && file.isNotBlank()) {
-                    DashboardBannerItem.buildR2CdnUrl(colId, recId, file)
-                } else ""
-            }
+            if (explicitPrimary.isNotEmpty()) {
+                ChristianWorshipHelper.encodePhotoValues(explicitPrimary)
+            } else if (recId.isNotBlank() && files.isNotEmpty()) {
+                ChristianWorshipHelper.encodePhotoValues(files.map { DashboardBannerItem.buildR2CdnUrl(colId, recId, it) })
+            } else ""
         }
         val resolvedFallback = if (purged) "" else {
-            photoFallbackUrl?.takeIf { it.isNotBlank() } ?: run {
-                if (recId.isNotBlank() && file.isNotBlank()) {
-                    DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, file)
-                } else ""
-            }
+            if (explicitFallback.isNotEmpty()) {
+                ChristianWorshipHelper.encodePhotoValues(explicitFallback)
+            } else if (recId.isNotBlank() && files.isNotEmpty()) {
+                ChristianWorshipHelper.encodePhotoValues(files.map { DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, it) })
+            } else ""
         }
         val actDate = activityDate?.takeIf { it > 0L } ?: now
         val uploaded = proofUploadedAt?.takeIf { it > 0L }
@@ -501,7 +506,7 @@ data class PbChristianWorshipRecordDto(
             localPhotoPath = "",
             pbRecordId = recId,
             pbCollectionId = if (recId.isNotBlank()) colId else "",
-            pbFilename = if (finalPurged) "" else file,
+            pbFilename = if (finalPurged) "" else encodedFiles,
             proofUploadedAt = uploaded,
             proofExpiresAt = expires,
             proofStatus = status,

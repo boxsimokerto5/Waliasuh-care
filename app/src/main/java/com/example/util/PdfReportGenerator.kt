@@ -5996,8 +5996,13 @@ object PdfReportGenerator {
                         rec.title.takeIf { it.isNotBlank() },
                         rec.notes.takeIf { it.isNotBlank() }
                     ).joinToString(" - ").ifBlank { "-" }
+                    val pCount = ChristianWorshipHelper.photoCount(rec)
                     val photoLabel = when {
-                        ChristianWorshipHelper.isProofActive(rec) -> if (isEn) "Active" else "Ada Foto"
+                        ChristianWorshipHelper.isProofActive(rec) -> if (pCount > 1) {
+                            if (isEn) "$pCount Photos" else "$pCount Foto"
+                        } else {
+                            if (isEn) "Active" else "Ada Foto"
+                        }
                         rec.isMediaPurgedFromServer -> if (isEn) "Expired" else "Arsip"
                         else -> "-"
                     }

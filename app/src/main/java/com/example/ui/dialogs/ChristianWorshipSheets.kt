@@ -14,9 +14,12 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -721,7 +724,7 @@ fun ClaimChristianStudentsSheet(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun InputChristianWorshipDialog(
     christianStudents: List<ChildStudent>,
@@ -731,7 +734,7 @@ fun InputChristianWorshipDialog(
     isSaving: Boolean = false,
     canManageClaim: Boolean = false,
     onOpenClaimChristian: () -> Unit,
-    onSaveSingle: (student: ChildStudent, activityType: String, activityDate: Long, title: String, notes: String, imageUri: Uri?) -> Unit,
+    onSaveTaggedPhotos: (students: List<ChildStudent>, activityType: String, activityDate: Long, title: String, notes: String, imageUris: List<Uri>) -> Unit,
     onSaveBatch: (students: List<ChildStudent>, activityType: String, activityDate: Long, title: String, notes: String) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -743,8 +746,12 @@ fun InputChristianWorshipDialog(
     var selectedType by remember(defaultActivityType) {
         mutableStateOf(ChristianWorshipHelper.normalizeType(defaultActivityType))
     }
-    var selectedStudent by remember(targetStudent, christianStudents) {
-        mutableStateOf(targetStudent ?: christianStudents.firstOrNull())
+    val selectedStudentIds = remember(targetStudent, christianStudents) {
+        mutableStateListOf<Long>().apply {
+            val initialStudent = targetStudent?.takeIf { StudentReligionHelper.isChristian(it) }
+                ?: christianStudents.firstOrNull()
+            if (initialStudent != null) add(initialStudent.id)
+        }
     }
     val batchSelectedIds = remember(christianStudents) {
         mutableStateListOf<Long>().apply {
@@ -757,12 +764,29 @@ fun InputChristianWorshipDialog(
         mutableStateOf(ChristianWorshipHelper.activityLabel(selectedType, isEn))
     }
     var notesInput by remember { mutableStateOf("") }
-    var selectedPhotoUri by remember { mutableStateOf<Uri?>(null) }
+    val selectedPhotoUris = remember { mutableStateListOf<Uri>() }
+    var replaceAllOnNextPick by remember { mutableStateOf(false) }
 
     val photoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri ->
-        if (uri != null) selectedPhotoUri = uri
+        contract = ActivityResultContracts.PickMultipleVisualMedia(
+            maxItems = ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY
+        )
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            val baseList = if (replaceAllOnNextPick) emptyList() else selectedPhotoUris.toList()
+            val combined = (baseList + uris).distinct()
+            val clipped = combined.size > ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY
+            selectedPhotoUris.clear()
+            selectedPhotoUris.addAll(combined.take(ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY))
+            if (clipped) {
+                Toast.makeText(
+                    context,
+                    if (isEn) "Maximum 2 photos per activity." else "Maksimal 2 foto per kegiatan.",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
+        replaceAllOnNextPick = false
     }
 
     val activeVisual = christianActivityVisual(selectedType)
@@ -982,7 +1006,7 @@ fun InputChristianWorshipDialog(
                                     .testTag("tab_christian_input_single")
                             ) {
                                 Text(
-                                    text = if (isEn) "Single + Photo" else "Satuan + Foto",
+                                    text = if (isEn) "Tag + Photos" else "Tag Anak + Foto",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
@@ -1005,7 +1029,7 @@ fun InputChristianWorshipDialog(
                                     .testTag("tab_christian_input_batch")
                             ) {
                                 Text(
-                                    text = if (isEn) "Batch Checklist" else "Checklist Massal",
+                                    text = if (isEn) "Quick Checklist" else "Checklist Cepat",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
                                     maxLines = 1
@@ -1083,7 +1107,9 @@ fun InputChristianWorshipDialog(
                         }
 
                         if (selectedTab == 0) {
-                            // Pilihan Anak + Lampiran Foto dalam Card Pastel Rapat
+                            // Pilihan 1 / Beberapa / Semua Anak + Maks 2 Foto Bersama
+                            val allSingleSelected = christianStudents.isNotEmpty() &&
+                                christianStudents.all { it.id in selectedStudentIds }
                             Card(
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(
@@ -1095,104 +1121,310 @@ fun InputChristianWorshipDialog(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 10.dp, vertical = 8.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    verticalArrangement = Arrangement.spacedBy(7.dp)
                                 ) {
-                                    Text(
-                                        text = if (isEn) "Christian Student" else "Anak Asuh Kristen",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isDark) Color(0xFF6EE7B7) else Color(0xFF15803D)
-                                    )
                                     Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .horizontalScroll(rememberScrollState()),
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        christianStudents.forEach { st ->
-                                            val isSt = selectedStudent?.id == st.id
-                                            FilterChip(
-                                                selected = isSt,
-                                                onClick = { selectedStudent = st },
-                                                label = {
-                                                    Text(
-                                                        st.name,
-                                                        fontSize = 11.sp,
-                                                        fontWeight = if (isSt) FontWeight.Bold else FontWeight.Medium
-                                                    )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Tag Christian Students (${selectedStudentIds.size}/${christianStudents.size})"
+                                                } else {
+                                                    "Tandai Anak Asuh Kristen (${selectedStudentIds.size}/${christianStudents.size})"
                                                 },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = Color(0xFF15803D),
-                                                    selectedLabelColor = Color.White,
-                                                    containerColor = MaterialTheme.colorScheme.surface
-                                                ),
-                                                modifier = Modifier.testTag("chip_christian_student_${st.id}")
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFF6EE7B7) else Color(0xFF15803D)
+                                            )
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Pick 1, several, or all • Shared photos sync to all tagged Parent Portals"
+                                                } else {
+                                                    "Bisa 1, beberapa, atau semua anak • Foto tampil di Portal Ortu yang ditandai"
+                                                },
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                if (allSingleSelected) {
+                                                    selectedStudentIds.clear()
+                                                } else {
+                                                    selectedStudentIds.clear()
+                                                    selectedStudentIds.addAll(christianStudents.map { it.id })
+                                                }
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_christian_select_all_single")
+                                        ) {
+                                            Text(
+                                                text = if (allSingleSelected) {
+                                                    if (isEn) "Clear All" else "Batal Semua"
+                                                } else {
+                                                    if (isEn) "Select All" else "Pilih Semua"
+                                                },
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFF6EE7B7) else Color(0xFF15803D)
                                             )
                                         }
                                     }
 
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 148.dp)
+                                            .verticalScroll(rememberScrollState())
                                     ) {
-                                        OutlinedButton(
-                                            onClick = {
-                                                photoPickerLauncher.launch(
-                                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                                                )
-                                            },
-                                            shape = RoundedCornerShape(10.dp),
-                                            border = BorderStroke(1.dp, Color(0xFF0EA5E9)),
-                                            colors = ButtonDefaults.outlinedButtonColors(
-                                                containerColor = if (isDark) Color(0xFF0C4A6E).copy(alpha = 0.4f) else Color(0xFFE0F2FE),
-                                                contentColor = if (isDark) Color(0xFF7DD3FC) else Color(0xFF0369A1)
-                                            ),
-                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .heightIn(min = 42.dp)
-                                                .testTag("btn_pick_christian_photo")
+                                        FlowRow(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (selectedPhotoUri != null) {
-                                                    if (isEn) "Change Photo" else "Ganti Foto (90h)"
-                                                } else {
-                                                    if (isEn) "Attach Photo (90d)" else "Foto Bukti (Simpan 90 Hari)"
-                                                },
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        if (selectedPhotoUri != null) {
-                                            IconButton(
-                                                onClick = { selectedPhotoUri = null },
-                                                modifier = Modifier.size(40.dp)
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Close,
-                                                    contentDescription = if (isEn) "Remove photo" else "Hapus foto",
-                                                    tint = MaterialTheme.colorScheme.error,
-                                                    modifier = Modifier.size(18.dp)
+                                            christianStudents.forEach { st ->
+                                                val isSt = st.id in selectedStudentIds
+                                                FilterChip(
+                                                    selected = isSt,
+                                                    onClick = {
+                                                        if (isSt) {
+                                                            selectedStudentIds.remove(st.id)
+                                                        } else {
+                                                            selectedStudentIds.add(st.id)
+                                                        }
+                                                    },
+                                                    leadingIcon = if (isSt) {
+                                                        {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Check,
+                                                                contentDescription = null,
+                                                                modifier = Modifier.size(14.dp)
+                                                            )
+                                                        }
+                                                    } else null,
+                                                    label = {
+                                                        Text(
+                                                            st.name,
+                                                            fontSize = 11.sp,
+                                                            fontWeight = if (isSt) FontWeight.Bold else FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    },
+                                                    colors = FilterChipDefaults.filterChipColors(
+                                                        selectedContainerColor = Color(0xFF15803D),
+                                                        selectedLabelColor = Color.White,
+                                                        selectedLeadingIconColor = Color.White,
+                                                        containerColor = MaterialTheme.colorScheme.surface
+                                                    ),
+                                                    modifier = Modifier.testTag("chip_christian_student_${st.id}")
                                                 )
                                             }
                                         }
                                     }
 
-                                    selectedPhotoUri?.let { uri ->
-                                        Image(
-                                            painter = rememberAsyncImagePainter(uri),
-                                            contentDescription = if (isEn) "Selected photo" else "Foto terpilih",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(110.dp)
-                                                .clip(RoundedCornerShape(10.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Activity Photos (${selectedPhotoUris.size}/2 • Kept 90d)"
+                                            } else {
+                                                "Foto Bukti Kegiatan (${selectedPhotoUris.size}/2 • 90 Hari)"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isDark) Color(0xFF7DD3FC) else Color(0xFF0369A1)
                                         )
+                                        Surface(
+                                            shape = RoundedCornerShape(999.dp),
+                                            color = if (isDark) Color(0xFF0C4A6E) else Color(0xFFE0F2FE)
+                                        ) {
+                                            Text(
+                                                text = if (isEn) "Max 2 Photos" else "Maks 2 Foto",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isDark) Color(0xFFBAE6FD) else Color(0xFF0369A1),
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+
+                                    if (selectedPhotoUris.isNotEmpty()) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            selectedPhotoUris.forEachIndexed { idx, uri ->
+                                                Box(
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(106.dp)
+                                                        .clip(RoundedCornerShape(10.dp))
+                                                        .border(
+                                                            1.dp,
+                                                            Color(0xFF38BDF8),
+                                                            RoundedCornerShape(10.dp)
+                                                        )
+                                                ) {
+                                                    Image(
+                                                        painter = rememberAsyncImagePainter(uri),
+                                                        contentDescription = if (isEn) "Selected photo ${idx + 1}" else "Foto terpilih ${idx + 1}",
+                                                        contentScale = ContentScale.Crop,
+                                                        modifier = Modifier.fillMaxSize()
+                                                    )
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = Color.Black.copy(alpha = 0.65f),
+                                                        modifier = Modifier
+                                                            .align(Alignment.BottomStart)
+                                                            .padding(5.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = if (isEn) "Photo ${idx + 1}" else "Foto ${idx + 1}",
+                                                            fontSize = 9.5.sp,
+                                                            color = Color.White,
+                                                            fontWeight = FontWeight.Bold,
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                        )
+                                                    }
+                                                    IconButton(
+                                                        onClick = {
+                                                            if (idx in selectedPhotoUris.indices) {
+                                                                selectedPhotoUris.removeAt(idx)
+                                                            }
+                                                        },
+                                                        modifier = Modifier
+                                                            .align(Alignment.TopEnd)
+                                                            .size(48.dp)
+                                                            .testTag("btn_remove_christian_photo_$idx")
+                                                    ) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(28.dp)
+                                                                .clip(CircleShape)
+                                                                .background(Color.Black.copy(alpha = 0.65f)),
+                                                            contentAlignment = Alignment.Center
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.Close,
+                                                                contentDescription = if (isEn) "Remove photo ${idx + 1}" else "Hapus foto ${idx + 1}",
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(16.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            if (selectedPhotoUris.size == 1) {
+                                                Surface(
+                                                    onClick = {
+                                                        replaceAllOnNextPick = false
+                                                        photoPickerLauncher.launch(
+                                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                        )
+                                                    },
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = if (isDark) Color(0xFF0C4A6E).copy(alpha = 0.35f) else Color(0xFFE0F2FE),
+                                                    border = BorderStroke(1.dp, Color(0xFF0EA5E9)),
+                                                    modifier = Modifier
+                                                        .weight(1f)
+                                                        .height(106.dp)
+                                                        .testTag("btn_pick_christian_photo")
+                                                ) {
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .fillMaxSize()
+                                                            .padding(8.dp),
+                                                        verticalArrangement = Arrangement.Center,
+                                                        horizontalAlignment = Alignment.CenterHorizontally
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.AddAPhoto,
+                                                            contentDescription = null,
+                                                            tint = if (isDark) Color(0xFF7DD3FC) else Color(0xFF0369A1),
+                                                            modifier = Modifier.size(22.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.height(4.dp))
+                                                        Text(
+                                                            text = if (isEn) "Add Photo 2" else "+ Foto ke-2",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = if (isDark) Color(0xFF7DD3FC) else Color(0xFF0369A1)
+                                                        )
+                                                        Text(
+                                                            text = if (isEn) "Optional" else "(Opsional)",
+                                                            fontSize = 9.5.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    if (selectedPhotoUris.size != 1) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    replaceAllOnNextPick = selectedPhotoUris.size >= ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY
+                                                    photoPickerLauncher.launch(
+                                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                                    )
+                                                },
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, Color(0xFF0EA5E9)),
+                                                colors = ButtonDefaults.outlinedButtonColors(
+                                                    containerColor = if (isDark) Color(0xFF0C4A6E).copy(alpha = 0.4f) else Color(0xFFE0F2FE),
+                                                    contentColor = if (isDark) Color(0xFF7DD3FC) else Color(0xFF0369A1)
+                                                ),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("btn_pick_christian_photo")
+                                            ) {
+                                                Icon(Icons.Default.AddAPhoto, contentDescription = null, modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = if (selectedPhotoUris.size >= ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY) {
+                                                        if (isEn) "Replace Photos (2/2)" else "Ganti Foto (2/2)"
+                                                    } else {
+                                                        if (isEn) "Attach Photos (Max 2 • 90d)" else "Lampirkan Foto (Maks 2 Foto)"
+                                                    },
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                            if (selectedPhotoUris.isNotEmpty()) {
+                                                IconButton(
+                                                    onClick = { selectedPhotoUris.clear() },
+                                                    modifier = Modifier
+                                                        .size(48.dp)
+                                                        .testTag("btn_clear_all_christian_photos")
+                                                ) {
+                                                    Icon(
+                                                        Icons.Default.Close,
+                                                        contentDescription = if (isEn) "Clear all photos" else "Hapus semua foto",
+                                                        tint = MaterialTheme.colorScheme.error,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -1374,15 +1606,22 @@ fun InputChristianWorshipDialog(
                                 onClick = {
                                     val now = System.currentTimeMillis()
                                     if (selectedTab == 0) {
-                                        val st = selectedStudent
-                                        if (st == null) {
+                                        val pickedList = christianStudents.filter { it.id in selectedStudentIds }
+                                        if (pickedList.isEmpty()) {
                                             Toast.makeText(
                                                 context,
-                                                if (isEn) "Select a student" else "Pilih siswa terlebih dahulu",
+                                                if (isEn) "Select at least 1 student" else "Pilih minimal 1 siswa terlebih dahulu",
                                                 Toast.LENGTH_SHORT
                                             ).show()
                                         } else {
-                                            onSaveSingle(st, selectedType, now, titleInput, notesInput, selectedPhotoUri)
+                                            onSaveTaggedPhotos(
+                                                pickedList,
+                                                selectedType,
+                                                now,
+                                                titleInput,
+                                                notesInput,
+                                                selectedPhotoUris.toList()
+                                            )
                                         }
                                     } else {
                                         val list = christianStudents.filter { it.id in batchSelectedIds }
@@ -1413,8 +1652,13 @@ fun InputChristianWorshipDialog(
                                     Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(17.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
                                 }
+                                val saveLabel = if (selectedTab == 0 && selectedStudentIds.size > 1) {
+                                    if (isEn) "Save (${selectedStudentIds.size})" else "Simpan (${selectedStudentIds.size} Anak)"
+                                } else {
+                                    if (isEn) "Save Log" else "Simpan Ibadah"
+                                }
                                 Text(
-                                    text = if (isEn) "Save Log" else "Simpan Ibadah",
+                                    text = saveLabel,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )

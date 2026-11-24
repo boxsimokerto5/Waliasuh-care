@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import com.example.data.model.ChatMediaLocalSave
+import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.ParentMessage
@@ -109,19 +110,23 @@ object WaliGalleryMediaHelper {
     }
 
     fun isLocalSaveAccessible(context: Context, localUri: String): Boolean {
-        val clean = localUri.trim()
-        if (clean.isBlank()) return false
-        return runCatching {
-            val uri = Uri.parse(clean)
-            if (uri.scheme == "file" || clean.startsWith("/")) {
-                val path = uri.path ?: clean
-                File(path).let { it.exists() && it.length() > 0L }
-            } else {
-                context.contentResolver.openInputStream(uri)?.use { stream ->
-                    stream.read() != -1
-                } ?: false
-            }
-        }.getOrDefault(false)
+        val entries = localUri.split('\n', '\r')
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+        if (entries.isEmpty()) return false
+        return entries.all { clean ->
+            runCatching {
+                val uri = Uri.parse(clean)
+                if (uri.scheme == "file" || clean.startsWith("/")) {
+                    val path = uri.path ?: clean
+                    File(path).let { it.exists() && it.length() > 0L }
+                } else {
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        stream.read() != -1
+                    } ?: false
+                }
+            }.getOrDefault(false)
+        }
     }
 
     suspend fun savePostPhotoToParentGallery(
@@ -205,33 +210,62 @@ object WaliGalleryMediaHelper {
         record: ChristianWorshipRecord
     ): Result<ChristianWorshipLocalSave> =
         withContext(Dispatchers.IO) {
-            val candidateUrls = listOf(record.photoUrl, record.photoFallbackUrl, record.localPhotoPath)
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-            val bytes = downloadFromCandidateUrls(context, candidateUrls).getOrElse {
-                return@withContext Result.failure(it)
+            val entries = ChristianWorshipHelper.extractPhotoEntries(record)
+            if (entries.isEmpty()) {
+                return@withContext Result.failure(Exception("File foto sudah dibersihkan dari server atau URL tidak tersedia."))
             }
-            val (ext, mimeType) = resolveExtensionAndMime(candidateUrls)
             val safeName = record.studentName
                 .replace(Regex("[^A-Za-z0-9]"), "_")
                 .trim('_')
                 .take(18)
                 .ifBlank { "Ananda" }
-            val fileName = "WaliAsuh_Ibadah_${safeName}_${record.activityType}_${record.id}.$ext"
-            writeImageBytesToDeviceGallery(
-                context = context,
-                displayFileName = fileName,
-                mimeType = mimeType,
-                bytes = bytes
-            ).map { galleryUri ->
-                ChristianWorshipLocalSave(
-                    recordId = record.id,
-                    localGalleryUri = galleryUri,
+
+            val savedGalleryUris = mutableListOf<String>()
+            val savedFileNames = mutableListOf<String>()
+            var lastError: Throwable? = null
+
+            entries.forEachIndexed { idx, entry ->
+                val candidateUrls = listOf(entry.remoteUrl, entry.fallbackUrl, entry.localPath)
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                val downloadRes = downloadFromCandidateUrls(context, candidateUrls)
+                val bytes = downloadRes.getOrNull()
+                if (bytes == null) {
+                    lastError = downloadRes.exceptionOrNull()
+                    return@forEachIndexed
+                }
+                val (ext, mimeType) = resolveExtensionAndMime(candidateUrls)
+                val indexSuffix = if (entries.size > 1) "_${idx + 1}" else ""
+                val fileName = "WaliAsuh_Ibadah_${safeName}_${record.activityType}_${record.id}${indexSuffix}.$ext"
+                val writeRes = writeImageBytesToDeviceGallery(
+                    context = context,
                     displayFileName = fileName,
-                    savedAt = System.currentTimeMillis()
+                    mimeType = mimeType,
+                    bytes = bytes
+                )
+                writeRes.onSuccess { galleryUri ->
+                    savedGalleryUris.add(galleryUri)
+                    savedFileNames.add(fileName)
+                }.onFailure { err ->
+                    lastError = err
+                }
+            }
+
+            if (savedGalleryUris.isEmpty()) {
+                return@withContext Result.failure(
+                    lastError ?: Exception("Gagal menyimpan foto kegiatan ibadah ke Galeri HP.")
                 )
             }
+
+            Result.success(
+                ChristianWorshipLocalSave(
+                    recordId = record.id,
+                    localGalleryUri = ChristianWorshipHelper.encodePhotoValues(savedGalleryUris),
+                    displayFileName = savedFileNames.joinToString(", "),
+                    savedAt = System.currentTimeMillis()
+                )
+            )
         }
 
     private fun resolveExtensionAndMime(candidateUrls: List<String>): Pair<String, String> {

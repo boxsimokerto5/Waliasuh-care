@@ -3,7 +3,10 @@ package com.example.data.remote.pocketbase
 import android.content.Context
 import com.example.data.model.SavingRetentionHelper
 import com.example.data.model.SavingTransaction
+import com.squareup.moshi.FromJson
+import com.squareup.moshi.JsonReader
 import com.squareup.moshi.Moshi
+import com.squareup.moshi.ToJson
 import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
@@ -374,12 +377,52 @@ interface PocketBaseService {
     ): Response<ResponseBody>
 }
 
+data class PbFlexFileList(val files: List<String> = emptyList())
+
+class PbFlexFileListAdapter {
+    @FromJson
+    fun fromJson(reader: JsonReader): PbFlexFileList? {
+        return when (reader.peek()) {
+            JsonReader.Token.NULL -> {
+                reader.nextNull<Unit>()
+                null
+            }
+            JsonReader.Token.BEGIN_ARRAY -> {
+                val list = mutableListOf<String>()
+                reader.beginArray()
+                while (reader.hasNext()) {
+                    if (reader.peek() == JsonReader.Token.STRING) {
+                        val value = reader.nextString().trim()
+                        if (value.isNotBlank()) list.add(value)
+                    } else {
+                        reader.skipValue()
+                    }
+                }
+                reader.endArray()
+                PbFlexFileList(list)
+            }
+            JsonReader.Token.STRING -> {
+                val value = reader.nextString().trim()
+                PbFlexFileList(if (value.isNotBlank()) listOf(value) else emptyList())
+            }
+            else -> {
+                reader.skipValue()
+                PbFlexFileList(emptyList())
+            }
+        }
+    }
+
+    @ToJson
+    fun toJson(value: PbFlexFileList): List<String> = value.files
+}
+
 object PocketBaseClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
     private var cachedService: PocketBaseService? = null
     private var cachedUrl: String? = null
 
     val moshi: Moshi = Moshi.Builder()
+        .add(PbFlexFileListAdapter())
         .add(KotlinJsonAdapterFactory())
         .build()
 

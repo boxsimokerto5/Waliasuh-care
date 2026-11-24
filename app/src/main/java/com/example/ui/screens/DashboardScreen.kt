@@ -3259,15 +3259,15 @@ private fun DashboardChristianModalsHost(
                 modalState.showInputChristianWorshipDialog = false
                 modalState.showClaimChristianSheet = true
             },
-            onSaveSingle = { student, activityType, activityDate, title, notes, imageUri ->
-                viewModel.saveChristianWorshipActivity(
-                    student = student,
+            onSaveTaggedPhotos = { pickedStudents, activityType, activityDate, title, notes, imageUris ->
+                viewModel.saveChristianWorshipActivities(
+                    students = pickedStudents,
                     activityType = activityType,
                     activityDate = activityDate,
                     title = title,
                     notes = notes,
-                    imageUri = imageUri
-                ) { ok, msg ->
+                    imageUris = imageUris
+                ) { ok, msg, _ ->
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     if (ok) modalState.showInputChristianWorshipDialog = false
                 }

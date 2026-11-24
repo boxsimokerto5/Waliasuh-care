@@ -63,10 +63,20 @@ data class ChristianWorshipLocalSave(
     val savedAt: Long = System.currentTimeMillis()
 )
 
+data class ChristianPhotoItem(
+    val primaryModel: String,
+    val remoteUrl: String,
+    val fallbackUrl: String,
+    val localPath: String,
+    val galleryUri: String
+)
+
 object ChristianWorshipHelper {
     const val RETENTION_DAYS = 90L
     const val DAY_MILLIS = 86_400_000L
     const val RETENTION_MILLIS = RETENTION_DAYS * DAY_MILLIS
+    const val MAX_PHOTOS_PER_ACTIVITY = 2
+    private const val MULTI_VALUE_SEPARATOR = "\n"
 
     val CORE_TYPES = listOf(
         ChristianWorshipRecord.TYPE_DOA_PAGI,
@@ -83,6 +93,112 @@ object ChristianWorshipHelper {
     val ALL_TYPES = CORE_TYPES + EXTRA_TYPES
 
     fun computeExpiresAt(uploadedAt: Long): Long = uploadedAt + RETENTION_MILLIS
+
+    fun encodePhotoValues(
+        values: List<String>,
+        maxItems: Int = MAX_PHOTOS_PER_ACTIVITY
+    ): String {
+        return values.asSequence()
+            .flatMap { it.split('\n', '\r') }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(maxItems.coerceAtLeast(1))
+            .joinToString(MULTI_VALUE_SEPARATOR)
+    }
+
+    fun decodePhotoValues(raw: String?): List<String> {
+        if (raw.isNullOrBlank()) return emptyList()
+        return raw.split('\n', '\r')
+            .asSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .take(MAX_PHOTOS_PER_ACTIVITY)
+            .toList()
+    }
+
+    fun extractPhotoEntries(
+        record: ChristianWorshipRecord,
+        localSave: ChristianWorshipLocalSave? = null
+    ): List<ChristianPhotoItem> {
+        if (record.isMediaPurgedFromServer) {
+            val savedOnly = decodePhotoValues(localSave?.localGalleryUri)
+            return savedOnly.map { uri ->
+                ChristianPhotoItem(
+                    primaryModel = uri,
+                    remoteUrl = "",
+                    fallbackUrl = "",
+                    localPath = "",
+                    galleryUri = uri
+                )
+            }
+        }
+        val galleryUris = decodePhotoValues(localSave?.localGalleryUri)
+        val localPaths = decodePhotoValues(record.localPhotoPath)
+        val remoteUrls = decodePhotoValues(record.photoUrl)
+        val fallbackUrls = decodePhotoValues(record.photoFallbackUrl)
+        val slotCount = maxOf(
+            galleryUris.size,
+            localPaths.size,
+            remoteUrls.size,
+            fallbackUrls.size
+        ).coerceAtMost(MAX_PHOTOS_PER_ACTIVITY)
+
+        val result = ArrayList<ChristianPhotoItem>(slotCount)
+        for (idx in 0 until slotCount) {
+            val gallery = galleryUris.getOrNull(idx).orEmpty()
+            val local = localPaths.getOrNull(idx).orEmpty()
+            val remote = remoteUrls.getOrNull(idx).orEmpty()
+            val fallback = fallbackUrls.getOrNull(idx).orEmpty()
+            val primary = gallery.ifBlank { local.ifBlank { remote.ifBlank { fallback } } }
+            if (primary.isNotBlank()) {
+                result.add(
+                    ChristianPhotoItem(
+                        primaryModel = primary,
+                        remoteUrl = remote,
+                        fallbackUrl = fallback,
+                        localPath = local,
+                        galleryUri = gallery
+                    )
+                )
+            }
+        }
+        return result
+    }
+
+    fun photoCount(
+        record: ChristianWorshipRecord,
+        localSave: ChristianWorshipLocalSave? = null
+    ): Int = extractPhotoEntries(record, localSave).size
+
+    fun remotePhotoCount(record: ChristianWorshipRecord): Int {
+        if (record.isMediaPurgedFromServer) return 0
+        val remoteCount = decodePhotoValues(record.photoUrl).size
+        val fallbackCount = decodePhotoValues(record.photoFallbackUrl).size
+        return maxOf(remoteCount, fallbackCount).coerceAtMost(MAX_PHOTOS_PER_ACTIVITY)
+    }
+
+    fun hasSavedAllPhotosLocally(
+        record: ChristianWorshipRecord,
+        localSave: ChristianWorshipLocalSave?
+    ): Boolean {
+        if (localSave == null) return false
+        val savedCount = decodePhotoValues(localSave.localGalleryUri).size
+        if (savedCount <= 0) return false
+        val expectedCount = maxOf(remotePhotoCount(record), decodePhotoValues(record.localPhotoPath).size, 1)
+        return savedCount >= expectedCount
+    }
+
+    fun sharesRemotePhotoWith(
+        first: ChristianWorshipRecord,
+        second: ChristianWorshipRecord
+    ): Boolean {
+        val urlsA = (decodePhotoValues(first.photoUrl) + decodePhotoValues(first.photoFallbackUrl)).toSet()
+        if (urlsA.isEmpty()) return false
+        val urlsB = decodePhotoValues(second.photoUrl) + decodePhotoValues(second.photoFallbackUrl)
+        return urlsB.any { it in urlsA }
+    }
 
     fun normalizeType(raw: String?): String {
         return when (raw?.trim()?.uppercase()) {
@@ -152,7 +268,9 @@ object ChristianWorshipHelper {
                     val dStr = dateFmt.format(Date(rec.activityDate))
                     val typeLbl = activityShortLabel(rec.activityType, isEn)
                     val titlePart = rec.title.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty()
-                    appendLine("${idx + 1}. [$dStr] *${rec.studentName}* ($typeLbl)$titlePart")
+                    val count = photoCount(rec)
+                    val photoSuffix = if (count > 0) " [📷 $count]" else ""
+                    appendLine("${idx + 1}. [$dStr] *${rec.studentName}* ($typeLbl)$titlePart$photoSuffix")
                 }
             }
         }
@@ -178,12 +296,14 @@ object ChristianWorshipHelper {
 
     fun hasRemotePhoto(record: ChristianWorshipRecord): Boolean {
         return !record.isMediaPurgedFromServer &&
-            (record.photoUrl.isNotBlank() || record.photoFallbackUrl.isNotBlank())
+            (decodePhotoValues(record.photoUrl).isNotEmpty() || decodePhotoValues(record.photoFallbackUrl).isNotEmpty())
     }
 
     fun hasAnyPhoto(record: ChristianWorshipRecord): Boolean {
         return !record.isMediaPurgedFromServer &&
-            (record.photoUrl.isNotBlank() || record.photoFallbackUrl.isNotBlank() || record.localPhotoPath.isNotBlank())
+            (decodePhotoValues(record.photoUrl).isNotEmpty() ||
+                decodePhotoValues(record.photoFallbackUrl).isNotEmpty() ||
+                decodePhotoValues(record.localPhotoPath).isNotEmpty())
     }
 
     fun isProofExpired(record: ChristianWorshipRecord, now: Long = System.currentTimeMillis()): Boolean {

@@ -917,6 +917,7 @@ object PocketBaseSchemaProvider {
                 PbFieldDef(
                     name = "photo_file",
                     type = "file",
+                    fileMaxSelect = 2,
                     fileMaxSize = 10_485_760L,
                     fileMimeTypes = listOf("image/jpeg", "image/png", "image/webp")
                 ),
@@ -1119,6 +1120,9 @@ for col in SCHEMA:
         for cf in cur_fields:
             tf = target_by_name.get(cf.get("name"))
             if tf and cf.get("type") == "file" and tf.get("type") == "file":
+                if int(cf.get("maxSelect") or 1) < int(tf.get("maxSelect") or 1):
+                    cf["maxSelect"] = tf["maxSelect"]
+                    fields_changed = True
                 if int(cf.get("maxSize") or 0) < int(tf.get("maxSize") or 0):
                     cf["maxSize"] = tf["maxSize"]
                     fields_changed = True

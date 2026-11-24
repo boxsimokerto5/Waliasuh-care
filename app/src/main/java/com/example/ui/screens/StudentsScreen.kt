@@ -480,15 +480,15 @@ fun StudentsScreen(
             isSaving = isSavingChristianWorship,
             canManageClaim = canManageClaim,
             onOpenClaimChristian = {},
-            onSaveSingle = { st, activityType, activityDate, title, notes, imageUri ->
-                viewModel.saveChristianWorshipActivity(
-                    student = st,
+            onSaveTaggedPhotos = { pickedStudents, activityType, activityDate, title, notes, imageUris ->
+                viewModel.saveChristianWorshipActivities(
+                    students = pickedStudents,
                     activityType = activityType,
                     activityDate = activityDate,
                     title = title,
                     notes = notes,
-                    imageUri = imageUri
-                ) { ok, msg ->
+                    imageUris = imageUris
+                ) { ok, msg, _ ->
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                     if (ok) studentForChristianWorshipInput = null
                 }

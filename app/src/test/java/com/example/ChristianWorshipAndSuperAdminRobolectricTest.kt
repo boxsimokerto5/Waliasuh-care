@@ -2,6 +2,7 @@ package com.example
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
@@ -411,7 +412,7 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
                     targetStudent = student,
                     isSaving = false,
                     onOpenClaimChristian = {},
-                    onSaveSingle = { _, actType, _, title, _, _ ->
+                    onSaveTaggedPhotos = { _, actType, _, title, _, _ ->
                         savedType = actType
                         savedTitle = title
                     },
@@ -425,6 +426,7 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         composeTestRule.onNodeWithTag("sheet_input_christian_worship").assertIsDisplayed()
         composeTestRule.onNodeWithTag("tab_christian_input_single").assertExists()
         composeTestRule.onNodeWithTag("tab_christian_input_batch").assertExists()
+        composeTestRule.onNodeWithTag("btn_christian_select_all_single").assertExists()
         composeTestRule.onNodeWithTag("chip_christian_type_KE_GEREJA").performScrollTo().performClick()
         composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("btn_save_christian_worship").performScrollTo().performClick()
@@ -902,5 +904,140 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         composeTestRule.onNodeWithTag("tab_student_detail_mengaji").assertDoesNotExist()
         composeTestRule.onNodeWithTag("tab_student_detail_sholat").assertDoesNotExist()
         composeTestRule.onNodeWithTag("tab_student_detail_puasa").assertDoesNotExist()
+    }
+
+    @Test
+    fun `InputChristianWorshipDialog supports tagging multiple or all Christian students in photo tab`() {
+        val studentA = ChildStudent(
+            id = 9891L,
+            name = "Cristin Dea Musa",
+            nis = "989101",
+            gender = "P",
+            age = 15,
+            dormitory = "Asrama Putri",
+            classGrade = "IX-A",
+            schoolId = "SRT1-KDR",
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        val studentB = studentA.copy(
+            id = 9892L,
+            name = "Kharisa Wahyuningsih",
+            nis = "989201"
+        )
+        var savedStudents: List<ChildStudent> = emptyList()
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                com.example.ui.dialogs.InputChristianWorshipDialog(
+                    christianStudents = listOf(studentA, studentB),
+                    initialTab = 0,
+                    defaultActivityType = ChristianWorshipRecord.TYPE_DOA_PAGI,
+                    targetStudent = studentA,
+                    isSaving = false,
+                    onOpenClaimChristian = {},
+                    onSaveTaggedPhotos = { students, _, _, _, _, _ ->
+                        savedStudents = students
+                    },
+                    onSaveBatch = { _, _, _, _, _ -> },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("btn_christian_select_all_single").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_save_christian_worship").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(listOf(9891L, 9892L), savedStudents.map { it.id })
+    }
+
+    @Test
+    fun `saveChristianWorshipActivities distributes max 2 shared photos to all tagged students and parses PB multi-file DTO`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        val db = AppDatabase.getDatabase(app)
+        val vm = HealthViewModel(app)
+        val schoolId = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+        val student1 = ChildStudent(
+            id = 9895L,
+            name = "Cristin Musa",
+            nis = "989501",
+            gender = "P",
+            age = 15,
+            dormitory = "Asrama Putri",
+            classGrade = "IX-A",
+            schoolId = schoolId,
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        val student2 = student1.copy(
+            id = 9896L,
+            name = "Kharisa Wahyu",
+            nis = "989601"
+        )
+        db.childStudentDao().insert(student1)
+        db.childStudentDao().insert(student2)
+
+        val uris = listOf(
+            Uri.parse("content://media/external/images/media/101"),
+            Uri.parse("content://media/external/images/media/102"),
+            Uri.parse("content://media/external/images/media/103")
+        )
+        var saveOk = false
+        var savedCount = 0
+        vm.saveChristianWorshipActivities(
+            students = listOf(student1, student2),
+            activityType = ChristianWorshipRecord.TYPE_DOA_PAGI,
+            activityDate = System.currentTimeMillis(),
+            title = "Ibadah Pagi Bersama",
+            notes = "Foto bersama",
+            imageUris = uris
+        ) { ok, _, count ->
+            saveOk = ok
+            savedCount = count
+        }
+
+        var loops = 0
+        while (loops < 40 && (!saveOk || vm.christianWorshipRecords.value.count { it.studentId in listOf(9895L, 9896L) } < 2)) {
+            ShadowLooper.idleMainLooper()
+            delay(30)
+            loops++
+        }
+
+        assertTrue(saveOk)
+        assertEquals(2, savedCount)
+        val rec1 = ChristianWorshipHelper.recordsForStudent(vm.christianWorshipRecords.value, student1).first()
+        val rec2 = ChristianWorshipHelper.recordsForStudent(vm.christianWorshipRecords.value, student2).first()
+        val entries1 = ChristianWorshipHelper.extractPhotoEntries(rec1)
+        val entries2 = ChristianWorshipHelper.extractPhotoEntries(rec2)
+        assertEquals(2, entries1.size)
+        assertEquals(2, entries2.size)
+        assertEquals(entries1.map { it.primaryModel }, entries2.map { it.primaryModel })
+        assertTrue(ChristianWorshipHelper.sharesRemotePhotoWith(rec1, rec2))
+
+        // Verify Moshi FlexFileList adapter parses both String and Array for photo_file
+        val jsonArrayDto = """
+            {
+              "id": "cwr000000000001",
+              "school_id": "SRT1-KDR",
+              "student_id": 9895,
+              "student_name": "Cristin Musa",
+              "photo_file": ["foto_1.webp", "foto_2.webp"]
+            }
+        """.trimIndent()
+        val adapter = com.example.data.remote.pocketbase.PocketBaseClient.moshi
+            .adapter(com.example.data.remote.pocketbase.PbChristianWorshipRecordDto::class.java)
+        val parsed = adapter.fromJson(jsonArrayDto)!!.toDomainModel()
+        assertEquals(2, ChristianWorshipHelper.extractPhotoEntries(parsed).size)
+
+        db.christianWorshipDao().getAllRecordsIncludingDeletedList()
+            .filter { it.studentId in listOf(9895L, 9896L) }
+            .forEach { db.christianWorshipDao().deleteRecord(it) }
+        db.childStudentDao().delete(student1)
+        db.childStudentDao().delete(student2)
+        Unit
     }
 }

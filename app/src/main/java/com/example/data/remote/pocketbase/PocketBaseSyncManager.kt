@@ -4572,8 +4572,37 @@ object PocketBaseSyncManager {
         context: Context,
         draftRecord: ChristianWorshipRecord,
         imageUri: Uri
-    ): Result<ChristianWorshipRecord> = withContext(Dispatchers.IO) {
+    ): Result<ChristianWorshipRecord> =
+        uploadChristianWorshipWithPhotos(
+            context = context,
+            draftRecords = listOf(draftRecord),
+            imageUris = listOf(imageUri)
+        ).map { list ->
+            list.firstOrNull() ?: draftRecord
+        }
+
+    suspend fun uploadChristianWorshipWithPhotos(
+        context: Context,
+        draftRecords: List<ChristianWorshipRecord>,
+        imageUris: List<Uri>
+    ): Result<List<ChristianWorshipRecord>> = withContext(Dispatchers.IO) {
+        if (draftRecords.isEmpty()) return@withContext Result.success(emptyList())
         val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
+        val cleanUris = imageUris.distinct().take(ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY)
+        if (cleanUris.isEmpty()) {
+            if (PocketBaseConfig.isConfigured(context)) {
+                val service = PocketBaseClient.getService(context)
+                if (service != null) {
+                    val pairs = draftRecords.map { rec ->
+                        val dto = PbChristianWorshipRecordDto.fromDomain(rec)
+                        dto.id!! to dto
+                    }
+                    upsertBatchOrFallback(service, "christian_worship_records", pairs)
+                }
+            }
+            return@withContext Result.success(draftRecords)
+        }
+
         if (!PocketBaseConfig.isConfigured(context)) {
             return@withContext Result.failure(
                 Exception(if (isEn) "PocketBase server is not configured." else "Server PocketBase belum terkonfigurasi.")
@@ -4586,18 +4615,14 @@ object PocketBaseSyncManager {
             )
         }
 
-        val compressed = com.example.util.WaliGalleryMediaHelper.compressGalleryPhotoBytes(context, imageUri)
-            ?: return@withContext Result.failure(
-                Exception(if (isEn) "Unable to compress worship photo." else "Gagal memproses foto kegiatan ibadah.")
-            )
-
-        val now = System.currentTimeMillis()
-        val safeId = if (draftRecord.id > 0L) draftRecord.id else generateCloudSafeId()
-        val pbId = draftRecord.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
-        val cleanSchool = draftRecord.schoolId.ifBlank { "SRT1-KDR" }
-        val uploadedAt = draftRecord.proofUploadedAt ?: now
-        val expiresAt = draftRecord.proofExpiresAt ?: ChristianWorshipHelper.computeExpiresAt(uploadedAt)
-        val filename = "ibadah_kristen_${safeId}_${now}.webp"
+        val compressedPhotos = mutableListOf<ByteArray>()
+        for (uri in cleanUris) {
+            val bytes = com.example.util.WaliGalleryMediaHelper.compressGalleryPhotoBytes(context, uri)
+                ?: return@withContext Result.failure(
+                    Exception(if (isEn) "Unable to compress worship photo." else "Gagal memproses foto kegiatan ibadah.")
+                )
+            compressedPhotos.add(bytes)
+        }
 
         val client = OkHttpClient.Builder()
             .connectTimeout(20, TimeUnit.SECONDS)
@@ -4605,44 +4630,65 @@ object PocketBaseSyncManager {
             .writeTimeout(90, TimeUnit.SECONDS)
             .build()
 
-        val multipart = MultipartBody.Builder()
-            .setType(MultipartBody.FORM)
-            .addFormDataPart("id", pbId)
-            .addFormDataPart("local_id", safeId.toString())
-            .addFormDataPart("school_id", cleanSchool)
-            .addFormDataPart("student_id", draftRecord.studentId.toString())
-            .addFormDataPart("student_name", draftRecord.studentName)
-            .addFormDataPart("student_nik", com.example.util.StudentCsvParser.cleanDigitsOnly(draftRecord.studentNik))
-            .addFormDataPart("student_nis", draftRecord.studentNis)
-            .addFormDataPart("student_class", draftRecord.studentClass)
-            .addFormDataPart("student_dorm", draftRecord.studentDorm)
-            .addFormDataPart("activity_type", ChristianWorshipHelper.normalizeType(draftRecord.activityType))
-            .addFormDataPart("activity_date", draftRecord.activityDate.toString())
-            .addFormDataPart("date_key", draftRecord.dateKey.ifBlank { ChristianWorshipHelper.dateKeyFromMillis(draftRecord.activityDate) })
-            .addFormDataPart("title", draftRecord.title)
-            .addFormDataPart("notes", draftRecord.notes)
-            .addFormDataPart("wali_username", draftRecord.waliUsername)
-            .addFormDataPart("wali_name", draftRecord.waliName)
-            .addFormDataPart("proof_uploaded_at", uploadedAt.toString())
-            .addFormDataPart("proof_expires_at", expiresAt.toString())
-            .addFormDataPart("proof_status", ChristianWorshipRecord.PROOF_STATUS_ACTIVE)
-            .addFormDataPart("is_media_purged_from_server", "false")
-            .addFormDataPart("is_deleted", "false")
-            .addFormDataPart("created_at", draftRecord.createdAt.toString())
-            .addFormDataPart("updated_at", draftRecord.updatedAt.toString())
-            .addFormDataPart("photo_file", filename, compressed.toRequestBody("image/webp".toMediaType()))
-            .build()
+        data class PbUploadOutcome(
+            val pbRecordId: String,
+            val collectionId: String,
+            val filenames: List<String>,
+            val cdnUrls: List<String>,
+            val fallbackUrls: List<String>
+        )
 
-        val postRequest = Request.Builder()
-            .url("$baseUrl/api/collections/christian_worship_records/records")
-            .post(multipart)
-            .build()
+        fun executePhotoPost(
+            hostRecord: ChristianWorshipRecord,
+            photoBytesList: List<ByteArray>,
+            isHiddenHolder: Boolean = false
+        ): Result<PbUploadOutcome> {
+            val now = System.currentTimeMillis()
+            val safeId = if (hostRecord.id > 0L) hostRecord.id else generateCloudSafeId()
+            val pbId = hostRecord.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
+            val cleanSchool = hostRecord.schoolId.ifBlank { "SRT1-KDR" }
+            val uploadedAt = hostRecord.proofUploadedAt ?: now
+            val expiresAt = hostRecord.proofExpiresAt ?: ChristianWorshipHelper.computeExpiresAt(uploadedAt)
 
-        return@withContext try {
+            val multipartBuilder = MultipartBody.Builder()
+                .setType(MultipartBody.FORM)
+                .addFormDataPart("id", pbId)
+                .addFormDataPart("local_id", safeId.toString())
+                .addFormDataPart("school_id", cleanSchool)
+                .addFormDataPart("student_id", hostRecord.studentId.toString())
+                .addFormDataPart("student_name", hostRecord.studentName)
+                .addFormDataPart("student_nik", com.example.util.StudentCsvParser.cleanDigitsOnly(hostRecord.studentNik))
+                .addFormDataPart("student_nis", hostRecord.studentNis)
+                .addFormDataPart("student_class", hostRecord.studentClass)
+                .addFormDataPart("student_dorm", hostRecord.studentDorm)
+                .addFormDataPart("activity_type", ChristianWorshipHelper.normalizeType(hostRecord.activityType))
+                .addFormDataPart("activity_date", hostRecord.activityDate.toString())
+                .addFormDataPart("date_key", hostRecord.dateKey.ifBlank { ChristianWorshipHelper.dateKeyFromMillis(hostRecord.activityDate) })
+                .addFormDataPart("title", hostRecord.title)
+                .addFormDataPart("notes", hostRecord.notes)
+                .addFormDataPart("wali_username", hostRecord.waliUsername)
+                .addFormDataPart("wali_name", hostRecord.waliName)
+                .addFormDataPart("proof_uploaded_at", uploadedAt.toString())
+                .addFormDataPart("proof_expires_at", expiresAt.toString())
+                .addFormDataPart("proof_status", ChristianWorshipRecord.PROOF_STATUS_ACTIVE)
+                .addFormDataPart("is_media_purged_from_server", "false")
+                .addFormDataPart("is_deleted", if (isHiddenHolder) "true" else "false")
+                .addFormDataPart("created_at", hostRecord.createdAt.toString())
+                .addFormDataPart("updated_at", hostRecord.updatedAt.toString())
+
+            photoBytesList.forEachIndexed { idx, bytes ->
+                val filename = "ibadah_kristen_${safeId}_${now}_${idx + 1}.webp"
+                multipartBuilder.addFormDataPart("photo_file", filename, bytes.toRequestBody("image/webp".toMediaType()))
+            }
+
+            val postRequest = Request.Builder()
+                .url("$baseUrl/api/collections/christian_worship_records/records")
+                .post(multipartBuilder.build())
+                .build()
+
             var responseCode = 0
             var responseRaw = ""
             var wasSuccess = false
-
             client.newCall(postRequest).execute().use { resp ->
                 responseCode = resp.code
                 responseRaw = resp.body?.string().orEmpty()
@@ -4650,7 +4696,7 @@ object PocketBaseSyncManager {
             }
 
             if (responseCode == 404) {
-                return@withContext Result.failure(
+                return Result.failure(
                     Exception(
                         if (isEn) {
                             "Collection 'christian_worship_records' is not synced on server yet. Run Sync Schema in Superadmin."
@@ -4660,10 +4706,9 @@ object PocketBaseSyncManager {
                     )
                 )
             }
-
             if (!wasSuccess) {
                 val errMsg = parsePocketBaseUploadError(responseRaw, responseCode, isEn)
-                return@withContext Result.failure(
+                return Result.failure(
                     Exception(if (isEn) "Failed to upload photo: $errMsg" else "Gagal mengunggah foto ke R2/PocketBase: $errMsg")
                 )
             }
@@ -4672,15 +4717,20 @@ object PocketBaseSyncManager {
             val recordId = json.optString("id", pbId).trim().ifBlank { pbId }
             val collectionId = json.optString("collectionId", "christian_worship_records")
                 .ifBlank { "christian_worship_records" }
-            val uploadedFilename = when {
-                json.has("photo_file") && json.optJSONArray("photo_file") != null -> {
-                    json.optJSONArray("photo_file")?.optString(0, "").orEmpty()
+            val filenames = mutableListOf<String>()
+            val arr = json.optJSONArray("photo_file")
+            if (arr != null) {
+                for (i in 0 until arr.length()) {
+                    val fn = arr.optString(i, "").trim()
+                    if (fn.isNotBlank()) filenames.add(fn)
                 }
-                else -> json.optString("photo_file", "")
-            }.trim()
+            } else {
+                val single = json.optString("photo_file", "").trim()
+                if (single.isNotBlank()) filenames.add(single)
+            }
 
-            if (uploadedFilename.isBlank()) {
-                return@withContext Result.failure(
+            if (filenames.isEmpty()) {
+                return Result.failure(
                     Exception(
                         if (isEn) {
                             "Column 'photo_file' on christian_worship_records is not active yet. Run Sync Schema."
@@ -4691,25 +4741,110 @@ object PocketBaseSyncManager {
                 )
             }
 
-            val cdnUrl = DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, uploadedFilename)
-            val fallbackUrl = DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, uploadedFilename)
-            val finalized = draftRecord.copy(
-                id = safeId,
-                schoolId = cleanSchool,
-                photoUrl = cdnUrl,
-                photoFallbackUrl = fallbackUrl,
-                pbRecordId = recordId,
-                pbCollectionId = collectionId,
-                pbFilename = uploadedFilename,
-                proofUploadedAt = uploadedAt,
-                proofExpiresAt = expiresAt,
-                proofStatus = ChristianWorshipRecord.PROOF_STATUS_ACTIVE,
-                isMediaPurgedFromServer = false
+            val cdnUrls = filenames.map { fn -> DashboardBannerItem.buildR2CdnUrl(collectionId, recordId, fn) }
+            val fallbackUrls = filenames.map { fn -> DashboardBannerItem.buildPbApiFileUrl(baseUrl, collectionId, recordId, fn) }
+            return Result.success(
+                PbUploadOutcome(
+                    pbRecordId = recordId,
+                    collectionId = collectionId,
+                    filenames = filenames,
+                    cdnUrls = cdnUrls,
+                    fallbackUrls = fallbackUrls
+                )
             )
-            uploadSingleChristianWorshipRecord(context, finalized)
-            Result.success(finalized)
+        }
+
+        return@withContext try {
+            val primaryHost = draftRecords.first()
+            val primaryOutcomeRes = executePhotoPost(primaryHost, compressedPhotos)
+
+            val allCdnUrls = mutableListOf<String>()
+            val allFallbackUrls = mutableListOf<String>()
+            val hostFilenamesByLocalId = mutableMapOf<Long, List<String>>()
+            var resolvedCollectionId = "christian_worship_records"
+
+            if (primaryOutcomeRes.isSuccess) {
+                val out = primaryOutcomeRes.getOrThrow()
+                resolvedCollectionId = out.collectionId
+                allCdnUrls.addAll(out.cdnUrls)
+                allFallbackUrls.addAll(out.fallbackUrls)
+                hostFilenamesByLocalId[primaryHost.id] = out.filenames
+            } else if (compressedPhotos.size > 1) {
+                // Fallback bila skema server masih maxSelect = 1: unggah foto ke-1 & ke-2 terpisah
+                val firstRes = executePhotoPost(primaryHost, listOf(compressedPhotos[0]))
+                if (firstRes.isFailure) {
+                    return@withContext Result.failure(firstRes.exceptionOrNull()!!)
+                }
+                val firstOut = firstRes.getOrThrow()
+                resolvedCollectionId = firstOut.collectionId
+                allCdnUrls.addAll(firstOut.cdnUrls)
+                allFallbackUrls.addAll(firstOut.fallbackUrls)
+                hostFilenamesByLocalId[primaryHost.id] = firstOut.filenames
+
+                val secondHost = if (draftRecords.size >= 2) {
+                    draftRecords[1]
+                } else {
+                    val holderId = generateCloudSafeId()
+                    primaryHost.copy(
+                        id = holderId,
+                        studentId = -999L,
+                        pbRecordId = PocketBaseIdCodec.toPbId(holderId),
+                        isDeleted = true
+                    )
+                }
+                val secondRes = executePhotoPost(
+                    hostRecord = secondHost,
+                    photoBytesList = listOf(compressedPhotos[1]),
+                    isHiddenHolder = draftRecords.size < 2
+                )
+                if (secondRes.isFailure) {
+                    return@withContext Result.failure(secondRes.exceptionOrNull()!!)
+                }
+                val secondOut = secondRes.getOrThrow()
+                allCdnUrls.addAll(secondOut.cdnUrls)
+                allFallbackUrls.addAll(secondOut.fallbackUrls)
+                if (draftRecords.size >= 2) {
+                    hostFilenamesByLocalId[secondHost.id] = secondOut.filenames
+                }
+            } else {
+                return@withContext Result.failure(primaryOutcomeRes.exceptionOrNull()!!)
+            }
+
+            val encodedCdn = ChristianWorshipHelper.encodePhotoValues(allCdnUrls)
+            val encodedFallback = ChristianWorshipHelper.encodePhotoValues(allFallbackUrls)
+            val now = System.currentTimeMillis()
+            val finalizedRecords = draftRecords.mapIndexed { idx, rec ->
+                val safeId = if (rec.id > 0L) rec.id else generateCloudSafeId() + idx.toLong()
+                val pbId = rec.pbRecordId.trim().takeIf { it.length == 15 } ?: PocketBaseIdCodec.toPbId(safeId)
+                val uploadedAt = rec.proofUploadedAt ?: now
+                val expiresAt = rec.proofExpiresAt ?: ChristianWorshipHelper.computeExpiresAt(uploadedAt)
+                val ownFiles = hostFilenamesByLocalId[rec.id].orEmpty()
+                rec.copy(
+                    id = safeId,
+                    schoolId = rec.schoolId.ifBlank { "SRT1-KDR" },
+                    photoUrl = encodedCdn,
+                    photoFallbackUrl = encodedFallback,
+                    pbRecordId = pbId,
+                    pbCollectionId = resolvedCollectionId,
+                    pbFilename = ChristianWorshipHelper.encodePhotoValues(ownFiles),
+                    proofUploadedAt = uploadedAt,
+                    proofExpiresAt = expiresAt,
+                    proofStatus = ChristianWorshipRecord.PROOF_STATUS_ACTIVE,
+                    isMediaPurgedFromServer = false
+                )
+            }
+
+            val service = PocketBaseClient.getService(context)
+            if (service != null && finalizedRecords.isNotEmpty()) {
+                val pairs = finalizedRecords.map { rec ->
+                    val dto = PbChristianWorshipRecordDto.fromDomain(rec)
+                    dto.id!! to dto
+                }
+                upsertBatchOrFallback(service, "christian_worship_records", pairs)
+            }
+            Result.success(finalizedRecords)
         } catch (e: Exception) {
-            Log.e(TAG, "Error uploadChristianWorshipWithPhoto", e)
+            Log.e(TAG, "Error uploadChristianWorshipWithPhotos", e)
             Result.failure(e)
         }
     }

@@ -118,7 +118,7 @@ fun ParentChristianWorshipContent(
 
     var selectedTypeFilter by remember { mutableStateOf("ALL") }
     var monthOnly by remember { mutableStateOf(false) }
-    var previewRecord by remember { mutableStateOf<ChristianWorshipRecord?>(null) }
+    var previewState by remember { mutableStateOf<Pair<ChristianWorshipRecord, Int>?>(null) }
     var readyPdfFile by remember { mutableStateOf<File?>(null) }
 
     val periodLabel = remember(monthOnly, isEn) {
@@ -139,7 +139,7 @@ fun ParentChristianWorshipContent(
         activeRecords.filter { rec ->
             ChristianWorshipHelper.hasRemotePhoto(rec) &&
                 !ChristianWorshipHelper.isProofExpired(rec) &&
-                localSavesByRecordId[rec.id] == null
+                !ChristianWorshipHelper.hasSavedAllPhotosLocally(rec, localSavesByRecordId[rec.id])
         }
     }
 
@@ -523,13 +523,10 @@ fun ParentChristianWorshipContent(
             } else {
                 items(filteredRecords, key = { "parent_chris_${it.id}" }) { rec ->
                     val localSave = localSavesByRecordId[rec.id]
-                    val hasPhoto = ChristianWorshipHelper.hasAnyPhoto(rec)
+                    val photoEntries = ChristianWorshipHelper.extractPhotoEntries(rec, localSave)
                     val isExpired = ChristianWorshipHelper.isProofExpired(rec)
                     val remDays = ChristianWorshipHelper.remainingDays(rec)
-                    val photoModel: Any? = localSave?.localGalleryUri?.takeIf { it.isNotBlank() }
-                        ?: rec.localPhotoPath.takeIf { it.isNotBlank() }
-                        ?: rec.photoUrl.takeIf { it.isNotBlank() }
-                        ?: rec.photoFallbackUrl.takeIf { it.isNotBlank() }
+                    val allSavedLocally = ChristianWorshipHelper.hasSavedAllPhotosLocally(rec, localSave)
 
                     Card(
                         modifier = Modifier
@@ -584,45 +581,56 @@ fun ParentChristianWorshipContent(
                                 )
                             }
 
-                            if (hasPhoto && !isExpired && photoModel != null) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(170.dp)
-                                        .clip(RoundedCornerShape(12.dp))
-                                        .clickable { previewRecord = rec }
+                            if (photoEntries.isNotEmpty() && (!isExpired || allSavedLocally)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    Image(
-                                        painter = rememberAsyncImagePainter(model = photoModel),
-                                        contentDescription = ChristianWorshipHelper.activityLabel(rec.activityType, isEn),
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    Surface(
-                                        shape = RoundedCornerShape(999.dp),
-                                        color = Color.Black.copy(alpha = 0.55f),
-                                        modifier = Modifier
-                                            .align(Alignment.BottomEnd)
-                                            .padding(8.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    photoEntries.forEachIndexed { idx, photoItem ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(if (photoEntries.size == 1) 170.dp else 145.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { previewState = rec to idx }
+                                                .testTag("img_parent_christian_photo_${rec.id}_$idx")
                                         ) {
-                                            Icon(Icons.Default.ZoomIn, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
-                                            Text(
-                                                text = if (remDays > 0L) {
-                                                    if (isEn) "${remDays}d photo" else "Aktif ${remDays}h"
-                                                } else if (isEn) "Photo" else "Foto",
-                                                fontSize = 10.sp,
-                                                color = Color.White
+                                            Image(
+                                                painter = rememberAsyncImagePainter(model = photoItem.primaryModel),
+                                                contentDescription = ChristianWorshipHelper.activityLabel(rec.activityType, isEn),
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
                                             )
+                                            Surface(
+                                                shape = RoundedCornerShape(999.dp),
+                                                color = Color.Black.copy(alpha = 0.55f),
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomEnd)
+                                                    .padding(8.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                ) {
+                                                    Icon(Icons.Default.ZoomIn, contentDescription = null, tint = Color.White, modifier = Modifier.size(13.dp))
+                                                    val badgeText = when {
+                                                        photoEntries.size > 1 -> "${idx + 1}/${photoEntries.size}"
+                                                        remDays > 0L -> if (isEn) "${remDays}d photo" else "Aktif ${remDays}h"
+                                                        else -> if (isEn) "Photo" else "Foto"
+                                                    }
+                                                    Text(
+                                                        text = badgeText,
+                                                        fontSize = 10.sp,
+                                                        color = Color.White
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
                                 }
 
-                                if (localSave != null) {
+                                if (allSavedLocally) {
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = Color(0xFFDCFCE7)
@@ -634,7 +642,12 @@ fun ParentChristianWorshipContent(
                                         ) {
                                             Icon(Icons.Default.CheckCircle, contentDescription = null, tint = Color(0xFF15803D), modifier = Modifier.size(14.dp))
                                             Text(
-                                                text = if (isEn) "Saved to Phone Gallery" else "Sudah Tersimpan di Galeri HP",
+                                                text = if (photoEntries.size > 1) {
+                                                    if (isEn) "${photoEntries.size} Photos Saved in Phone Gallery"
+                                                    else "Tersimpan di Galeri HP (${photoEntries.size} Foto)"
+                                                } else {
+                                                    if (isEn) "Saved to Phone Gallery" else "Sudah Tersimpan di Galeri HP"
+                                                },
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF15803D)
@@ -647,12 +660,20 @@ fun ParentChristianWorshipContent(
                                         enabled = !isSavingMedia,
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .heightIn(min = 44.dp)
+                                            .heightIn(min = 48.dp)
                                             .testTag("btn_parent_save_chris_photo_${rec.id}")
                                     ) {
                                         Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
                                         Spacer(modifier = Modifier.width(6.dp))
-                                        Text(if (isEn) "Save Photo to Phone Gallery" else "Simpan Foto ke Galeri HP", fontSize = 12.sp)
+                                        Text(
+                                            text = if (photoEntries.size > 1) {
+                                                if (isEn) "Save ${photoEntries.size} Photos to Phone Gallery"
+                                                else "Simpan ${photoEntries.size} Foto ke Galeri HP"
+                                            } else {
+                                                if (isEn) "Save Photo to Phone Gallery" else "Simpan Foto ke Galeri HP"
+                                            },
+                                            fontSize = 12.sp
+                                        )
                                     }
                                 }
                             } else if (rec.isMediaPurgedFromServer || isExpired) {
@@ -677,13 +698,19 @@ fun ParentChristianWorshipContent(
         }
     }
 
-    previewRecord?.let { rec ->
-        val imgModel: Any? = localSavesByRecordId[rec.id]?.localGalleryUri?.takeIf { it.isNotBlank() }
+    previewState?.let { (rec, initialIdx) ->
+        val localSave = localSavesByRecordId[rec.id]
+        val entries = ChristianWorshipHelper.extractPhotoEntries(rec, localSave)
+        var activeIdx by remember(rec.id, initialIdx) {
+            mutableStateOf(initialIdx.coerceIn(0, (entries.size - 1).coerceAtLeast(0)))
+        }
+        val activeModel: Any? = entries.getOrNull(activeIdx)?.primaryModel
+            ?: localSave?.localGalleryUri?.takeIf { it.isNotBlank() }
             ?: rec.localPhotoPath.takeIf { it.isNotBlank() }
             ?: rec.photoUrl.takeIf { it.isNotBlank() }
             ?: rec.photoFallbackUrl.takeIf { it.isNotBlank() }
         Dialog(
-            onDismissRequest = { previewRecord = null },
+            onDismissRequest = { previewState = null },
             properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
             Box(
@@ -692,19 +719,44 @@ fun ParentChristianWorshipContent(
                     .background(Color.Black.copy(alpha = 0.92f))
                     .padding(16.dp)
             ) {
-                if (imgModel != null) {
+                if (activeModel != null) {
                     Image(
-                        painter = rememberAsyncImagePainter(model = imgModel),
+                        painter = rememberAsyncImagePainter(model = activeModel),
                         contentDescription = rec.title.ifBlank { rec.studentName },
                         contentScale = ContentScale.Fit,
                         modifier = Modifier.fillMaxSize()
                     )
                 }
                 IconButton(
-                    onClick = { previewRecord = null },
+                    onClick = { previewState = null },
                     modifier = Modifier.align(Alignment.TopEnd)
                 ) {
                     Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup", tint = Color.White)
+                }
+                if (entries.size > 1) {
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        entries.forEachIndexed { idx, _ ->
+                            val isSelected = idx == activeIdx
+                            Button(
+                                onClick = { activeIdx = idx },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = if (isSelected) Color(0xFF4F46E5) else Color.White.copy(alpha = 0.22f),
+                                    contentColor = Color.White
+                                ),
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text(
+                                    text = if (isEn) "Photo ${idx + 1}" else "Foto ${idx + 1}",
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
