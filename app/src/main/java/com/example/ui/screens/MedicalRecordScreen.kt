@@ -147,6 +147,8 @@ fun MedicalRecordScreen(
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
+    val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val isPetugasKesehatan = currentUserRole == com.example.ui.UserRole.PETUGAS_KESEHATAN
     var showDirectTreatmentDialog by remember { mutableStateOf(false) }
     var recordToEdit by remember { mutableStateOf<MedicalRecord?>(null) }
     var recordToShare by remember { mutableStateOf<MedicalRecord?>(null) }
@@ -743,6 +745,7 @@ fun MedicalRecordScreen(
             allRecords = allRecords,
             waliName = waliName,
             schoolProfile = schoolProfile,
+            isPetugasKesehatan = isPetugasKesehatan,
             onDismiss = { studentForPdfPrint = null }
         )
     }
@@ -809,6 +812,7 @@ fun MedicalRecordScreen(
         ShareWhatsAppDialog(
             record = record,
             schoolProfile = schoolProfile,
+            isPetugasKesehatan = isPetugasKesehatan,
             onDismiss = { recordToShare = null }
         )
     }

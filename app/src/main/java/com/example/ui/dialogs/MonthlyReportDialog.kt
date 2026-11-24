@@ -125,6 +125,7 @@ fun MonthlyReportContent(
     students: List<ChildStudent>,
     waliName: String,
     schoolProfile: SchoolProfile = SchoolProfile(),
+    isPetugasKesehatan: Boolean = false,
     showCloseButton: Boolean = false,
     fillAvailableHeight: Boolean = true,
     onDismiss: () -> Unit = {},
@@ -208,14 +209,24 @@ fun MonthlyReportContent(
         countMap.entries.sortedByDescending { it.value }.take(5)
     }
 
-    val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
+    val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank {
+        if (isPetugasKesehatan) {
+            if (isEn) "School Health Unit" else "Unit Kesehatan Sekolah"
+        } else {
+            "Wali Asuh Care"
+        }
+    }
 
     // Text for WhatsApp Share
-    val whatsappReportText = remember(monthRecords, periodLabel, waliName, totalStudents, schoolProfile, s.language) {
+    val whatsappReportText = remember(monthRecords, periodLabel, waliName, totalStudents, schoolProfile, isPetugasKesehatan, s.language) {
         buildString {
             if (isEn) {
                 appendLine("📋 *MONTHLY HEALTH RECAPITULATION REPORT*")
-                appendLine("*$activeSchoolTitle*")
+                if (isPetugasKesehatan) {
+                    appendLine("*SCHOOL HEALTH UNIT — $activeSchoolTitle*")
+                } else {
+                    appendLine("*$activeSchoolTitle*")
+                }
                 appendLine("*Period:* $periodLabel")
                 appendLine("━━━━━━━━━━━━━━━━━━━━━")
                 appendLine("📊 *STATISTICS SUMMARY:*")
@@ -254,11 +265,20 @@ fun MonthlyReportContent(
                     }
                     appendLine("")
                 }
-                appendLine("👤 *Person in Charge / Wali Asuh:* $waliName")
+                val effectiveSigner = waliName.ifBlank { if (isPetugasKesehatan) "Health Officer" else "Wali Asuh" }
+                if (isPetugasKesehatan) {
+                    appendLine("👤 *Health Officer:* $effectiveSigner")
+                } else {
+                    appendLine("👤 *Person in Charge / Wali Asuh:* $effectiveSigner")
+                }
                 appendLine("🕒 *Printed Date:* ${DateUtils.formatFullDate(System.currentTimeMillis())}")
             } else {
                 appendLine("📋 *LAPORAN REKAPITULASI KESEHATAN BULANAN*")
-                appendLine("*$activeSchoolTitle*")
+                if (isPetugasKesehatan) {
+                    appendLine("*UNIT KESEHATAN SEKOLAH — $activeSchoolTitle*")
+                } else {
+                    appendLine("*$activeSchoolTitle*")
+                }
                 appendLine("*Periode:* $periodLabel")
                 appendLine("━━━━━━━━━━━━━━━━━━━━━")
                 appendLine("📊 *RINGKASAN STATISTIK:*")
@@ -297,7 +317,12 @@ fun MonthlyReportContent(
                     }
                     appendLine("")
                 }
-                appendLine("👤 *Penanggung Jawab / Wali Asuh:* $waliName")
+                val effectiveSigner = waliName.ifBlank { if (isPetugasKesehatan) "Petugas Kesehatan" else "Wali Asuh" }
+                if (isPetugasKesehatan) {
+                    appendLine("👤 *Petugas Kesehatan:* $effectiveSigner")
+                } else {
+                    appendLine("👤 *Penanggung Jawab / Wali Asuh:* $effectiveSigner")
+                }
                 appendLine("🕒 *Tanggal Cetak:* ${DateUtils.formatFullDate(System.currentTimeMillis())}")
             }
         }
@@ -793,7 +818,8 @@ fun MonthlyReportContent(
                                     totalStudentsCount = totalStudents,
                                     monthYearLabel = periodLabel,
                                     waliName = waliName,
-                                    schoolProfile = schoolProfile
+                                    schoolProfile = schoolProfile,
+                                    isPetugasKesehatan = isPetugasKesehatan
                                 )
                                 if (pdfFile != null) {
                                     PdfReportGenerator.openPdfFile(context, pdfFile)

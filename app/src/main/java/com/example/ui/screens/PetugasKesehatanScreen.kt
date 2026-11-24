@@ -313,6 +313,7 @@ fun PetugasKesehatanScreen(
                         students = students,
                         waliName = waliName,
                         schoolProfile = schoolProfile,
+                        isPetugasKesehatan = true,
                         showCloseButton = false,
                         fillAvailableHeight = true,
                         modifier = Modifier

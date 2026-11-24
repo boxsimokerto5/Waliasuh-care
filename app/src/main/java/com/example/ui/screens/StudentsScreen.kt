@@ -81,6 +81,8 @@ fun StudentsScreen(
     val isEn = LocalAppStrings.current.isEnglish
     val schoolProfile by viewModel.schoolProfile.collectAsStateWithLifecycle()
     val waliName by viewModel.waliName.collectAsStateWithLifecycle()
+    val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+    val isPetugasKesehatan = currentUserRole == com.example.ui.UserRole.PETUGAS_KESEHATAN || medicalOnlyMode
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
@@ -375,6 +377,7 @@ fun StudentsScreen(
                 com.example.ui.dialogs.StudentDetailTab.entries
             },
             allowCardQr = !medicalOnlyMode,
+            isPetugasKesehatan = isPetugasKesehatan,
             onInputMengaji = if (medicalOnlyMode) null else { target ->
                 selectedStudentForDetail = null
                 studentForMengajiInput = target

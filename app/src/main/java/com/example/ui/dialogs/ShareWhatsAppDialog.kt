@@ -53,6 +53,7 @@ import com.example.util.i18n.LocalAppStrings
 fun ShareWhatsAppDialog(
     record: MedicalRecord,
     schoolProfile: SchoolProfile = SchoolProfile(),
+    isPetugasKesehatan: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -77,7 +78,13 @@ fun ShareWhatsAppDialog(
         }
     }
 
-    val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank { "Wali Asuh Care" }
+    val activeSchoolTitle = schoolProfile.schoolName.trim().ifBlank {
+        if (isPetugasKesehatan) {
+            if (isEn) "School Health Unit" else "Unit Kesehatan Sekolah"
+        } else {
+            "Wali Asuh Care"
+        }
+    }
     val activeShortTitle = schoolProfile.shortName.trim().ifBlank { activeSchoolTitle }
 
     val inpatientInfo = when {
@@ -95,9 +102,11 @@ fun ShareWhatsAppDialog(
     }
 
     val reportText = if (isEn) {
+        val defaultEscort = if (isPetugasKesehatan) "Health Officer $activeShortTitle" else "Wali Asuh $activeShortTitle"
+        val footerOrg = if (isPetugasKesehatan) "School Health Unit $activeSchoolTitle" else "Wali Asuh Care $activeSchoolTitle"
         """
 🏥 *FOSTER STUDENT TREATMENT REPORT*
-*$activeSchoolTitle*
+${if (isPetugasKesehatan) "*SCHOOL HEALTH UNIT — $activeSchoolTitle*" else "*$activeSchoolTitle*"}
 ----------------------------------------
 👦 *Name:* ${record.studentName}
 🏠 *Asrama:* ${record.studentDormitory}
@@ -109,15 +118,17 @@ $inpatientInfo
 💉 *Action:* ${record.actionsTaken.ifBlank { "Physical examination" }}
 💊 *Medicine:* ${record.prescription.ifBlank { "-" }}
 $controlInfo
-👤 *Escort:* ${record.escortName.ifBlank { "Wali Asuh $activeShortTitle" }}
+👤 *Escort:* ${record.escortName.ifBlank { defaultEscort }}
 ${if (record.notes.isNotBlank()) "📝 *Notes:* ${record.notes}" else ""}
 ----------------------------------------
-_Wali Asuh Care ${activeSchoolTitle}_
+_${footerOrg}_
 """.trimIndent()
     } else {
+        val defaultEscort = if (isPetugasKesehatan) "Petugas Kesehatan $activeShortTitle" else "Pengasuh $activeShortTitle"
+        val footerOrg = if (isPetugasKesehatan) "Unit Kesehatan Sekolah $activeSchoolTitle" else "SIK Anak Asuh $activeSchoolTitle"
         """
 🏥 *LAPORAN PENGOBATAN ANAK ASUH*
-*$activeSchoolTitle*
+${if (isPetugasKesehatan) "*UNIT KESEHATAN SEKOLAH — $activeSchoolTitle*" else "*$activeSchoolTitle*"}
 ----------------------------------------
 👦 *Nama:* ${record.studentName}
 🏠 *Asrama:* ${record.studentDormitory}
@@ -129,10 +140,10 @@ $inpatientInfo
 💉 *Tindakan:* ${record.actionsTaken.ifBlank { "Pemeriksaan fisik" }}
 💊 *Obat:* ${record.prescription.ifBlank { "-" }}
 $controlInfo
-👤 *Pendamping:* ${record.escortName.ifBlank { "Pengasuh $activeShortTitle" }}
+👤 *Pendamping:* ${record.escortName.ifBlank { defaultEscort }}
 ${if (record.notes.isNotBlank()) "📝 *Catatan:* ${record.notes}" else ""}
 ----------------------------------------
-_SIK Anak Asuh ${activeSchoolTitle}_
+_${footerOrg}_
 """.trimIndent()
     }
 
@@ -173,10 +184,18 @@ _SIK Anak Asuh ${activeSchoolTitle}_
                 }
 
                 Text(
-                    text = if (isEn) {
-                        "Ready-to-send message format for the Asrama / Wali Asuh WhatsApp group:"
+                    text = if (isPetugasKesehatan) {
+                        if (isEn) {
+                            "Ready-to-send message format for the School Health Unit / Dormitory WhatsApp group:"
+                        } else {
+                            "Format pesan siap dikirim ke grup WhatsApp Unit Kesehatan Sekolah / pembina asrama:"
+                        }
                     } else {
-                        "Format pesan siap dikirim ke grup WhatsApp pengasuh / kepala asrama:"
+                        if (isEn) {
+                            "Ready-to-send message format for the Asrama / Wali Asuh WhatsApp group:"
+                        } else {
+                            "Format pesan siap dikirim ke grup WhatsApp pengasuh / kepala asrama:"
+                        }
                     },
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

@@ -80,7 +80,8 @@ object PdfReportGenerator {
         periodType: ReportPeriodType,
         periodLabel: String,
         waliName: String = "Wali Asuh",
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        isPetugasKesehatan: Boolean = false
     ): File? {
         try {
             val lang = AppLanguageManager.getLanguage(context)
@@ -99,7 +100,15 @@ object PdfReportGenerator {
             var currentY = 35f
 
             // 1. Header / Kop Surat Resmi Tenant Sekolah
-            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = if (isPetugasKesehatan) UNIT_KESEHATAN_SEKOLAH else UNIT_LAYANAN_KESEHATAN
+            )
 
             // 2. Judul Dokumen & Periode
             currentY = drawTitleAndPeriod(canvas, paint, pageWidth, currentY, periodLabel, lang)
@@ -172,7 +181,17 @@ object PdfReportGenerator {
                 currentY = 40f
             }
 
-            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            drawFooterSignatures(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                height = pageHeight,
+                startY = currentY,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                signerRoleTitle = if (isPetugasKesehatan) SIGNER_ROLE_PETUGAS_KESEHATAN else SIGNER_ROLE_WALI_ASUH
+            )
 
             document.finishPage(page)
 
@@ -197,7 +216,10 @@ object PdfReportGenerator {
     }
 
     internal const val UNIT_LAYANAN_KESEHATAN = "UNIT LAYANAN KESEHATAN WALIASUH"
+    internal const val UNIT_KESEHATAN_SEKOLAH = "UNIT KESEHATAN SEKOLAH"
     internal const val UNIT_BIMBINGAN_SPIRITUAL = "UNIT BIMBINGAN SPIRITUAL WALIASUH"
+    internal const val SIGNER_ROLE_WALI_ASUH = "Wali Asuh"
+    internal const val SIGNER_ROLE_PETUGAS_KESEHATAN = "Petugas Kesehatan"
 
     internal fun buildHeaderTitle(schoolProfile: SchoolProfile): String {
         return schoolProfile.schoolName.trim()
@@ -214,9 +236,13 @@ object PdfReportGenerator {
         }
     }
 
-    internal fun buildFooterSignatureTitle(schoolProfile: SchoolProfile): String {
+    internal fun buildFooterSignatureTitle(
+        schoolProfile: SchoolProfile,
+        roleTitle: String = SIGNER_ROLE_WALI_ASUH
+    ): String {
+        val effectiveRole = roleTitle.trim().ifBlank { SIGNER_ROLE_WALI_ASUH }
         val schoolSignLabel = schoolProfile.shortName.trim().ifBlank { schoolProfile.schoolName.trim() }
-        val signTitle = if (schoolSignLabel.isNotBlank()) "Wali Asuh $schoolSignLabel," else "Wali Asuh,"
+        val signTitle = if (schoolSignLabel.isNotBlank()) "$effectiveRole $schoolSignLabel," else "$effectiveRole,"
         return signTitle.take(60)
     }
 
@@ -614,7 +640,8 @@ object PdfReportGenerator {
         height: Int,
         startY: Float,
         waliName: String,
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        signerRoleTitle: String = SIGNER_ROLE_WALI_ASUH
     ) {
         val lang = AppLanguageManager.getLanguage(context)
         val localizedContext = AppLanguageManager.createLocalizedContext(context, lang)
@@ -622,7 +649,8 @@ object PdfReportGenerator {
         val datePattern = if (lang == AppLanguage.ENGLISH) "MMMM d, yyyy" else "d MMMM yyyy"
         val todayDate = SimpleDateFormat(datePattern, lang.locale).format(Date())
         val cityLabel = schoolProfile.city.trim().ifBlank { "Indonesia" }
-        val effectiveWaliName = waliName.trim().ifBlank { "Wali Asuh" }
+        val effectiveSignerRole = signerRoleTitle.trim().ifBlank { SIGNER_ROLE_WALI_ASUH }
+        val effectiveWaliName = waliName.trim().ifBlank { effectiveSignerRole }
         val rightX = width - 50f
 
         paint.style = Paint.Style.FILL
@@ -631,10 +659,10 @@ object PdfReportGenerator {
         paint.textSize = 8.5f
         paint.color = Color.rgb(71, 85, 105)
 
-        // Satu Entitas Kanan: Tanggal, Wali Asuh <Nama Sekolah>, Barcode QR Nama Penginput, Nama Wali Asuh
+        // Satu Entitas Kanan: Tanggal, Wali Asuh / Petugas Kesehatan <Nama Sekolah>, Barcode QR Nama Penginput, Nama
         canvas.drawText("$cityLabel, $todayDate", rightX, y, paint)
 
-        val footerSignTitle = buildFooterSignatureTitle(schoolProfile)
+        val footerSignTitle = buildFooterSignatureTitle(schoolProfile, effectiveSignerRole)
         paint.textSize = if (footerSignTitle.length > 44) 7.5f else 8.5f
         canvas.drawText(footerSignTitle, rightX, y + 12f, paint)
 
@@ -691,7 +719,8 @@ object PdfReportGenerator {
         totalStudentsCount: Int,
         monthYearLabel: String,
         waliName: String = "Wali Asuh",
-        schoolProfile: SchoolProfile = SchoolProfile()
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        isPetugasKesehatan: Boolean = false
     ): File? {
         try {
             val lang = AppLanguageManager.getLanguage(context)
@@ -709,7 +738,15 @@ object PdfReportGenerator {
             var currentY = 35f
 
             // 1. Header / Kop Surat
-            currentY = drawHeader(context, canvas, paint, pageWidth, currentY, schoolProfile)
+            currentY = drawHeader(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                startY = currentY,
+                schoolProfile = schoolProfile,
+                unitTitle = if (isPetugasKesehatan) UNIT_KESEHATAN_SEKOLAH else UNIT_LAYANAN_KESEHATAN
+            )
 
             // 2. Judul Dokumen
             paint.textAlign = Paint.Align.CENTER
@@ -860,7 +897,17 @@ object PdfReportGenerator {
                 currentY = 40f
             }
 
-            drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+            drawFooterSignatures(
+                context = context,
+                canvas = canvas,
+                paint = paint,
+                width = pageWidth,
+                height = pageHeight,
+                startY = currentY,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                signerRoleTitle = if (isPetugasKesehatan) SIGNER_ROLE_PETUGAS_KESEHATAN else SIGNER_ROLE_WALI_ASUH
+            )
             document.finishPage(page)
 
             val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
@@ -917,7 +964,8 @@ object PdfReportGenerator {
         context: Context,
         pdfFile: File,
         studentName: String,
-        schoolName: String = "Wali Asuh Care"
+        schoolName: String = "Wali Asuh Care",
+        isPetugasKesehatan: Boolean = false
     ) {
         val s = AppLanguageManager.getStrings(context).report
         val isEn = AppLanguageManager.getLanguage(context) == AppLanguage.ENGLISH
@@ -927,23 +975,39 @@ object PdfReportGenerator {
                 "${context.packageName}.provider",
                 pdfFile
             )
-            val cleanSchool = schoolName.ifBlank { "Wali Asuh Care" }
+            val fallbackSchool = if (isPetugasKesehatan) {
+                if (isEn) "School Health Unit" else "Unit Kesehatan Sekolah"
+            } else {
+                "Wali Asuh Care"
+            }
+            val cleanSchool = schoolName.ifBlank { fallbackSchool }
+
+            val subjectText = if (isPetugasKesehatan) {
+                if (isEn) "School Health Unit Recap - $studentName"
+                else "Rekap Unit Kesehatan Sekolah - $studentName"
+            } else {
+                if (isEn) "Health Screening Recap - $studentName"
+                else "Rekap Screening Kesehatan - $studentName"
+            }
+            val bodyText = if (isPetugasKesehatan) {
+                if (isEn) {
+                    "Official School Health Unit medical recapitulation document for $studentName ($cleanSchool)."
+                } else {
+                    "Dokumen resmi Unit Kesehatan Sekolah — Rekapitulasi Screening Kesehatan $studentName ($cleanSchool)."
+                }
+            } else {
+                if (isEn) {
+                    "Official Health Screening Recapitulation document for $studentName ($cleanSchool)."
+                } else {
+                    "Dokumen resmi Rekapitulasi Screening Kesehatan Anak Asuh $studentName ($cleanSchool)."
+                }
+            }
 
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(
-                    Intent.EXTRA_SUBJECT,
-                    if (isEn) "Health Screening Recap - $studentName" else "Rekap Screening Kesehatan - $studentName"
-                )
-                putExtra(
-                    Intent.EXTRA_TEXT,
-                    if (isEn) {
-                        "Official Health Screening Recapitulation document for $studentName ($cleanSchool)."
-                    } else {
-                        "Dokumen resmi Rekapitulasi Screening Kesehatan Anak Asuh $studentName ($cleanSchool)."
-                    }
-                )
+                putExtra(Intent.EXTRA_SUBJECT, subjectText)
+                putExtra(Intent.EXTRA_TEXT, bodyText)
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 

@@ -138,6 +138,7 @@ fun StudentDetailDialog(
     initialTab: StudentDetailTab = StudentDetailTab.BIODATA,
     allowedTabs: List<StudentDetailTab> = StudentDetailTab.entries,
     allowCardQr: Boolean = true,
+    isPetugasKesehatan: Boolean = false,
     onInputMengaji: ((ChildStudent) -> Unit)? = null,
     onInputSholat: ((ChildStudent) -> Unit)? = null,
     onPrintKartuMengaji: ((ChildStudent) -> Unit)? = null,
@@ -1723,6 +1724,7 @@ fun StudentDetailDialog(
             allRecords = studentRecords,
             waliName = waliName,
             schoolProfile = schoolProfile,
+            isPetugasKesehatan = isPetugasKesehatan,
             onDismiss = { showPrintPdfDialog = false }
         )
     }

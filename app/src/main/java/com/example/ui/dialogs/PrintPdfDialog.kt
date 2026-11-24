@@ -82,6 +82,7 @@ fun PrintPdfDialog(
     allRecords: List<MedicalRecord>,
     waliName: String = "Wali Asuh",
     schoolProfile: SchoolProfile = SchoolProfile(),
+    isPetugasKesehatan: Boolean = false,
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -552,7 +553,8 @@ fun PrintPdfDialog(
                         },
                         periodLabel = periodLabel,
                         waliName = waliName,
-                        schoolProfile = schoolProfile
+                        schoolProfile = schoolProfile,
+                        isPetugasKesehatan = isPetugasKesehatan
                     )
                     if (pdfFile != null) {
                         if (actionType == "OPEN") {
@@ -562,7 +564,8 @@ fun PrintPdfDialog(
                                 context = context,
                                 pdfFile = pdfFile,
                                 studentName = student.name,
-                                schoolName = schoolProfile.schoolName
+                                schoolName = schoolProfile.schoolName,
+                                isPetugasKesehatan = isPetugasKesehatan
                             )
                         }
                     } else {
