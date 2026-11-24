@@ -59,6 +59,7 @@ internal fun LazyListScope.kristenCategoryItems(
     claimedStudents: List<ChildStudent>,
     christianWorshipRecords: List<ChristianWorshipRecord>,
     waliName: String,
+    canManageChristianClaim: Boolean = false,
     onOpenClaimChristianStudents: () -> Unit,
     onOpenInputChristianWorship: (initialTab: Int, defaultType: String, targetStudent: ChildStudent?) -> Unit,
     onOpenChristianReport: (initialTab: Int) -> Unit,
@@ -237,12 +238,24 @@ internal fun LazyListScope.kristenCategoryItems(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 CartoonMenuCard(
-                    title = if (isEn) "Claim Students" else "Klaim Anak Kristen",
-                    subtitle = if (isEn) "Tag Religion & Filter" else "Tandai Siswa & Auto-Portal",
+                    title = if (canManageChristianClaim) {
+                        if (isEn) "Claim Students" else "Klaim Anak Kristen"
+                    } else {
+                        if (isEn) "Christian Students" else "Daftar Anak Kristen"
+                    },
+                    subtitle = if (canManageChristianClaim) {
+                        if (isEn) "Admin Only • Auto-Portal" else "Khusus Admin • Auto-Portal"
+                    } else {
+                        if (isEn) "Locked • Edit via Admin" else "Terkunci • Ubah via Admin"
+                    },
                     imageRes = R.drawable.img_menu_klaim_anak_asuh,
-                    badgeText = "${christianStudents.size} ${if (isEn) "Kids" else "Anak"}",
-                    badgeBg = Color(0xFFE0E7FF),
-                    badgeColor = Color(0xFF3730A3),
+                    badgeText = if (canManageChristianClaim) {
+                        "${christianStudents.size} ${if (isEn) "Kids" else "Anak"}"
+                    } else {
+                        "🔒 ${christianStudents.size} ${if (isEn) "Kids" else "Anak"}"
+                    },
+                    badgeBg = if (canManageChristianClaim) Color(0xFFE0E7FF) else Color(0xFFF1F5F9),
+                    badgeColor = if (canManageChristianClaim) Color(0xFF3730A3) else Color(0xFF475569),
                     bgGradient = listOf(Color(0xFFEEF2FF), Color(0xFFE0E7FF).copy(alpha = 0.65f)),
                     borderColor = Color(0xFFC7D2FE),
                     onClick = onOpenClaimChristianStudents,

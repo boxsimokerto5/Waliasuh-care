@@ -41,10 +41,13 @@ import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -156,6 +159,7 @@ internal fun christianActivityVisual(type: String): ChristianActivityVisual {
 @Composable
 fun ClaimChristianStudentsSheet(
     students: List<ChildStudent>,
+    canManageClaim: Boolean = false,
     onClaimStudents: (List<ChildStudent>, Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -164,6 +168,7 @@ fun ClaimChristianStudentsSheet(
     var searchQuery by remember { mutableStateOf("") }
     var filterMode by remember { mutableStateOf("ALL") } // ALL | KRISTEN | BELUM
     val selectedIds = remember { mutableStateListOf<Long>() }
+    var pendingClaimAction by remember { mutableStateOf<Pair<List<ChildStudent>, Boolean>?>(null) }
 
     val christianCount = remember(students) { students.count { StudentReligionHelper.isChristian(it) } }
     val filtered = remember(students, searchQuery, filterMode) {
@@ -260,7 +265,11 @@ fun ClaimChristianStudentsSheet(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (isEn) "Claim Christian Students" else "Klaim Anak Agama Kristen",
+                                    text = if (canManageClaim) {
+                                        if (isEn) "Claim Christian Students" else "Klaim Anak Agama Kristen"
+                                    } else {
+                                        if (isEn) "Christian Students List" else "Daftar Anak Agama Kristen"
+                                    },
                                     fontSize = 15.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color.White,
@@ -268,10 +277,18 @@ fun ClaimChristianStudentsSheet(
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = if (isEn) {
-                                        "$christianCount claimed • Sholat & Mengaji excluded, Fasting kept"
+                                    text = if (canManageClaim) {
+                                        if (isEn) {
+                                            "$christianCount claimed • Admin Only & Double Confirmation"
+                                        } else {
+                                            "$christianCount diklaim • Khusus Admin & Konfirmasi Ganda"
+                                        }
                                     } else {
-                                        "$christianCount diklaim • Sholat & Mengaji otomatis dikecualikan"
+                                        if (isEn) {
+                                            "$christianCount Christian • Locked (Admin Only)"
+                                        } else {
+                                            "$christianCount diklaim • Terkunci (Khusus Admin)"
+                                        }
                                     },
                                     fontSize = 10.5.sp,
                                     color = Color(0xFFE0E7FF),
@@ -309,6 +326,40 @@ fun ClaimChristianStudentsSheet(
                         .padding(horizontal = 12.dp, vertical = 10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    if (!canManageClaim) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isDark) Color(0xFF334155) else Color(0xFFF1F5F9),
+                            border = BorderStroke(1.dp, if (isDark) Color(0xFF475569) else Color(0xFFCBD5E1)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("badge_claim_christian_locked")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = if (isDark) Color(0xFFE2E8F0) else Color(0xFF334155),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "View Only • Adding or removing Christian student religion status is strictly locked to the School Admin menu."
+                                    } else {
+                                        "Mode Lihat Saja • Penetapan & pelepasan klaim agama Kristen hanya dapat diubah oleh Admin melalui menu khusus di Halaman Admin agar data aman."
+                                    },
+                                    fontSize = 11.sp,
+                                    lineHeight = 15.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (isDark) Color(0xFFE2E8F0) else Color(0xFF334155)
+                                )
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
@@ -385,7 +436,7 @@ fun ClaimChristianStudentsSheet(
                         )
                     }
 
-                    if (selectedIds.isNotEmpty()) {
+                    if (canManageClaim && selectedIds.isNotEmpty()) {
                         val pickedStudents = students.filter { it.id in selectedIds }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -393,8 +444,7 @@ fun ClaimChristianStudentsSheet(
                         ) {
                             Button(
                                 onClick = {
-                                    onClaimStudents(pickedStudents, true)
-                                    selectedIds.clear()
+                                    pendingClaimAction = pickedStudents to true
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA)),
                                 shape = RoundedCornerShape(10.dp),
@@ -409,8 +459,7 @@ fun ClaimChristianStudentsSheet(
                             }
                             OutlinedButton(
                                 onClick = {
-                                    onClaimStudents(pickedStudents, false)
-                                    selectedIds.clear()
+                                    pendingClaimAction = pickedStudents to false
                                 },
                                 shape = RoundedCornerShape(10.dp),
                                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
@@ -453,9 +502,15 @@ fun ClaimChristianStudentsSheet(
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable {
-                                        if (isChecked) selectedIds.remove(student.id) else selectedIds.add(student.id)
-                                    }
+                                    .then(
+                                        if (canManageClaim) {
+                                            Modifier.clickable {
+                                                if (isChecked) selectedIds.remove(student.id) else selectedIds.add(student.id)
+                                            }
+                                        } else {
+                                            Modifier
+                                        }
+                                    )
                                     .testTag("row_claim_christian_${student.id}"),
                                 shape = RoundedCornerShape(12.dp),
                                 colors = CardDefaults.cardColors(containerColor = rowBg),
@@ -464,21 +519,23 @@ fun ClaimChristianStudentsSheet(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Checkbox(
-                                        checked = isChecked,
-                                        onCheckedChange = { checked ->
-                                            if (checked) {
-                                                if (student.id !in selectedIds) selectedIds.add(student.id)
-                                            } else {
-                                                selectedIds.remove(student.id)
-                                            }
-                                        },
-                                        colors = CheckboxDefaults.colors(checkedColor = Color(0xFF4338CA)),
-                                        modifier = Modifier.testTag("chk_claim_christian_${student.id}")
-                                    )
+                                    if (canManageClaim) {
+                                        Checkbox(
+                                            checked = isChecked,
+                                            onCheckedChange = { checked ->
+                                                if (checked) {
+                                                    if (student.id !in selectedIds) selectedIds.add(student.id)
+                                                } else {
+                                                    selectedIds.remove(student.id)
+                                                }
+                                            },
+                                            colors = CheckboxDefaults.colors(checkedColor = Color(0xFF4338CA)),
+                                            modifier = Modifier.testTag("chk_claim_christian_${student.id}")
+                                        )
+                                    }
                                     StudentAvatar(
                                         name = student.name,
                                         gender = student.gender,
@@ -503,24 +560,60 @@ fun ClaimChristianStudentsSheet(
                                             overflow = TextOverflow.Ellipsis
                                         )
                                     }
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = if (isChristian) Color(0xFF4338CA) else Color(0xFFE2E8F0),
-                                        modifier = Modifier
-                                            .clickable { onClaimStudents(listOf(student), !isChristian) }
-                                            .testTag("btn_toggle_christian_${student.id}")
-                                    ) {
-                                        Text(
-                                            text = if (isChristian) {
-                                                if (isEn) "Christian ✓" else "Kristen ✓"
-                                            } else {
-                                                if (isEn) "+ Claim" else "+ Klaim"
-                                            },
-                                            fontSize = 10.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isChristian) Color.White else Color(0xFF334155),
-                                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp)
-                                        )
+                                    if (canManageClaim) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isChristian) Color(0xFF4338CA) else Color(0xFFE2E8F0),
+                                            modifier = Modifier
+                                                .heightIn(min = 38.dp)
+                                                .clickable { pendingClaimAction = listOf(student) to !isChristian }
+                                                .testTag("btn_toggle_christian_${student.id}")
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = if (isChristian) {
+                                                        if (isEn) "Christian ✓" else "Kristen ✓"
+                                                    } else {
+                                                        if (isEn) "+ Claim" else "+ Klaim"
+                                                    },
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isChristian) Color.White else Color(0xFF334155),
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = if (isChristian) Color(0xFF4338CA) else Color(0xFFE2E8F0),
+                                            modifier = Modifier.testTag("status_christian_readonly_${student.id}")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 5.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                if (isChristian) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Lock,
+                                                        contentDescription = null,
+                                                        tint = Color.White,
+                                                        modifier = Modifier.size(11.dp)
+                                                    )
+                                                }
+                                                Text(
+                                                    text = if (isChristian) {
+                                                        if (isEn) "Christian" else "Kristen"
+                                                    } else {
+                                                        if (isEn) "Regular" else "Reguler"
+                                                    },
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = if (isChristian) Color.White else Color(0xFF475569)
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -529,6 +622,102 @@ fun ClaimChristianStudentsSheet(
                 }
             }
         }
+    }
+
+    pendingClaimAction?.let { (targets, markAsChristian) ->
+        val namesPreview = targets.take(4).joinToString(", ") { it.name } +
+            if (targets.size > 4) {
+                if (isEn) " (+${targets.size - 4} more)" else " (+${targets.size - 4} lainnya)"
+            } else ""
+        AlertDialog(
+            onDismissRequest = { pendingClaimAction = null },
+            modifier = Modifier.testTag("dialog_confirm_christian_claim"),
+            icon = {
+                Icon(
+                    imageVector = if (markAsChristian) Icons.Default.CheckCircle else Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = if (markAsChristian) Color(0xFF4338CA) else Color(0xFFDC2626),
+                    modifier = Modifier.size(28.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = if (markAsChristian) {
+                        if (isEn) "Confirm Christian Status" else "Konfirmasi Klaim Agama Kristen"
+                    } else {
+                        if (isEn) "Remove Christian Status?" else "Lepas Status Agama Kristen?"
+                    },
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = if (isEn) {
+                            "Target (${targets.size} student(s)): $namesPreview"
+                        } else {
+                            "Siswa terpilih (${targets.size} anak): $namesPreview"
+                        },
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = if (markAsChristian) {
+                            if (isEn) {
+                                "• Student will appear in Christian Worship menu & reports.\n• Automatically excluded from Sholat & Mengaji lists (Fasting stays active).\n• Parent Portal automatically switches to Christian Worship."
+                            } else {
+                                "• Siswa masuk daftar pembinaan & laporan Agama Kristen.\n• Otomatis dikecualikan dari absen Sholat & Mengaji (Puasa tetap ikut).\n• Portal Orang Tua otomatis menampilkan menu Agama Kristen."
+                            }
+                        } else {
+                            if (isEn) {
+                                "Warning: Removing the Christian status will return the student(s) to regular Sholat & Mengaji lists and disable the Christian menu on their Parent Portal."
+                            } else {
+                                "Peringatan: Melepas status Kristen akan mengembalikan siswa ke daftar absen Sholat & Mengaji serta menonaktifkan menu Agama Kristen di Portal Orang Tua."
+                            }
+                        },
+                        fontSize = 12.sp,
+                        lineHeight = 17.sp,
+                        color = if (markAsChristian) MaterialTheme.colorScheme.onSurfaceVariant else Color(0xFFB91C1C)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        pendingClaimAction = null
+                        onClaimStudents(targets, markAsChristian)
+                        selectedIds.clear()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (markAsChristian) Color(0xFF4338CA) else Color(0xFFDC2626)
+                    ),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_confirm_christian_action")
+                ) {
+                    Text(
+                        text = if (markAsChristian) {
+                            if (isEn) "Confirm Claim" else "Ya, Tetapkan Kristen"
+                        } else {
+                            if (isEn) "Yes, Remove" else "Ya, Lepas Klaim"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingClaimAction = null },
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_cancel_christian_action")
+                ) {
+                    Text(if (isEn) "Cancel" else "Batal")
+                }
+            }
+        )
     }
 }
 
@@ -540,6 +729,7 @@ fun InputChristianWorshipDialog(
     defaultActivityType: String = ChristianWorshipRecord.TYPE_DOA_PAGI,
     targetStudent: ChildStudent? = null,
     isSaving: Boolean = false,
+    canManageClaim: Boolean = false,
     onOpenClaimChristian: () -> Unit,
     onSaveSingle: (student: ChildStudent, activityType: String, activityDate: Long, title: String, notes: String, imageUri: Uri?) -> Unit,
     onSaveBatch: (students: List<ChildStudent>, activityType: String, activityDate: Long, title: String, notes: String) -> Unit,
@@ -714,26 +904,54 @@ fun InputChristianWorshipDialog(
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = if (isEn) {
-                                        "No students are marked Christian yet. Claim Christian students first."
+                                    text = if (canManageClaim) {
+                                        if (isEn) {
+                                            "No students are marked Christian yet. Claim Christian students first."
+                                        } else {
+                                            "Belum ada siswa diklaim beragama Kristen. Silakan klaim terlebih dahulu."
+                                        }
                                     } else {
-                                        "Belum ada siswa diklaim beragama Kristen. Silakan klaim terlebih dahulu."
+                                        if (isEn) {
+                                            "No students are marked Christian yet. Please contact the School Admin to assign Christian religion status in the Admin menu."
+                                        } else {
+                                            "Belum ada siswa yang ditetapkan beragama Kristen. Silakan hubungi Admin Sekolah untuk menetapkan data agama siswa di Halaman Admin."
+                                        }
                                     },
                                     fontSize = 12.sp,
                                     color = if (isDark) Color(0xFFE0E7FF) else Color(0xFF312E81)
                                 )
-                                Button(
-                                    onClick = onOpenClaimChristian,
-                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA)),
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
-                                        .testTag("btn_input_open_claim_christian")
-                                ) {
-                                    Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(if (isEn) "Claim Christian Students" else "Klaim Anak Kristen", fontWeight = FontWeight.Bold)
+                                if (canManageClaim) {
+                                    Button(
+                                        onClick = onOpenClaimChristian,
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4338CA)),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .testTag("btn_input_open_claim_christian")
+                                    ) {
+                                        Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(if (isEn) "Claim Christian Students" else "Klaim Anak Kristen", fontWeight = FontWeight.Bold)
+                                    }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = onOpenClaimChristian,
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = BorderStroke(1.dp, Color(0xFF4338CA)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(min = 48.dp)
+                                            .testTag("btn_input_open_claim_christian")
+                                    ) {
+                                        Icon(Icons.Default.Lock, contentDescription = null, tint = Color(0xFF4338CA), modifier = Modifier.size(16.dp))
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isEn) "View Student List (Admin Only)" else "Lihat Daftar Siswa (Khusus Admin)",
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF4338CA)
+                                        )
+                                    }
                                 }
                             }
                         }

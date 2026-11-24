@@ -57,10 +57,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.widget.Toast
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.MengajiHelper
+import com.example.data.model.StudentReligionHelper
 import com.example.ui.HealthViewModel
 import com.example.ui.dialogs.AddStudentDialog
+import com.example.ui.dialogs.InputChristianWorshipDialog
 import com.example.ui.dialogs.InputMengajiDialog
 import com.example.ui.dialogs.KartuMengajiSheet
 import com.example.ui.dialogs.StudentCardGeneratorSheet
@@ -84,6 +87,8 @@ fun StudentsScreen(
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val isPetugasKesehatan = currentUserRole == com.example.ui.UserRole.PETUGAS_KESEHATAN || medicalOnlyMode
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
+    val isSavingChristianWorship by viewModel.isSavingChristianWorship.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
@@ -93,6 +98,7 @@ fun StudentsScreen(
     var selectedStudentForDetail by remember { mutableStateOf<ChildStudent?>(null) }
     var studentToEdit by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForMengajiInput by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForChristianWorshipInput by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForKartuMengaji by remember { mutableStateOf<ChildStudent?>(null) }
 
     val filteredStudents = students.filter { student ->
@@ -368,6 +374,7 @@ fun StudentsScreen(
             schoolProfile = schoolProfile,
             waliName = waliName,
             mengajiRecords = if (medicalOnlyMode) emptyList() else studentMengaji,
+            christianWorshipRecords = if (medicalOnlyMode) emptyList() else christianWorshipRecords,
             fastingRecords = if (medicalOnlyMode) emptyList() else fastingRecords,
             sholatRecords = if (medicalOnlyMode) emptyList() else sholatRecords,
             haidRecords = if (medicalOnlyMode) emptyList() else haidRecords,
@@ -382,6 +389,10 @@ fun StudentsScreen(
                 selectedStudentForDetail = null
                 studentForMengajiInput = target
             },
+            onInputChristianWorship = if (medicalOnlyMode) null else { target ->
+                selectedStudentForDetail = null
+                studentForChristianWorshipInput = target
+            },
             onPrintKartuMengaji = if (medicalOnlyMode) null else { target ->
                 selectedStudentForDetail = null
                 studentForKartuMengaji = target
@@ -391,6 +402,7 @@ fun StudentsScreen(
                 studentToEdit = toEdit
             },
             onDeleteMengajiRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteChristianWorshipRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteChristianWorshipRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteFastingRecord(rec) },
             onDeleteSholatRecord = if (medicalOnlyMode) null else { rec -> viewModel.deleteSholatRecord(rec) },
@@ -449,6 +461,51 @@ fun StudentsScreen(
                 studentForMengajiInput = st
             },
             onDismiss = { studentForKartuMengaji = null }
+        )
+    }
+
+    studentForChristianWorshipInput?.let { target ->
+        val christianStudentsList = remember(students) {
+            students.filter { StudentReligionHelper.isChristian(it) }
+                .distinctBy { it.id }
+                .sortedBy { it.name.lowercase() }
+        }
+        val canManageClaim = currentUserRole == com.example.ui.UserRole.ADMIN ||
+            currentUserRole == com.example.ui.UserRole.SUPERADMIN
+        InputChristianWorshipDialog(
+            christianStudents = christianStudentsList,
+            initialTab = 0,
+            defaultActivityType = ChristianWorshipRecord.TYPE_DOA_PAGI,
+            targetStudent = target,
+            isSaving = isSavingChristianWorship,
+            canManageClaim = canManageClaim,
+            onOpenClaimChristian = {},
+            onSaveSingle = { st, activityType, activityDate, title, notes, imageUri ->
+                viewModel.saveChristianWorshipActivity(
+                    student = st,
+                    activityType = activityType,
+                    activityDate = activityDate,
+                    title = title,
+                    notes = notes,
+                    imageUri = imageUri
+                ) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) studentForChristianWorshipInput = null
+                }
+            },
+            onSaveBatch = { pickedStudents, activityType, activityDate, title, notes ->
+                viewModel.saveChristianWorshipBatch(
+                    students = pickedStudents,
+                    activityType = activityType,
+                    activityDate = activityDate,
+                    title = title,
+                    notes = notes
+                ) { savedCount, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (savedCount > 0) studentForChristianWorshipInput = null
+                }
+            },
+            onDismiss = { studentForChristianWorshipInput = null }
         )
     }
 

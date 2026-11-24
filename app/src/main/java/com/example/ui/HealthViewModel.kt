@@ -8971,6 +8971,18 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Int, String) -> Unit = { _, _ -> }
     ) {
         val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val isAdmin = _currentUserRole.value == UserRole.ADMIN || _currentUserRole.value == UserRole.SUPERADMIN
+        if (!isAdmin) {
+            onResult(
+                0,
+                if (isEn) {
+                    "Only School Admins can establish or remove Christian religion claims."
+                } else {
+                    "Hanya Admin Sekolah yang berhak menetapkan atau melepas klaim agama Kristen."
+                }
+            )
+            return
+        }
         if (selectedStudents.isEmpty()) {
             onResult(0, if (isEn) "Select at least 1 student first." else "Pilih minimal 1 anak asuh terlebih dahulu.")
             return

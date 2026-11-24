@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,6 +35,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.RestaurantMenu
@@ -65,13 +67,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
+import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
 
@@ -998,6 +1005,164 @@ fun AdminSecurityMaintenanceSheet(
                     }
                 }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminChristianClaimMenuCard(
+    christianStudents: List<ChildStudent>,
+    totalStudentsCount: Int,
+    isEn: Boolean,
+    onOpenClaimChristian: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val cardBg = if (isDark) Color(0xFF1E1B4B).copy(alpha = 0.72f) else Color(0xFFEEF2FF)
+    val borderColor = if (isDark) Color(0xFF4F46E5) else Color(0xFFA5B4FC)
+    val titleColor = if (isDark) Color(0xFFE0E7FF) else Color(0xFF312E81)
+    val subColor = if (isDark) Color(0xFFC7D2FE) else Color(0xFF4338CA)
+
+    ElevatedCard(
+        onClick = onOpenClaimChristian,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("card_admin_christian_claim"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = cardBg),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.5.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, borderColor, RoundedCornerShape(16.dp))
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .border(1.5.dp, Color(0xFF6366F1), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_menu_kristen),
+                        contentDescription = if (isEn) "Christian Students Claim" else "Klaim Agama Kristen",
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = Color(0xFF4338CA)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "ADMIN ONLY" else "KHUSUS ADMIN",
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = if (isDark) Color(0xFF312E81) else Color(0xFFE0E7FF)
+                        ) {
+                            Text(
+                                text = if (isEn) {
+                                    "${christianStudents.size}/$totalStudentsCount Students"
+                                } else {
+                                    "${christianStudents.size}/$totalStudentsCount Anak"
+                                },
+                                fontSize = 9.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = subColor,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = if (isEn) "Christian Student Religion Claims" else "Klaim Anak Agama Kristen",
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = titleColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = if (isEn) {
+                            "Locked from Wali Asuh. Auto-updates Parent Portal & excludes Sholat/Mengaji."
+                        } else {
+                            "Dikunci dari Wali Asuh. Otomatis ubah Portal Ortu & kecualikan Sholat/Mengaji."
+                        },
+                        fontSize = 10.5.sp,
+                        lineHeight = 14.sp,
+                        color = subColor
+                    )
+                }
+
+                Button(
+                    onClick = onOpenClaimChristian,
+                    shape = RoundedCornerShape(10.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF4338CA),
+                        contentColor = Color.White
+                    ),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_admin_open_claim_christian")
+                ) {
+                    Text(
+                        text = if (isEn) "Manage" else "Kelola",
+                        fontSize = 11.5.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            if (christianStudents.isNotEmpty()) {
+                val previewNames = christianStudents.take(3).joinToString(", ") { it.name } +
+                    if (christianStudents.size > 3) " +${christianStudents.size - 3}" else ""
+                Text(
+                    text = if (isEn) "Claimed: $previewNames" else "Terdaftar Kristen: $previewNames",
+                    fontSize = 10.5.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = titleColor.copy(alpha = 0.9f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }

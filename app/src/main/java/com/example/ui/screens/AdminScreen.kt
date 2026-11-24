@@ -146,11 +146,13 @@ import com.example.data.model.VisitSessionSwap
 import com.example.data.model.FastingJenjangHelper
 import com.example.data.model.FastingSession
 import com.example.data.model.MengajiHelper
+import com.example.data.model.StudentReligionHelper
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitLaunchStage
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
+import com.example.ui.components.AdminChristianClaimMenuCard
 import com.example.ui.components.AdminCsvBackupSheet
 import com.example.ui.components.AdminHeroSummaryCard
 import com.example.ui.components.AdminQuickMenuGridCard
@@ -158,6 +160,7 @@ import com.example.ui.components.AdminSecurityMaintenanceSheet
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.AddStudentDialog
 import com.example.ui.dialogs.ChangeAdminPasswordDialog
+import com.example.ui.dialogs.ClaimChristianStudentsSheet
 import com.example.ui.dialogs.CreateVisitSessionDialog
 import com.example.ui.dialogs.DaftarKodeSopSheet
 import com.example.ui.dialogs.DeleteAccountBottomSheet
@@ -167,6 +170,7 @@ import com.example.ui.dialogs.ImportJadwalMatriksDialog
 import com.example.ui.dialogs.ImportStudentsCsvDialog
 import com.example.ui.dialogs.ImportWaliCsvDialog
 import com.example.ui.dialogs.InfoPentingFeedSheet
+import com.example.ui.dialogs.InputChristianWorshipDialog
 import com.example.ui.dialogs.InputMengajiDialog
 import com.example.ui.dialogs.JadwalMatriksSheet
 import com.example.ui.dialogs.JadwalPersonalSheet
@@ -215,6 +219,8 @@ fun AdminScreen(
     val fastingSessions by viewModel.fastingSessions.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
     val mengajiRecords by viewModel.mengajiRecords.collectAsStateWithLifecycle()
+    val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
+    val isSavingChristianWorship by viewModel.isSavingChristianWorship.collectAsStateWithLifecycle()
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val visitSessions by viewModel.visitSessions.collectAsStateWithLifecycle()
@@ -255,6 +261,7 @@ fun AdminScreen(
     var readyAdminJadwalPdf by remember { mutableStateOf<File?>(null) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
     var showCsvBackupSheet by remember { mutableStateOf(false) }
+    var showAdminClaimChristianSheet by remember { mutableStateOf(false) }
     var showSecurityMaintenanceSheet by remember { mutableStateOf(false) }
     var showChangePasswordDialog by remember { mutableStateOf(false) }
     var showImportStudentsDialog by remember { mutableStateOf(false) }
@@ -284,6 +291,7 @@ fun AdminScreen(
     var studentToDelete by remember { mutableStateOf<ChildStudent?>(null) }
     var selectedDetailStudent by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForMengajiInput by remember { mutableStateOf<ChildStudent?>(null) }
+    var studentForChristianWorshipInput by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForKartuMengaji by remember { mutableStateOf<ChildStudent?>(null) }
     var studentToEdit by remember { mutableStateOf<ChildStudent?>(null) }
     var studentForManageTandem by remember { mutableStateOf<ChildStudent?>(null) }
@@ -310,6 +318,11 @@ fun AdminScreen(
     }
     val schoolStudents = students.filter {
         it.schoolId.equals(activeSchoolCode, ignoreCase = true)
+    }
+    val christianSchoolStudents = remember(schoolStudents) {
+        schoolStudents
+            .filter { StudentReligionHelper.isChristian(it) }
+            .sortedBy { it.name.lowercase() }
     }
     val schoolFastingSessions = remember(fastingSessions, activeSchoolCode) {
         fastingSessions
@@ -810,6 +823,16 @@ fun AdminScreen(
                         onOpenSchoolProfile = { showEditSchoolDialog = true },
                         onOpenCsvBackupSheet = { showCsvBackupSheet = true },
                         onOpenSecuritySheet = { showSecurityMaintenanceSheet = true }
+                    )
+                }
+
+                // 2b. Menu Khusus Admin: Klaim & Data Anak Agama Kristen (Terkunci dari Wali Asuh)
+                item(key = "admin_christian_claim_menu") {
+                    AdminChristianClaimMenuCard(
+                        christianStudents = christianSchoolStudents,
+                        totalStudentsCount = schoolStudents.size,
+                        isEn = isEn,
+                        onOpenClaimChristian = { showAdminClaimChristianSheet = true }
                     )
                 }
 
@@ -3183,12 +3206,17 @@ fun AdminScreen(
             schoolProfile = schoolProfile,
             waliName = schoolProfile.adminName.ifBlank { waliName },
             mengajiRecords = MengajiHelper.recordsForStudent(mengajiRecords, student),
+            christianWorshipRecords = christianWorshipRecords,
             fastingRecords = fastingRecords,
             sholatRecords = sholatRecords,
             haidRecords = haidRecords,
             onInputMengaji = { target ->
                 selectedDetailStudent = null
                 studentForMengajiInput = target
+            },
+            onInputChristianWorship = { target ->
+                selectedDetailStudent = null
+                studentForChristianWorshipInput = target
             },
             onPrintKartuMengaji = { target ->
                 selectedDetailStudent = null
@@ -3199,6 +3227,7 @@ fun AdminScreen(
                 studentToEdit = toEdit
             },
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteChristianWorshipRecord = { rec -> viewModel.deleteChristianWorshipRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
             onDeleteSholatRecord = { rec -> viewModel.deleteSholatRecord(rec) },
@@ -3257,6 +3286,52 @@ fun AdminScreen(
                 studentForMengajiInput = st
             },
             onDismiss = { studentForKartuMengaji = null }
+        )
+    }
+
+    studentForChristianWorshipInput?.let { target ->
+        val christianStudentsList = remember(schoolStudents) {
+            schoolStudents.filter { com.example.data.model.StudentReligionHelper.isChristian(it) }
+                .distinctBy { it.id }
+                .sortedBy { it.name.lowercase() }
+        }
+        InputChristianWorshipDialog(
+            christianStudents = christianStudentsList,
+            initialTab = 0,
+            defaultActivityType = com.example.data.model.ChristianWorshipRecord.TYPE_DOA_PAGI,
+            targetStudent = target,
+            isSaving = isSavingChristianWorship,
+            canManageClaim = true,
+            onOpenClaimChristian = {
+                studentForChristianWorshipInput = null
+                showAdminClaimChristianSheet = true
+            },
+            onSaveSingle = { st, activityType, activityDate, title, notes, imageUri ->
+                viewModel.saveChristianWorshipActivity(
+                    student = st,
+                    activityType = activityType,
+                    activityDate = activityDate,
+                    title = title,
+                    notes = notes,
+                    imageUri = imageUri
+                ) { ok, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (ok) studentForChristianWorshipInput = null
+                }
+            },
+            onSaveBatch = { pickedStudents, activityType, activityDate, title, notes ->
+                viewModel.saveChristianWorshipBatch(
+                    students = pickedStudents,
+                    activityType = activityType,
+                    activityDate = activityDate,
+                    title = title,
+                    notes = notes
+                ) { savedCount, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    if (savedCount > 0) studentForChristianWorshipInput = null
+                }
+            },
+            onDismiss = { studentForChristianWorshipInput = null }
         )
     }
 
@@ -3507,6 +3582,19 @@ fun AdminScreen(
             onExportWali = { triggerExportWaliCsv() },
             onOpenSchoolProfile = { showEditSchoolDialog = true },
             onDismiss = { showCsvBackupSheet = false }
+        )
+    }
+
+    if (showAdminClaimChristianSheet) {
+        ClaimChristianStudentsSheet(
+            students = schoolStudents,
+            canManageClaim = true,
+            onClaimStudents = { picked, markChristian ->
+                viewModel.claimStudentsChristianReligion(picked, markChristian) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
+            onDismiss = { showAdminClaimChristianSheet = false }
         )
     }
 
@@ -5060,15 +5148,31 @@ fun AdminStudentCardItem(
                 }
             }
 
-            // Optional note/allergy badges if available
+            // Optional note/allergy/religion badges if available
+            val isChristianStudent = StudentReligionHelper.isChristian(student)
             val hasAllergy = student.allergies.isNotBlank() && !student.allergies.contains("tidak", ignoreCase = true) && student.allergies != "-"
             val hasBlood = student.bloodType.isNotBlank() && student.bloodType != "-"
-            if (hasAllergy || hasBlood) {
+            if (isChristianStudent || hasAllergy || hasBlood) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (isChristianStudent) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFE0E7FF))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (isEn) "✝ Christian" else "✝ Agama Kristen",
+                                fontSize = 10.sp,
+                                color = Color(0xFF3730A3),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                     if (hasAllergy) {
                         Box(
                             modifier = Modifier

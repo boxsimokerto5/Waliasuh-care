@@ -6,6 +6,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
@@ -29,8 +31,12 @@ import com.example.ui.HealthViewModel
 import com.example.ui.LoginResult
 import com.example.ui.components.CategoryHubOverlay
 import com.example.ui.components.DashboardCategoryHub
+import com.example.ui.dialogs.ClaimChristianStudentsSheet
 import com.example.ui.dialogs.PilihanAksesOrangTuaSheet
 import com.example.ui.dialogs.SholatAttendanceSheet
+import com.example.ui.dialogs.StudentDetailDialog
+import com.example.ui.dialogs.StudentDetailTab
+import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.ParentPortalScreen
 import com.example.ui.screens.SuperAdminScreen
 import com.example.util.i18n.AppLanguage
@@ -105,6 +111,35 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         )
         db.parentAccessLinkDao().insert(linkChristian)
 
+        // Non-admin / belum login sebagai Admin wajib ditolak
+        var blockedCount = -1
+        var blockedMsg = ""
+        vm.claimStudentsChristianReligion(listOf(christianStudent), true) { count, msg ->
+            blockedCount = count
+            blockedMsg = msg
+        }
+        assertEquals(0, blockedCount)
+        assertTrue(blockedMsg.contains("Admin", ignoreCase = true))
+
+        // Login sebagai Admin Sekolah lalu klaim -> berhasil
+        val adminReg = SchoolRegistration(
+            id = 9815L,
+            schoolName = "SRT 1 Kediri",
+            city = "Kediri",
+            address = "Kediri",
+            picName = "Admin Test",
+            picEmail = "admin@test.id",
+            picPhone = "08123456789",
+            estimatedWaliCount = 2,
+            status = "APPROVED",
+            generatedSchoolCode = schoolId,
+            generatedAdminUsername = "admin_chris_9815",
+            generatedAdminPassword = "Admin#9815"
+        )
+        db.schoolRegistrationDao().insert(adminReg)
+        val adminLogin = vm.executeLogin("admin_chris_9815", "Admin#9815", rememberMe = false)
+        assertTrue(adminLogin is LoginResult.SuccessAdmin)
+
         var claimedCount = 0
         vm.claimStudentsChristianReligion(listOf(christianStudent), true) { count, _ ->
             claimedCount = count
@@ -116,6 +151,8 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
             loops++
         }
         assertEquals(1, claimedCount)
+        db.schoolRegistrationDao().delete(adminReg)
+        vm.logout()
 
         val updatedDbStudent = db.childStudentDao().getById(9801L)!!
         val updatedDbLink = db.parentAccessLinkDao().getByStudentId(9801L, schoolId)!!
@@ -601,5 +638,269 @@ class ChristianWorshipAndSuperAdminRobolectricTest {
         db.schoolRegistrationDao().delete(pendingReg)
         db.schoolRegistrationDao().delete(approvedReg)
         Unit
+    }
+
+    @Test
+    fun `ClaimChristianStudentsSheet locks editing for non-Admin Wali and requires double confirmation for Admin`() {
+        val studentA = ChildStudent(
+            id = 9861L,
+            name = "Kevin Immanuel",
+            nis = "986101",
+            gender = "L",
+            age = 15,
+            dormitory = "Asrama Putra",
+            classGrade = "IX-A",
+            schoolId = "SRT1-KDR",
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        val studentB = ChildStudent(
+            id = 9862L,
+            name = "Bima Pratama",
+            nis = "986201",
+            gender = "L",
+            age = 15,
+            dormitory = "Asrama Putra",
+            classGrade = "IX-A",
+            schoolId = "SRT1-KDR",
+            religion = ""
+        )
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        // 1. Mode Wali Asuh (canManageClaim = false): terkunci / hanya baca
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                ClaimChristianStudentsSheet(
+                    students = listOf(studentA, studentB),
+                    canManageClaim = false,
+                    onClaimStudents = { _, _ -> },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("badge_claim_christian_locked").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("status_christian_readonly_9861").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_toggle_christian_9861").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("chk_claim_christian_9861").assertDoesNotExist()
+
+        // 2. Mode Admin (canManageClaim = true): butuh konfirmasi ganda sebelum mengubah status
+        var committedTargets = emptyList<ChildStudent>()
+        var committedMark = false
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                ClaimChristianStudentsSheet(
+                    students = listOf(studentA, studentB),
+                    canManageClaim = true,
+                    onClaimStudents = { targets, mark ->
+                        committedTargets = targets
+                        committedMark = mark
+                    },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("badge_claim_christian_locked").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("btn_toggle_christian_9862").performClick()
+        composeTestRule.waitForIdle()
+
+        // Belum berubah sebelum konfirmasi ganda ditekan
+        assertTrue(committedTargets.isEmpty())
+        composeTestRule.onNodeWithTag("dialog_confirm_christian_claim").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_confirm_christian_action")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, committedTargets.size)
+        assertEquals(9862L, committedTargets.first().id)
+        assertTrue(committedMark)
+    }
+
+    @Test
+    fun `AdminScreen displays dedicated Christian claim menu card and opens ClaimChristianStudentsSheet`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        app.getSharedPreferences("waliasuh_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        val db = AppDatabase.getDatabase(app)
+        val vm = HealthViewModel(app)
+        val schoolId = vm.schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+
+        val student = ChildStudent(
+            id = 9871L,
+            name = "Rachel Natalia",
+            nis = "987101",
+            gender = "P",
+            age = 14,
+            dormitory = "Asrama Putri",
+            classGrade = "VIII-A",
+            schoolId = schoolId,
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        db.childStudentDao().insert(student)
+
+        var loops = 0
+        while (loops < 30 && vm.students.value.none { it.id == 9871L }) {
+            ShadowLooper.idleMainLooper()
+            delay(30)
+            loops++
+        }
+
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                AdminScreen(
+                    viewModel = vm,
+                    onLogout = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("list_admin_content")
+            .performScrollToNode(hasTestTag("card_admin_christian_claim"))
+        composeTestRule.onNodeWithTag("card_admin_christian_claim").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_admin_open_claim_christian")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("sheet_claim_christian_students").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_toggle_christian_9871").assertExists()
+
+        db.childStudentDao().delete(student)
+        Unit
+    }
+
+    @Test
+    fun `StudentDetailDialog hides Mengaji and Sholat for Christian student and shows Ibadah Kristen history`() {
+        val christianStudent = ChildStudent(
+            id = 9881L,
+            name = "Kevin Immanuel",
+            nis = "988101",
+            gender = "L",
+            age = 16,
+            dormitory = "Asrama Putra",
+            classGrade = "XI-1",
+            schoolId = "SRT1-KDR",
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        val worshipLog = ChristianWorshipRecord(
+            id = 98811L,
+            schoolId = "SRT1-KDR",
+            studentId = 9881L,
+            studentName = christianStudent.name,
+            studentNis = christianStudent.nis,
+            activityType = ChristianWorshipRecord.TYPE_KE_GEREJA,
+            activityDate = System.currentTimeMillis(),
+            dateKey = ChristianWorshipHelper.todayDateKey(),
+            title = "Ibadah Minggu GKJW",
+            notes = "Mengikuti kebaktian Minggu pagi dengan tertib",
+            waliName = "Bu Ana"
+        )
+        var inputClickedStudent: ChildStudent? = null
+        var deletedRecord: ChristianWorshipRecord? = null
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                StudentDetailDialog(
+                    student = christianStudent,
+                    studentRecords = emptyList(),
+                    christianWorshipRecords = listOf(worshipLog),
+                    onInputChristianWorship = { inputClickedStudent = it },
+                    onDeleteChristianWorshipRecord = { deletedRecord = it },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tag_student_detail_christian_badge").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_biodata").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_kristen").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_berobat").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_puasa").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_mengaji").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("tab_student_detail_sholat").assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag("tab_student_detail_kristen").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("student_christian_item_98811").assertExists()
+        composeTestRule.onNodeWithText("Ibadah Minggu GKJW").assertExists()
+        composeTestRule.onNodeWithTag("btn_student_detail_input_christian")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(9881L, inputClickedStudent?.id)
+
+        composeTestRule.onNodeWithTag("btn_delete_christian_98811")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("btn_confirm_delete_student_christian")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        assertEquals(98811L, deletedRecord?.id)
+    }
+
+    @Test
+    fun `StudentDetailDialog keeps Mengaji and Sholat for regular students and stays medical-only when restricted`() {
+        val regularStudent = ChildStudent(
+            id = 9882L,
+            name = "Abimanyu Satria",
+            nis = "988201",
+            gender = "L",
+            age = 16,
+            dormitory = "Asrama Putra",
+            classGrade = "X-4",
+            schoolId = "SRT1-KDR",
+            religion = ""
+        )
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                StudentDetailDialog(
+                    student = regularStudent,
+                    studentRecords = emptyList(),
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tag_student_detail_christian_badge").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("tab_student_detail_kristen").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("tab_student_detail_mengaji").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_sholat").assertExists()
+
+        val christianStudent = regularStudent.copy(
+            id = 9883L,
+            name = "Mita Roro",
+            gender = "P",
+            religion = StudentReligionHelper.RELIGION_KRISTEN
+        )
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                StudentDetailDialog(
+                    student = christianStudent,
+                    studentRecords = emptyList(),
+                    allowedTabs = listOf(StudentDetailTab.BIODATA, StudentDetailTab.BEROBAT),
+                    isPetugasKesehatan = true,
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tab_student_detail_biodata").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_berobat").assertExists()
+        composeTestRule.onNodeWithTag("tab_student_detail_kristen").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("tab_student_detail_mengaji").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("tab_student_detail_sholat").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("tab_student_detail_puasa").assertDoesNotExist()
     }
 }

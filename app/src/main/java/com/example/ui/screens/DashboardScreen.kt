@@ -1478,6 +1478,7 @@ fun DashboardScreen(
                     modalState.showAbsenSholatSheet = true
                 },
                 christianWorshipRecords = christianWorshipRecords,
+                canManageChristianClaim = isAdminUser,
                 onOpenClaimChristianStudents = {
                     TopOnAdManager.onUserActionClick(context)
                     modalState.showClaimChristianSheet = true
@@ -2228,6 +2229,7 @@ fun DashboardScreen(
         myFosterStudents = myFosterStudents,
         allRecords = allRecords,
         mengajiRecords = mengajiRecords,
+        christianWorshipRecords = christianWorshipRecords,
         fastingRecords = fastingRecords,
         sholatRecords = sholatRecords,
         activeHaidRecords = activeHaidRecords,
@@ -2290,6 +2292,7 @@ fun DashboardScreen(
         viewModel = viewModel,
         modalState = modalState,
         waliName = waliName,
+        isAdminUser = isAdminUser,
         schoolProfile = schoolProfile,
         students = students,
         christianWorshipRecords = christianWorshipRecords,
@@ -2364,6 +2367,7 @@ private fun DashboardVisitAndParentModalsHost(
     myFosterStudents: List<ChildStudent>,
     allRecords: List<MedicalRecord>,
     mengajiRecords: List<com.example.data.model.MengajiRecord>,
+    christianWorshipRecords: List<ChristianWorshipRecord>,
     fastingRecords: List<com.example.data.model.FastingRecord>,
     sholatRecords: List<com.example.data.model.SholatRecord>,
     activeHaidRecords: List<com.example.data.model.HaidRecord>,
@@ -2597,15 +2601,24 @@ private fun DashboardVisitAndParentModalsHost(
             schoolProfile = schoolProfile,
             waliName = waliName,
             mengajiRecords = mengajiRecords,
+            christianWorshipRecords = christianWorshipRecords,
             fastingRecords = fastingRecords,
             sholatRecords = sholatRecords,
             haidRecords = activeHaidRecords + suciRecords,
+            onInputChristianWorship = { target ->
+                modalState.visitStudentForDetail = null
+                modalState.christianInputTargetStudent = target
+                modalState.christianInputInitialTab = 0
+                modalState.christianInputDefaultType = ChristianWorshipRecord.TYPE_DOA_PAGI
+                modalState.showInputChristianWorshipDialog = true
+            },
             onInputSholat = { target ->
                 modalState.visitStudentForDetail = null
                 modalState.absenSholatInitialStudent = target
                 modalState.showAbsenSholatSheet = true
             },
             onDeleteMengajiRecord = { rec -> viewModel.deleteMengajiRecord(rec) },
+            onDeleteChristianWorshipRecord = { rec -> viewModel.deleteChristianWorshipRecord(rec) },
             onDeleteMedicalRecord = { rec -> viewModel.deleteRecord(rec) },
             onDeleteFastingRecord = { rec -> viewModel.deleteFastingRecord(rec) },
             onDeleteSholatRecord = { rec -> viewModel.deleteSholatRecord(rec) },
@@ -3208,6 +3221,7 @@ private fun DashboardChristianModalsHost(
     viewModel: HealthViewModel,
     modalState: DashboardModalState,
     waliName: String,
+    isAdminUser: Boolean,
     schoolProfile: com.example.data.model.SchoolProfile,
     students: List<ChildStudent>,
     christianWorshipRecords: List<ChristianWorshipRecord>,
@@ -3223,6 +3237,7 @@ private fun DashboardChristianModalsHost(
     if (modalState.showClaimChristianSheet) {
         ClaimChristianStudentsSheet(
             students = students,
+            canManageClaim = isAdminUser,
             onClaimStudents = { picked, markChristian ->
                 viewModel.claimStudentsChristianReligion(picked, markChristian) { _, msg ->
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
@@ -3239,6 +3254,7 @@ private fun DashboardChristianModalsHost(
             defaultActivityType = modalState.christianInputDefaultType,
             targetStudent = modalState.christianInputTargetStudent,
             isSaving = isSavingChristianWorship,
+            canManageClaim = isAdminUser,
             onOpenClaimChristian = {
                 modalState.showInputChristianWorshipDialog = false
                 modalState.showClaimChristianSheet = true

@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,6 +28,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,6 +46,7 @@ import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Badge
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -55,6 +59,7 @@ import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
@@ -93,7 +98,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.rememberAsyncImagePainter
 import com.example.data.model.ChildStudent
+import com.example.data.model.ChristianWorshipHelper
+import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.FastingRecord
 import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
@@ -105,6 +113,7 @@ import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
 import com.example.data.model.SholatStatus
 import com.example.data.model.SholatWaktu
+import com.example.data.model.StudentReligionHelper
 import com.example.ui.components.ControlBadge
 import com.example.ui.components.FaskesBadge
 import com.example.ui.components.StudentAvatar
@@ -119,6 +128,7 @@ import java.util.Calendar
 enum class StudentDetailTab {
     BIODATA,
     MENGAJI,
+    IBADAH_KRISTEN,
     SHOLAT,
     BEROBAT,
     PUASA
@@ -132,6 +142,7 @@ fun StudentDetailDialog(
     schoolProfile: SchoolProfile = SchoolProfile(),
     waliName: String = "Wali Asuh",
     mengajiRecords: List<MengajiRecord> = emptyList(),
+    christianWorshipRecords: List<ChristianWorshipRecord> = emptyList(),
     fastingRecords: List<FastingRecord> = emptyList(),
     sholatRecords: List<SholatRecord> = emptyList(),
     haidRecords: List<HaidRecord> = emptyList(),
@@ -140,10 +151,12 @@ fun StudentDetailDialog(
     allowCardQr: Boolean = true,
     isPetugasKesehatan: Boolean = false,
     onInputMengaji: ((ChildStudent) -> Unit)? = null,
+    onInputChristianWorship: ((ChildStudent) -> Unit)? = null,
     onInputSholat: ((ChildStudent) -> Unit)? = null,
     onPrintKartuMengaji: ((ChildStudent) -> Unit)? = null,
     onEditStudent: ((ChildStudent) -> Unit)? = null,
     onDeleteMengajiRecord: ((MengajiRecord) -> Unit)? = null,
+    onDeleteChristianWorshipRecord: ((ChristianWorshipRecord) -> Unit)? = null,
     onDeleteMedicalRecord: ((MedicalRecord) -> Unit)? = null,
     onDeleteFastingRecord: ((FastingRecord) -> Unit)? = null,
     onDeleteSholatRecord: ((SholatRecord) -> Unit)? = null,
@@ -155,14 +168,29 @@ fun StudentDetailDialog(
     val context = LocalContext.current
     val s = LocalAppStrings.current
     val isEn = s.isEnglish
-    val effectiveAllowedTabs = remember(allowedTabs) {
-        allowedTabs.ifEmpty { listOf(StudentDetailTab.BIODATA) }
+    val isChristianStudent = remember(student) { StudentReligionHelper.isChristian(student) }
+    val effectiveAllowedTabs = remember(allowedTabs, isChristianStudent) {
+        val filtered = if (isChristianStudent) {
+            allowedTabs.filter { tab ->
+                tab != StudentDetailTab.MENGAJI && tab != StudentDetailTab.SHOLAT
+            }
+        } else {
+            allowedTabs.filter { tab ->
+                tab != StudentDetailTab.IBADAH_KRISTEN
+            }
+        }
+        filtered.ifEmpty { listOf(StudentDetailTab.BIODATA) }
     }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var selectedTab by rememberSaveable(student.id) {
         mutableStateOf(
             if (initialTab in effectiveAllowedTabs) initialTab else effectiveAllowedTabs.first()
         )
+    }
+    LaunchedEffect(effectiveAllowedTabs) {
+        if (selectedTab !in effectiveAllowedTabs) {
+            selectedTab = effectiveAllowedTabs.first()
+        }
     }
     val contentScrollState = rememberScrollState()
     LaunchedEffect(selectedTab) {
@@ -174,12 +202,17 @@ fun StudentDetailDialog(
     var showAllMengajiHistory by remember { mutableStateOf(false) }
     var showPhotoManager by remember { mutableStateOf(false) }
     var showPhotoPreview by remember { mutableStateOf(false) }
+    var previewChristianWorship by remember { mutableStateOf<ChristianWorshipRecord?>(null) }
     var pendingDeleteMengaji by remember { mutableStateOf<MengajiRecord?>(null) }
+    var pendingDeleteChristianWorship by remember { mutableStateOf<ChristianWorshipRecord?>(null) }
     var pendingDeleteMedical by remember { mutableStateOf<MedicalRecord?>(null) }
     var pendingDeleteFasting by remember { mutableStateOf<FastingRecord?>(null) }
     var pendingDeleteSholat by remember { mutableStateOf<SholatRecord?>(null) }
     val orderedMengajiRecords = remember(mengajiRecords, student) {
         MengajiHelper.recordsForStudent(mengajiRecords, student)
+    }
+    val orderedChristianRecords = remember(christianWorshipRecords, student) {
+        ChristianWorshipHelper.recordsForStudent(christianWorshipRecords, student)
     }
     val orderedSholatRecords = remember(sholatRecords, student) {
         SholatHelper.recordsForStudent(sholatRecords, student)
@@ -230,6 +263,7 @@ fun StudentDetailDialog(
     val cleanNoKk = remember(student.noKk) { StudentCsvParser.cleanDigitsOnly(student.noKk) }
 
     val emeraldPrimary = Color(0xFF047857)
+    val christianIndigo = Color(0xFF4338CA)
     val sholatTeal = Color(0xFF0F766E)
     val medicalSky = Color(0xFF0369A1)
     val fastingAmber = Color(0xFFB45309)
@@ -351,6 +385,15 @@ fun StudentDetailDialog(
                                         bgColor = MaterialTheme.colorScheme.secondaryContainer,
                                         textColor = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
+                                }
+                                if (isChristianStudent) {
+                                    Box(modifier = Modifier.testTag("tag_student_detail_christian_badge")) {
+                                        StudentChipBadge(
+                                            text = if (isEn) "✝ Christian" else "✝ Agama Kristen",
+                                            bgColor = Color(0xFFE0E7FF),
+                                            textColor = Color(0xFF3730A3)
+                                        )
+                                    }
                                 }
                             }
                             Spacer(modifier = Modifier.height(3.dp))
@@ -480,6 +523,17 @@ fun StudentDetailDialog(
                             countBadge = null,
                             modifier = Modifier.testTag("tab_student_detail_biodata"),
                             onClick = { selectedTab = StudentDetailTab.BIODATA }
+                        )
+                    }
+                    if (StudentDetailTab.IBADAH_KRISTEN in effectiveAllowedTabs) {
+                        SlimCategoryTabPill(
+                            label = if (isEn) "Christian" else "Ibadah Kristen",
+                            icon = Icons.Default.Church,
+                            selected = selectedTab == StudentDetailTab.IBADAH_KRISTEN,
+                            accentColor = christianIndigo,
+                            countBadge = orderedChristianRecords.size,
+                            modifier = Modifier.testTag("tab_student_detail_kristen"),
+                            onClick = { selectedTab = StudentDetailTab.IBADAH_KRISTEN }
                         )
                     }
                     if (StudentDetailTab.MENGAJI in effectiveAllowedTabs) {
@@ -735,6 +789,12 @@ fun StudentDetailDialog(
                                                     if (isMale) "Laki-laki (Putra)" else "Perempuan (Putri)"
                                                 }
                                             )
+                                            if (isChristianStudent) {
+                                                ProfileDetailRow(
+                                                    label = if (isEn) "Religion" else "Agama",
+                                                    value = if (isEn) "Christian" else "Kristen"
+                                                )
+                                            }
                                             val ttlFormatted = listOf(student.birthPlace, student.birthDate)
                                                 .filter { it.isNotBlank() }
                                                 .joinToString(", ")
@@ -1051,6 +1111,270 @@ fun StudentDetailDialog(
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = emeraldPrimary
                                             )
+                                        }
+                                    }
+                                }
+                            }
+
+                            StudentDetailTab.IBADAH_KRISTEN -> {
+                                val morningCount = orderedChristianRecords.count {
+                                    ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_PAGI
+                                }
+                                val eveningCount = orderedChristianRecords.count {
+                                    ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_DOA_MALAM
+                                }
+                                val churchCount = orderedChristianRecords.count {
+                                    ChristianWorshipHelper.normalizeType(it.activityType) == ChristianWorshipRecord.TYPE_KE_GEREJA
+                                }
+                                val nurtureCount = orderedChristianRecords.count {
+                                    ChristianWorshipHelper.isExtraType(it.activityType)
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Church,
+                                            contentDescription = null,
+                                            tint = christianIndigo,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = if (isEn) {
+                                                "Christian Worship (${orderedChristianRecords.size})"
+                                            } else {
+                                                "Riwayat Ibadah Kristen (${orderedChristianRecords.size})"
+                                            },
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (onInputChristianWorship != null) {
+                                        FilledTonalButton(
+                                            onClick = { onInputChristianWorship(student) },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = ButtonDefaults.filledTonalButtonColors(
+                                                containerColor = Color(0xFFE0E7FF),
+                                                contentColor = christianIndigo
+                                            ),
+                                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_student_detail_input_christian")
+                                        ) {
+                                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (isEn) "Add Worship" else "Input Ibadah",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+                                }
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    FastingStatMiniPill(
+                                        label = if (isEn) "Morning" else "Ibadah Pagi",
+                                        count = morningCount,
+                                        bgColor = Color(0xFFFEF3C7),
+                                        textColor = Color(0xFFB45309),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FastingStatMiniPill(
+                                        label = if (isEn) "Evening" else "Ibadah Malam",
+                                        count = eveningCount,
+                                        bgColor = Color(0xFFE0E7FF),
+                                        textColor = Color(0xFF3730A3),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FastingStatMiniPill(
+                                        label = if (isEn) "Church" else "Gereja",
+                                        count = churchCount,
+                                        bgColor = Color(0xFFCCFBF1),
+                                        textColor = Color(0xFF0F766E),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    FastingStatMiniPill(
+                                        label = if (isEn) "Nurture" else "Pembinaan",
+                                        count = nurtureCount,
+                                        bgColor = Color(0xFFF3E8FF),
+                                        textColor = Color(0xFF7E22CE),
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+
+                                if (orderedChristianRecords.isEmpty()) {
+                                    EmptyTabStateCard(
+                                        icon = Icons.Default.Church,
+                                        accentColor = christianIndigo,
+                                        title = if (isEn) "No Christian Worship Records Yet" else "Belum Ada Catatan Ibadah Kristen",
+                                        subtitle = if (isEn) {
+                                            "Record morning/evening worship, church service, memory verses, or prayer notes for this student."
+                                        } else {
+                                            "Catat ibadah pagi/malam, ke gereja, ayat hafalan, atau pokok doa siswa melalui menu Agama Kristen."
+                                        },
+                                        modifier = Modifier.testTag("empty_student_christian_state")
+                                    )
+                                } else {
+                                    orderedChristianRecords.forEach { rec ->
+                                        val vis = christianActivityVisual(rec.activityType)
+                                        val hasPhoto = ChristianWorshipHelper.hasAnyPhoto(rec)
+                                        val remDays = ChristianWorshipHelper.remainingDays(rec)
+                                        Card(
+                                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                                            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .border(
+                                                    1.dp,
+                                                    vis.borderLight.copy(alpha = 0.65f),
+                                                    RoundedCornerShape(10.dp)
+                                                )
+                                                .testTag("student_christian_item_${rec.id}")
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Surface(
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        color = vis.bgLight
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = vis.icon,
+                                                                contentDescription = null,
+                                                                tint = vis.accent,
+                                                                modifier = Modifier.size(12.dp)
+                                                            )
+                                                            Text(
+                                                                text = ChristianWorshipHelper.activityLabel(rec.activityType, isEn),
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = vis.accent
+                                                            )
+                                                        }
+                                                    }
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = DateUtils.formatShortDate(rec.activityDate, s.language),
+                                                            fontSize = 10.5.sp,
+                                                            fontWeight = FontWeight.Medium,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                        if (onDeleteChristianWorshipRecord != null) {
+                                                            IconButton(
+                                                                onClick = { pendingDeleteChristianWorship = rec },
+                                                                modifier = Modifier
+                                                                    .size(48.dp)
+                                                                    .testTag("btn_delete_christian_${rec.id}")
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.DeleteOutline,
+                                                                    contentDescription = if (isEn) "Delete worship log" else "Hapus catatan ibadah Kristen",
+                                                                    tint = MaterialTheme.colorScheme.error,
+                                                                    modifier = Modifier.size(19.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                if (rec.title.isNotBlank()) {
+                                                    Text(
+                                                        text = rec.title,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onSurface
+                                                    )
+                                                }
+                                                if (rec.notes.isNotBlank()) {
+                                                    Text(
+                                                        text = rec.notes,
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+                                                if (rec.waliName.isNotBlank()) {
+                                                    Text(
+                                                        text = if (isEn) "Caregiver: ${rec.waliName}" else "Pembina: ${rec.waliName}",
+                                                        fontSize = 10.sp,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
+
+                                                if (hasPhoto && !ChristianWorshipHelper.isProofExpired(rec)) {
+                                                    val imgModel = rec.photoUrl.ifBlank {
+                                                        rec.photoFallbackUrl.ifBlank { rec.localPhotoPath }
+                                                    }
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .height(110.dp)
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .clickable { previewChristianWorship = rec }
+                                                            .testTag("btn_student_christian_photo_${rec.id}")
+                                                    ) {
+                                                        Image(
+                                                            painter = rememberAsyncImagePainter(imgModel),
+                                                            contentDescription = rec.title.ifBlank { student.name },
+                                                            contentScale = ContentScale.Crop,
+                                                            modifier = Modifier.matchParentSize()
+                                                        )
+                                                        Surface(
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            color = Color.Black.copy(alpha = 0.6f),
+                                                            modifier = Modifier
+                                                                .align(Alignment.BottomEnd)
+                                                                .padding(6.dp)
+                                                        ) {
+                                                            Row(
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                            ) {
+                                                                Icon(
+                                                                    imageVector = Icons.Default.ZoomIn,
+                                                                    contentDescription = null,
+                                                                    tint = Color.White,
+                                                                    modifier = Modifier.size(13.dp)
+                                                                )
+                                                                Text(
+                                                                    text = if (remDays > 0) "${remDays}h" else if (isEn) "Photo" else "Foto",
+                                                                    fontSize = 10.sp,
+                                                                    fontWeight = FontWeight.Bold,
+                                                                    color = Color.White
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -1931,6 +2255,106 @@ fun StudentDetailDialog(
                 }
             }
         )
+    }
+
+    pendingDeleteChristianWorship?.let { target ->
+        val actLabel = ChristianWorshipHelper.activityLabel(target.activityType, isEn)
+        AlertDialog(
+            onDismissRequest = { pendingDeleteChristianWorship = null },
+            title = {
+                Text(
+                    text = if (isEn) "Delete Christian Worship Log?" else "Hapus Catatan Ibadah Kristen?",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = if (isEn) {
+                        "Are you sure you want to delete \"$actLabel\" (${target.title.ifBlank { target.dateKey }}) for ${student.name}?"
+                    } else {
+                        "Yakin ingin menghapus catatan \"$actLabel\" (${target.title.ifBlank { target.dateKey }}) milik ${student.name}?"
+                    },
+                    fontSize = 13.sp
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteChristianWorshipRecord?.invoke(target)
+                        pendingDeleteChristianWorship = null
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Christian worship log deleted" else "Catatan ibadah Kristen dihapus",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier
+                        .heightIn(min = 48.dp)
+                        .testTag("btn_confirm_delete_student_christian")
+                ) {
+                    Text(if (isEn) "Delete" else "Hapus")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { pendingDeleteChristianWorship = null },
+                    modifier = Modifier.heightIn(min = 48.dp)
+                ) {
+                    Text(if (isEn) "Cancel" else "Batal")
+                }
+            }
+        )
+    }
+
+    previewChristianWorship?.let { rec ->
+        val imgModel = rec.photoUrl.ifBlank { rec.photoFallbackUrl.ifBlank { rec.localPhotoPath } }
+        ModalBottomSheet(
+            onDismissRequest = { previewChristianWorship = null },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            dragHandle = null,
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(16.dp)
+                    .testTag("sheet_student_christian_photo_preview"),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(student.name, fontSize = 15.5.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "${ChristianWorshipHelper.activityLabel(rec.activityType, isEn)} • ${rec.title}",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(
+                        onClick = { previewChristianWorship = null },
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = s.nav.close)
+                    }
+                }
+                Image(
+                    painter = rememberAsyncImagePainter(imgModel),
+                    contentDescription = rec.title.ifBlank { student.name },
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(280.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                )
+            }
+        }
     }
 
     if (showPhotoManager && onUploadStudentPhoto != null) {
