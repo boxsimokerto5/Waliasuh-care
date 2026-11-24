@@ -20,18 +20,23 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CleaningServices
@@ -87,6 +92,7 @@ import coil.request.ImageRequest
 import com.example.data.model.ChildStudent
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryPost
+import com.example.ui.components.rememberEdgeToEdgeDialogSafeInsets
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 
@@ -99,6 +105,7 @@ fun WaliGallerySheet(
     currentWaliName: String,
     isAdminOrSuper: Boolean,
     isPublishing: Boolean,
+    uploadProgress: Pair<Int, Int>? = null,
     onPublishPost: (
         imageUri: Uri,
         caption: String,
@@ -107,7 +114,16 @@ fun WaliGallerySheet(
         selectedStudentIds: Set<Long>,
         retentionDays: Int,
         onDone: (Boolean, String) -> Unit
-    ) -> Unit,
+    ) -> Unit = { _, _, _, _, _, _, _ -> },
+    onPublishPosts: ((
+        imageUris: List<Uri>,
+        caption: String,
+        activityTag: String,
+        targetScope: String,
+        selectedStudentIds: Set<Long>,
+        retentionDays: Int,
+        onDone: (Boolean, String) -> Unit
+    ) -> Unit)? = null,
     onPurgeServerMedia: (WaliGalleryPost, (Boolean, String) -> Unit) -> Unit,
     onDeletePost: (WaliGalleryPost, (Boolean, String) -> Unit) -> Unit,
     onDismiss: () -> Unit
@@ -253,14 +269,19 @@ fun WaliGallerySheet(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isEn) "Compressing & Uploading..." else "Mengompresi & Mengunggah...",
+                            text = if (uploadProgress != null && uploadProgress.second > 1) {
+                                if (isEn) "Uploading ${uploadProgress.first}/${uploadProgress.second} photos..."
+                                else "Mengunggah ${uploadProgress.first}/${uploadProgress.second} foto..."
+                            } else {
+                                if (isEn) "Compressing & Uploading..." else "Mengompresi & Mengunggah..."
+                            },
                             fontWeight = FontWeight.Bold
                         )
                     } else {
                         Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = if (isEn) "Post Activity Photo to Parents" else "Posting Foto Kegiatan ke Orang Tua",
+                            text = if (isEn) "Post Activity Photos (Max 6)" else "Posting Foto Kegiatan (Maks. 6)",
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -570,10 +591,18 @@ fun WaliGallerySheet(
         CreateWaliGalleryPostDialog(
             myStudents = myStudents,
             isPublishing = isPublishing,
-            onPublish = { uri, caption, tag, scope, selectedIds, days ->
-                onPublishPost(uri, caption, tag, scope, selectedIds, days) { ok, msg ->
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                    if (ok) showCreateDialog = false
+            uploadProgress = uploadProgress,
+            onPublishPhotos = { uris, caption, tag, scope, selectedIds, days ->
+                if (onPublishPosts != null) {
+                    onPublishPosts(uris, caption, tag, scope, selectedIds, days) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) showCreateDialog = false
+                    }
+                } else if (uris.isNotEmpty()) {
+                    onPublishPost(uris.first(), caption, tag, scope, selectedIds, days) { ok, msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        if (ok) showCreateDialog = false
+                    }
                 }
             },
             onDismiss = { if (!isPublishing) showCreateDialog = false }
@@ -629,8 +658,10 @@ fun WaliGallerySheet(
 fun CreateWaliGalleryPostDialog(
     myStudents: List<ChildStudent>,
     isPublishing: Boolean,
-    onPublish: (
-        imageUri: Uri,
+    uploadProgress: Pair<Int, Int>? = null,
+    initialSelectedUris: List<Uri> = emptyList(),
+    onPublishPhotos: (
+        imageUris: List<Uri>,
         caption: String,
         activityTag: String,
         targetScope: String,
@@ -641,8 +672,12 @@ fun CreateWaliGalleryPostDialog(
 ) {
     val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
+    val maxPhotos = WaliGalleryHelper.MAX_BATCH_PHOTOS
 
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedUris by remember(initialSelectedUris) {
+        mutableStateOf(initialSelectedUris.distinct().take(maxPhotos))
+    }
+    var appendOnPickerResult by remember { mutableStateOf(false) }
     var caption by remember { mutableStateOf("") }
     var selectedTag by remember { mutableStateOf(WaliGalleryHelper.TAG_KEGIATAN) }
     var targetScope by remember { mutableStateOf(WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS) }
@@ -650,117 +685,300 @@ fun CreateWaliGalleryPostDialog(
     var retentionDays by remember { mutableIntStateOf(WaliGalleryHelper.DEFAULT_RETENTION_DAYS) }
 
     val photoPicker = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia(),
-        onResult = { uri -> if (uri != null) selectedUri = uri }
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = maxPhotos),
+        onResult = { uris ->
+            if (uris.isEmpty()) return@rememberLauncherForActivityResult
+            if (appendOnPickerResult && selectedUris.isNotEmpty()) {
+                val merged = (selectedUris + uris).distinct()
+                if (merged.size > maxPhotos) {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Maximum $maxPhotos photos per post. Kept the first $maxPhotos."
+                        else "Maksimal $maxPhotos foto sekali posting. Disimpan $maxPhotos foto pertama.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                selectedUris = merged.take(maxPhotos)
+            } else {
+                val distinctUris = uris.distinct()
+                if (distinctUris.size > maxPhotos) {
+                    Toast.makeText(
+                        context,
+                        if (isEn) "Maximum $maxPhotos photos per post." else "Maksimal $maxPhotos foto sekali posting.",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                selectedUris = distinctUris.take(maxPhotos)
+            }
+        }
     )
+
+    val launchPicker: (Boolean) -> Unit = { append ->
+        appendOnPickerResult = append
+        photoPicker.launch(
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .widthIn(max = 560.dp)
+                .fillMaxSize()
+                .windowInsetsPadding(rememberEdgeToEdgeDialogSafeInsets())
+                .imePadding()
                 .padding(16.dp),
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = 4.dp
+            contentAlignment = Alignment.Center
         ) {
-            Column(
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
-                    .testTag("dialog_create_wali_gallery"),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                    .widthIn(max = 560.dp),
+                shape = RoundedCornerShape(22.dp),
+                color = MaterialTheme.colorScheme.surface,
+                tonalElevation = 4.dp
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (isEn) "Post to Parent Gallery" else "Posting Galeri Wali Asuh",
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss, enabled = !isPublishing) {
-                        Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
-                    }
-                }
-
-                // Zero-permission Photo Picker preview/button
-                Surface(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable(enabled = !isPublishing) {
-                            photoPicker.launch(
-                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                            )
-                        }
-                        .testTag("btn_pick_gallery_photo"),
-                    shape = RoundedCornerShape(14.dp),
-                    color = Color(0xFFF0FDFA),
-                    border = BorderStroke(1.2.dp, Color(0xFF5EEAD4))
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                        .testTag("dialog_create_wali_gallery"),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    if (selectedUri != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(16f / 10f)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isEn) "Post to Parent Gallery" else "Posting Galeri Wali Asuh",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = onDismiss,
+                            enabled = !isPublishing,
+                            modifier = Modifier.size(48.dp)
                         ) {
-                            AsyncImage(
-                                model = selectedUri,
-                                contentDescription = "Preview Foto",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = Color.Black.copy(alpha = 0.6f),
+                            Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
+                        }
+                    }
+
+                    // Zero-permission Multi-Photo Picker (Max 6)
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(14.dp))
+                            .then(
+                                if (selectedUris.isEmpty()) {
+                                    Modifier
+                                        .clickable(enabled = !isPublishing) { launchPicker(false) }
+                                        .testTag("btn_pick_gallery_photo")
+                                } else {
+                                    Modifier
+                                }
+                            ),
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color(0xFFF0FDFA),
+                        border = BorderStroke(1.2.dp, Color(0xFF5EEAD4))
+                    ) {
+                        if (selectedUris.isNotEmpty()) {
+                            Column(
                                 modifier = Modifier
-                                    .align(Alignment.BottomEnd)
-                                    .padding(8.dp)
+                                    .fillMaxWidth()
+                                    .padding(10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = Color(0xFF0F766E)
+                                    ) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "${selectedUris.size}/$maxPhotos Selected"
+                                            } else {
+                                                "${selectedUris.size}/$maxPhotos Foto Dipilih"
+                                            },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White,
+                                            modifier = Modifier
+                                                .padding(horizontal = 9.dp, vertical = 4.dp)
+                                                .testTag("text_selected_gallery_photo_count")
+                                        )
+                                    }
+
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (selectedUris.size < maxPhotos) {
+                                            OutlinedButton(
+                                                onClick = { launchPicker(true) },
+                                                enabled = !isPublishing,
+                                                shape = RoundedCornerShape(10.dp),
+                                                border = BorderStroke(1.dp, Color(0xFF0F766E)),
+                                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                                modifier = Modifier
+                                                    .heightIn(min = 48.dp)
+                                                    .testTag("btn_add_more_gallery_photos")
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF0F766E),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = if (isEn) "Add" else "Tambah",
+                                                    fontSize = 11.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF0F766E)
+                                                )
+                                            }
+                                        }
+                                        OutlinedButton(
+                                            onClick = { launchPicker(false) },
+                                            enabled = !isPublishing,
+                                            shape = RoundedCornerShape(10.dp),
+                                            border = BorderStroke(1.dp, Color(0xFF0F766E).copy(alpha = 0.5f)),
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                                            modifier = Modifier
+                                                .heightIn(min = 48.dp)
+                                                .testTag("btn_pick_gallery_photo")
+                                        ) {
+                                            Text(
+                                                text = if (isEn) "Replace" else "Pilih Ulang",
+                                                fontSize = 11.5.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = Color(0xFF0F766E)
+                                            )
+                                        }
+                                    }
+                                }
+
+                                LazyRow(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("list_selected_gallery_photos"),
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = selectedUris,
+                                        key = { idx, uri -> "${idx}_${uri}" }
+                                    ) { index, uri ->
+                                        Box(
+                                            modifier = Modifier
+                                                .size(104.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(Color(0xFFE2E8F0))
+                                        ) {
+                                            AsyncImage(
+                                                model = uri,
+                                                contentDescription = if (isEn) {
+                                                    "Selected photo ${index + 1}"
+                                                } else {
+                                                    "Preview foto ${index + 1}"
+                                                },
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                            Surface(
+                                                shape = RoundedCornerShape(6.dp),
+                                                color = Color.Black.copy(alpha = 0.65f),
+                                                modifier = Modifier
+                                                    .align(Alignment.TopStart)
+                                                    .padding(6.dp)
+                                            ) {
+                                                Text(
+                                                    text = "${index + 1}",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color.White,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                )
+                                            }
+                                            if (!isPublishing) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                        .size(48.dp)
+                                                        .clickable {
+                                                            selectedUris = selectedUris.filterIndexed { i, _ -> i != index }
+                                                        }
+                                                        .testTag("btn_remove_gallery_photo_$index"),
+                                                    contentAlignment = Alignment.TopEnd
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .padding(5.dp)
+                                                            .size(24.dp)
+                                                            .clip(CircleShape)
+                                                            .background(Color.Black.copy(alpha = 0.72f)),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Close,
+                                                            contentDescription = if (isEn) {
+                                                                "Remove photo ${index + 1}"
+                                                            } else {
+                                                                "Hapus foto ${index + 1}"
+                                                            },
+                                                            tint = Color.White,
+                                                            modifier = Modifier.size(14.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 24.dp, horizontal = 16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.AddPhotoAlternate,
+                                    contentDescription = null,
+                                    tint = Color(0xFF0F766E),
+                                    modifier = Modifier.size(34.dp)
+                                )
                                 Text(
-                                    text = if (isEn) "Change Photo" else "Ganti Foto",
-                                    fontSize = 11.sp,
-                                    color = Color.White,
+                                    text = if (isEn) {
+                                        "Tap to Select Photos (Max $maxPhotos)"
+                                    } else {
+                                        "Ketuk untuk Pilih Foto (Maks. $maxPhotos)"
+                                    },
+                                    fontSize = 13.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    color = Color(0xFF0F766E)
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "Pick 1–$maxPhotos photos at once • Auto-compressed before upload"
+                                    } else {
+                                        "Bisa pilih 1–$maxPhotos foto sekaligus • Otomatis dikompres agar hemat kuota & R2"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 26.dp, horizontal = 16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AddPhotoAlternate,
-                                contentDescription = null,
-                                tint = Color(0xFF0F766E),
-                                modifier = Modifier.size(34.dp)
-                            )
-                            Text(
-                                text = if (isEn) "Tap to Select Photo" else "Ketuk untuk Pilih Foto",
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF0F766E)
-                            )
-                            Text(
-                                text = if (isEn) "Automatically compressed before upload" else "Otomatis dikompres agar hemat kuota & R2",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
                     }
-                }
 
                 OutlinedTextField(
                     value = caption,
@@ -923,15 +1141,21 @@ fun CreateWaliGalleryPostDialog(
 
                 Button(
                     onClick = {
-                        val uri = selectedUri
-                        if (uri == null) {
+                        if (selectedUris.isEmpty()) {
                             Toast.makeText(
                                 context,
-                                if (isEn) "Please select a photo first." else "Pilih foto terlebih dahulu.",
+                                if (isEn) "Please select at least 1 photo first." else "Pilih minimal 1 foto terlebih dahulu.",
                                 Toast.LENGTH_SHORT
                             ).show()
                         } else {
-                            onPublish(uri, caption, selectedTag, targetScope, selectedStudentIds, retentionDays)
+                            onPublishPhotos(
+                                selectedUris,
+                                caption,
+                                selectedTag,
+                                targetScope,
+                                selectedStudentIds,
+                                retentionDays
+                            )
                         }
                     },
                     enabled = !isPublishing,
@@ -945,14 +1169,28 @@ fun CreateWaliGalleryPostDialog(
                     if (isPublishing) {
                         CircularProgressIndicator(modifier = Modifier.size(18.dp), color = Color.White, strokeWidth = 2.dp)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(if (isEn) "Uploading..." else "Mengunggah...")
+                        Text(
+                            text = if (uploadProgress != null && uploadProgress.second > 1) {
+                                if (isEn) "Uploading ${uploadProgress.first}/${uploadProgress.second}..."
+                                else "Mengunggah ${uploadProgress.first}/${uploadProgress.second} foto..."
+                            } else {
+                                if (isEn) "Uploading..." else "Mengunggah..."
+                            }
+                        )
                     } else {
                         Text(
-                            text = if (isEn) "Post Now" else "Posting Sekarang",
+                            text = when {
+                                selectedUris.size > 1 -> {
+                                    if (isEn) "Post ${selectedUris.size} Photos Now"
+                                    else "Posting ${selectedUris.size} Foto Sekarang"
+                                }
+                                else -> if (isEn) "Post Now" else "Posting Sekarang"
+                            },
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
+            }
             }
         }
     }

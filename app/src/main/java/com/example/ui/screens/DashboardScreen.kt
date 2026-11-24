@@ -2395,6 +2395,7 @@ private fun DashboardVisitAndParentModalsHost(
     }
     val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
     val isPublishingGalleryPost by viewModel.isPublishingGalleryPost.collectAsStateWithLifecycle()
+    val galleryUploadProgress by viewModel.galleryUploadProgress.collectAsStateWithLifecycle()
     val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
     val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
     val dashboardBannerConfig by viewModel.dashboardBannerConfig.collectAsStateWithLifecycle()
@@ -2869,9 +2870,10 @@ private fun DashboardVisitAndParentModalsHost(
             currentWaliName = waliName,
             isAdminOrSuper = isAdminUser,
             isPublishing = isPublishingGalleryPost,
-            onPublishPost = { imageUri, caption, activityTag, targetScope, selectedStudentIds, retentionDays, onDone ->
-                viewModel.publishWaliGalleryPost(
-                    imageUri = imageUri,
+            uploadProgress = galleryUploadProgress,
+            onPublishPosts = { imageUris, caption, activityTag, targetScope, selectedStudentIds, retentionDays, onDone ->
+                viewModel.publishWaliGalleryPosts(
+                    imageUris = imageUris,
                     caption = caption,
                     activityTag = activityTag,
                     targetScope = targetScope,

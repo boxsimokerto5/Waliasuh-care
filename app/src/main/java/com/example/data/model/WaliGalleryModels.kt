@@ -40,6 +40,7 @@ data class WaliGalleryLocalSave(
 object WaliGalleryHelper {
     const val DAY_MILLIS = 86_400_000L
     const val DEFAULT_RETENTION_DAYS = 14
+    const val MAX_BATCH_PHOTOS = 6
     val RETENTION_DAY_OPTIONS = listOf(7, 14, 30)
 
     const val SCOPE_ALL_MY_STUDENTS = "ALL_MY_STUDENTS"

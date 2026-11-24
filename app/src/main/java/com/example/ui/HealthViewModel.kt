@@ -8272,6 +8272,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     private val _isPublishingGalleryPost = MutableStateFlow(false)
     val isPublishingGalleryPost: StateFlow<Boolean> = _isPublishingGalleryPost.asStateFlow()
 
+    private val _galleryUploadProgress = MutableStateFlow<Pair<Int, Int>?>(null)
+    val galleryUploadProgress: StateFlow<Pair<Int, Int>?> = _galleryUploadProgress.asStateFlow()
+
     private val _isSavingGalleryMedia = MutableStateFlow(false)
     val isSavingGalleryMedia: StateFlow<Boolean> = _isSavingGalleryMedia.asStateFlow()
 
@@ -8310,7 +8313,36 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         retentionDays: Int = WaliGalleryHelper.DEFAULT_RETENTION_DAYS,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
+        publishWaliGalleryPosts(
+            imageUris = listOf(imageUri),
+            caption = caption,
+            activityTag = activityTag,
+            targetScope = targetScope,
+            selectedStudentIds = selectedStudentIds,
+            retentionDays = retentionDays,
+            onResult = onResult
+        )
+    }
+
+    fun publishWaliGalleryPosts(
+        imageUris: List<Uri>,
+        caption: String,
+        activityTag: String = WaliGalleryHelper.TAG_KEGIATAN,
+        targetScope: String = WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
+        selectedStudentIds: Set<Long> = emptySet(),
+        retentionDays: Int = WaliGalleryHelper.DEFAULT_RETENTION_DAYS,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
         val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val cleanUris = imageUris.distinct().take(WaliGalleryHelper.MAX_BATCH_PHOTOS)
+        if (cleanUris.isEmpty()) {
+            onResult(
+                false,
+                if (isEn) "Select at least 1 photo first." else "Pilih minimal 1 foto terlebih dahulu."
+            )
+            return
+        }
+
         val cleanScope = if (targetScope.equals(WaliGalleryHelper.SCOPE_SPECIFIC_STUDENTS, ignoreCase = true)) {
             WaliGalleryHelper.SCOPE_SPECIFIC_STUDENTS
         } else {
@@ -8347,62 +8379,100 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             _isPublishingGalleryPost.value = true
+            _galleryUploadProgress.value = 1 to cleanUris.size
             try {
-                val now = System.currentTimeMillis()
+                val baseNow = System.currentTimeMillis()
                 val safeDays = retentionDays.coerceIn(1, 90)
-                val postId = PocketBaseSyncManager.generateCloudSafeId()
-                val draftPost = WaliGalleryPost(
-                    id = postId,
-                    schoolId = activeSchool,
-                    waliUsername = currentUsername,
-                    waliName = currentWaliName,
-                    caption = caption.trim(),
-                    activityTag = activityTag.trim().uppercase().ifBlank { WaliGalleryHelper.TAG_KEGIATAN },
-                    targetScope = cleanScope,
-                    targetStudentIdsCsv = WaliGalleryHelper.formatIdCsv(targetIds),
-                    retentionDays = safeDays,
-                    expiresAt = now + safeDays * WaliGalleryHelper.DAY_MILLIS,
-                    expectedRecipientCount = expectedRecipients,
-                    downloadedByCsv = "",
-                    isMediaPurgedFromServer = false,
-                    isDeleted = false,
-                    createdAt = now,
-                    updatedAt = now
-                )
+                val cleanCaption = caption.trim()
+                val cleanTag = activityTag.trim().uppercase().ifBlank { WaliGalleryHelper.TAG_KEGIATAN }
+                val targetCsv = WaliGalleryHelper.formatIdCsv(targetIds)
 
-                val finalPost = if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
-                    val uploadRes = PocketBaseSyncManager.uploadWaliGalleryPostWithPhoto(
-                        context = getApplication(),
-                        draftPost = draftPost,
-                        imageUri = imageUri
+                var successCount = 0
+                var lastError: String? = null
+
+                cleanUris.forEachIndexed { index, uri ->
+                    _galleryUploadProgress.value = (index + 1) to cleanUris.size
+                    val itemNow = baseNow + index
+                    val postId = PocketBaseSyncManager.generateCloudSafeId()
+                    val draftPost = WaliGalleryPost(
+                        id = postId,
+                        schoolId = activeSchool,
+                        waliUsername = currentUsername,
+                        waliName = currentWaliName,
+                        caption = cleanCaption,
+                        activityTag = cleanTag,
+                        targetScope = cleanScope,
+                        targetStudentIdsCsv = targetCsv,
+                        retentionDays = safeDays,
+                        expiresAt = itemNow + safeDays * WaliGalleryHelper.DAY_MILLIS,
+                        expectedRecipientCount = expectedRecipients,
+                        downloadedByCsv = "",
+                        isMediaPurgedFromServer = false,
+                        isDeleted = false,
+                        createdAt = itemNow,
+                        updatedAt = itemNow
                     )
-                    if (uploadRes.isFailure) {
-                        val err = uploadRes.exceptionOrNull()?.message
-                            ?: if (isEn) "Failed to upload photo." else "Gagal mengunggah foto ke server."
-                        onResult(false, err)
-                        return@launch
+
+                    val finalPost = if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                        val uploadRes = PocketBaseSyncManager.uploadWaliGalleryPostWithPhoto(
+                            context = getApplication(),
+                            draftPost = draftPost,
+                            imageUri = uri
+                        )
+                        if (uploadRes.isFailure) {
+                            lastError = uploadRes.exceptionOrNull()?.message
+                            return@forEachIndexed
+                        }
+                        uploadRes.getOrThrow()
+                    } else {
+                        draftPost.copy(
+                            photoUrl = uri.toString(),
+                            pbRecordId = PocketBaseIdCodec.toPbId(postId),
+                            pbCollectionId = "wali_gallery_posts"
+                        )
                     }
-                    uploadRes.getOrThrow()
-                } else {
-                    draftPost.copy(
-                        photoUrl = imageUri.toString(),
-                        pbRecordId = PocketBaseIdCodec.toPbId(postId),
-                        pbCollectionId = "wali_gallery_posts"
-                    )
+
+                    repository.insertWaliGalleryPost(finalPost)
+                    successCount++
                 }
 
-                repository.insertWaliGalleryPost(finalPost)
-                onResult(
-                    true,
-                    if (isEn) {
-                        "Photo posted! Parents with matching foster caregiver can auto-save it to their phone gallery."
-                    } else {
-                        "Foto berhasil diposting ke Galeri Wali Asuh! Orang tua terkait akan langsung menerimanya."
+                when {
+                    successCount == cleanUris.size -> {
+                        val msg = if (cleanUris.size == 1) {
+                            if (isEn) {
+                                "Photo posted! Parents with matching foster caregiver can auto-save it to their phone gallery."
+                            } else {
+                                "Foto berhasil diposting ke Galeri Wali Asuh! Orang tua terkait akan langsung menerimanya."
+                            }
+                        } else {
+                            if (isEn) {
+                                "$successCount photos posted! Parents with matching foster caregiver can auto-save them."
+                            } else {
+                                "$successCount foto berhasil diposting ke Galeri Wali Asuh! Orang tua terkait akan langsung menerimanya."
+                            }
+                        }
+                        onResult(true, msg)
                     }
-                )
+                    successCount > 0 -> {
+                        val failedCount = cleanUris.size - successCount
+                        val msg = if (isEn) {
+                            "$successCount of ${cleanUris.size} photos posted ($failedCount failed)."
+                        } else {
+                            "$successCount dari ${cleanUris.size} foto berhasil diposting ($failedCount gagal)."
+                        }
+                        onResult(true, msg)
+                    }
+                    else -> {
+                        onResult(
+                            false,
+                            lastError ?: if (isEn) "Failed to upload photo." else "Gagal mengunggah foto ke server."
+                        )
+                    }
+                }
             } catch (e: Exception) {
                 onResult(false, e.message ?: if (isEn) "Failed to post photo." else "Gagal memposting foto.")
             } finally {
+                _galleryUploadProgress.value = null
                 _isPublishingGalleryPost.value = false
             }
         }

@@ -1,6 +1,7 @@
 package com.example
 
 import android.content.Context
+import android.net.Uri
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -13,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextInput
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.example.data.database.AppDatabase
@@ -22,6 +24,7 @@ import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
 import com.example.data.remote.pocketbase.PbWaliGalleryPostDto
+import com.example.ui.dialogs.CreateWaliGalleryPostDialog
 import com.example.ui.dialogs.WaliGallerySheet
 import com.example.ui.screens.ParentGalleryContent
 import com.example.util.i18n.AppLanguage
@@ -499,6 +502,95 @@ class WaliGalleryRobolectricTest {
         db.waliGalleryPostDao().deleteById(9572L)
         db.parentAccessLinkDao().delete(link)
         db.childStudentDao().delete(student)
+        Unit
+    }
+
+    @Test
+    fun `CreateWaliGalleryPostDialog caps multi-photo selection at 6, supports removal, and submits batch URIs`() {
+        val sampleUris = (1..8).map { idx -> Uri.parse("content://media/external/images/media/$idx") }
+        var publishedUris: List<Uri> = emptyList()
+        var publishedCaption = ""
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(
+                LocalAppStrings provides AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+            ) {
+                CreateWaliGalleryPostDialog(
+                    myStudents = emptyList(),
+                    isPublishing = false,
+                    initialSelectedUris = sampleUris,
+                    onPublishPhotos = { uris, caption, _, _, _, _ ->
+                        publishedUris = uris
+                        publishedCaption = caption
+                    },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Capped at max 6 photos
+        composeTestRule.onNodeWithTag("text_selected_gallery_photo_count").assertIsDisplayed()
+        composeTestRule.onNodeWithText("6/6 Foto Dipilih").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_add_more_gallery_photos").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Posting 6 Foto Sekarang").assertIsDisplayed()
+
+        // Remove first photo -> 5/6 and Add button becomes available
+        composeTestRule.onNodeWithTag("btn_remove_gallery_photo_0").performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithText("5/6 Foto Dipilih").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_add_more_gallery_photos").assertExists()
+        composeTestRule.onNodeWithText("Posting 5 Foto Sekarang").assertIsDisplayed()
+
+        // Fill caption and submit
+        composeTestRule.onNodeWithTag("input_gallery_caption").performScrollTo().performTextInput("Karya tulis bersama")
+        composeTestRule.onNodeWithTag("btn_submit_create_wali_gallery").performScrollTo().performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(5, publishedUris.size)
+        assertEquals(sampleUris.drop(1).take(5), publishedUris)
+        assertEquals("Karya tulis bersama", publishedCaption)
+    }
+
+    @Test
+    fun `HealthViewModel publishWaliGalleryPosts publishes batch up to 6 photos`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<android.app.Application>()
+        val db = AppDatabase.getDatabase(app)
+        val vm = com.example.ui.HealthViewModel(app)
+        val uris = (1..7).map { idx -> Uri.parse("content://media/external/images/media/batch_$idx") }
+
+        var callbackOk = false
+        var callbackMsg = ""
+        var done = false
+
+        vm.publishWaliGalleryPosts(
+            imageUris = uris,
+            caption = "Dokumentasi multi foto kegiatan",
+            activityTag = WaliGalleryHelper.TAG_KEGIATAN,
+            targetScope = WaliGalleryHelper.SCOPE_ALL_MY_STUDENTS,
+            retentionDays = 14
+        ) { ok, msg ->
+            callbackOk = ok
+            callbackMsg = msg
+            done = true
+        }
+
+        var loops = 0
+        while (!done && loops < 50) {
+            org.robolectric.shadows.ShadowLooper.idleMainLooper()
+            kotlinx.coroutines.delay(40)
+            loops++
+        }
+
+        assertTrue(done)
+        assertTrue(callbackOk)
+        assertTrue(callbackMsg.contains("6"))
+
+        val inserted = vm.waliGalleryPosts.value.filter { it.caption == "Dokumentasi multi foto kegiatan" }
+        assertEquals(6, inserted.size)
+
+        inserted.forEach { db.waliGalleryPostDao().deleteById(it.id) }
         Unit
     }
 }
