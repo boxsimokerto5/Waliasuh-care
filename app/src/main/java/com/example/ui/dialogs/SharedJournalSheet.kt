@@ -39,10 +39,13 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -86,6 +89,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -98,6 +103,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -843,6 +849,8 @@ private fun SharedJournalEditorScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<JournalImageAttachment?>(null) }
     var activeVoiceTarget by remember { mutableStateOf<JournalVoiceTarget?>(null) }
+    val contentFocusRequester = remember { FocusRequester() }
+    val bodyTapInteraction = remember { MutableInteractionSource() }
 
     val speechLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
@@ -1377,49 +1385,129 @@ private fun SharedJournalEditorScreen(
                         }
                     }
 
-                    // Input Judul tanpa kotak (gaya MIUI Notes) + mic opsional
-                    Row(
+                    // Input Judul dengan tipografi adaptif (otomatis mengecil rapi jika terisi paragraf panjang)
+                    val isLongTitle = title.length > 52 || title.contains('\n')
+                    val titleFontSize = if (isLongTitle) 16.sp else 20.sp
+                    val titleLineHeight = if (isLongTitle) 22.5.sp else 26.sp
+                    val titleWeight = if (isLongTitle) FontWeight.SemiBold else FontWeight.Bold
+
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (title.isEmpty()) {
-                                Text(
-                                    text = if (isEn) "Title" else "Judul",
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                        Text(
+                            text = if (isEn) "SHORT TITLE (OPTIONAL)" else "JUDUL SINGKAT (OPSIONAL)",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = 0.6.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (title.isEmpty()) {
+                                    Text(
+                                        text = if (isEn) "Write a short title..." else "Tulis judul singkat...",
+                                        fontSize = 20.sp,
+                                        lineHeight = 26.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+                                    )
+                                }
+                                BasicTextField(
+                                    value = title,
+                                    onValueChange = { if (canManage) title = it },
+                                    readOnly = !canManage,
+                                    textStyle = TextStyle(
+                                        fontSize = titleFontSize,
+                                        lineHeight = titleLineHeight,
+                                        fontWeight = titleWeight,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                    keyboardActions = KeyboardActions(
+                                        onNext = {
+                                            runCatching { contentFocusRequester.requestFocus() }
+                                        }
+                                    ),
+                                    cursorBrush = SolidColor(accentColor),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("input_shared_journal_title")
                                 )
                             }
-                            BasicTextField(
-                                value = title,
-                                onValueChange = { if (canManage) title = it },
-                                readOnly = !canManage,
-                                textStyle = TextStyle(
-                                    fontSize = 24.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                cursorBrush = SolidColor(accentColor),
+                            if (canManage) {
+                                IconButton(
+                                    onClick = { launchVoiceInput(JournalVoiceTarget.TITLE) },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .testTag("btn_voice_title")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = if (isEn) "Dictate title" else "Dikte judul dengan suara",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                        modifier = Modifier.size(19.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Bantuan 1-ketuk bila paragraf panjang tidak sengaja masuk ke kolom Judul
+                    if (canManage && isLongTitle && content.isBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = accentColor.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, accentColor.copy(alpha = 0.25f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("banner_move_title_to_content")
+                        ) {
+                            Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .testTag("input_shared_journal_title")
-                            )
-                        }
-                        if (canManage) {
-                            IconButton(
-                                onClick = { launchVoiceInput(JournalVoiceTarget.TITLE) },
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .testTag("btn_voice_title")
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = if (isEn) "Dictate title" else "Dikte judul dengan suara",
-                                    tint = accentColor,
-                                    modifier = Modifier.size(20.dp)
+                                Text(
+                                    text = if (isEn) {
+                                        "Long text is in the Title field."
+                                    } else {
+                                        "Teks panjang tertulis di kolom Judul."
+                                    },
+                                    fontSize = 11.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.weight(1f)
                                 )
+                                Surface(
+                                    onClick = {
+                                        content = title.trim()
+                                        title = ""
+                                        runCatching { contentFocusRequester.requestFocus() }
+                                    },
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = accentColor,
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_move_title_to_content")
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "Move to Body" else "Pindah ke Isi",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -1435,38 +1523,100 @@ private fun SharedJournalEditorScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f)
                     )
 
-                    // Input Body Bebas
-                    Box(
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.28f))
+
+                    // Header & Input Body Bebas (font pas 15.sp agar konsisten & nyaman dibaca)
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 72.dp)
+                            .heightIn(min = 140.dp)
+                            .clickable(
+                                interactionSource = bodyTapInteraction,
+                                indication = null
+                            ) {
+                                if (canManage) {
+                                    runCatching { contentFocusRequester.requestFocus() }
+                                }
+                            },
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        if (content.isEmpty()) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
                             Text(
-                                text = if (isEn) {
-                                    "Start typing your journal note or shared rules..."
-                                } else {
-                                    "Mulai menulis catatan jurnal atau poin aturan bersama..."
-                                },
-                                fontSize = 15.5.sp,
-                                lineHeight = 23.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
+                                text = if (isEn) "NOTE CONTENT" else "ISI CATATAN",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = 0.6.sp,
+                                color = accentColor.copy(alpha = 0.85f)
                             )
+                            if (canManage) {
+                                Surface(
+                                    onClick = { launchVoiceInput(JournalVoiceTarget.CONTENT) },
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = accentColor.copy(alpha = 0.1f),
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_voice_content")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Mic,
+                                            contentDescription = if (isEn) "Dictate note content" else "Dikte isi catatan",
+                                            tint = accentColor,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = if (isEn) "Dictate Body" else "Dikte Isi",
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = accentColor
+                                        )
+                                    }
+                                }
+                            }
                         }
-                        BasicTextField(
-                            value = content,
-                            onValueChange = { if (canManage) content = it },
-                            readOnly = !canManage,
-                            textStyle = TextStyle(
-                                fontSize = 15.5.sp,
-                                lineHeight = 23.sp,
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            cursorBrush = SolidColor(accentColor),
+
+                        Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .testTag("input_shared_journal_content")
-                        )
+                                .heightIn(min = 108.dp)
+                        ) {
+                            if (content.isEmpty()) {
+                                Text(
+                                    text = if (isEn) {
+                                        "Write your private note, daily journal, or shared rules here..."
+                                    } else {
+                                        "Tulis isi catatan pribadi, jurnal harian, atau aturan bersama di sini..."
+                                    },
+                                    fontSize = 15.sp,
+                                    lineHeight = 22.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.48f)
+                                )
+                            }
+                            BasicTextField(
+                                value = content,
+                                onValueChange = { if (canManage) content = it },
+                                readOnly = !canManage,
+                                textStyle = TextStyle(
+                                    fontSize = 15.sp,
+                                    lineHeight = 22.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                cursorBrush = SolidColor(accentColor),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 108.dp)
+                                    .focusRequester(contentFocusRequester)
+                                    .testTag("input_shared_journal_content")
+                            )
+                        }
                     }
 
                     // Daftar Centang Interaktif (Checklist)

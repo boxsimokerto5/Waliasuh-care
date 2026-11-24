@@ -9319,7 +9319,7 @@ class ExampleRobolectricTest {
 
   @Test
   fun `verify TopOn mediation bundles Meta Audience Network adapter cleanly without Yandex`() {
-    val metaInitCls = Class.forName("com.anythink.network.facebook.FacebookATInitManager")
+    val metaInitCls = Class.forName("com.secmtp.sdk.mediation.adapters.facebook.FacebookInitManager")
     val getInstanceMethod = metaInitCls.getMethod("getInstance")
     val metaInitInstance = getInstanceMethod.invoke(null)
     org.junit.Assert.assertNotNull(metaInitInstance)
@@ -9327,13 +9327,19 @@ class ExampleRobolectricTest {
     val networkVersionMethod = metaInitCls.getMethod("getNetworkVersion")
     val metaVersion = networkVersionMethod.invoke(metaInitInstance) as? String
     org.junit.Assert.assertFalse(metaVersion.isNullOrBlank())
+    org.junit.Assert.assertTrue(metaVersion!!.startsWith("6.22"))
 
-    val metaInterstitialCls = Class.forName("com.anythink.network.facebook.FacebookATInterstitialAdapter")
-    val metaRewardCls = Class.forName("com.anythink.network.facebook.FacebookATRewardedVideoAdapter")
+    val metaInterstitialCls = Class.forName("com.secmtp.sdk.mediation.adapters.facebook.FacebookInterstitialAdapter")
+    val metaRewardCls = Class.forName("com.secmtp.sdk.mediation.adapters.facebook.FacebookRewardedVideoAdapter")
     org.junit.Assert.assertNotNull(metaInterstitialCls)
     org.junit.Assert.assertNotNull(metaRewardCls)
 
+    val metaSdkOptionsPos = Class.forName("com.facebook.ads.NativeAdOptionsViewPosition")
+    org.junit.Assert.assertNotNull(metaSdkOptionsPos)
+
     val hasYandexAdapter = runCatching {
+      Class.forName("com.secmtp.sdk.mediation.adapters.yandex.YandexInitManager")
+    }.isSuccess || runCatching {
       Class.forName("com.anythink.network.yandex.YandexATInitManager")
     }.isSuccess
     org.junit.Assert.assertFalse(hasYandexAdapter)
@@ -9345,7 +9351,7 @@ class ExampleRobolectricTest {
 
   @Test
   fun `verify TopOn mediation bundles Liftoff Vungle adapter cleanly`() {
-    val vungleInitCls = Class.forName("com.anythink.network.vungle.VungleATInitManager")
+    val vungleInitCls = Class.forName("com.secmtp.sdk.mediation.adapters.vungle.VungleInitManager")
     val getInstanceMethod = vungleInitCls.getMethod("getInstance")
     val vungleInitInstance = getInstanceMethod.invoke(null)
     org.junit.Assert.assertNotNull(vungleInitInstance)
@@ -9354,8 +9360,8 @@ class ExampleRobolectricTest {
     val vungleVersion = networkVersionMethod.invoke(vungleInitInstance) as? String
     org.junit.Assert.assertFalse(vungleVersion.isNullOrBlank())
 
-    val vungleInterstitialCls = Class.forName("com.anythink.network.vungle.VungleATInterstitialAdapter")
-    val vungleRewardCls = Class.forName("com.anythink.network.vungle.VungleATRewardedVideoAdapter")
+    val vungleInterstitialCls = Class.forName("com.secmtp.sdk.mediation.adapters.vungle.VungleInterstitialAdapter")
+    val vungleRewardCls = Class.forName("com.secmtp.sdk.mediation.adapters.vungle.VungleRewardedVideoAdapter")
     org.junit.Assert.assertNotNull(vungleInterstitialCls)
     org.junit.Assert.assertNotNull(vungleRewardCls)
 

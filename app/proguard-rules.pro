@@ -20,7 +20,9 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# TopOn (AnyThink) Core & Mediation
+# TopOn (AnyThink / Secmtp) Core & Mediation
+-keep class com.secmtp.sdk.** { *; }
+-dontwarn com.secmtp.sdk.**
 -keep class com.anythink.** { *; }
 -dontwarn com.anythink.**
 -keepattributes EnclosingMethod, InnerClasses, Signature, *Annotation*

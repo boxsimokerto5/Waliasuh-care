@@ -657,8 +657,25 @@ class SharedJournalRobolectricTest {
         composeTestRule.onNodeWithTag("btn_voice_title")
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_voice_content")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
         composeTestRule.onNodeWithTag("btn_toolbar_voice")
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
+
+        // Jika paragraf panjang terlanjur masuk ke kolom Judul saat Isi masih kosong, tombol 1-ketuk memindahkannya ke Isi
+        val longParagraph = "Belajar membaca dapat dimulai sejak dini karena literasi penting untuk masa depan."
+        composeTestRule.onNodeWithTag("input_shared_journal_title")
+            .performTextReplacement(longParagraph)
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("banner_move_title_to_content").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_move_title_to_content")
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("banner_move_title_to_content").assertDoesNotExist()
+        composeTestRule.onNodeWithText(longParagraph).assertIsDisplayed()
     }
 }
