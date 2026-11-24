@@ -28,7 +28,13 @@ data class WaliAccount(
 
     fun isSpecialPortalRole(): Boolean = isGuruNgaji() || isPetugasKesehatan()
 
+    /** Anak Admin Utama: bisa ubah shift, pola rotasi, CSV, & penyematan tugas. */
     fun isAnakAdminSekolah(): Boolean = role.trim().equals(ROLE_WALI_ANAK_ADMIN, ignoreCase = true)
+
+    /** Anak Admin Penyematan: hanya bisa menyematkan tugas tambahan & jaga RS/Faskes (shift terkunci). */
+    fun isAnakAdminPenyematan(): Boolean = role.trim().equals(ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true)
+
+    fun hasAnyScheduleAdminRole(): Boolean = isAnakAdminSekolah() || isAnakAdminPenyematan()
 
     fun hasProfilePhoto(): Boolean = photoUrl.isNotBlank() || photoFallbackUrl.isNotBlank()
 
@@ -38,15 +44,18 @@ data class WaliAccount(
     fun roleLabel(isEnglish: Boolean = false): String = when {
         isGuruNgaji() -> if (isEnglish) "Mengaji Teacher" else "Guru Ngaji"
         isPetugasKesehatan() -> if (isEnglish) "Health Officer" else "Petugas Kesehatan"
-        isAnakAdminSekolah() -> if (isEnglish) "Wali Asuh • Schedule Sub-Admin" else "Wali Asuh • Anak Admin Jadwal"
+        isAnakAdminSekolah() -> if (isEnglish) "Wali Asuh • Main Schedule Sub-Admin" else "Wali Asuh • Anak Admin Utama"
+        isAnakAdminPenyematan() -> if (isEnglish) "Wali Asuh • Task Pin Sub-Admin" else "Wali Asuh • Anak Admin Penyematan"
         else -> "Wali Asuh"
     }
 
     companion object {
         const val ROLE_WALI = "WALI"
         const val ROLE_WALI_ANAK_ADMIN = "WALI_ANAK_ADMIN"
+        const val ROLE_WALI_ANAK_ADMIN_PIN = "WALI_ANAK_ADMIN_PIN"
         const val ROLE_GURU_NGAJI = "GURU_NGAJI"
         const val ROLE_PETUGAS_KESEHATAN = "PETUGAS_KESEHATAN"
         const val MAX_ANAK_ADMIN_PER_SCHOOL = 7
+        const val MAX_ANAK_ADMIN_PIN_PER_SCHOOL = 7
     }
 }

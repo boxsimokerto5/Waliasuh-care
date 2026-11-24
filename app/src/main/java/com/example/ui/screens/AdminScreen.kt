@@ -459,7 +459,7 @@ fun AdminScreen(
                 account.roleLabel(isEn).contains(searchQuery, ignoreCase = true)
         val matchDorm = when (selectedFilterDormitory) {
             "Semua" -> true
-            "Anak Admin" -> account.isAnakAdminSekolah()
+            "Anak Admin" -> account.hasAnyScheduleAdminRole()
             "Guru Ngaji" -> account.isGuruNgaji()
             "Petugas Kesehatan" -> account.isPetugasKesehatan()
             else -> account.dormitory.contains(selectedFilterDormitory, ignoreCase = true)
@@ -470,6 +470,8 @@ fun AdminScreen(
     val putraCount = schoolAccounts.count { it.dormitory.contains("Putra", ignoreCase = true) }
     val putriCount = schoolAccounts.count { it.dormitory.contains("Putri", ignoreCase = true) }
     val anakAdminCount = schoolAccounts.count { it.isAnakAdminSekolah() }
+    val anakAdminPinCount = schoolAccounts.count { it.isAnakAdminPenyematan() }
+    val totalScheduleSubAdminCount = anakAdminCount + anakAdminPinCount
     val guruNgajiCount = schoolAccounts.count { it.isGuruNgaji() }
     val petugasKesehatanCount = schoolAccounts.count { it.isPetugasKesehatan() }
 
@@ -1314,19 +1316,19 @@ fun AdminScreen(
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             text = if (isEn) {
-                                                "Schedule Sub-Admin Feature ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                                "Schedule Sub-Admins (Main $anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} • Pin $anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
                                             } else {
-                                                "Fitur Anak Admin Jadwal ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali)"
+                                                "Anak Admin Jadwal (Utama $anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} • Penyematan $anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
                                             },
-                                            fontSize = 12.sp,
+                                            fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = Color(0xFF312E81)
                                         )
                                         Text(
                                             text = if (isEn) {
-                                                "Pin up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh in this school to directly change shifts, pin hospital/extra tasks, & upload/download CSVs inside the app."
+                                                "Separate quotas: up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Main (shifts & CSV) & ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL} Task Pin (extra tasks & RS/Faskes only)."
                                             } else {
-                                                "Sematkan ke maks. ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh agar dapat klik-edit shift, pin tugas (RS/Asrama), serta upload & download CSV langsung di aplikasi."
+                                                "Kuota terpisah: maks. ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Admin Utama (shift & CSV) & ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL} Admin Penyematan (khusus Tugas Tambahan & Jaga RS/Faskes)."
                                             },
                                             fontSize = 10.5.sp,
                                             color = Color(0xFF3730A3),
@@ -1409,7 +1411,7 @@ fun AdminScreen(
                             listOf("Semua", "Putra", "Putri", "Anak Admin", "Guru Ngaji", "Petugas Kesehatan").forEach { dormFilter ->
                                 val chipLabel = when (dormFilter) {
                                     "Semua" -> if (isEn) "All" else "Semua"
-                                    "Anak Admin" -> if (isEn) "Sub-Admin ($anakAdminCount)" else "Anak Admin ($anakAdminCount)"
+                                    "Anak Admin" -> if (isEn) "Sub-Admin ($totalScheduleSubAdminCount)" else "Anak Admin ($totalScheduleSubAdminCount)"
                                     "Guru Ngaji" -> if (isEn) "Mengaji Teacher ($guruNgajiCount)" else "Guru Ngaji ($guruNgajiCount)"
                                     "Petugas Kesehatan" -> if (isEn) "Health Officer ($petugasKesehatanCount)" else "Petugas Kesehatan ($petugasKesehatanCount)"
                                     else -> dormFilter
@@ -1514,7 +1516,19 @@ fun AdminScreen(
                             onEdit = { accountToEdit = account },
                             anakAdminCount = anakAdminCount,
                             onToggleAnakAdmin = { enable ->
-                                viewModel.setWaliAnakAdminStatus(account, enable) { _, msg ->
+                                viewModel.setWaliAnakAdminRole(
+                                    account,
+                                    if (enable) WaliAccount.ROLE_WALI_ANAK_ADMIN else WaliAccount.ROLE_WALI
+                                ) { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
+                            },
+                            anakAdminPinCount = anakAdminPinCount,
+                            onToggleAnakAdminPin = { enable ->
+                                viewModel.setWaliAnakAdminRole(
+                                    account,
+                                    if (enable) WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN else WaliAccount.ROLE_WALI
+                                ) { _, msg ->
                                     Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                 }
                             },
@@ -2596,10 +2610,12 @@ fun AdminScreen(
                                     }
                                 }
 
-                                // Pintasan Pengaturan Anak Admin Jadwal (Maks 7 Wali Asuh per Sekolah)
+                                // Pintasan Pengaturan Anak Admin Utama & Penyematan (Kuota Terpisah 7/7)
                                 val pinnedNamesPreview = schoolAccounts
-                                    .filter { it.isAnakAdminSekolah() }
-                                    .joinToString(", ") { it.name }
+                                    .filter { it.hasAnyScheduleAdminRole() }
+                                    .joinToString(", ") {
+                                        if (it.isAnakAdminPenyematan()) "${it.name} (Pin)" else it.name
+                                    }
                                 Surface(
                                     shape = RoundedCornerShape(10.dp),
                                     color = Color(0xFFEEF2FF),
@@ -2625,9 +2641,9 @@ fun AdminScreen(
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(
                                                 text = if (isEn) {
-                                                    "Schedule Sub-Admins ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                                    "Sub-Admins (Main $anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} • Pin $anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
                                                 } else {
-                                                    "Anak Admin Jadwal ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali)"
+                                                    "Anak Admin Jadwal (Utama $anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} • Pin $anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
                                                 },
                                                 fontSize = 11.5.sp,
                                                 fontWeight = FontWeight.Bold,
@@ -2635,8 +2651,8 @@ fun AdminScreen(
                                             )
                                             Text(
                                                 text = pinnedNamesPreview.ifBlank {
-                                                    if (isEn) "Tap to pin up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh to edit shifts, pins & CSVs."
-                                                    else "Ketuk untuk sematkan maks. ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh agar bisa ubah jadwal & CSV."
+                                                    if (isEn) "Tap to assign Main Sub-Admins (shifts/CSV) or Task Pin Sub-Admins (tasks & RS/Faskes)."
+                                                    else "Ketuk untuk sematkan Anak Admin Utama (shift & CSV) atau Admin Penyematan (tugas & RS/Faskes)."
                                                 },
                                                 fontSize = 10.5.sp,
                                                 color = Color(0xFF4338CA),
@@ -3097,6 +3113,7 @@ fun AdminScreen(
         AddWaliAccountDialog(
             schoolName = schoolProfile.schoolName.ifBlank { schoolProfile.shortName },
             anakAdminCount = anakAdminCount,
+            anakAdminPinCount = anakAdminPinCount,
             onDismiss = { showAddDialog = false },
             onConfirm = { name, username, dormitory, phone, password, role ->
                 viewModel.addWaliAccount(
@@ -3444,6 +3461,7 @@ fun AdminScreen(
         EditWaliAccountDialog(
             account = account,
             anakAdminCount = anakAdminCount,
+            anakAdminPinCount = anakAdminPinCount,
             onDismiss = { accountToEdit = null },
             onConfirm = { updated ->
                 viewModel.updateWaliAccount(
@@ -4268,6 +4286,11 @@ fun AdminScreen(
                     Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                 }
             },
+            onSelectAnakAdminRole = { targetAccount, targetRole ->
+                viewModel.setWaliAnakAdminRole(targetAccount, targetRole) { _, msg ->
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
+            },
             onDismiss = { showManageAnakAdminDialog = false }
         )
     }
@@ -4464,6 +4487,8 @@ fun WaliAccountCardItem(
     onEdit: () -> Unit,
     anakAdminCount: Int = 0,
     onToggleAnakAdmin: (Boolean) -> Unit = {},
+    anakAdminPinCount: Int = 0,
+    onToggleAnakAdminPin: (Boolean) -> Unit = {},
     onResetPassword: () -> Unit,
     onDelete: () -> Unit,
     modifier: Modifier = Modifier
@@ -4477,11 +4502,13 @@ fun WaliAccountCardItem(
     val isGuruNgaji = account.isGuruNgaji()
     val isPetugasKesehatan = account.isPetugasKesehatan()
     val isAnakAdmin = account.isAnakAdminSekolah()
+    val isAnakAdminPin = account.isAnakAdminPenyematan()
     val isPutri = account.dormitory.contains("Putri", ignoreCase = true)
     val dormAccentColor = when {
         isPetugasKesehatan -> Color(0xFF0E7490)
         isGuruNgaji -> Color(0xFF047857)
         isAnakAdmin -> Color(0xFF4338CA)
+        isAnakAdminPin -> Color(0xFF0F766E)
         isPutri -> Color(0xFFBE185D)
         else -> Color(0xFF0369A1)
     }
@@ -4489,6 +4516,7 @@ fun WaliAccountCardItem(
         isPetugasKesehatan -> Color(0xFFECFEFF)
         isGuruNgaji -> Color(0xFFECFDF5)
         isAnakAdmin -> Color(0xFFEEF2FF)
+        isAnakAdminPin -> Color(0xFFF0FDFA)
         isPutri -> Color(0xFFFDF2F8)
         else -> Color(0xFFF0F9FF)
     }
@@ -4529,8 +4557,10 @@ fun WaliAccountCardItem(
                                 isPetugasKesehatan -> "KARTU AKSES PETUGAS KESEHATAN"
                                 isGuruNgaji && isEn -> "MENGAJI TEACHER ACCESS CARD"
                                 isGuruNgaji -> "KARTU AKSES GURU NGAJI"
-                                isAnakAdmin && isEn -> "WALI ASUH • SCHEDULE SUB-ADMIN"
-                                isAnakAdmin -> "WALI ASUH • ANAK ADMIN JADWAL"
+                                isAnakAdmin && isEn -> "WALI ASUH • MAIN SCHEDULE SUB-ADMIN"
+                                isAnakAdmin -> "WALI ASUH • ANAK ADMIN UTAMA"
+                                isAnakAdminPin && isEn -> "WALI ASUH • TASK PIN SUB-ADMIN"
+                                isAnakAdminPin -> "WALI ASUH • ANAK ADMIN PENYEMATAN"
                                 isEn -> "WALI ASUH ACCESS CARD"
                                 else -> "KARTU AKSES WALI ASUH"
                             },
@@ -4557,7 +4587,8 @@ fun WaliAccountCardItem(
                         Text(
                             text = when {
                                 isPetugasKesehatan || isGuruNgaji -> account.roleLabel(isEn)
-                                isAnakAdmin -> if (isEn) "★ Sub-Admin" else "★ Anak Admin"
+                                isAnakAdmin -> if (isEn) "★ Main Admin" else "★ Admin Utama"
+                                isAnakAdminPin -> if (isEn) "📌 Pin Admin" else "📌 Admin Penyematan"
                                 else -> account.dormitory
                             },
                             fontSize = 10.sp,
@@ -4789,43 +4820,82 @@ fun WaliAccountCardItem(
                     }
                 }
 
-                // Tombol Penyematan Fitur Anak Admin Jadwal (Maks 7 Wali Asuh per Sekolah)
+                // Tombol Penyematan Fitur Anak Admin Utama & Anak Admin Penyematan (Kuota Terpisah 7/7)
                 if (!account.isSpecialPortalRole()) {
-                    val canPinMore = isAnakAdmin || anakAdminCount < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL
-                    OutlinedButton(
-                        onClick = { onToggleAnakAdmin(!isAnakAdmin) },
-                        enabled = canPinMore,
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isAnakAdmin) Color(0xFF4338CA) else Color(0xFF94A3B8)
-                        ),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            containerColor = if (isAnakAdmin) Color(0xFFEEF2FF) else Color.Transparent,
-                            contentColor = if (isAnakAdmin) Color(0xFF312E81) else Color(0xFF334155)
-                        ),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 48.dp)
-                            .testTag("btn_toggle_anak_admin_${account.id}")
-                    ) {
-                        Icon(
-                            imageVector = if (isAnakAdmin) Icons.Default.AdminPanelSettings else Icons.Default.PushPin,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = when {
-                                isAnakAdmin && isEn -> "Unpin Schedule Sub-Admin ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
-                                isAnakAdmin -> "Anak Admin Jadwal Aktif • Ketuk untuk Cabut ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
-                                isEn -> "Pin as Schedule Sub-Admin ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
-                                else -> "Sematkan Anak Admin Jadwal ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
-                            },
-                            fontSize = 11.5.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    val canPinMoreUtama = isAnakAdmin || anakAdminCount < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL
+                    val canPinMorePin = isAnakAdminPin || anakAdminPinCount < WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = { onToggleAnakAdmin(!isAnakAdmin) },
+                            enabled = canPinMoreUtama,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isAnakAdmin) Color(0xFF4338CA) else Color(0xFF94A3B8)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (isAnakAdmin) Color(0xFFEEF2FF) else Color.Transparent,
+                                contentColor = if (isAnakAdmin) Color(0xFF312E81) else Color(0xFF334155)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_toggle_anak_admin_${account.id}")
+                        ) {
+                            Icon(
+                                imageVector = if (isAnakAdmin) Icons.Default.AdminPanelSettings else Icons.Default.PushPin,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when {
+                                    isAnakAdmin && isEn -> "Unpin Main Sub-Admin ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                    isAnakAdmin -> "Anak Admin Utama Aktif • Cabut ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                    isEn -> "Pin as Main Sub-Admin ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                    else -> "Sematkan Anak Admin Utama ($anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        OutlinedButton(
+                            onClick = { onToggleAnakAdminPin(!isAnakAdminPin) },
+                            enabled = canPinMorePin,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isAnakAdminPin) Color(0xFF0F766E) else Color(0xFF94A3B8)
+                            ),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = if (isAnakAdminPin) Color(0xFFF0FDFA) else Color.Transparent,
+                                contentColor = if (isAnakAdminPin) Color(0xFF115E59) else Color(0xFF334155)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_toggle_anak_admin_pin_${account.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = when {
+                                    isAnakAdminPin && isEn -> "Unpin Task Pin Sub-Admin ($anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
+                                    isAnakAdminPin -> "Anak Admin Penyematan Aktif • Cabut ($anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
+                                    isEn -> "Pin as Task Pin Sub-Admin ($anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
+                                    else -> "Sematkan Anak Admin Penyematan ($anakAdminPinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 

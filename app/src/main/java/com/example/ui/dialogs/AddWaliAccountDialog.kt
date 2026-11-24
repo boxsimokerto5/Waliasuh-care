@@ -62,6 +62,8 @@ fun AddWaliAccountDialog(
     schoolName: String = "",
     anakAdminCount: Int = 0,
     maxAnakAdmin: Int = WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL,
+    anakAdminPinCount: Int = 0,
+    maxAnakAdminPin: Int = WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL,
     onDismiss: () -> Unit,
     onConfirm: (name: String, username: String, dormitory: String, phone: String, password: String, role: String) -> Unit
 ) {
@@ -186,6 +188,7 @@ fun AddWaliAccountDialog(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     val quotaFull = anakAdminCount >= maxAnakAdmin
+                    val quotaPinFull = anakAdminPinCount >= maxAnakAdminPin
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -214,14 +217,33 @@ fun AddWaliAccountDialog(
                             },
                             label = {
                                 Text(
-                                    if (isEn) "Wali + Schedule Sub-Admin ($anakAdminCount/$maxAnakAdmin)"
-                                    else "Wali + Anak Admin Jadwal ($anakAdminCount/$maxAnakAdmin)",
+                                    if (isEn) "Wali + Main Sub-Admin ($anakAdminCount/$maxAnakAdmin)"
+                                    else "Wali + Anak Admin Utama ($anakAdminCount/$maxAnakAdmin)",
                                     fontSize = 11.sp
                                 )
                             },
                             modifier = Modifier
                                 .heightIn(min = 36.dp)
                                 .testTag("chip_add_role_anak_admin")
+                        )
+                        FilterChip(
+                            selected = selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN,
+                            enabled = !quotaPinFull || selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN,
+                            onClick = {
+                                if (!quotaPinFull) {
+                                    selectedRole = WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
+                                }
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Wali + Task Pin Admin ($anakAdminPinCount/$maxAnakAdminPin)"
+                                    else "Wali + Admin Penyematan ($anakAdminPinCount/$maxAnakAdminPin)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("chip_add_role_anak_admin_pin")
                         )
                         FilterChip(
                             selected = selectedRole == WaliAccount.ROLE_GURU_NGAJI,
@@ -259,20 +281,31 @@ fun AddWaliAccountDialog(
                     if (selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN) {
                         Text(
                             text = if (isEn) {
-                                "Pinned with Schedule Sub-Admin access: can tap directly in the app to change shifts, pin extra tasks (hospital/dormitory), and upload/download schedule CSVs."
+                                "Pinned with Main Schedule Sub-Admin access: can change shifts, pin extra tasks (hospital/dormitory), set leave, and upload/download schedule CSVs."
                             } else {
-                                "Disematkan fitur Anak Admin Sekolah: bisa langsung klik di aplikasi untuk ubah shift, sematkan tugas tambahan (RS/Asrama/dll.), serta upload & download template CSV jadwal."
+                                "Disematkan fitur Anak Admin Utama: bisa langsung klik di aplikasi untuk ubah shift, sematkan tugas tambahan (RS/Asrama), atur izin, serta upload & download CSV jadwal."
                             },
                             fontSize = 10.5.sp,
-                            color = androidx.compose.ui.graphics.Color(0xFF0369A1),
+                            color = androidx.compose.ui.graphics.Color(0xFF4338CA),
                             lineHeight = 14.sp
                         )
-                    } else if (quotaFull && selectedRole == WaliAccount.ROLE_WALI) {
+                    } else if (selectedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN) {
                         Text(
                             text = if (isEn) {
-                                "Schedule Sub-Admin quota reached ($anakAdminCount/$maxAnakAdmin). Unpin one first to assign another."
+                                "Pinned with Task Pin Sub-Admin access: can ONLY pin/unpin Extra Tasks & Hospital/Faskes duties. Shifts, leave, and CSV upload remain locked."
                             } else {
-                                "Kuota Anak Admin Jadwal penuh ($anakAdminCount/$maxAnakAdmin). Cabut salah satu terlebih dahulu untuk menyematkan akun baru."
+                                "Disematkan fitur Anak Admin Penyematan: HANYA dapat menyematkan/mencabut Tugas Tambahan & Jaga RS/Faskes. Shift, izin, dan upload CSV tetap terkunci."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF0F766E),
+                            lineHeight = 14.sp
+                        )
+                    } else if (quotaFull && quotaPinFull && selectedRole == WaliAccount.ROLE_WALI) {
+                        Text(
+                            text = if (isEn) {
+                                "Both Sub-Admin quotas are full ($anakAdminCount/$maxAnakAdmin Main, $anakAdminPinCount/$maxAnakAdminPin Pin). Unpin one first to assign another."
+                            } else {
+                                "Kuota Anak Admin Utama ($anakAdminCount/$maxAnakAdmin) & Penyematan ($anakAdminPinCount/$maxAnakAdminPin) penuh. Cabut salah satu dulu."
                             },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.error,

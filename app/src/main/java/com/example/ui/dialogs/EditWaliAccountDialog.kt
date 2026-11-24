@@ -64,6 +64,8 @@ fun EditWaliAccountDialog(
     account: WaliAccount,
     anakAdminCount: Int = 0,
     maxAnakAdmin: Int = WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL,
+    anakAdminPinCount: Int = 0,
+    maxAnakAdminPin: Int = WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL,
     onDismiss: () -> Unit,
     onConfirm: (updatedAccount: WaliAccount) -> Unit
 ) {
@@ -189,7 +191,9 @@ fun EditWaliAccountDialog(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     val wasAlreadyAnakAdmin = account.isAnakAdminSekolah()
+                    val wasAlreadyPinAdmin = account.isAnakAdminPenyematan()
                     val quotaBlocked = !wasAlreadyAnakAdmin && anakAdminCount >= maxAnakAdmin
+                    val quotaPinBlocked = !wasAlreadyPinAdmin && anakAdminPinCount >= maxAnakAdminPin
                     FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -218,14 +222,33 @@ fun EditWaliAccountDialog(
                             },
                             label = {
                                 Text(
-                                    if (isEn) "Wali + Schedule Sub-Admin ($anakAdminCount/$maxAnakAdmin)"
-                                    else "Wali + Anak Admin Jadwal ($anakAdminCount/$maxAnakAdmin)",
+                                    if (isEn) "Wali + Main Sub-Admin ($anakAdminCount/$maxAnakAdmin)"
+                                    else "Wali + Anak Admin Utama ($anakAdminCount/$maxAnakAdmin)",
                                     fontSize = 11.sp
                                 )
                             },
                             modifier = Modifier
                                 .heightIn(min = 36.dp)
                                 .testTag("chip_edit_role_anak_admin")
+                        )
+                        FilterChip(
+                            selected = selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true),
+                            enabled = !quotaPinBlocked || selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true),
+                            onClick = {
+                                if (!quotaPinBlocked) {
+                                    selectedRole = WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
+                                }
+                            },
+                            label = {
+                                Text(
+                                    if (isEn) "Wali + Task Pin Admin ($anakAdminPinCount/$maxAnakAdminPin)"
+                                    else "Wali + Admin Penyematan ($anakAdminPinCount/$maxAnakAdminPin)",
+                                    fontSize = 11.sp
+                                )
+                            },
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("chip_edit_role_anak_admin_pin")
                         )
                         FilterChip(
                             selected = selectedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true),
@@ -263,20 +286,31 @@ fun EditWaliAccountDialog(
                     if (selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true)) {
                         Text(
                             text = if (isEn) {
-                                "This Wali Asuh can tap schedule cells directly in the app to change shifts, pin extra tasks (hospital/dormitory), and upload/download CSVs."
+                                "Main Schedule Sub-Admin: can tap schedule cells directly to change shifts, pin extra tasks, set leave, and upload/download CSVs."
                             } else {
-                                "Wali Asuh ini bisa langsung klik jadwal di aplikasi untuk ubah shift, sematkan tugas tambahan (RS/Asrama/dll.), serta upload & download template CSV."
+                                "Anak Admin Utama: bisa langsung klik jadwal untuk ubah shift, sematkan tugas tambahan (RS/Asrama), atur izin, serta upload & download CSV."
                             },
                             fontSize = 10.5.sp,
-                            color = androidx.compose.ui.graphics.Color(0xFF0369A1),
+                            color = androidx.compose.ui.graphics.Color(0xFF4338CA),
                             lineHeight = 14.sp
                         )
-                    } else if (quotaBlocked && selectedRole.equals(WaliAccount.ROLE_WALI, ignoreCase = true)) {
+                    } else if (selectedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true)) {
                         Text(
                             text = if (isEn) {
-                                "Quota full ($anakAdminCount/$maxAnakAdmin). Unpin another Wali Asuh first."
+                                "Task Pin Sub-Admin: can ONLY pin/unpin Extra Tasks & Hospital/Faskes duties. Shifts, leave, and CSV upload remain locked."
                             } else {
-                                "Kuota Anak Admin penuh ($anakAdminCount/$maxAnakAdmin). Cabut sematan akun lain dulu."
+                                "Anak Admin Penyematan: HANYA dapat menyematkan/mencabut Tugas Tambahan & Jaga RS/Faskes. Shift, izin, dan upload CSV tetap terkunci."
+                            },
+                            fontSize = 10.5.sp,
+                            color = androidx.compose.ui.graphics.Color(0xFF0F766E),
+                            lineHeight = 14.sp
+                        )
+                    } else if (quotaBlocked && quotaPinBlocked && selectedRole.equals(WaliAccount.ROLE_WALI, ignoreCase = true)) {
+                        Text(
+                            text = if (isEn) {
+                                "Both Sub-Admin quotas are full ($anakAdminCount/$maxAnakAdmin Main, $anakAdminPinCount/$maxAnakAdminPin Pin)."
+                            } else {
+                                "Kuota Anak Admin Utama ($anakAdminCount/$maxAnakAdmin) & Penyematan ($anakAdminPinCount/$maxAnakAdminPin) penuh."
                             },
                             fontSize = 10.5.sp,
                             color = MaterialTheme.colorScheme.error,

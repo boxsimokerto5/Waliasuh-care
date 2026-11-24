@@ -189,6 +189,7 @@ fun JadwalMatriksSheet(
     shiftCodes: List<WaliShiftCode>,
     schoolProfile: SchoolProfile,
     canManageSchedule: Boolean,
+    canPinTasks: Boolean = canManageSchedule,
     actorName: String,
     onChangeMonth: (String) -> Unit,
     onSelectCellToEdit: (WaliScheduleEntry, Int) -> Unit,
@@ -602,7 +603,7 @@ fun JadwalMatriksSheet(
                                                     color = if (isTodayCell) Color(0xFF0284C7) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
                                                 )
                                                 .clickable {
-                                                    if (canManageSchedule) {
+                                                    if (canManageSchedule || canPinTasks) {
                                                         onSelectCellToEdit(entry, day)
                                                     } else {
                                                         inspectedCell = entry to day
@@ -906,6 +907,7 @@ fun JadwalPersonalSheet(
     shiftCodes: List<WaliShiftCode>,
     schoolProfile: SchoolProfile,
     canManageSchedule: Boolean,
+    canPinTasks: Boolean = canManageSchedule,
     onEditDay: (Int) -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -1029,7 +1031,7 @@ fun JadwalPersonalSheet(
                         modifier = Modifier
                             .fillMaxWidth()
                             .then(
-                                if (canManageSchedule) Modifier.clickable { onEditDay(day) }
+                                if (canManageSchedule || canPinTasks) Modifier.clickable { onEditDay(day) }
                                 else Modifier
                             ),
                         shape = RoundedCornerShape(12.dp),
@@ -1668,11 +1670,13 @@ fun PenyematanTugasSheet(
     shiftCodes: List<WaliShiftCode>,
     schoolProfile: SchoolProfile,
     canManageSchedule: Boolean,
+    canPinTasks: Boolean = canManageSchedule,
     onEditCell: (WaliScheduleEntry, Int) -> Unit,
     onOpenRosterSetup: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
+    val canInteractPins = canManageSchedule || canPinTasks
     val shiftMap = remember(shiftCodes, schoolProfile.tenantCode) {
         WaliScheduleHelper.buildShiftMap(shiftCodes, schoolProfile.tenantCode)
     }
@@ -1681,7 +1685,7 @@ fun PenyematanTugasSheet(
         mutableIntStateOf(selectedDay.coerceIn(1, maxDay))
     }
     var fullMonthMode by remember { mutableStateOf(false) }
-    var manageAllMode by remember(canManageSchedule) { mutableStateOf(canManageSchedule) }
+    var manageAllMode by remember(canInteractPins) { mutableStateOf(canInteractPins) }
     var filterCat by remember { mutableStateOf("ALL") }
     var searchQuery by remember { mutableStateOf("") }
 
@@ -1769,11 +1773,11 @@ fun PenyematanTugasSheet(
                 }
             }
 
-            if (canManageSchedule) {
+            if (canInteractPins) {
                 Surface(
                     shape = RoundedCornerShape(10.dp),
-                    color = Color(0xFFEEF2FF),
-                    border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                    color = if (canManageSchedule) Color(0xFFEEF2FF) else Color(0xFFF0FDFA),
+                    border = BorderStroke(1.dp, if (canManageSchedule) Color(0xFFC7D2FE) else Color(0xFF99F6E4)),
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("badge_penyematan_manage_mode")
@@ -1784,19 +1788,27 @@ fun PenyematanTugasSheet(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.AdminPanelSettings,
+                            imageVector = if (canManageSchedule) Icons.Default.AdminPanelSettings else Icons.Default.PushPin,
                             contentDescription = null,
-                            tint = Color(0xFF4338CA),
+                            tint = if (canManageSchedule) Color(0xFF4338CA) else Color(0xFF0F766E),
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = if (isEn) {
-                                "Management Mode active: tap any Wali Asuh below to change shifts or attach/remove hospital & extra tasks."
+                            text = if (canManageSchedule) {
+                                if (isEn) {
+                                    "Management Mode active: tap any Wali Asuh below to change shifts or attach/remove hospital & extra tasks."
+                                } else {
+                                    "Mode Kelola Tugas aktif: ketuk nama Wali Asuh untuk langsung mengganti shift (P1–M3/LP/L) atau menyematkan tugas RS & asrama."
+                                }
                             } else {
-                                "Mode Kelola Tugas aktif: ketuk nama Wali Asuh untuk langsung mengganti shift (P1–M3/LP/L) atau menyematkan tugas RS & asrama."
+                                if (isEn) {
+                                    "Task Pin Mode active: tap any Wali Asuh below to pin/remove Extra Tasks & RS/Faskes duties (shifts locked)."
+                                } else {
+                                    "Mode Penyematan Tugas aktif: ketuk nama Wali Asuh untuk menyematkan/mencabut Tugas Tambahan & Jaga RS/Faskes (shift terkunci)."
+                                }
                             },
                             fontSize = 11.sp,
-                            color = Color(0xFF312E81),
+                            color = if (canManageSchedule) Color(0xFF312E81) else Color(0xFF115E59),
                             lineHeight = 14.sp
                         )
                     }
@@ -1854,7 +1866,7 @@ fun PenyematanTugasSheet(
                     .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                if (canManageSchedule) {
+                if (canInteractPins) {
                     FilterChip(
                         selected = !fullMonthMode && manageAllMode,
                         onClick = {
@@ -1871,7 +1883,7 @@ fun PenyematanTugasSheet(
                     )
                 }
                 FilterChip(
-                    selected = !fullMonthMode && (!canManageSchedule || !manageAllMode),
+                    selected = !fullMonthMode && (!canInteractPins || !manageAllMode),
                     onClick = {
                         fullMonthMode = false
                         manageAllMode = false
@@ -1903,7 +1915,7 @@ fun PenyematanTugasSheet(
                 )
             }
 
-            if (canManageSchedule && entries.isNotEmpty()) {
+            if (canInteractPins && entries.isNotEmpty()) {
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
@@ -1917,7 +1929,7 @@ fun PenyematanTugasSheet(
                 )
             }
 
-            val showInteractiveAllList = canManageSchedule && manageAllMode && !fullMonthMode
+            val showInteractiveAllList = canInteractPins && manageAllMode && !fullMonthMode
 
             if (showInteractiveAllList) {
                 if (manageableRows.isEmpty()) {
@@ -1941,7 +1953,7 @@ fun PenyematanTugasSheet(
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            if (entries.isEmpty() && onOpenRosterSetup != null) {
+                            if (canManageSchedule && entries.isEmpty() && onOpenRosterSetup != null) {
                                 Button(
                                     onClick = {
                                         onDismiss()
@@ -2050,7 +2062,11 @@ fun PenyematanTugasSheet(
                                             )
                                             Spacer(modifier = Modifier.width(5.dp))
                                             Text(
-                                                text = if (isEn) "Shift / Pin" else "Ubah / Pin",
+                                                text = if (canManageSchedule) {
+                                                    if (isEn) "Shift / Pin" else "Ubah / Pin"
+                                                } else {
+                                                    if (isEn) "Pin Task" else "Pin Tugas"
+                                                },
                                                 fontSize = 11.5.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = Color(0xFF0F766E)
@@ -2068,8 +2084,13 @@ fun PenyematanTugasSheet(
                                         }
                                     } else {
                                         Text(
-                                            text = if (isEn) "No extra task pinned yet • Tap to change shift or pin RS/dorm task"
-                                            else "Belum ada pin tugas • Ketuk untuk ganti shift atau sematkan tugas RS/Asrama",
+                                            text = if (canManageSchedule) {
+                                                if (isEn) "No extra task pinned yet • Tap to change shift or pin RS/dorm task"
+                                                else "Belum ada pin tugas • Ketuk untuk ganti shift atau sematkan tugas RS/Asrama"
+                                            } else {
+                                                if (isEn) "No extra task pinned yet • Tap to pin extra task or RS/Faskes duty"
+                                                else "Belum ada pin tugas • Ketuk untuk sematkan tugas tambahan atau jaga RS/Faskes"
+                                            },
                                             fontSize = 11.sp,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -2095,7 +2116,7 @@ fun PenyematanTugasSheet(
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        if (canManageSchedule && entries.isNotEmpty()) {
+                        if (canInteractPins && entries.isNotEmpty()) {
                             TextButton(
                                 onClick = {
                                     fullMonthMode = false
@@ -2127,7 +2148,7 @@ fun PenyematanTugasSheet(
                             colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surface),
                             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
                             modifier = Modifier.then(
-                                if (canManageSchedule) Modifier.clickable { onEditCell(entry, day) } else Modifier
+                                if (canInteractPins) Modifier.clickable { onEditCell(entry, day) } else Modifier
                             )
                         ) {
                             Column(
@@ -2149,7 +2170,7 @@ fun PenyematanTugasSheet(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
-                                    if (canManageSchedule) {
+                                    if (canInteractPins) {
                                         IconButton(
                                             onClick = { onEditCell(entry, day) },
                                             modifier = Modifier.size(48.dp)

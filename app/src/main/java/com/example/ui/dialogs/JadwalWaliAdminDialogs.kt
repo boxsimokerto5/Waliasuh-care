@@ -42,6 +42,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.LocalHospital
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Repeat
@@ -109,6 +110,7 @@ fun EditJadwalSelDialog(
     monthKey: String,
     shiftCodes: List<WaliShiftCode>,
     schoolProfile: SchoolProfile,
+    pinOnlyMode: Boolean = false,
     onSave: (shiftCode: String, pins: List<PinnedTaskItem>, leave: LeaveDayInfo?) -> Unit,
     onOpenPatternEditor: (() -> Unit)? = null,
     onDismiss: () -> Unit
@@ -177,7 +179,12 @@ fun EditJadwalSelDialog(
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = if (isEn) "Edit Schedule Cell" else "Atur Shift & Pin Tugas",
+                                text = when {
+                                    pinOnlyMode && isEn -> "Pin Tasks & Faskes Duties"
+                                    pinOnlyMode -> "Sematkan Tugas & Jaga Faskes"
+                                    isEn -> "Edit Schedule Cell"
+                                    else -> "Atur Shift & Pin Tugas"
+                                },
                                 fontSize = 15.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 maxLines = 1,
@@ -214,116 +221,206 @@ fun EditJadwalSelDialog(
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // 1. Shift Code Picker (4 Kolom Rapat & Bebas Duplikat)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (isEn) "1. Shift Code" else "1. Pilih Kode Shift",
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                        if (pinOnlyMode) {
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = Color(0xFFF0FDFA),
+                                border = BorderStroke(1.dp, Color(0xFF5EEAD4)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("banner_pin_only_mode")
                             ) {
-                                if (onOpenPatternEditor != null) {
-                                    Surface(
-                                        shape = RoundedCornerShape(8.dp),
-                                        color = Color(0xFFE0F2FE),
-                                        modifier = Modifier.clickable {
-                                            onDismiss()
-                                            onOpenPatternEditor()
-                                        }
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Repeat,
-                                                contentDescription = null,
-                                                tint = Color(0xFF0369A1),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Text(
-                                                text = if (isEn) "Pattern" else "Pola Rotasi",
-                                                fontSize = 10.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF0369A1),
-                                                maxLines = 1,
-                                                softWrap = false
-                                            )
-                                        }
-                                    }
-                                }
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
-                                    modifier = Modifier
-                                        .clickable { selectedCode = "" }
-                                        .testTag("btn_clear_jadwal_shift")
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Lock,
+                                        contentDescription = null,
+                                        tint = Color(0xFF0F766E),
+                                        modifier = Modifier.size(16.dp)
+                                    )
                                     Text(
-                                        text = if (isEn) "Clear" else "Kosongkan",
+                                        text = if (isEn) {
+                                            "Task Pin Sub-Admin: You can pin/unpin Extra Tasks & RS/Faskes duties. Shifts & leave are locked."
+                                        } else {
+                                            "Anak Admin Penyematan: Anda dapat menyematkan/mencabut Tugas Tambahan & Jaga RS/Faskes. Shift & izin terkunci."
+                                        },
                                         fontSize = 10.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = MaterialTheme.colorScheme.error,
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        color = Color(0xFF115E59),
+                                        lineHeight = 14.sp
                                     )
                                 }
                             }
-                        }
-
-                        Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                            effectiveCodes.chunked(4).forEach { rowCodes ->
+                            val currentShiftDef = effectiveCodes.firstOrNull {
+                                it.code.equals(initialCode, ignoreCase = true)
+                            }
+                            val shiftBadgeColor = if (initialCode.isNotBlank()) {
+                                parseJadwalShiftColor(currentShiftDef?.colorHex ?: "#64748B")
+                            } else {
+                                Color(0xFF64748B)
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(10.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("card_locked_shift_preview")
+                            ) {
                                 Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    rowCodes.forEach { sc ->
-                                        val color = parseJadwalShiftColor(sc.colorHex)
-                                        val isSelected = selectedCode.equals(sc.code, ignoreCase = true)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = if (isEn) "Current Shift (Locked)" else "Shift Saat Ini (Terkunci)",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = when {
+                                                currentShiftDef != null -> "${currentShiftDef.name} (${currentShiftDef.code})"
+                                                initialCode.isNotBlank() -> initialCode
+                                                isEn -> "No shift assigned"
+                                                else -> "Belum ada shift"
+                                            },
+                                            fontSize = 12.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                    Surface(
+                                        shape = RoundedCornerShape(7.dp),
+                                        color = shiftBadgeColor
+                                    ) {
+                                        Text(
+                                            text = initialCode.ifBlank { "-" },
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            // 1. Shift Code Picker (4 Kolom Rapat & Bebas Duplikat)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = if (isEn) "1. Shift Code" else "1. Pilih Kode Shift",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (onOpenPatternEditor != null) {
                                         Surface(
-                                            shape = RoundedCornerShape(9.dp),
-                                            color = if (isSelected) color else color.copy(alpha = 0.11f),
-                                            border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, color),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clickable { selectedCode = sc.code }
-                                                .testTag("chip_pick_shift_${sc.code}")
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFE0F2FE),
+                                            modifier = Modifier.clickable {
+                                                onDismiss()
+                                                onOpenPatternEditor()
+                                            }
                                         ) {
-                                            Column(
-                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
                                             ) {
-                                                Text(
-                                                    text = sc.code,
-                                                    fontSize = 11.5.sp,
-                                                    fontWeight = FontWeight.ExtraBold,
-                                                    color = if (isSelected) Color.White else color,
-                                                    maxLines = 1
+                                                Icon(
+                                                    Icons.Default.Repeat,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF0369A1),
+                                                    modifier = Modifier.size(12.dp)
                                                 )
                                                 Text(
-                                                    text = sc.name,
-                                                    fontSize = 8.5.sp,
-                                                    lineHeight = 10.sp,
-                                                    color = if (isSelected) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    text = if (isEn) "Pattern" else "Pola Rotasi",
+                                                    fontSize = 10.5.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = Color(0xFF0369A1),
                                                     maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    textAlign = TextAlign.Center
+                                                    softWrap = false
                                                 )
                                             }
                                         }
                                     }
-                                    repeat(4 - rowCodes.size) {
-                                        Spacer(modifier = Modifier.weight(1f))
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                                        modifier = Modifier
+                                            .clickable { selectedCode = "" }
+                                            .testTag("btn_clear_jadwal_shift")
+                                    ) {
+                                        Text(
+                                            text = if (isEn) "Clear" else "Kosongkan",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = MaterialTheme.colorScheme.error,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                effectiveCodes.chunked(4).forEach { rowCodes ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        rowCodes.forEach { sc ->
+                                            val color = parseJadwalShiftColor(sc.colorHex)
+                                            val isSelected = selectedCode.equals(sc.code, ignoreCase = true)
+                                            Surface(
+                                                shape = RoundedCornerShape(9.dp),
+                                                color = if (isSelected) color else color.copy(alpha = 0.11f),
+                                                border = BorderStroke(if (isSelected) 1.5.dp else 1.dp, color),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable { selectedCode = sc.code }
+                                                    .testTag("chip_pick_shift_${sc.code}")
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 5.dp),
+                                                    horizontalAlignment = Alignment.CenterHorizontally
+                                                ) {
+                                                    Text(
+                                                        text = sc.code,
+                                                        fontSize = 11.5.sp,
+                                                        fontWeight = FontWeight.ExtraBold,
+                                                        color = if (isSelected) Color.White else color,
+                                                        maxLines = 1
+                                                    )
+                                                    Text(
+                                                        text = sc.name,
+                                                        fontSize = 8.5.sp,
+                                                        lineHeight = 10.sp,
+                                                        color = if (isSelected) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        textAlign = TextAlign.Center
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        repeat(4 - rowCodes.size) {
+                                            Spacer(modifier = Modifier.weight(1f))
+                                        }
                                     }
                                 }
                             }
@@ -555,84 +652,102 @@ fun EditJadwalSelDialog(
                             }
                         }
 
-                        HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                        if (!pinOnlyMode) {
+                            HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
 
-                        // 3. Izin / Sakit / Cuti (Segmented 4 Kolom Seimbang, Tidak Akan Patah Vertikal)
-                        Text(
-                            text = if (isEn) "3. Leave / Sick Status & Drive Link" else "3. Keterangan Izin / Sakit / Cuti",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                        ) {
-                            listOf(
-                                "" to if (isEn) "Normal" else "Normal",
-                                "IZIN" to "IZIN",
-                                "SAKIT" to "SAKIT",
-                                "CUTI" to "CUTI"
-                            ).forEach { (key, lbl) ->
-                                val selected = leaveStatus == key
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (selected) {
-                                        if (key.isEmpty()) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-                                    },
-                                    border = BorderStroke(
-                                        if (selected) 1.3.dp else 0.9.dp,
-                                        if (selected) {
-                                            if (key.isEmpty()) Color(0xFF15803D) else Color(0xFFD97706)
-                                        } else {
-                                            MaterialTheme.colorScheme.outlineVariant
-                                        }
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .clickable { leaveStatus = key }
-                                        .testTag("chip_leave_status_${key.ifBlank { "NORMAL" }}")
-                                ) {
-                                    Text(
-                                        text = lbl,
-                                        fontSize = 11.sp,
-                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                            // 3. Izin / Sakit / Cuti (Segmented 4 Kolom Seimbang, Tidak Akan Patah Vertikal)
+                            Text(
+                                text = if (isEn) "3. Leave / Sick Status & Drive Link" else "3. Keterangan Izin / Sakit / Cuti",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(5.dp)
+                            ) {
+                                listOf(
+                                    "" to if (isEn) "Normal" else "Normal",
+                                    "IZIN" to "IZIN",
+                                    "SAKIT" to "SAKIT",
+                                    "CUTI" to "CUTI"
+                                ).forEach { (key, lbl) ->
+                                    val selected = leaveStatus == key
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
                                         color = if (selected) {
-                                            if (key.isEmpty()) Color(0xFF166534) else Color(0xFF92400E)
+                                            if (key.isEmpty()) Color(0xFFDCFCE7) else Color(0xFFFEF3C7)
                                         } else {
-                                            MaterialTheme.colorScheme.onSurface
+                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                                         },
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp)
-                                    )
+                                        border = BorderStroke(
+                                            if (selected) 1.3.dp else 0.9.dp,
+                                            if (selected) {
+                                                if (key.isEmpty()) Color(0xFF15803D) else Color(0xFFD97706)
+                                            } else {
+                                                MaterialTheme.colorScheme.outlineVariant
+                                            }
+                                        ),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { leaveStatus = key }
+                                            .testTag("chip_leave_status_${key.ifBlank { "NORMAL" }}")
+                                    ) {
+                                        Text(
+                                            text = lbl,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                                            color = if (selected) {
+                                                if (key.isEmpty()) Color(0xFF166534) else Color(0xFF92400E)
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            },
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp)
+                                        )
+                                    }
                                 }
                             }
-                        }
 
-                        if (leaveStatus.isNotBlank()) {
-                            OutlinedTextField(
-                                value = leaveDriveUrl,
-                                onValueChange = { leaveDriveUrl = it },
-                                placeholder = { Text(if (isEn) "Google Drive Letter Link (Optional)" else "Tautan Google Drive Surat (Opsional)", fontSize = 11.5.sp) },
-                                textStyle = TextStyle(fontSize = 12.sp),
-                                singleLine = true,
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("input_leave_drive_url")
-                            )
-                            OutlinedTextField(
-                                value = leaveNote,
-                                onValueChange = { leaveNote = it },
-                                placeholder = { Text(if (isEn) "Note / Reason" else "Catatan / Keterangan Izin", fontSize = 11.5.sp) },
-                                textStyle = TextStyle(fontSize = 12.sp),
-                                singleLine = true,
-                                shape = RoundedCornerShape(10.dp),
+                            if (leaveStatus.isNotBlank()) {
+                                OutlinedTextField(
+                                    value = leaveDriveUrl,
+                                    onValueChange = { leaveDriveUrl = it },
+                                    placeholder = { Text(if (isEn) "Google Drive Letter Link (Optional)" else "Tautan Google Drive Surat (Opsional)", fontSize = 11.5.sp) },
+                                    textStyle = TextStyle(fontSize = 12.sp),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("input_leave_drive_url")
+                                )
+                                OutlinedTextField(
+                                    value = leaveNote,
+                                    onValueChange = { leaveNote = it },
+                                    placeholder = { Text(if (isEn) "Note / Reason" else "Catatan / Keterangan Izin", fontSize = 11.5.sp) },
+                                    textStyle = TextStyle(fontSize = 12.sp),
+                                    singleLine = true,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        } else if (initialLeave != null) {
+                            HorizontalDivider(thickness = 0.6.dp, color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                            Surface(
+                                shape = RoundedCornerShape(8.dp),
+                                color = Color(0xFFFEF3C7),
+                                border = BorderStroke(1.dp, Color(0xFFFCD34D)),
                                 modifier = Modifier.fillMaxWidth()
-                            )
+                            ) {
+                                Text(
+                                    text = "${initialLeave.status}${if (initialLeave.note.isNotBlank()) ": ${initialLeave.note}" else ""} (${if (isEn) "Locked" else "Terkunci"})",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF92400E),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                                )
+                            }
                         }
                     }
 
@@ -661,15 +776,19 @@ fun EditJadwalSelDialog(
                         }
                         Button(
                             onClick = {
-                                val leave = if (leaveStatus.isBlank()) null else LeaveDayInfo(
-                                    status = leaveStatus,
-                                    driveUrl = leaveDriveUrl.trim(),
-                                    note = leaveNote.trim()
-                                )
-                                val finalCode = selectedCode.ifBlank {
-                                    if (leaveStatus == "CUTI") "C" else if (leaveStatus.isNotBlank()) "IZIN" else ""
+                                if (pinOnlyMode) {
+                                    onSave(initialCode, pins.toList(), initialLeave)
+                                } else {
+                                    val leave = if (leaveStatus.isBlank()) null else LeaveDayInfo(
+                                        status = leaveStatus,
+                                        driveUrl = leaveDriveUrl.trim(),
+                                        note = leaveNote.trim()
+                                    )
+                                    val finalCode = selectedCode.ifBlank {
+                                        if (leaveStatus == "CUTI") "C" else if (leaveStatus.isNotBlank()) "IZIN" else ""
+                                    }
+                                    onSave(finalCode, pins.toList(), leave)
                                 }
-                                onSave(finalCode, pins.toList(), leave)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
                             shape = RoundedCornerShape(10.dp),
@@ -680,7 +799,11 @@ fun EditJadwalSelDialog(
                                 .testTag("btn_save_jadwal_sel")
                         ) {
                             Text(
-                                text = if (isEn) "Save Schedule" else "Simpan Perubahan",
+                                text = if (pinOnlyMode) {
+                                    if (isEn) "Save Pins" else "Simpan Penyematan"
+                                } else {
+                                    if (isEn) "Save Schedule" else "Simpan Perubahan"
+                                },
                                 fontSize = 12.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 maxLines = 1,
@@ -1609,20 +1732,31 @@ fun KelolaAnakAdminDialog(
     schoolProfile: SchoolProfile,
     waliAccounts: List<WaliAccount>,
     onToggleAnakAdmin: (WaliAccount, Boolean) -> Unit,
+    onSelectAnakAdminRole: ((WaliAccount, String) -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
     val activeSchoolId = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
-    val eligibleAccounts = remember(waliAccounts, activeSchoolId) {
+    var selectedRoleTab by remember { mutableIntStateOf(0) } // 0 = Anak Admin Utama, 1 = Anak Admin Penyematan
+    val isUtamaTab = selectedRoleTab == 0
+
+    val eligibleAccounts = remember(waliAccounts, activeSchoolId, isUtamaTab) {
         waliAccounts.filter { acc ->
             (acc.schoolId.isBlank() || acc.schoolId.equals(activeSchoolId, ignoreCase = true)) &&
                 !acc.isSpecialPortalRole()
         }.sortedWith(
-            compareByDescending<WaliAccount> { it.isAnakAdminSekolah() }.thenBy { it.name.lowercase() }
+            compareByDescending<WaliAccount> {
+                if (isUtamaTab) it.isAnakAdminSekolah() else it.isAnakAdminPenyematan()
+            }.thenByDescending {
+                it.hasAnyScheduleAdminRole()
+            }.thenBy { it.name.lowercase() }
         )
     }
-    val anakAdminCount = remember(eligibleAccounts) {
+    val utamaCount = remember(eligibleAccounts) {
         eligibleAccounts.count { it.isAnakAdminSekolah() }
+    }
+    val pinCount = remember(eligibleAccounts) {
+        eligibleAccounts.count { it.isAnakAdminPenyematan() }
     }
     var searchQuery by remember { mutableStateOf("") }
     val filteredAccounts = remember(eligibleAccounts, searchQuery) {
@@ -1660,28 +1794,28 @@ fun KelolaAnakAdminDialog(
                 ) {
                     Surface(
                         shape = RoundedCornerShape(10.dp),
-                        color = Color(0xFFE0E7FF),
+                        color = if (isUtamaTab) Color(0xFFE0E7FF) else Color(0xFFCCFBF1),
                         modifier = Modifier.size(40.dp)
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Icon(
-                                imageVector = Icons.Default.AdminPanelSettings,
+                                imageVector = if (isUtamaTab) Icons.Default.AdminPanelSettings else Icons.Default.PushPin,
                                 contentDescription = null,
-                                tint = Color(0xFF4338CA),
+                                tint = if (isUtamaTab) Color(0xFF4338CA) else Color(0xFF0F766E),
                                 modifier = Modifier.size(22.dp)
                             )
                         }
                     }
                     Column {
                         Text(
-                            text = if (isEn) "Pin Schedule Sub-Admins" else "Sematkan Fitur Anak Admin Jadwal",
+                            text = if (isEn) "Pin Schedule Sub-Admins" else "Kelola Anak Admin Jadwal",
                             fontSize = 16.5.sp,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "${schoolProfile.schoolName.ifBlank { activeSchoolId }} • $anakAdminCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} ${if (isEn) "Quota" else "Kuota Terpakai"}",
-                            fontSize = 11.5.sp,
-                            color = Color(0xFF4338CA),
+                            text = "${schoolProfile.schoolName.ifBlank { activeSchoolId }} • Utama $utamaCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} • Penyematan $pinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}",
+                            fontSize = 11.sp,
+                            color = if (isUtamaTab) Color(0xFF4338CA) else Color(0xFF0F766E),
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -1694,20 +1828,93 @@ fun KelolaAnakAdminDialog(
                 }
             }
 
+            // Segmented Role Switcher: Anak Admin Utama vs Anak Admin Penyematan (Kuota Terpisah 7/7)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (isUtamaTab) Color(0xFF4338CA) else Color(0xFFEEF2FF),
+                    border = BorderStroke(1.dp, if (isUtamaTab) Color(0xFF4338CA) else Color(0xFFC7D2FE)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clickable { selectedRoleTab = 0 }
+                        .testTag("tab_picker_anak_admin_utama")
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "Main Sub-Admin ($utamaCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                            } else {
+                                "Anak Admin Utama ($utamaCount/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (isUtamaTab) Color.White else Color(0xFF312E81),
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = if (!isUtamaTab) Color(0xFF0F766E) else Color(0xFFF0FDFA),
+                    border = BorderStroke(1.dp, if (!isUtamaTab) Color(0xFF0F766E) else Color(0xFF99F6E4)),
+                    modifier = Modifier
+                        .weight(1f)
+                        .heightIn(min = 48.dp)
+                        .clickable { selectedRoleTab = 1 }
+                        .testTag("tab_picker_anak_admin_pin")
+                ) {
+                    Box(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = if (isEn) {
+                                "Task Pin Admin ($pinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
+                            } else {
+                                "Admin Penyematan ($pinCount/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})"
+                            },
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (!isUtamaTab) Color.White else Color(0xFF115E59),
+                            textAlign = TextAlign.Center,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+
             Surface(
                 shape = RoundedCornerShape(10.dp),
-                color = Color(0xFFEEF2FF),
-                border = BorderStroke(1.dp, Color(0xFFC7D2FE)),
+                color = if (isUtamaTab) Color(0xFFEEF2FF) else Color(0xFFF0FDFA),
+                border = BorderStroke(1.dp, if (isUtamaTab) Color(0xFFC7D2FE) else Color(0xFF99F6E4)),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
-                    text = if (isEn) {
-                        "Select up to ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh in this school. Pinned accounts stay on their normal Wali dashboard, with live permission to change shifts, pin RS/dorm tasks, and upload/download schedule CSVs."
+                    text = if (isUtamaTab) {
+                        if (isEn) {
+                            "Main Sub-Admin (Quota ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}): stays on normal Wali dashboard, with full permission to change shifts, pin RS/dorm tasks, set leave, and upload/download schedule CSVs."
+                        } else {
+                            "Anak Admin Utama (Kuota ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}): tetap login sebagai Wali Asuh biasa, dapat mengganti shift (P1–M3/LP/L), menyematkan tugas RS/Faskes, mengatur izin, serta upload & download CSV jadwal."
+                        }
                     } else {
-                        "Pilih maksimal ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh di sekolah ini. Mereka tetap login sebagai Wali Asuh biasa, namun dapat langsung klik-ganti shift, menyematkan tugas RS/Asrama, serta upload & download CSV jadwal."
+                        if (isEn) {
+                            "Task Pin Sub-Admin (Separate Quota ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}): stays on normal Wali dashboard, ONLY allowed to pin/unpin Extra Tasks & RS/Faskes duties. Cannot change shifts, leave, or upload CSV."
+                        } else {
+                            "Anak Admin Penyematan (Kuota Terpisah ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}): tetap login sebagai Wali Asuh biasa, HANYA dapat menyematkan/mencabut Tugas Tambahan & Jaga RS/Faskes. Tidak bisa mengganti shift, izin, atau upload CSV."
+                        }
                     },
                     fontSize = 11.sp,
-                    color = Color(0xFF312E81),
+                    color = if (isUtamaTab) Color(0xFF312E81) else Color(0xFF115E59),
                     lineHeight = 15.sp,
                     modifier = Modifier.padding(10.dp)
                 )
@@ -1751,19 +1958,43 @@ fun KelolaAnakAdminDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     items(filteredAccounts, key = { it.id }) { account ->
-                        val isPinned = account.isAnakAdminSekolah()
-                        val canEnable = isPinned || anakAdminCount < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL
+                        val isUtama = account.isAnakAdminSekolah()
+                        val isPinAdmin = account.isAnakAdminPenyematan()
+                        val isPinnedInTab = if (isUtamaTab) isUtama else isPinAdmin
+                        val tabQuotaCount = if (isUtamaTab) utamaCount else pinCount
+                        val tabQuotaMax = if (isUtamaTab) WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL else WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL
+                        val canEnable = isPinnedInTab || tabQuotaCount < tabQuotaMax
+                        val handleToggle: (Boolean) -> Unit = { checked ->
+                            val nextRole = when {
+                                checked && isUtamaTab -> WaliAccount.ROLE_WALI_ANAK_ADMIN
+                                checked && !isUtamaTab -> WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
+                                else -> WaliAccount.ROLE_WALI
+                            }
+                            if (onSelectAnakAdminRole != null) {
+                                onSelectAnakAdminRole(account, nextRole)
+                            } else if (isUtamaTab) {
+                                onToggleAnakAdmin(account, checked)
+                            }
+                        }
                         Surface(
                             shape = RoundedCornerShape(12.dp),
-                            color = if (isPinned) Color(0xFFEEF2FF) else MaterialTheme.colorScheme.surface,
+                            color = when {
+                                isUtama -> Color(0xFFEEF2FF)
+                                isPinAdmin -> Color(0xFFF0FDFA)
+                                else -> MaterialTheme.colorScheme.surface
+                            },
                             border = BorderStroke(
                                 1.dp,
-                                if (isPinned) Color(0xFF818CF8) else MaterialTheme.colorScheme.outlineVariant
+                                when {
+                                    isUtama -> Color(0xFF818CF8)
+                                    isPinAdmin -> Color(0xFF2DD4BF)
+                                    else -> MaterialTheme.colorScheme.outlineVariant
+                                }
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable(enabled = canEnable) {
-                                    onToggleAnakAdmin(account, !isPinned)
+                                    handleToggle(!isPinnedInTab)
                                 }
                                 .testTag("row_picker_anak_admin_${account.id}")
                         ) {
@@ -1789,15 +2020,21 @@ fun KelolaAnakAdminDialog(
                                             fontSize = 13.5.sp,
                                             fontWeight = FontWeight.Bold,
                                             maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
                                         )
-                                        if (isPinned) {
+                                        if (isUtama || isPinAdmin) {
                                             Surface(
                                                 shape = RoundedCornerShape(6.dp),
-                                                color = Color(0xFF4338CA)
+                                                color = if (isUtama) Color(0xFF4338CA) else Color(0xFF0F766E)
                                             ) {
                                                 Text(
-                                                    text = if (isEn) "Sub-Admin" else "Anak Admin",
+                                                    text = when {
+                                                        isUtama && isEn -> "Main Admin"
+                                                        isUtama -> "Admin Utama"
+                                                        isEn -> "Pin Admin"
+                                                        else -> "Admin Penyematan"
+                                                    },
                                                     fontSize = 9.5.sp,
                                                     color = Color.White,
                                                     fontWeight = FontWeight.Bold,
@@ -1813,11 +2050,9 @@ fun KelolaAnakAdminDialog(
                                     )
                                 }
                                 Switch(
-                                    checked = isPinned,
+                                    checked = isPinnedInTab,
                                     enabled = canEnable,
-                                    onCheckedChange = { checked ->
-                                        onToggleAnakAdmin(account, checked)
-                                    },
+                                    onCheckedChange = handleToggle,
                                     modifier = Modifier.testTag("switch_picker_anak_admin_${account.id}")
                                 )
                             }

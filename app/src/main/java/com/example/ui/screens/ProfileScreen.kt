@@ -201,6 +201,7 @@ fun ProfileScreen(
 
                     val isPutri = acc?.dormitory?.contains("putri", ignoreCase = true) == true
                     val isAnakAdmin = acc?.isAnakAdminSekolah() == true
+                    val isAnakAdminPin = acc?.isAnakAdminPenyematan() == true
                     val cardGradient = if (isDarkTheme) {
                         Brush.linearGradient(
                             colors = listOf(
@@ -224,12 +225,14 @@ fun ProfileScreen(
                     val pillBg = when {
                         isDarkTheme -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
                         isAnakAdmin -> Color(0xFFE0E7FF)
+                        isAnakAdminPin -> Color(0xFFCCFBF1)
                         isPutri -> Color(0xFFFCE7F3)
                         else -> Color(0xFFDBEAFE)
                     }
                     val pillFg = when {
                         isDarkTheme -> MaterialTheme.colorScheme.onPrimaryContainer
                         isAnakAdmin -> Color(0xFF3730A3)
+                        isAnakAdminPin -> Color(0xFF0F766E)
                         isPutri -> Color(0xFFBE185D)
                         else -> Color(0xFF1D4ED8)
                     }

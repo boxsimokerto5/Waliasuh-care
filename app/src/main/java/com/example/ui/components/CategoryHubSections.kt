@@ -2310,6 +2310,8 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
     monthEntries: List<WaliScheduleEntry>,
     canManageSchedule: Boolean,
     isAnakAdminSekolah: Boolean = false,
+    canPinScheduleTasks: Boolean = canManageSchedule,
+    isAnakAdminPenyematan: Boolean = false,
     scheduleWaliAccounts: List<com.example.data.model.WaliAccount> = emptyList(),
     currentUsername: String?,
     currentWaliName: String,
@@ -2833,9 +2835,9 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                                 )
                                 Text(
                                     text = if (isEn) {
-                                        "Schedule Sub-Admin Active • Tap any row/cell to edit shifts & tasks, or use CSV"
+                                        "Main Schedule Sub-Admin Active • Tap any row/cell to edit shifts & tasks, or use CSV"
                                     } else {
-                                        "Mode Anak Admin Jadwal • Klik wali untuk ubah shift/pin tugas, atau kelola CSV"
+                                        "Mode Anak Admin Utama • Klik wali untuk ubah shift/pin tugas, atau kelola CSV"
                                     },
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -2920,6 +2922,62 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
                         }
                     }
                 }
+            } else if (isAnakAdminPenyematan || canPinScheduleTasks) {
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = Color(0xFFF0FDFA),
+                    border = BorderStroke(1.dp, Color(0xFF5EEAD4)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("card_jadwal_pin_admin_controls")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 9.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.testTag("badge_anak_admin_pin_mode")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PushPin,
+                                contentDescription = null,
+                                tint = Color(0xFF0F766E),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = if (isEn) {
+                                    "Task Pin Sub-Admin Active • Tap any caregiver row below to pin/unpin Extra Tasks & RS/Faskes duties (shifts & leave locked)."
+                                } else {
+                                    "Mode Anak Admin Penyematan • Ketuk nama wali untuk sematkan Tugas Tambahan & Jaga RS/Faskes (shift & izin terkunci)."
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF115E59)
+                            )
+                        }
+                        Button(
+                            onClick = onOpenPinTugas,
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0F766E)),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_jadwal_pin_admin_open_sheet")
+                        ) {
+                            Icon(Icons.Default.PushPin, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isEn) "Open Task Pinning Manager" else "Buka Penyematan Tugas & RS/Faskes",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -2933,6 +2991,7 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
         shiftCodes = shiftCodes,
         monthEntries = monthEntries,
         canManageSchedule = canManageSchedule,
+        canPinScheduleTasks = canPinScheduleTasks,
         searchQuery = searchQuery,
         selectedGroup = selectedGroup,
         onSearchChange = onSearchChange,
@@ -2954,6 +3013,7 @@ internal fun LazyListScope.jadwalDailyRosterItems(
     shiftCodes: List<WaliShiftCode>,
     monthEntries: List<WaliScheduleEntry>,
     canManageSchedule: Boolean,
+    canPinScheduleTasks: Boolean = canManageSchedule,
     searchQuery: String,
     selectedGroup: String,
     onSearchChange: (String) -> Unit,
@@ -2964,6 +3024,7 @@ internal fun LazyListScope.jadwalDailyRosterItems(
     onEditCell: (WaliScheduleEntry, Int) -> Unit,
     onOpenImportMatriks: (() -> Unit)? = null
 ) {
+    val canEditAnyCell = canManageSchedule || canPinScheduleTasks
     val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
     val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, schoolProfile.tenantCode)
     val daysInMonth = WaliScheduleHelper.daysInMonth(monthKey)
@@ -3013,10 +3074,10 @@ internal fun LazyListScope.jadwalDailyRosterItems(
                             modifier = Modifier.testTag("text_jadwal_selected_date")
                         )
                         Text(
-                            text = if (canManageSchedule) {
-                                if (isEn) "Tap any person to edit shift & pins" else "Ketuk nama wali untuk atur shift & pin tugas"
-                            } else {
-                                if (isEn) "Tap any person for monthly schedule" else "Ketuk nama wali untuk lihat jadwal personal"
+                            text = when {
+                                canManageSchedule -> if (isEn) "Tap any person to edit shift & pins" else "Ketuk nama wali untuk atur shift & pin tugas"
+                                canPinScheduleTasks -> if (isEn) "Tap any person to pin extra task / Faskes" else "Ketuk nama wali untuk sematkan tugas & jaga Faskes"
+                                else -> if (isEn) "Tap any person for monthly schedule" else "Ketuk nama wali untuk lihat jadwal personal"
                             },
                             fontSize = 10.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -3168,10 +3229,10 @@ internal fun LazyListScope.jadwalDailyRosterItems(
                             timeSubtitle = grpTime,
                             members = matchedMembers,
                             shiftMap = shiftMap,
-                            canManageSchedule = canManageSchedule,
+                            canManageSchedule = canEditAnyCell,
                             isEn = isEn,
                             onMemberClick = { entry ->
-                                if (canManageSchedule) onEditCell(entry, safeDay)
+                                if (canEditAnyCell) onEditCell(entry, safeDay)
                                 else onOpenPersonal(entry)
                             }
                         )

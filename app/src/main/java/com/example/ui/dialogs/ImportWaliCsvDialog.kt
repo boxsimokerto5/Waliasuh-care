@@ -145,6 +145,8 @@ fun ImportWaliCsvDialog(
                         rawRole.contains("kesehatan", ignoreCase = true) ||
                         rawRole.contains("medis", ignoreCase = true) ||
                         rawRole.equals("uks", ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
+                    rawRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true) ||
+                        rawRole.contains("penyematan", ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
                     rawRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) ||
                         rawRole.contains("anak admin", ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
                     else -> WaliAccount.ROLE_WALI

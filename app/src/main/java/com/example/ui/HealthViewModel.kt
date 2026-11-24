@@ -1126,6 +1126,13 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         role == UserRole.WALI && account?.isAnakAdminSekolah() == true
     }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
+    val isAnakAdminPenyematan: StateFlow<Boolean> = combine(
+        _currentUserRole,
+        currentWaliAccount
+    ) { role, account ->
+        role == UserRole.WALI && account?.isAnakAdminPenyematan() == true
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     // Multi-tenant isolated medical records:
     val allRecords: StateFlow<List<MedicalRecord>> = combine(
         repository.allRecords,
@@ -3707,13 +3714,19 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             isAnakAdminSekolah.value
     }
 
+    fun canPinScheduleTasks(): Boolean = canManageSchoolSchedule() || isAnakAdminPenyematan.value
+
     private fun scheduleActorName(): String {
         val profile = _schoolProfile.value
         return when (_currentUserRole.value) {
             UserRole.ADMIN -> profile.adminName.ifBlank { "Admin Sekolah" }
             UserRole.SUPERADMIN -> "SuperAdmin"
             UserRole.WALI -> _waliName.value.ifBlank {
-                if (isAnakAdminSekolah.value) "Anak Admin Sekolah" else "Wali Asuh"
+                when {
+                    isAnakAdminSekolah.value -> "Anak Admin Utama"
+                    isAnakAdminPenyematan.value -> "Anak Admin Penyematan"
+                    else -> "Wali Asuh"
+                }
             }
             else -> _waliName.value.ifBlank { "Admin Sekolah" }
         }
@@ -4009,7 +4022,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
         val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
-        if (!canManageSchoolSchedule()) {
+        val canFullEdit = canManageSchoolSchedule()
+        val canPinOnly = !canFullEdit && canPinScheduleTasks()
+        if (!canFullEdit && !canPinOnly) {
             onResult(false, if (isEn) "Only school admin can edit schedules or pin tasks." else "Hanya admin sekolah yang boleh mengubah jadwal, menyematkan tugas, atau input izin.")
             return
         }
@@ -4019,30 +4034,46 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         viewModelScope.launch {
-            val dayCodes = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson).toMutableMap()
-            val cleanCode = shiftCode.trim().uppercase()
-            if (cleanCode.isBlank()) dayCodes.remove(day) else dayCodes[day] = cleanCode
-
             val dayPins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson).toMutableMap()
             val cleanPins = pinsForDay.filter { it.label.isNotBlank() }
             if (cleanPins.isEmpty()) dayPins.remove(day) else dayPins[day] = cleanPins
 
-            val dayLeaves = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson).toMutableMap()
-            if (leaveForDay == null || leaveForDay.status.isBlank()) {
-                dayLeaves.remove(day)
+            val updated = if (canPinOnly) {
+                // Anak Admin Penyematan hanya boleh mengubah penyematan tugas & jaga RS/Faskes; shift & izin tetap terkunci.
+                entry.copy(
+                    dayPinsJson = WaliScheduleHelper.serializeDayPins(dayPins),
+                    updatedBy = scheduleActorName(),
+                    updatedAt = System.currentTimeMillis()
+                )
             } else {
-                dayLeaves[day] = leaveForDay
-            }
+                val dayCodes = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson).toMutableMap()
+                val cleanCode = shiftCode.trim().uppercase()
+                if (cleanCode.isBlank()) dayCodes.remove(day) else dayCodes[day] = cleanCode
 
-            val updated = entry.copy(
-                dayCodesJson = WaliScheduleHelper.serializeDayCodes(dayCodes),
-                dayPinsJson = WaliScheduleHelper.serializeDayPins(dayPins),
-                dayLeaveJson = WaliScheduleHelper.serializeDayLeaves(dayLeaves),
-                updatedBy = scheduleActorName(),
-                updatedAt = System.currentTimeMillis()
-            )
+                val dayLeaves = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson).toMutableMap()
+                if (leaveForDay == null || leaveForDay.status.isBlank()) {
+                    dayLeaves.remove(day)
+                } else {
+                    dayLeaves[day] = leaveForDay
+                }
+
+                entry.copy(
+                    dayCodesJson = WaliScheduleHelper.serializeDayCodes(dayCodes),
+                    dayPinsJson = WaliScheduleHelper.serializeDayPins(dayPins),
+                    dayLeaveJson = WaliScheduleHelper.serializeDayLeaves(dayLeaves),
+                    updatedBy = scheduleActorName(),
+                    updatedAt = System.currentTimeMillis()
+                )
+            }
             repository.updateWaliScheduleEntry(updated)
-            onResult(true, if (isEn) "Day $day updated for ${entry.waliName}." else "Jadwal Tgl $day untuk ${entry.waliName} disimpan.")
+            val successMsg = if (canPinOnly) {
+                if (isEn) "Pinned tasks on Day $day saved for ${entry.waliName}."
+                else "Penyematan tugas Tgl $day untuk ${entry.waliName} disimpan."
+            } else {
+                if (isEn) "Day $day updated for ${entry.waliName}."
+                else "Jadwal Tgl $day untuk ${entry.waliName} disimpan."
+            }
+            onResult(true, successMsg)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleWaliScheduleEntry(getApplication(), updated)
             }
@@ -5350,19 +5381,26 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (replace) {
                 repository.deleteWaliAccountsBySchool(targetSchoolId)
             }
-            val existingPinned = if (replace) 0 else {
-                repository.getWaliAccountsBySchoolList(targetSchoolId).count { it.isAnakAdminSekolah() }
-            }
-            var pinnedSlotsUsed = existingPinned
+            val existingAccounts = if (replace) emptyList() else repository.getWaliAccountsBySchoolList(targetSchoolId)
+            var utamaSlotsUsed = existingAccounts.count { it.isAnakAdminSekolah() }
+            var pinSlotsUsed = existingAccounts.count { it.isAnakAdminPenyematan() }
             val stampedAccounts = accountList.map { acc ->
                 val assignedId = if (acc.id > 0L) acc.id else PocketBaseSyncManager.generateCloudSafeId()
                 val normalizedRole = when {
                     acc.role.trim().equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
                     acc.role.trim().equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
                     acc.role.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> {
-                        if (pinnedSlotsUsed < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
-                            pinnedSlotsUsed++
+                        if (utamaSlotsUsed < WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
+                            utamaSlotsUsed++
                             WaliAccount.ROLE_WALI_ANAK_ADMIN
+                        } else {
+                            WaliAccount.ROLE_WALI
+                        }
+                    }
+                    acc.role.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true) -> {
+                        if (pinSlotsUsed < WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL) {
+                            pinSlotsUsed++
+                            WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
                         } else {
                             WaliAccount.ROLE_WALI
                         }
@@ -7200,6 +7238,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 trimmedRole.equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
                 trimmedRole.equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
                 trimmedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
+                trimmedRole.equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
                 else -> WaliAccount.ROLE_WALI
             }
             if (normalizedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN) {
@@ -7208,9 +7247,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (existingPinned >= WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
                     onError(
                         if (isEn) {
-                            "Schedule Sub-Admin quota is full (max ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} per school). Unpin one first."
+                            "Main Sub-Admin quota is full (max ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} per school). Unpin one first."
                         } else {
-                            "Kuota Anak Admin Sekolah penuh (maksimal ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh per sekolah). Cabut salah satu terlebih dahulu."
+                            "Kuota Anak Admin Utama penuh (maksimal ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh per sekolah). Cabut salah satu terlebih dahulu."
+                        }
+                    )
+                    return@launch
+                }
+            } else if (normalizedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN) {
+                val existingPinAdmins = repository.getWaliAccountsBySchoolList(tenant)
+                    .count { it.isAnakAdminPenyematan() }
+                if (existingPinAdmins >= WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL) {
+                    onError(
+                        if (isEn) {
+                            "Task Pin Sub-Admin quota is full (max ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL} per school). Unpin one first."
+                        } else {
+                            "Kuota Anak Admin Penyematan penuh (maksimal ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL} Wali Asuh per sekolah). Cabut salah satu terlebih dahulu."
                         }
                     )
                     return@launch
@@ -7281,6 +7333,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 account.role.trim().equals(WaliAccount.ROLE_GURU_NGAJI, ignoreCase = true) -> WaliAccount.ROLE_GURU_NGAJI
                 account.role.trim().equals(WaliAccount.ROLE_PETUGAS_KESEHATAN, ignoreCase = true) -> WaliAccount.ROLE_PETUGAS_KESEHATAN
                 account.role.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
+                account.role.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
                 else -> WaliAccount.ROLE_WALI
             }
             if (normalizedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN) {
@@ -7289,9 +7342,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 if (otherPinned >= WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
                     onError(
                         if (isEn) {
-                            "Schedule Sub-Admin quota is full (max ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} per school). Unpin another Wali Asuh first."
+                            "Main Sub-Admin quota is full (max ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} per school). Unpin another Wali Asuh first."
                         } else {
-                            "Kuota Anak Admin Sekolah penuh (maksimal ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh per sekolah). Cabut sematan akun lain dulu."
+                            "Kuota Anak Admin Utama penuh (maksimal ${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL} Wali Asuh per sekolah). Cabut sematan akun lain dulu."
+                        }
+                    )
+                    return@launch
+                }
+            } else if (normalizedRole == WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN) {
+                val otherPinAdmins = repository.getWaliAccountsBySchoolList(tenant)
+                    .count { it.isAnakAdminPenyematan() && it.id != account.id }
+                if (otherPinAdmins >= WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL) {
+                    onError(
+                        if (isEn) {
+                            "Task Pin Sub-Admin quota is full (max ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL} per school). Unpin another Wali Asuh first."
+                        } else {
+                            "Kuota Anak Admin Penyematan penuh (maksimal ${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL} Wali Asuh per sekolah). Cabut sematan akun lain dulu."
                         }
                     )
                     return@launch
@@ -7311,6 +7377,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         enableAnakAdmin: Boolean,
         onResult: (Boolean, String) -> Unit = { _, _ -> }
     ) {
+        val targetRole = if (enableAnakAdmin) WaliAccount.ROLE_WALI_ANAK_ADMIN else WaliAccount.ROLE_WALI
+        setWaliAnakAdminRole(account, targetRole, onResult)
+    }
+
+    fun setWaliAnakAdminRole(
+        account: WaliAccount,
+        targetRole: String,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
         viewModelScope.launch {
             val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
             if (account.isSpecialPortalRole()) {
@@ -7321,36 +7396,64 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 return@launch
             }
+            val normalizedTarget = when {
+                targetRole.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN
+                targetRole.trim().equals(WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, ignoreCase = true) -> WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
+                else -> WaliAccount.ROLE_WALI
+            }
             val tenant = account.schoolId.ifBlank { _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" } }
-            if (enableAnakAdmin) {
-                val otherPinned = repository.getWaliAccountsBySchoolList(tenant)
-                    .count { it.isAnakAdminSekolah() && it.id != account.id }
-                if (otherPinned >= WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
+            val schoolAccounts = repository.getWaliAccountsBySchoolList(tenant)
+            if (normalizedTarget == WaliAccount.ROLE_WALI_ANAK_ADMIN) {
+                val otherUtama = schoolAccounts.count { it.isAnakAdminSekolah() && it.id != account.id }
+                if (otherUtama >= WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL) {
                     onResult(
                         false,
                         if (isEn) {
-                            "Sub-Admin quota reached (${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}). Unpin one first."
+                            "Main Sub-Admin quota reached (${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}). Unpin one first."
                         } else {
-                            "Kuota Anak Admin Sekolah penuh (${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}). Cabut salah satu terlebih dahulu."
+                            "Kuota Anak Admin Utama penuh (${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL}). Cabut salah satu terlebih dahulu."
+                        }
+                    )
+                    return@launch
+                }
+            } else if (normalizedTarget == WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN) {
+                val otherPin = schoolAccounts.count { it.isAnakAdminPenyematan() && it.id != account.id }
+                if (otherPin >= WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL) {
+                    onResult(
+                        false,
+                        if (isEn) {
+                            "Task Pin Sub-Admin quota reached (${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}). Unpin one first."
+                        } else {
+                            "Kuota Anak Admin Penyematan penuh (${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL}). Cabut salah satu terlebih dahulu."
                         }
                     )
                     return@launch
                 }
             }
-            val newRole = if (enableAnakAdmin) WaliAccount.ROLE_WALI_ANAK_ADMIN else WaliAccount.ROLE_WALI
-            val updated = account.copy(role = newRole)
+
+            val updated = account.copy(role = normalizedTarget)
             repository.updateWaliAccount(updated)
-            val totalNow = repository.getWaliAccountsBySchoolList(tenant).count { it.isAnakAdminSekolah() }
-            onResult(
-                true,
-                if (enableAnakAdmin) {
-                    if (isEn) "${account.name} pinned as Schedule Sub-Admin ($totalNow/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})."
-                    else "Fitur Anak Admin Jadwal disematkan ke ${account.name} ($totalNow/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})."
+            val refreshed = repository.getWaliAccountsBySchoolList(tenant)
+            val totalUtamaNow = refreshed.count { it.isAnakAdminSekolah() }
+            val totalPinNow = refreshed.count { it.isAnakAdminPenyematan() }
+            val msg = when (normalizedTarget) {
+                WaliAccount.ROLE_WALI_ANAK_ADMIN -> if (isEn) {
+                    "${account.name} pinned as Main Sub-Admin ($totalUtamaNow/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})."
                 } else {
-                    if (isEn) "Schedule Sub-Admin role removed from ${account.name}."
-                    else "Hak Anak Admin Jadwal untuk ${account.name} dicabut."
+                    "Fitur Anak Admin Utama disematkan ke ${account.name} ($totalUtamaNow/${WaliAccount.MAX_ANAK_ADMIN_PER_SCHOOL})."
                 }
-            )
+                WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN -> if (isEn) {
+                    "${account.name} pinned as Task Pin Sub-Admin ($totalPinNow/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})."
+                } else {
+                    "Fitur Anak Admin Penyematan disematkan ke ${account.name} ($totalPinNow/${WaliAccount.MAX_ANAK_ADMIN_PIN_PER_SCHOOL})."
+                }
+                else -> if (isEn) {
+                    "Sub-Admin role removed from ${account.name}."
+                } else {
+                    "Hak Anak Admin untuk ${account.name} dicabut."
+                }
+            }
+            onResult(true, msg)
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadWaliAccounts(getApplication(), listOf(updated))
             }

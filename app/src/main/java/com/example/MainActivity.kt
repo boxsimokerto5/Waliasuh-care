@@ -283,10 +283,12 @@ private fun WaliAsuhCareAppContent(
     val currentWaliAccount by viewModel.currentWaliAccount.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val isAnakAdminSekolah by viewModel.isAnakAdminSekolah.collectAsStateWithLifecycle()
+    val isAnakAdminPenyematan by viewModel.isAnakAdminPenyematan.collectAsStateWithLifecycle()
     val canManageMainSchedule = currentUserRole == UserRole.ADMIN ||
         currentUserRole == UserRole.SUPERADMIN ||
         isAnakSuperAdmin ||
         isAnakAdminSekolah
+    val canPinMainScheduleTasks = canManageMainSchedule || isAnakAdminPenyematan
     val mainCoroutineScope = rememberCoroutineScope()
     val dashboardModalState = rememberDashboardModalState()
     var readyMainTabunganSummaryPdf by remember { mutableStateOf<java.io.File?>(null) }
@@ -551,6 +553,7 @@ private fun WaliAsuhCareAppContent(
                         shiftCodes = schoolShiftCodes,
                         scheduleEntries = schoolScheduleEntries,
                         canManageSchedule = canManageMainSchedule,
+                        canPinScheduleTasks = canPinMainScheduleTasks,
                         waliAccounts = waliAccounts,
                         currentUsername = currentUsername,
                         currentWaliName = waliName,
@@ -875,6 +878,8 @@ private fun WaliAsuhCareAppContent(
                 scheduleEntries = schoolScheduleEntries,
                 canManageSchedule = canManageMainSchedule,
                 isAnakAdminSekolah = isAnakAdminSekolah,
+                canPinScheduleTasks = canPinMainScheduleTasks,
+                isAnakAdminPenyematan = isAnakAdminPenyematan,
                 scheduleWaliAccounts = waliAccounts,
                 currentUsername = currentUsername,
                 currentWaliName = waliName,
@@ -953,7 +958,7 @@ private fun WaliAsuhCareAppContent(
                 },
                 onEditScheduleCell = { entry, day ->
                     TopOnAdManager.onUserActionClick(context)
-                    if (canManageMainSchedule) {
+                    if (canManageMainSchedule || canPinMainScheduleTasks) {
                         dashboardModalState.editingScheduleCellTarget = entry to day
                     } else {
                         android.widget.Toast.makeText(

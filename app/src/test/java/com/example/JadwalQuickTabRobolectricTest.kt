@@ -299,4 +299,173 @@ class JadwalQuickTabRobolectricTest {
         composeTestRule.onNodeWithTag("fab_direct_treatment").assertIsDisplayed()
         composeTestRule.onNodeWithTag("nav_item_jadwal").assertIsDisplayed()
     }
+
+    @Test
+    fun `anak admin penyematan has separate 7 quota and locks shift and leave on schedule update`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val db = AppDatabase.getDatabase(app)
+        val schoolId = "SCH-PIN-1"
+        val monthKey = "2026-11"
+        val initialLeave = com.example.data.model.LeaveDayInfo(status = "IZIN", driveUrl = "", note = "Rapat")
+
+        runBlocking {
+            clearSchoolData(db, schoolId)
+            // Fill 7/7 Anak Admin Utama slots
+            for (i in 1..7) {
+                db.waliAccountDao().insert(
+                    WaliAccount(
+                        name = "Utama $i",
+                        username = "utama_$i",
+                        password = "pw",
+                        schoolId = schoolId,
+                        role = WaliAccount.ROLE_WALI_ANAK_ADMIN
+                    )
+                )
+            }
+            // Add 1 Anak Admin Penyematan (separate quota 1/7)
+            db.waliAccountDao().insert(
+                WaliAccount(
+                    name = "Pin Admin Satu",
+                    username = "pin_admin_1",
+                    password = "pw",
+                    schoolId = schoolId,
+                    role = WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN
+                )
+            )
+            db.waliScheduleEntryDao().insert(
+                WaliScheduleEntry(
+                    schoolId = schoolId,
+                    monthKey = monthKey,
+                    waliUsername = "target_wali",
+                    waliName = "Wali Target",
+                    sortOrder = 1,
+                    dayCodesJson = WaliScheduleHelper.serializeDayCodes(mapOf(15 to "P1")),
+                    dayLeaveJson = WaliScheduleHelper.serializeDayLeaves(mapOf(15 to initialLeave)),
+                    dayPinsJson = "{}"
+                )
+            )
+        }
+
+        val vm = HealthViewModel(app)
+        runBlocking {
+            vm.updateSchoolProfile(
+                SchoolProfile(schoolName = "SR Uji", shortName = "SRU", tenantCode = schoolId)
+            )
+            val loginRes = vm.executeLogin("pin_admin_1", "pw", rememberMe = false)
+            org.junit.Assert.assertTrue(loginRes is LoginResult.SuccessWali)
+            waitUntil { vm.schoolScheduleEntries.value.any { it.schoolId == schoolId } && vm.isAnakAdminPenyematan.value }
+
+            org.junit.Assert.assertFalse(vm.canManageSchoolSchedule())
+            org.junit.Assert.assertTrue(vm.canPinScheduleTasks())
+
+            val targetEntry = vm.schoolScheduleEntries.value.first { it.waliUsername == "target_wali" }
+            var saveOk = false
+            vm.updateWaliScheduleDayCell(
+                entry = targetEntry,
+                day = 15,
+                shiftCode = "M3", // Attempted shift change MUST be ignored for Penyematan
+                pinsForDay = listOf(PinnedTaskItem("Jaga RSUD", WaliScheduleHelper.PIN_FASKES)),
+                leaveForDay = null // Attempted leave clear MUST be ignored for Penyematan
+            ) { ok, _ -> saveOk = ok }
+
+            waitUntil {
+                saveOk && (WaliScheduleHelper.parseDayPins(
+                    vm.schoolScheduleEntries.value.firstOrNull { it.id == targetEntry.id }?.dayPinsJson.orEmpty()
+                )[15]?.isNotEmpty() == true)
+            }
+
+            val saved = vm.schoolScheduleEntries.value.first { it.id == targetEntry.id }
+            assertEquals("P1", WaliScheduleHelper.parseDayCodes(saved.dayCodesJson)[15])
+            assertEquals("IZIN", WaliScheduleHelper.parseDayLeaves(saved.dayLeaveJson)[15]?.status)
+            assertEquals(
+                listOf("Jaga RSUD"),
+                WaliScheduleHelper.parseDayPins(saved.dayPinsJson)[15]?.map { it.label }
+            )
+        }
+    }
+
+    @Test
+    fun `EditJadwalSelDialog in pinOnlyMode locks shift and leave while saving pinned tasks`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val profile = SchoolProfile(schoolName = "SR Kediri", tenantCode = "SCH-PIN-2")
+        val shiftCodes = WaliScheduleHelper.defaultShiftCodes("SCH-PIN-2")
+        val existingLeave = com.example.data.model.LeaveDayInfo(status = "SAKIT", note = "Demam")
+        val entry = WaliScheduleEntry(
+            id = 301L,
+            schoolId = "SCH-PIN-2",
+            monthKey = "2026-11",
+            waliUsername = "wali_uji",
+            waliName = "Ustadz Uji",
+            dayCodesJson = WaliScheduleHelper.serializeDayCodes(mapOf(10 to "P1")),
+            dayLeaveJson = WaliScheduleHelper.serializeDayLeaves(mapOf(10 to existingLeave)),
+            dayPinsJson = "{}"
+        )
+        var savedTriple: Triple<String, List<PinnedTaskItem>, com.example.data.model.LeaveDayInfo?>? = null
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                MyApplicationTheme {
+                    com.example.ui.dialogs.EditJadwalSelDialog(
+                        entry = entry,
+                        day = 10,
+                        monthKey = "2026-11",
+                        shiftCodes = shiftCodes,
+                        schoolProfile = profile,
+                        pinOnlyMode = true,
+                        onSave = { code, pins, leave -> savedTriple = Triple(code, pins, leave) },
+                        onDismiss = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("banner_pin_only_mode").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_locked_shift_preview").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("chip_pick_shift_P1").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("chip_leave_status_IZIN").assertDoesNotExist()
+
+        composeTestRule.onNodeWithTag("input_pin_custom_label").performTextInput("Jaga UKS Malam")
+        composeTestRule.onNodeWithTag("btn_add_custom_pin").performClick()
+        composeTestRule.onNodeWithTag("btn_save_jadwal_sel").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("P1", savedTriple?.first)
+        assertEquals(existingLeave, savedTriple?.third)
+        assertEquals(listOf("Jaga UKS Malam"), savedTriple?.second?.map { it.label })
+    }
+
+    @Test
+    fun `KelolaAnakAdminDialog supports segmented Utama and Penyematan tabs with separate quotas`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val profile = SchoolProfile(schoolName = "SR Kediri", tenantCode = "SCH-PIN-3")
+        val accounts = listOf(
+            WaliAccount(id = 1L, name = "A. Utama", username = "u1", password = "pw", schoolId = "SCH-PIN-3", role = WaliAccount.ROLE_WALI_ANAK_ADMIN),
+            WaliAccount(id = 2L, name = "B. Reguler", username = "r1", password = "pw", schoolId = "SCH-PIN-3", role = WaliAccount.ROLE_WALI)
+        )
+        var selectedRoleCall: Pair<Long, String>? = null
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                MyApplicationTheme {
+                    com.example.ui.dialogs.KelolaAnakAdminDialog(
+                        waliAccounts = accounts,
+                        schoolProfile = profile,
+                        activeSchoolId = "SCH-PIN-3",
+                        onToggleAnakAdmin = { _, _ -> },
+                        onSelectAnakAdminRole = { acc, role -> selectedRoleCall = acc.id to role },
+                        onDismiss = {}
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("tab_picker_anak_admin_utama").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("tab_picker_anak_admin_pin").assertIsDisplayed().performClick()
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("switch_picker_anak_admin_2").performClick()
+        assertEquals(2L to WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, selectedRoleCall)
+    }
 }

@@ -260,6 +260,7 @@ fun DashboardScreen(
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
     val isAnakAdminSekolah by viewModel.isAnakAdminSekolah.collectAsStateWithLifecycle()
+    val isAnakAdminPenyematan by viewModel.isAnakAdminPenyematan.collectAsStateWithLifecycle()
     val dashboardIconOrder by viewModel.dashboardIconOrder.collectAsStateWithLifecycle()
     val isSavingDashboardLayout by viewModel.isSavingDashboardLayout.collectAsStateWithLifecycle()
     val dashboardBannerConfig by viewModel.dashboardBannerConfig.collectAsStateWithLifecycle()
@@ -286,6 +287,7 @@ fun DashboardScreen(
     }
     val isAdminUser = currentUserRole == com.example.ui.UserRole.ADMIN || currentUserRole == com.example.ui.UserRole.SUPERADMIN
     val canManageSchedule = isAdminUser || isAnakSuperAdmin || isAnakAdminSekolah
+    val canPinScheduleTasks = canManageSchedule || isAnakAdminPenyematan
 
     LaunchedEffect(Unit) {
         viewModel.syncDashboardIconLayoutNow()
@@ -1357,6 +1359,8 @@ fun DashboardScreen(
                 scheduleEntries = schoolScheduleEntries,
                 canManageSchedule = canManageSchedule,
                 isAnakAdminSekolah = isAnakAdminSekolah,
+                canPinScheduleTasks = canPinScheduleTasks,
+                isAnakAdminPenyematan = isAnakAdminPenyematan,
                 scheduleWaliAccounts = waliAccounts,
                 currentUsername = currentUsername,
                 currentWaliName = waliName,
@@ -1415,7 +1419,7 @@ fun DashboardScreen(
                     }
                 },
                 onEditScheduleCell = { entry, day ->
-                    if (canManageSchedule) {
+                    if (canManageSchedule || canPinScheduleTasks) {
                         modalState.editingScheduleCellTarget = entry to day
                     } else {
                         Toast.makeText(
@@ -2279,6 +2283,7 @@ fun DashboardScreen(
         schoolShiftCodes = schoolShiftCodes,
         schoolScheduleEntries = schoolScheduleEntries,
         canManageSchedule = canManageSchedule,
+        canPinScheduleTasks = canPinScheduleTasks,
         isAnakSuperAdmin = isAnakSuperAdmin,
         infoPentingPosts = infoPentingPosts,
         infoPentingReactions = infoPentingReactions,
@@ -3784,6 +3789,7 @@ private fun DashboardJadwalAndInfoModalsHost(
     schoolShiftCodes: List<WaliShiftCode>,
     schoolScheduleEntries: List<WaliScheduleEntry>,
     canManageSchedule: Boolean,
+    canPinScheduleTasks: Boolean = canManageSchedule,
     isAnakSuperAdmin: Boolean,
     infoPentingPosts: List<com.example.data.model.InfoPentingPost>,
     infoPentingReactions: List<com.example.data.model.InfoPentingReaction>,
@@ -3809,6 +3815,7 @@ private fun DashboardJadwalAndInfoModalsHost(
             shiftCodes = schoolShiftCodes,
             schoolProfile = schoolProfile,
             canManageSchedule = canManageSchedule,
+            canPinTasks = canPinScheduleTasks,
             actorName = waliName,
             onChangeMonth = { newMonth ->
                 modalState.jadwalSelectedMonthKey = newMonth
@@ -3818,7 +3825,7 @@ private fun DashboardJadwalAndInfoModalsHost(
                 }
             },
             onSelectCellToEdit = { entry, day ->
-                if (canManageSchedule) {
+                if (canManageSchedule || canPinScheduleTasks) {
                     modalState.editingScheduleCellTarget = entry to day
                 }
             },
@@ -3853,8 +3860,9 @@ private fun DashboardJadwalAndInfoModalsHost(
                 shiftCodes = schoolShiftCodes,
                 schoolProfile = schoolProfile,
                 canManageSchedule = canManageSchedule,
+                canPinTasks = canPinScheduleTasks,
                 onEditDay = { day ->
-                    if (canManageSchedule) {
+                    if (canManageSchedule || canPinScheduleTasks) {
                         modalState.editingScheduleCellTarget = liveEntry to day
                     }
                 },
@@ -3915,8 +3923,9 @@ private fun DashboardJadwalAndInfoModalsHost(
             shiftCodes = schoolShiftCodes,
             schoolProfile = schoolProfile,
             canManageSchedule = canManageSchedule,
+            canPinTasks = canPinScheduleTasks,
             onEditCell = { entry, day ->
-                if (canManageSchedule) {
+                if (canManageSchedule || canPinScheduleTasks) {
                     modalState.editingScheduleCellTarget = entry to day
                 }
             },
@@ -3930,7 +3939,7 @@ private fun DashboardJadwalAndInfoModalsHost(
         )
     }
 
-    if (canManageSchedule) {
+    if (canManageSchedule || canPinScheduleTasks) {
         modalState.editingScheduleCellTarget?.let { (rawEntry, targetDay) ->
             val liveEntry = jadwalMonthEntries.firstOrNull { it.id == rawEntry.id } ?: rawEntry
             EditJadwalSelDialog(
@@ -3939,6 +3948,7 @@ private fun DashboardJadwalAndInfoModalsHost(
                 monthKey = modalState.jadwalSelectedMonthKey,
                 shiftCodes = schoolShiftCodes,
                 schoolProfile = schoolProfile,
+                pinOnlyMode = !canManageSchedule,
                 onSave = { code, pins, leave ->
                     viewModel.updateWaliScheduleDayCell(
                         entry = liveEntry,
@@ -3951,14 +3961,19 @@ private fun DashboardJadwalAndInfoModalsHost(
                         if (ok) modalState.editingScheduleCellTarget = null
                     }
                 },
-                onOpenPatternEditor = {
-                    modalState.editingScheduleCellTarget = null
-                    modalState.importJadwalInitialTab = 1
-                    modalState.showImportJadwalMatriksDialog = true
-                },
+                onOpenPatternEditor = if (canManageSchedule) {
+                    {
+                        modalState.editingScheduleCellTarget = null
+                        modalState.importJadwalInitialTab = 1
+                        modalState.showImportJadwalMatriksDialog = true
+                    }
+                } else null,
                 onDismiss = { modalState.editingScheduleCellTarget = null }
             )
         }
+    }
+
+    if (canManageSchedule) {
 
         if (modalState.showManageShiftCodesDialog) {
             ManageShiftCodesDialog(

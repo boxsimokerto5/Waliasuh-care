@@ -39,11 +39,13 @@ fun JadwalQuickScreen(
     shiftCodes: List<WaliShiftCode>,
     scheduleEntries: List<WaliScheduleEntry>,
     canManageSchedule: Boolean,
+    canPinScheduleTasks: Boolean = canManageSchedule,
     waliAccounts: List<WaliAccount>,
     currentUsername: String?,
     currentWaliName: String,
     modalState: DashboardModalState
 ) {
+    val canEditAnyCell = canManageSchedule || canPinScheduleTasks
     val context = LocalContext.current
     val isEn = LocalAppStrings.current.isEnglish
     var searchQuery by rememberSaveable { mutableStateOf("") }
@@ -73,6 +75,7 @@ fun JadwalQuickScreen(
                 shiftCodes = shiftCodes,
                 monthEntries = monthEntries,
                 canManageSchedule = canManageSchedule,
+                canPinScheduleTasks = canPinScheduleTasks,
                 searchQuery = searchQuery,
                 selectedGroup = selectedGroup,
                 onSearchChange = { searchQuery = it },
@@ -94,7 +97,7 @@ fun JadwalQuickScreen(
                 },
                 onEditCell = { entry, day ->
                     TopOnAdManager.onUserActionClick(context)
-                    if (canManageSchedule) {
+                    if (canEditAnyCell) {
                         modalState.editingScheduleCellTarget = entry to day
                     } else {
                         modalState.jadwalPersonalTargetEntry = entry
@@ -129,8 +132,9 @@ fun JadwalQuickScreen(
                 shiftCodes = shiftCodes,
                 schoolProfile = schoolProfile,
                 canManageSchedule = canManageSchedule,
+                canPinTasks = canPinScheduleTasks,
                 onEditDay = { day ->
-                    if (canManageSchedule) {
+                    if (canEditAnyCell) {
                         modalState.editingScheduleCellTarget = liveEntry to day
                     }
                 },
@@ -144,7 +148,7 @@ fun JadwalQuickScreen(
         }
     }
 
-    if (canManageSchedule) {
+    if (canEditAnyCell) {
         modalState.editingScheduleCellTarget?.let { (rawEntry, targetDay) ->
             val liveEntry = monthEntries.firstOrNull { it.id == rawEntry.id } ?: rawEntry
             EditJadwalSelDialog(
@@ -153,6 +157,7 @@ fun JadwalQuickScreen(
                 monthKey = modalState.jadwalSelectedMonthKey,
                 shiftCodes = shiftCodes,
                 schoolProfile = schoolProfile,
+                pinOnlyMode = !canManageSchedule,
                 onSave = { code, pins, leave ->
                     viewModel.updateWaliScheduleDayCell(
                         entry = liveEntry,
@@ -165,14 +170,19 @@ fun JadwalQuickScreen(
                         if (ok) modalState.editingScheduleCellTarget = null
                     }
                 },
-                onOpenPatternEditor = {
-                    modalState.editingScheduleCellTarget = null
-                    modalState.importJadwalInitialTab = 1
-                    modalState.showImportJadwalMatriksDialog = true
-                },
+                onOpenPatternEditor = if (canManageSchedule) {
+                    {
+                        modalState.editingScheduleCellTarget = null
+                        modalState.importJadwalInitialTab = 1
+                        modalState.showImportJadwalMatriksDialog = true
+                    }
+                } else null,
                 onDismiss = { modalState.editingScheduleCellTarget = null }
             )
         }
+    }
+
+    if (canManageSchedule) {
 
         if (modalState.showImportJadwalMatriksDialog) {
             ImportJadwalMatriksDialog(
