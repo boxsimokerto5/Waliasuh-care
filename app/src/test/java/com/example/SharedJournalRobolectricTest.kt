@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -18,6 +19,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
+import kotlinx.coroutines.flow.first
 import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
 import com.example.data.model.DashboardIconKey
@@ -435,5 +437,228 @@ class SharedJournalRobolectricTest {
         composeTestRule.waitForIdle()
 
         assertEquals("3506123456780001", scannedValue)
+    }
+
+    @Test
+    fun `Private notes are strictly visible and editable only by the owning account and round-trip PocketBase DTO`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        app.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE).edit().clear().commit()
+        val db = AppDatabase.getDatabase(app)
+        val dao = db.sharedJournalNoteDao()
+        dao.deleteBySchool("SCH-PRIV-1")
+
+        db.waliAccountDao().insert(
+            WaliAccount(
+                name = "Wali Penulis",
+                username = "wali_penulis_p",
+                password = "Password1!",
+                dormitory = "Putra",
+                schoolId = "SCH-PRIV-1"
+            )
+        )
+        db.waliAccountDao().insert(
+            WaliAccount(
+                name = "Wali Lain",
+                username = "wali_lain_p",
+                password = "Password1!",
+                dormitory = "Putri",
+                schoolId = "SCH-PRIV-1"
+            )
+        )
+        db.waliAccountDao().insert(
+            WaliAccount(
+                name = "Admin Sekolah",
+                username = "admin_priv",
+                password = "Password1!",
+                dormitory = "Semua",
+                role = WaliAccount.ROLE_WALI_ANAK_ADMIN,
+                schoolId = "SCH-PRIV-1"
+            )
+        )
+
+        val vm = HealthViewModel(app)
+        vm.updateSchoolProfile(
+            SchoolProfile(
+                schoolName = "SRT Private Note Test",
+                shortName = "SRT-PRV",
+                tenantCode = "SCH-PRIV-1"
+            )
+        )
+        vm.executeLogin("wali_penulis_p", "Password1!", rememberMe = false)
+        ShadowLooper.idleMainLooper()
+
+        var savedPrivateOk = false
+        var savedPrivateMsg = ""
+        vm.saveSharedJournalNote(
+            category = SharedJournalHelper.CATEGORY_PRIBADI,
+            title = "Evaluasi Pribadi Wali",
+            content = "Catatan internal khusus akun wali penulis.",
+            isPinned = false
+        ) { ok, msg ->
+            savedPrivateOk = ok
+            savedPrivateMsg = msg
+        }
+
+        var savedPublicOk = false
+        vm.saveSharedJournalNote(
+            category = SharedJournalHelper.CATEGORY_ATURAN,
+            title = "Aturan Bersama",
+            content = "Aturan piket pagi asrama.",
+            isPinned = false
+        ) { ok, _ ->
+            savedPublicOk = ok
+        }
+        delay(250)
+        ShadowLooper.idleMainLooper()
+
+        assertTrue(savedPrivateOk)
+        assertEquals("Catatan pribadi tersimpan!", savedPrivateMsg)
+        assertTrue(savedPublicOk)
+
+        val ownerNotes = vm.sharedJournalNotes.first { it.isNotEmpty() }
+        assertEquals(2, ownerNotes.size)
+        val privateNote = ownerNotes.first { SharedJournalHelper.isPrivateNote(it) }
+
+        // Pemilik boleh melihat & mengelola; wali lain DAN bahkan Admin / AnakSuperAdmin TIDAK boleh melihat/mengelola
+        assertTrue(SharedJournalHelper.isVisibleToUser(privateNote, "wali_penulis_p", "Wali Penulis"))
+        assertFalse(SharedJournalHelper.isVisibleToUser(privateNote, "wali_lain_p", "Wali Lain"))
+        assertFalse(SharedJournalHelper.isVisibleToUser(privateNote, "admin_priv", "Admin Sekolah"))
+
+        assertTrue(
+            SharedJournalHelper.canManageNote(
+                note = privateNote,
+                currentUsername = "wali_penulis_p",
+                currentWaliName = "Wali Penulis",
+                isAdmin = false,
+                isAnakSuperAdmin = false
+            )
+        )
+        assertFalse(
+            SharedJournalHelper.canManageNote(
+                note = privateNote,
+                currentUsername = "admin_priv",
+                currentWaliName = "Admin Sekolah",
+                isAdmin = true,
+                isAnakSuperAdmin = true
+            )
+        )
+
+        // Login sebagai wali lain -> catatan pribadi disembunyikan dari StateFlow, hanya aturan publik yang tampil
+        vm.executeLogin("wali_lain_p", "Password1!", rememberMe = false)
+        ShadowLooper.idleMainLooper()
+        val otherWaliNotes = vm.sharedJournalNotes.first { list -> list.none { SharedJournalHelper.isPrivateNote(it) } && list.size == 1 }
+        assertEquals("Aturan Bersama", otherWaliNotes.first().title)
+
+        // Login sebagai Admin -> catatan pribadi milik wali_penulis_p tetap tersembunyi
+        vm.executeLogin("admin_priv", "Password1!", rememberMe = false)
+        ShadowLooper.idleMainLooper()
+        val adminNotes = vm.sharedJournalNotes.first { list -> list.none { SharedJournalHelper.isPrivateNote(it) } && list.size == 1 }
+        assertEquals("Aturan Bersama", adminNotes.first().title)
+
+        // DTO round-trip mempertahankan kategori PRIBADI
+        val dto = PbSharedJournalNoteDto.fromDomain(privateNote)
+        val restored = dto.toDomainModel("SCH-PRIV-1")
+        assertEquals(SharedJournalHelper.CATEGORY_PRIBADI, restored.category)
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h640dp")
+    fun `SharedJournalSheet renders filter pills in Semua Pribadi Jurnal Aturan order, hides foreign private notes, and provides voice input`() {
+        val indonesianStrings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides indonesianStrings) {
+                SharedJournalSheet(
+                    notes = listOf(
+                        SharedJournalNote(
+                            id = 501L,
+                            schoolId = "SRT1-KDR",
+                            category = SharedJournalHelper.CATEGORY_PRIBADI,
+                            title = "Catatan Rahasia Saya",
+                            content = "Refleksi pribadi wali.",
+                            authorUsername = "wali_eko",
+                            authorName = "Eko Wahyudi"
+                        ),
+                        SharedJournalNote(
+                            id = 502L,
+                            schoolId = "SRT1-KDR",
+                            category = SharedJournalHelper.CATEGORY_PRIBADI,
+                            title = "Catatan Rahasia Orang Lain",
+                            content = "Tidak boleh terlihat.",
+                            authorUsername = "wali_budi",
+                            authorName = "Budi Santoso"
+                        ),
+                        SharedJournalNote(
+                            id = 503L,
+                            schoolId = "SRT1-KDR",
+                            category = SharedJournalHelper.CATEGORY_JURNAL,
+                            title = "Jurnal Harian Asrama",
+                            content = "Kegiatan sore lancar.",
+                            authorUsername = "wali_budi",
+                            authorName = "Budi Santoso"
+                        ),
+                        SharedJournalNote(
+                            id = 504L,
+                            schoolId = "SRT1-KDR",
+                            category = SharedJournalHelper.CATEGORY_ATURAN,
+                            title = "Aturan Kebersihan",
+                            content = "Piket tiap pagi.",
+                            authorUsername = "wali_budi",
+                            authorName = "Budi Santoso"
+                        )
+                    ),
+                    currentUsername = "wali_eko",
+                    currentWaliName = "Eko Wahyudi",
+                    isAdmin = true,
+                    isAnakSuperAdmin = true,
+                    onSaveNote = { _, _, _, _, _, _, _, _, _ -> },
+                    onTogglePin = { _, _ -> },
+                    onDeleteNote = { _, _ -> },
+                    onDismiss = {}
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Verifikasi urutan tab: Semua -> Pribadi -> Jurnal -> Aturan
+        val allBounds = composeTestRule.onNodeWithTag("chip_filter_all").getUnclippedBoundsInRoot()
+        val pribadiBounds = composeTestRule.onNodeWithTag("chip_filter_pribadi").getUnclippedBoundsInRoot()
+        val jurnalBounds = composeTestRule.onNodeWithTag("chip_filter_jurnal").getUnclippedBoundsInRoot()
+        val aturanBounds = composeTestRule.onNodeWithTag("chip_filter_aturan").getUnclippedBoundsInRoot()
+
+        assertTrue(allBounds.left < pribadiBounds.left)
+        assertTrue(pribadiBounds.left < jurnalBounds.left)
+        assertTrue(jurnalBounds.left < aturanBounds.left)
+
+        // Catatan pribadi milik user lain (502) tersembunyi walaupun isAdmin = true
+        composeTestRule.onNodeWithTag("card_shared_journal_501").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_shared_journal_502").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("card_shared_journal_503").assertIsDisplayed()
+
+        // Filter ke Pribadi -> hanya catatan pribadi milik wali_eko yang tampil
+        composeTestRule.onNodeWithTag("chip_filter_pribadi").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("card_shared_journal_501").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_shared_journal_503").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("card_shared_journal_504").assertDoesNotExist()
+
+        // Buka editor baru -> default kategori otomatis Catatan Pribadi & tombol Suara tersedia
+        composeTestRule.onNodeWithTag("btn_add_shared_journal").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("screen_shared_journal_editor").assertIsDisplayed()
+
+        val catPribadiBounds = composeTestRule.onNodeWithTag("btn_category_pribadi").getUnclippedBoundsInRoot()
+        val catJurnalBounds = composeTestRule.onNodeWithTag("btn_category_jurnal").getUnclippedBoundsInRoot()
+        val catAturanBounds = composeTestRule.onNodeWithTag("btn_category_aturan").getUnclippedBoundsInRoot()
+        assertTrue(catPribadiBounds.left < catJurnalBounds.left)
+        assertTrue(catJurnalBounds.left < catAturanBounds.left)
+
+        composeTestRule.onNodeWithTag("badge_private_note_notice").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_voice_title")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("btn_toolbar_voice")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
     }
 }

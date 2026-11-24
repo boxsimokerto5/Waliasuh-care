@@ -50,12 +50,14 @@ data class SharedJournalNote(
 )
 
 object SharedJournalHelper {
+    const val CATEGORY_PRIBADI = "PRIBADI"
     const val CATEGORY_JURNAL = "JURNAL"
     const val CATEGORY_ATURAN = "ATURAN"
 
     fun normalizeCategory(raw: String?): String {
         val clean = raw?.trim()?.uppercase().orEmpty()
         return when (clean) {
+            CATEGORY_PRIBADI, "PRIVATE", "PERSONAL", "CATATAN PRIBADI" -> CATEGORY_PRIBADI
             CATEGORY_ATURAN, "RULE", "RULES", "ATURAN BERSAMA" -> CATEGORY_ATURAN
             else -> CATEGORY_JURNAL
         }
@@ -63,9 +65,42 @@ object SharedJournalHelper {
 
     fun categoryLabel(category: String, isEn: Boolean): String {
         return when (normalizeCategory(category)) {
+            CATEGORY_PRIBADI -> if (isEn) "Private Note" else "Catatan Pribadi"
             CATEGORY_ATURAN -> if (isEn) "Joint Rule" else "Aturan Bersama"
             else -> if (isEn) "Journal Note" else "Catatan Jurnal"
         }
+    }
+
+    fun isPrivateNote(note: SharedJournalNote): Boolean {
+        return normalizeCategory(note.category) == CATEGORY_PRIBADI
+    }
+
+    fun isNoteOwner(
+        note: SharedJournalNote,
+        currentUsername: String?,
+        currentWaliName: String?
+    ): Boolean {
+        val user = currentUsername?.trim().orEmpty()
+        val authorUser = note.authorUsername.trim()
+        if (user.isNotBlank() && authorUser.isNotBlank()) {
+            return user.equals(authorUser, ignoreCase = true)
+        }
+        val wali = currentWaliName?.trim().orEmpty()
+        val authorDisplay = note.authorName.trim()
+        return wali.isNotBlank() && authorDisplay.isNotBlank() && wali.equals(authorDisplay, ignoreCase = true)
+    }
+
+    fun isVisibleToUser(
+        note: SharedJournalNote,
+        currentUsername: String?,
+        currentWaliName: String?
+    ): Boolean {
+        if (!isPrivateNote(note)) return true
+        return isNoteOwner(
+            note = note,
+            currentUsername = currentUsername,
+            currentWaliName = currentWaliName
+        )
     }
 
     fun parseChecklist(rawJson: String?): List<JournalChecklistItem> {
@@ -200,18 +235,19 @@ object SharedJournalHelper {
         isAdmin: Boolean,
         isAnakSuperAdmin: Boolean
     ): Boolean {
+        if (isPrivateNote(note)) {
+            return isNoteOwner(
+                note = note,
+                currentUsername = currentUsername,
+                currentWaliName = currentWaliName
+            )
+        }
         if (isAdmin || isAnakSuperAdmin) return true
-        val user = currentUsername?.trim().orEmpty()
-        val authorUser = note.authorUsername.trim()
-        if (user.isNotBlank() && authorUser.isNotBlank() && user.equals(authorUser, ignoreCase = true)) {
-            return true
-        }
-        val wali = currentWaliName?.trim().orEmpty()
-        val authorDisplay = note.authorName.trim()
-        if (authorUser.isBlank() && wali.isNotBlank() && authorDisplay.isNotBlank() && wali.equals(authorDisplay, ignoreCase = true)) {
-            return true
-        }
-        return false
+        return isNoteOwner(
+            note = note,
+            currentUsername = currentUsername,
+            currentWaliName = currentWaliName
+        )
     }
 
     fun formatCompactDate(timestamp: Long, isEn: Boolean): String {

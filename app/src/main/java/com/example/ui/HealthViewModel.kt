@@ -9556,11 +9556,15 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     val sharedJournalNotes: StateFlow<List<SharedJournalNote>> = combine(
         repository.allSharedJournalNotes,
-        _schoolProfile
-    ) { list, profile ->
+        _schoolProfile,
+        _currentUsername,
+        _waliName
+    ) { list, profile, username, wali ->
         val activeSchool = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
         list.filter { item ->
-            !item.isDeleted && item.schoolId.equals(activeSchool, ignoreCase = true)
+            !item.isDeleted &&
+                item.schoolId.equals(activeSchool, ignoreCase = true) &&
+                SharedJournalHelper.isVisibleToUser(item, username, wali)
         }.sortedWith(
             compareByDescending<SharedJournalNote> { it.isPinned }
                 .thenByDescending { it.updatedAt }
@@ -9700,7 +9704,11 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             onResult(
                 true,
                 if (silent) ""
-                else if (isEn) "Journal note & rule saved!" else "Catatan jurnal & aturan tersimpan!"
+                else if (normalizedCategory == SharedJournalHelper.CATEGORY_PRIBADI) {
+                    if (isEn) "Private note saved!" else "Catatan pribadi tersimpan!"
+                } else {
+                    if (isEn) "Journal note & rule saved!" else "Catatan jurnal & aturan tersimpan!"
+                }
             )
         }
     }

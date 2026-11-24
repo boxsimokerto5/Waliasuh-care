@@ -1,7 +1,10 @@
 package com.example.ui.dialogs
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.net.Uri
+import android.speech.RecognizerIntent
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -11,6 +14,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,6 +53,7 @@ import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -112,7 +117,11 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 private enum class JournalCategoryFilter {
-    ALL, JURNAL, ATURAN
+    ALL, PRIBADI, JURNAL, ATURAN
+}
+
+private enum class JournalVoiceTarget {
+    TITLE, CONTENT
 }
 
 @Composable
@@ -145,8 +154,18 @@ fun SharedJournalSheet(
     var activeNoteId by remember { mutableStateOf<Long?>(null) }
     var isCreatingNew by remember { mutableStateOf(false) }
 
-    val activeNote = remember(notes, activeNoteId) {
-        activeNoteId?.let { id -> notes.firstOrNull { it.id == id } }
+    val visibleNotes = remember(notes, currentUsername, currentWaliName) {
+        notes.filter { note ->
+            SharedJournalHelper.isVisibleToUser(
+                note = note,
+                currentUsername = currentUsername,
+                currentWaliName = currentWaliName
+            )
+        }
+    }
+
+    val activeNote = remember(visibleNotes, activeNoteId) {
+        activeNoteId?.let { id -> visibleNotes.firstOrNull { it.id == id } }
     }
 
     val isEditorOpen = isCreatingNew || activeNote != null
@@ -172,10 +191,10 @@ fun SharedJournalSheet(
         }
 
         if (isEditorOpen) {
-            val defaultCategory = if (filter == JournalCategoryFilter.ATURAN) {
-                SharedJournalHelper.CATEGORY_ATURAN
-            } else {
-                SharedJournalHelper.CATEGORY_JURNAL
+            val defaultCategory = when (filter) {
+                JournalCategoryFilter.PRIBADI -> SharedJournalHelper.CATEGORY_PRIBADI
+                JournalCategoryFilter.ATURAN -> SharedJournalHelper.CATEGORY_ATURAN
+                else -> SharedJournalHelper.CATEGORY_JURNAL
             }
             SharedJournalEditorScreen(
                 existingNote = activeNote,
@@ -197,7 +216,7 @@ fun SharedJournalSheet(
             )
         } else {
             SharedJournalListScreen(
-                notes = notes,
+                notes = visibleNotes,
                 filter = filter,
                 onFilterChange = { filter = it },
                 searchQuery = searchQuery,
@@ -234,6 +253,9 @@ private fun SharedJournalListScreen(
     val cardBg = if (isLight) Color.White else MaterialTheme.colorScheme.surface
     val searchBg = if (isLight) Color(0xFFECEEF2) else MaterialTheme.colorScheme.surfaceVariant
 
+    val pribadiCount = remember(notes) {
+        notes.count { SharedJournalHelper.normalizeCategory(it.category) == SharedJournalHelper.CATEGORY_PRIBADI }
+    }
     val jurnalCount = remember(notes) {
         notes.count { SharedJournalHelper.normalizeCategory(it.category) == SharedJournalHelper.CATEGORY_JURNAL }
     }
@@ -246,6 +268,8 @@ private fun SharedJournalListScreen(
         notes.filter { item ->
             val catMatch = when (filter) {
                 JournalCategoryFilter.ALL -> true
+                JournalCategoryFilter.PRIBADI ->
+                    SharedJournalHelper.normalizeCategory(item.category) == SharedJournalHelper.CATEGORY_PRIBADI
                 JournalCategoryFilter.JURNAL ->
                     SharedJournalHelper.normalizeCategory(item.category) == SharedJournalHelper.CATEGORY_JURNAL
                 JournalCategoryFilter.ATURAN ->
@@ -335,9 +359,9 @@ private fun SharedJournalListScreen(
                         )
                         Text(
                             text = if (isEn) {
-                                "$jurnalCount Journals • $aturanCount Joint Rules"
+                                "$pribadiCount Private • $jurnalCount Journals • $aturanCount Rules"
                             } else {
-                                "$jurnalCount Catatan Jurnal • $aturanCount Aturan Bersama"
+                                "$pribadiCount Pribadi • $jurnalCount Jurnal • $aturanCount Aturan"
                             },
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -422,10 +446,11 @@ private fun SharedJournalListScreen(
                     }
                 }
 
-                // Category Filter Pills
+                // Category Filter Pills: Semua -> Pribadi -> Jurnal -> Aturan
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 16.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -435,7 +460,15 @@ private fun SharedJournalListScreen(
                         activeColor = Color(0xFF1E293B),
                         onClick = { onFilterChange(JournalCategoryFilter.ALL) },
                         testTag = "chip_filter_all",
-                        modifier = Modifier.weight(0.9f)
+                        modifier = Modifier.widthIn(min = 76.dp)
+                    )
+                    JournalCategoryFilterPill(
+                        label = if (isEn) "Private ($pribadiCount)" else "Pribadi ($pribadiCount)",
+                        selected = filter == JournalCategoryFilter.PRIBADI,
+                        activeColor = Color(0xFF7C3AED),
+                        onClick = { onFilterChange(JournalCategoryFilter.PRIBADI) },
+                        testTag = "chip_filter_pribadi",
+                        modifier = Modifier.widthIn(min = 84.dp)
                     )
                     JournalCategoryFilterPill(
                         label = if (isEn) "Journal ($jurnalCount)" else "Jurnal ($jurnalCount)",
@@ -443,7 +476,7 @@ private fun SharedJournalListScreen(
                         activeColor = Color(0xFFD97706),
                         onClick = { onFilterChange(JournalCategoryFilter.JURNAL) },
                         testTag = "chip_filter_jurnal",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.widthIn(min = 80.dp)
                     )
                     JournalCategoryFilterPill(
                         label = if (isEn) "Rules ($aturanCount)" else "Aturan ($aturanCount)",
@@ -451,7 +484,7 @@ private fun SharedJournalListScreen(
                         activeColor = Color(0xFF0F766E),
                         onClick = { onFilterChange(JournalCategoryFilter.ATURAN) },
                         testTag = "chip_filter_aturan",
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.widthIn(min = 80.dp)
                     )
                 }
 
@@ -576,9 +609,19 @@ private fun SharedJournalMiuiCard(
     isEn: Boolean,
     onClick: () -> Unit
 ) {
-    val isAturan = SharedJournalHelper.normalizeCategory(note.category) == SharedJournalHelper.CATEGORY_ATURAN
-    val badgeBg = if (isAturan) Color(0xFFCCFBF1) else Color(0xFFFEF3C7)
-    val badgeFg = if (isAturan) Color(0xFF0F766E) else Color(0xFFB45309)
+    val normalizedCat = SharedJournalHelper.normalizeCategory(note.category)
+    val isPribadi = normalizedCat == SharedJournalHelper.CATEGORY_PRIBADI
+    val isAturan = normalizedCat == SharedJournalHelper.CATEGORY_ATURAN
+    val badgeBg = when {
+        isPribadi -> Color(0xFFEDE9FE)
+        isAturan -> Color(0xFFCCFBF1)
+        else -> Color(0xFFFEF3C7)
+    }
+    val badgeFg = when {
+        isPribadi -> Color(0xFF6D28D9)
+        isAturan -> Color(0xFF0F766E)
+        else -> Color(0xFFB45309)
+    }
 
     val checklist = remember(note.checklistJson) {
         SharedJournalHelper.parseChecklist(note.checklistJson)
@@ -653,17 +696,30 @@ private fun SharedJournalMiuiCard(
                         shape = RoundedCornerShape(6.dp),
                         color = badgeBg
                     ) {
-                        Text(
-                            text = if (isAturan) {
-                                if (isEn) "Rule" else "Aturan"
-                            } else {
-                                if (isEn) "Journal" else "Jurnal"
-                            },
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = badgeFg,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            if (isPribadi) {
+                                Icon(
+                                    imageVector = Icons.Default.Lock,
+                                    contentDescription = null,
+                                    tint = badgeFg,
+                                    modifier = Modifier.size(10.dp)
+                                )
+                            }
+                            Text(
+                                text = when {
+                                    isPribadi -> if (isEn) "Private" else "Pribadi"
+                                    isAturan -> if (isEn) "Rule" else "Aturan"
+                                    else -> if (isEn) "Journal" else "Jurnal"
+                                },
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = badgeFg
+                            )
+                        }
                     }
 
                     if (note.isPinned) {
@@ -786,6 +842,56 @@ private fun SharedJournalEditorScreen(
     var isSaving by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var previewImage by remember { mutableStateOf<JournalImageAttachment?>(null) }
+    var activeVoiceTarget by remember { mutableStateOf<JournalVoiceTarget?>(null) }
+
+    val speechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val target = activeVoiceTarget
+        activeVoiceTarget = null
+        if (result.resultCode == Activity.RESULT_OK && target != null) {
+            val spoken = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (spoken.isNotBlank()) {
+                when (target) {
+                    JournalVoiceTarget.TITLE -> {
+                        title = appendVoiceTranscript(title, spoken)
+                    }
+                    JournalVoiceTarget.CONTENT -> {
+                        content = appendVoiceTranscript(content, spoken)
+                    }
+                }
+            }
+        }
+    }
+
+    val launchVoiceInput: (JournalVoiceTarget) -> Unit = { target ->
+        activeVoiceTarget = target
+        val prompt = when (target) {
+            JournalVoiceTarget.TITLE -> if (isEn) "Speak note title..." else "Ucapkan judul catatan..."
+            JournalVoiceTarget.CONTENT -> if (isEn) "Speak note content..." else "Ucapkan isi catatan..."
+        }
+        val languageTag = if (isEn) "en-US" else "id-ID"
+        val intent = buildGoogleSpeechToTextIntent(promptText = prompt, languageTag = languageTag)
+        try {
+            speechLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            activeVoiceTarget = null
+            onShowMessage(
+                if (isEn) "Google Voice-to-Text service is not available on this device."
+                else "Layanan Suara ke Teks Google belum tersedia di perangkat ini."
+            )
+        } catch (e: Exception) {
+            activeVoiceTarget = null
+            onShowMessage(
+                if (isEn) "Unable to launch voice input: ${e.message ?: "Error"}"
+                else "Gagal membuka Suara ke Teks: ${e.message ?: "Error"}"
+            )
+        }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -865,8 +971,13 @@ private fun SharedJournalEditorScreen(
     val displayTimestamp = existingNote?.updatedAt ?: System.currentTimeMillis()
     val charCount = SharedJournalHelper.countCharacters(title, content, checklist)
     val authorLabel = existingNote?.authorName ?: (currentWaliName?.ifBlank { "Wali Asuh" } ?: "Wali Asuh")
+    val isPribadi = category == SharedJournalHelper.CATEGORY_PRIBADI
     val isAturan = category == SharedJournalHelper.CATEGORY_ATURAN
-    val accentColor = if (isAturan) Color(0xFF0F766E) else Color(0xFFD97706)
+    val accentColor = when {
+        isPribadi -> Color(0xFF7C3AED)
+        isAturan -> Color(0xFF0F766E)
+        else -> Color(0xFFD97706)
+    }
 
     val safeDialogInsets = rememberEdgeToEdgeDialogSafeInsets()
 
@@ -898,11 +1009,14 @@ private fun SharedJournalEditorScreen(
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Row(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .horizontalScroll(rememberScrollState()),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Surface(
                                     onClick = {
@@ -915,19 +1029,19 @@ private fun SharedJournalEditorScreen(
                                         .testTag("btn_toolbar_checklist")
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Icon(
                                             imageVector = Icons.Outlined.CheckBox,
                                             contentDescription = if (isEn) "Add checklist item" else "Tambah item centang",
                                             tint = Color(0xFFD97706),
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(19.dp)
                                         )
                                         Text(
                                             text = if (isEn) "Checklist" else "Centang",
-                                            fontSize = 12.5.sp,
+                                            fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
@@ -949,9 +1063,9 @@ private fun SharedJournalEditorScreen(
                                         .testTag("btn_toolbar_image")
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         if (isProcessingImage) {
                                             CircularProgressIndicator(
@@ -963,14 +1077,42 @@ private fun SharedJournalEditorScreen(
                                                 imageVector = Icons.Outlined.Image,
                                                 contentDescription = if (isEn) "Upload photo" else "Upload gambar",
                                                 tint = Color(0xFF0F766E),
-                                                modifier = Modifier.size(20.dp)
+                                                modifier = Modifier.size(19.dp)
                                             )
                                         }
                                         Text(
                                             text = if (isEn) "Photo" else "Gambar",
-                                            fontSize = 12.5.sp,
+                                            fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
                                             color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+
+                                Surface(
+                                    onClick = { launchVoiceInput(JournalVoiceTarget.CONTENT) },
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = Color(0xFFEDE9FE),
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_toolbar_voice")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Mic,
+                                            contentDescription = if (isEn) "Voice to text for content" else "Suara ke teks untuk isi catatan",
+                                            tint = Color(0xFF7C3AED),
+                                            modifier = Modifier.size(19.dp)
+                                        )
+                                        Text(
+                                            text = if (isEn) "Voice" else "Suara",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            color = Color(0xFF5B21B6)
                                         )
                                     }
                                 }
@@ -1137,28 +1279,72 @@ private fun SharedJournalEditorScreen(
                         .padding(horizontal = 20.dp, vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Pill kategori atau badge Mode Baca
+                    // Pill kategori atau badge Mode Baca (Urutan: Pribadi -> Jurnal -> Aturan)
                     if (canManage) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            EditorCategoryPill(
-                                label = if (isEn) "Journal Note" else "Catatan Jurnal",
-                                icon = Icons.Default.MenuBook,
-                                selected = category == SharedJournalHelper.CATEGORY_JURNAL,
-                                activeColor = Color(0xFFD97706),
-                                onClick = { category = SharedJournalHelper.CATEGORY_JURNAL },
-                                testTag = "btn_category_jurnal"
-                            )
-                            EditorCategoryPill(
-                                label = if (isEn) "Joint Rule" else "Aturan Bersama",
-                                icon = Icons.Default.Gavel,
-                                selected = category == SharedJournalHelper.CATEGORY_ATURAN,
-                                activeColor = Color(0xFF0F766E),
-                                onClick = { category = SharedJournalHelper.CATEGORY_ATURAN },
-                                testTag = "btn_category_aturan"
-                            )
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                EditorCategoryPill(
+                                    label = if (isEn) "Private Note" else "Catatan Pribadi",
+                                    icon = Icons.Default.Lock,
+                                    selected = category == SharedJournalHelper.CATEGORY_PRIBADI,
+                                    activeColor = Color(0xFF7C3AED),
+                                    onClick = { category = SharedJournalHelper.CATEGORY_PRIBADI },
+                                    testTag = "btn_category_pribadi"
+                                )
+                                EditorCategoryPill(
+                                    label = if (isEn) "Journal Note" else "Catatan Jurnal",
+                                    icon = Icons.Default.MenuBook,
+                                    selected = category == SharedJournalHelper.CATEGORY_JURNAL,
+                                    activeColor = Color(0xFFD97706),
+                                    onClick = { category = SharedJournalHelper.CATEGORY_JURNAL },
+                                    testTag = "btn_category_jurnal"
+                                )
+                                EditorCategoryPill(
+                                    label = if (isEn) "Joint Rule" else "Aturan Bersama",
+                                    icon = Icons.Default.Gavel,
+                                    selected = category == SharedJournalHelper.CATEGORY_ATURAN,
+                                    activeColor = Color(0xFF0F766E),
+                                    onClick = { category = SharedJournalHelper.CATEGORY_ATURAN },
+                                    testTag = "btn_category_aturan"
+                                )
+                            }
+
+                            if (isPribadi) {
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = Color(0xFFEDE9FE),
+                                    modifier = Modifier.testTag("badge_private_note_notice")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Lock,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(14.dp),
+                                            tint = Color(0xFF6D28D9)
+                                        )
+                                        Text(
+                                            text = if (isEn) {
+                                                "Only your account can view this private note."
+                                            } else {
+                                                "Hanya akun Anda yang dapat melihat catatan pribadi ini."
+                                            },
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF5B21B6)
+                                        )
+                                    }
+                                }
+                            }
                         }
                     } else {
                         Surface(
@@ -1191,30 +1377,51 @@ private fun SharedJournalEditorScreen(
                         }
                     }
 
-                    // Input Judul tanpa kotak (gaya MIUI Notes)
-                    Box(modifier = Modifier.fillMaxWidth()) {
-                        if (title.isEmpty()) {
-                            Text(
-                                text = if (isEn) "Title" else "Judul",
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                    // Input Judul tanpa kotak (gaya MIUI Notes) + mic opsional
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Box(modifier = Modifier.weight(1f)) {
+                            if (title.isEmpty()) {
+                                Text(
+                                    text = if (isEn) "Title" else "Judul",
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+                                )
+                            }
+                            BasicTextField(
+                                value = title,
+                                onValueChange = { if (canManage) title = it },
+                                readOnly = !canManage,
+                                textStyle = TextStyle(
+                                    fontSize = 24.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                ),
+                                cursorBrush = SolidColor(accentColor),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("input_shared_journal_title")
                             )
                         }
-                        BasicTextField(
-                            value = title,
-                            onValueChange = { if (canManage) title = it },
-                            readOnly = !canManage,
-                            textStyle = TextStyle(
-                                fontSize = 24.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            ),
-                            cursorBrush = SolidColor(accentColor),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("input_shared_journal_title")
-                        )
+                        if (canManage) {
+                            IconButton(
+                                onClick = { launchVoiceInput(JournalVoiceTarget.TITLE) },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("btn_voice_title")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = if (isEn) "Dictate title" else "Dikte judul dengan suara",
+                                    tint = accentColor,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
 
                     // Metadata Timestamp | Jumlah Karakter • Penulis
@@ -1458,10 +1665,18 @@ private fun SharedJournalEditorScreen(
             },
             text = {
                 Text(
-                    text = if (isEn) {
-                        "\"$displayTitle\" will be deleted for all Wali Asuh in this school."
+                    text = if (isPribadi) {
+                        if (isEn) {
+                            "\"$displayTitle\" will be deleted from your Private Notes."
+                        } else {
+                            "\"$displayTitle\" akan dihapus dari Catatan Pribadi Anda."
+                        }
                     } else {
-                        "\"$displayTitle\" akan dihapus dari daftar catatan jurnal & aturan bersama."
+                        if (isEn) {
+                            "\"$displayTitle\" will be deleted for all Wali Asuh in this school."
+                        } else {
+                            "\"$displayTitle\" akan dihapus dari daftar catatan jurnal & aturan bersama."
+                        }
                     }
                 )
             },
