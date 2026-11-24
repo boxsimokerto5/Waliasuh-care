@@ -60,6 +60,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
 import com.example.ui.components.StudentAvatar
+import com.example.ui.dialogs.AppUsageGuideSheet
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.DeleteAccountBottomSheet
 import com.example.ui.dialogs.FaskesReferralSheet
@@ -679,7 +680,7 @@ fun ProfileScreen(
             item {
                 MenuSettingCard(
                     title = if (isEn) "User Guide" else "Panduan",
-                    subtitle = if (isEn) "How to use Wali Asuh Care" else "Panduan penggunaan aplikasi",
+                    subtitle = if (isEn) "Complete guide for all app features" else "Panduan lengkap seluruh fitur aplikasi",
                     icon = Icons.Default.MenuBook,
                     iconBg = Color(0xFFE2E8F0),
                     iconColor = Color(0xFF334155),
@@ -1085,107 +1086,14 @@ fun ProfileScreen(
         )
     }
 
-    // Modal Bottom Sheet: Panduan
+    // Modal Bottom Sheet: Panduan Lengkap Aplikasi
     if (showGuideDialog) {
-        ModalBottomSheet(
-            onDismissRequest = { showGuideDialog = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            dragHandle = { BottomSheetDefaults.DragHandle() },
-            containerColor = MaterialTheme.colorScheme.surface
-        ) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .widthIn(max = 600.dp)
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 24.dp)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = if (isEn) "App Usage Guide" else "Panduan Penggunaan Aplikasi",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
-                    )
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-                        shape = RoundedCornerShape(10.dp)
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            val guideFaskes = schoolProfile.getAllFaskes()
-                                .takeIf { it.isNotEmpty() }
-                                ?.joinToString(" / ")
-                                ?: if (isEn) "Referral Facility" else "Faskes Rujukan"
-                            if (isEn) {
-                                Text("1. Add a sick student via the (+) button on Dashboard or Plans.", fontSize = 12.sp)
-                                Text("2. Choose destination facility ($guideFaskes) and departure time.", fontSize = 12.sp)
-                                Text("3. After arriving at UKS/Puskesmas, record the diagnosis & medication.", fontSize = 12.sp)
-                                Text("4. Set a follow-up checkup date or mark as no follow-up needed.", fontSize = 12.sp)
-                                Text("5. Share reports to the Wali Asuh WhatsApp group via the WA Report button.", fontSize = 12.sp)
-                            } else {
-                                Text("1. Masukkan anak sakit melalui tombol (+) di Dashboard atau Rencana.", fontSize = 12.sp)
-                                Text("2. Pilih faskes tujuan ($guideFaskes) dan jam berangkat.", fontSize = 12.sp)
-                                Text("3. Setelah tiba di faskes/puskesmas, nakes/pengasuh mencatat hasil diagnosa & obat.", fontSize = 12.sp)
-                                Text("4. Tentukan tanggal kontrol atau centang tidak perlu kontrol.", fontSize = 12.sp)
-                                Text("5. Bagikan laporan ke grup WhatsApp pengasuh dengan tombol Laporan WA.", fontSize = 12.sp)
-                            }
-                        }
-                    }
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f)),
-                        shape = RoundedCornerShape(10.dp),
-                        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Info,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Text(
-                                    text = if (isEn) "About & App Status" else "Tentang & Status Aplikasi",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                            }
-                            Text(
-                                text = stringResource(R.string.disclaimer_full),
-                                fontSize = 11.5.sp,
-                                lineHeight = 16.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)
-                    ) {
-                        OutlinedButton(
-                            onClick = {
-                                showGuideDialog = false
-                                onStartInteractiveTour()
-                            },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.testTag("btn_guide_start_tour")
-                        ) {
-                            Text(if (isEn) "Interactive Tour" else "Putar Tur Fitur")
-                        }
-                        Button(onClick = { showGuideDialog = false }, shape = RoundedCornerShape(10.dp)) {
-                            Text(s.nav.closeBtn)
-                        }
-                    }
-                }
-            }
-        }
+        AppUsageGuideSheet(
+            schoolProfile = schoolProfile,
+            currentRole = role,
+            onDismiss = { showGuideDialog = false },
+            onStartInteractiveTour = onStartInteractiveTour
+        )
     }
 
     // Modal Bottom Sheet: Keluar
