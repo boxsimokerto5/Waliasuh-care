@@ -32,12 +32,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -111,6 +111,7 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
 import com.example.data.model.ChildStudent
 import com.example.ui.components.ConfigureEdgeToEdgeDialogWindow
+import com.example.ui.components.rememberEdgeToEdgeDialogSafeInsets
 import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.delay
 
@@ -242,7 +243,7 @@ fun BarcodeScannerDialog(
 
         val density = LocalDensity.current
         val layoutDirection = LocalLayoutDirection.current
-        val safeDrawingInsets = WindowInsets.safeDrawing
+        val safeDrawingInsets = rememberEdgeToEdgeDialogSafeInsets()
         val topSafePx = safeDrawingInsets.getTop(density).toFloat()
         val bottomSafePx = safeDrawingInsets.getBottom(density).toFloat()
         val leftSafePx = safeDrawingInsets.getLeft(density, layoutDirection).toFloat()
@@ -290,7 +291,7 @@ fun BarcodeScannerDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .windowInsetsPadding(safeDrawingInsets)
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 28.dp, vertical = 96.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -456,7 +457,7 @@ fun BarcodeScannerDialog(
                         )
                     )
                     .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(
+                        safeDrawingInsets.only(
                             WindowInsetsSides.Top + WindowInsetsSides.Horizontal
                         )
                     )
@@ -584,7 +585,7 @@ fun BarcodeScannerDialog(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(
+                        safeDrawingInsets.only(
                             WindowInsetsSides.Top + WindowInsetsSides.Horizontal
                         )
                     )
@@ -677,7 +678,7 @@ fun BarcodeScannerDialog(
                         )
                     )
                     .windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(
+                        safeDrawingInsets.only(
                             WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
                         )
                     )
@@ -778,7 +779,7 @@ fun BarcodeScannerDialog(
                     onDismissRequest = { showManualPickerSheet = false },
                     sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                     modifier = Modifier.windowInsetsPadding(
-                        WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                        safeDrawingInsets.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
                     ),
                     shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
                     dragHandle = { BottomSheetDefaults.DragHandle() },
@@ -789,8 +790,11 @@ fun BarcodeScannerDialog(
                             .fillMaxWidth()
                             .widthIn(max = 600.dp)
                             .align(Alignment.CenterHorizontally)
-                            .navigationBarsPadding()
-                            .imePadding()
+                            .windowInsetsPadding(
+                                safeDrawingInsets
+                                    .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                                    .union(WindowInsets.ime.only(WindowInsetsSides.Bottom))
+                            )
                             .padding(horizontal = 16.dp)
                             .padding(bottom = 20.dp)
                     ) {

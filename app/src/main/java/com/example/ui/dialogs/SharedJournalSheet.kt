@@ -24,13 +24,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
@@ -107,6 +106,7 @@ import com.example.data.model.JournalImageAttachment
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
 import com.example.ui.components.ConfigureEdgeToEdgeDialogWindow
+import com.example.ui.components.rememberEdgeToEdgeDialogSafeInsets
 import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.launch
 import java.io.File
@@ -263,12 +263,14 @@ private fun SharedJournalListScreen(
         }
     }
 
+    val safeDialogInsets = rememberEdgeToEdgeDialogSafeInsets()
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .testTag("screen_shared_journal_list"),
         containerColor = pageBg,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = safeDialogInsets,
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onCreateNew,
@@ -866,28 +868,28 @@ private fun SharedJournalEditorScreen(
     val isAturan = category == SharedJournalHelper.CATEGORY_ATURAN
     val accentColor = if (isAturan) Color(0xFF0F766E) else Color(0xFFD97706)
 
+    val safeDialogInsets = rememberEdgeToEdgeDialogSafeInsets()
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
             .testTag("screen_shared_journal_editor"),
         containerColor = MaterialTheme.colorScheme.surface,
-        contentWindowInsets = WindowInsets.safeDrawing,
+        contentWindowInsets = safeDialogInsets,
         bottomBar = {
             if (canManage) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
                     tonalElevation = 2.dp,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .imePadding()
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .windowInsetsPadding(
-                                WindowInsets.navigationBars.only(
-                                    WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal
-                                )
+                                safeDialogInsets
+                                    .only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                                    .union(WindowInsets.ime.only(WindowInsetsSides.Bottom))
                             )
                     ) {
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
@@ -1509,6 +1511,7 @@ private fun SharedJournalEditorScreen(
                 lightStatusBars = false,
                 lightNavigationBars = false
             )
+            val previewSafeInsets = rememberEdgeToEdgeDialogSafeInsets()
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -1550,7 +1553,7 @@ private fun SharedJournalEditorScreen(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(
+                            previewSafeInsets.only(
                                 WindowInsetsSides.Top + WindowInsetsSides.Horizontal
                             )
                         )
