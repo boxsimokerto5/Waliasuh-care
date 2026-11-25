@@ -46,8 +46,10 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.HourglassTop
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NightlightRound
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
@@ -63,6 +65,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -493,6 +497,8 @@ fun ParentPortalScreen(
         else -> if (isEn) currentTab.titleEn else currentTab.titleId
     }
 
+    var showTopOverflowMenu by remember { mutableStateOf(false) }
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
@@ -542,57 +548,25 @@ fun ParentPortalScreen(
                     Column {
                         Text(
                             text = currentPageTitle,
-                            fontSize = 15.5.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.ExtraBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Text(
-                            text = schoolProfile.shortName.ifBlank { schoolProfile.schoolName },
-                            fontSize = 10.5.sp,
-                            color = Color.White.copy(alpha = 0.85f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        val schoolLabel = schoolProfile.shortName.ifBlank { schoolProfile.schoolName }
+                        if (schoolLabel.isNotBlank()) {
+                            Text(
+                                text = schoolLabel,
+                                fontSize = 10.5.sp,
+                                lineHeight = 13.sp,
+                                color = Color.White.copy(alpha = 0.88f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 },
                 actions = {
-                    Surface(
-                        onClick = {
-                            val next = if (appLanguage == AppLanguage.INDONESIAN) AppLanguage.ENGLISH else AppLanguage.INDONESIAN
-                            viewModel.setAppLanguage(next)
-                        },
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color.White.copy(alpha = 0.18f),
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        Text(
-                            text = if (appLanguage == AppLanguage.INDONESIAN) "ID" else "EN",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            if (activeLink != null) {
-                                showChangePasswordSheet = true
-                            } else {
-                                Toast.makeText(
-                                    context,
-                                    if (isEn) "Account data is not loaded yet. Please sync first." else "Data akun belum termuat. Silakan sinkronkan terlebih dahulu.",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        },
-                        modifier = Modifier.testTag("btn_parent_change_password")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.LockReset,
-                            contentDescription = if (isEn) "Change Password" else "Ganti Password"
-                        )
-                    }
                     IconButton(
                         onClick = {
                             viewModel.syncAllWithCloud { _, msg ->
@@ -604,11 +578,103 @@ fun ParentPortalScreen(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = if (isEn) "Sync" else "Sinkron")
                     }
-                    IconButton(
-                        onClick = onLogout,
-                        modifier = Modifier.testTag("btn_parent_logout")
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = if (isEn) "Logout" else "Keluar")
+                    Box {
+                        IconButton(
+                            onClick = { showTopOverflowMenu = true },
+                            modifier = Modifier.testTag("btn_parent_top_menu")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MoreVert,
+                                contentDescription = if (isEn) "More Options" else "Menu Lainnya"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showTopOverflowMenu,
+                            onDismissRequest = { showTopOverflowMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (appLanguage == AppLanguage.INDONESIAN) {
+                                            "Bahasa: Indonesia (Ubah ke EN)"
+                                        } else {
+                                            "Language: English (Switch to ID)"
+                                        },
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.Language,
+                                        contentDescription = null,
+                                        tint = Color(0xFF3730A3)
+                                    )
+                                },
+                                onClick = {
+                                    showTopOverflowMenu = false
+                                    val next = if (appLanguage == AppLanguage.INDONESIAN) {
+                                        AppLanguage.ENGLISH
+                                    } else {
+                                        AppLanguage.INDONESIAN
+                                    }
+                                    viewModel.setAppLanguage(next)
+                                },
+                                modifier = Modifier.testTag("btn_parent_toggle_language")
+                            )
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isEn) "Change Password" else "Ganti Password",
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Default.LockReset,
+                                        contentDescription = null,
+                                        tint = Color(0xFF3730A3)
+                                    )
+                                },
+                                onClick = {
+                                    showTopOverflowMenu = false
+                                    if (activeLink != null) {
+                                        showChangePasswordSheet = true
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Account data is not loaded yet. Please sync first." else "Data akun belum termuat. Silakan sinkronkan terlebih dahulu.",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                },
+                                modifier = Modifier.testTag("btn_parent_change_password")
+                            )
+                            HorizontalDivider()
+                            DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        text = if (isEn) "Logout" else "Keluar",
+                                        fontSize = 13.5.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFDC2626)
+                                    )
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.Logout,
+                                        contentDescription = null,
+                                        tint = Color(0xFFDC2626)
+                                    )
+                                },
+                                onClick = {
+                                    showTopOverflowMenu = false
+                                    onLogout()
+                                },
+                                modifier = Modifier.testTag("btn_parent_logout")
+                            )
+                        }
                     }
                 }
             )

@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -26,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.DeleteOutline
@@ -43,8 +44,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -66,6 +65,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -207,8 +207,8 @@ fun ParentHarapanContent(
         modifier = Modifier
             .fillMaxSize()
             .testTag("parent_harapan_content"),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // 1. Kartu Petunjuk Ikhtiar Bersama (3 Tahun atau Lebih di Sekolah Rakyat)
         item {
@@ -216,7 +216,7 @@ fun ParentHarapanContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("card_harapan_guidance"),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = Color.Transparent),
                 border = BorderStroke(1.dp, Color(0xFFA7F3D0))
             ) {
@@ -228,16 +228,16 @@ fun ParentHarapanContent(
                                 colors = listOf(Color(0xFFECFDF5), Color(0xFFEEF2FF))
                             )
                         )
-                        .padding(16.dp)
+                        .padding(12.dp)
                 ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(40.dp)
+                                    .size(36.dp)
                                     .clip(CircleShape)
                                     .background(Color(0xFF047857)),
                                 contentAlignment = Alignment.Center
@@ -246,13 +246,13 @@ fun ParentHarapanContent(
                                     imageVector = Icons.Default.VolunteerActivism,
                                     contentDescription = null,
                                     tint = Color.White,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = if (isEn) "Character Expectations for Your Child" else "Harapan Karakter pada Anak",
-                                    fontSize = 15.5.sp,
+                                    fontSize = 14.5.sp,
                                     fontWeight = FontWeight.ExtraBold,
                                     color = Color(0xFF064E3B)
                                 )
@@ -266,12 +266,12 @@ fun ParentHarapanContent(
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            color = Color.White.copy(alpha = 0.85f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = Color.White.copy(alpha = 0.88f),
                             border = BorderStroke(1.dp, Color(0xFFD1FAE5))
                         ) {
                             Row(
-                                modifier = Modifier.padding(12.dp),
+                                modifier = Modifier.padding(10.dp),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.Top
                             ) {
@@ -281,7 +281,7 @@ fun ParentHarapanContent(
                                     tint = Color(0xFF0F766E),
                                     modifier = Modifier
                                         .padding(top = 2.dp)
-                                        .size(16.dp)
+                                        .size(15.dp)
                                 )
                                 Text(
                                     text = if (isEn) {
@@ -289,8 +289,8 @@ fun ParentHarapanContent(
                                     } else {
                                         "Selama 3 tahun atau lebih, waktu anak lebih banyak dihabiskan di Sekolah Rakyat. Maka tuliskan harapan Anda tentang karakter anak Anda, agar nanti harapan sikap ini coba dinasehatkan oleh Wali Asuh kepada anak. Semua ini merupakan ikhtiar bersama."
                                     },
-                                    fontSize = 12.5.sp,
-                                    lineHeight = 18.sp,
+                                    fontSize = 11.5.sp,
+                                    lineHeight = 16.sp,
                                     color = Color(0xFF1E293B)
                                 )
                             }
@@ -306,19 +306,19 @@ fun ParentHarapanContent(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("card_form_parent_harapan"),
-                shape = RoundedCornerShape(18.dp),
+                shape = RoundedCornerShape(14.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 border = BorderStroke(
                     width = 1.dp,
                     color = if (editingItem != null) Color(0xFF4F46E5) else MaterialTheme.colorScheme.outlineVariant
                 ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -332,15 +332,15 @@ fun ParentHarapanContent(
                                 } else {
                                     if (isEn) "Write Your Expectation Form" else "Formulir Harapan Karakter"
                                 },
-                                fontSize = 14.5.sp,
+                                fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
                                 text = if (isEn) {
-                                    "Tap the microphone icon to dictate faster via Google Voice-to-Text."
+                                    "Tap the microphone icon to dictate faster via Google Voice."
                                 } else {
-                                    "Tekan ikon mikrofon untuk mengetik cepat dengan Suara ke Teks Google."
+                                    "Ketuk ikon mikrofon untuk dikte cepat lewat Suara Google."
                                 },
                                 fontSize = 11.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -356,179 +356,210 @@ fun ParentHarapanContent(
                         }
                     }
 
-                    // Pilihan Fokus Karakter
+                    // Pilihan Fokus Karakter (Chip Pil Ringkas & Rapat)
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = if (isEn) "Character Focus Pillars (Optional)" else "Fokus Nilai Karakter (Opsional)",
-                            fontSize = 12.sp,
+                            fontSize = 11.5.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             ParentExpectationHelper.FOCUS_OPTIONS.forEach { option ->
                                 val isSelected = option.key in selectedFocusTags
                                 val label = if (isEn) option.labelEn else option.labelId
-                                FilterChip(
-                                    selected = isSelected,
-                                    onClick = {
-                                        selectedFocusTags = if (isSelected) {
-                                            selectedFocusTags - option.key
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (isSelected) {
+                                        Color(0xFFD1FAE5)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                                    },
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isSelected) {
+                                            Color(0xFF059669)
                                         } else {
-                                            selectedFocusTags + option.key
+                                            MaterialTheme.colorScheme.outlineVariant
                                         }
-                                    },
-                                    label = {
-                                        Text(
-                                            text = label,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                                        )
-                                    },
-                                    leadingIcon = if (isSelected) {
-                                        {
+                                    ),
+                                    modifier = Modifier
+                                        .heightIn(min = 34.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable {
+                                            selectedFocusTags = if (isSelected) {
+                                                selectedFocusTags - option.key
+                                            } else {
+                                                selectedFocusTags + option.key
+                                            }
+                                        }
+                                        .testTag("chip_harapan_focus_${option.key}")
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        if (isSelected) {
                                             Icon(
                                                 imageVector = Icons.Default.Check,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(15.dp)
+                                                tint = Color(0xFF065F46),
+                                                modifier = Modifier.size(14.dp)
                                             )
                                         }
-                                    } else null,
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFFD1FAE5),
-                                        selectedLabelColor = Color(0xFF065F46),
-                                        selectedLeadingIconColor = Color(0xFF065F46)
-                                    ),
-                                    modifier = Modifier.testTag("chip_harapan_focus_${option.key}")
-                                )
+                                        Text(
+                                            text = label,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) Color(0xFF065F46) else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
                     // Input 1: Harapan Karakter & Sikap Ananda (Wajib) + Voice
-                    OutlinedTextField(
-                        value = characterText,
-                        onValueChange = { characterText = it },
-                        label = {
-                            Text(
-                                if (isEn) "Character & Attitude Expectations *" else "Harapan Karakter & Sikap Ananda *"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                if (isEn) {
-                                    "Example: I hope my child becomes more honest, disciplined in prayers, and respectful to elders..."
-                                } else {
-                                    "Contoh: Semoga ananda tumbuh lebih jujur, disiplin sholat berjamaah, dan ramah kepada teman..."
-                                },
-                                fontSize = 12.sp
-                            )
-                        },
-                        trailingIcon = {
-                            IconButton(
-                                onClick = { startVoiceInput(ParentHarapanVoiceField.CHARACTER) },
-                                modifier = Modifier
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .testTag("btn_voice_parent_harapan_karakter")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = if (isEn) "Voice input for character expectation" else "Suara ke teks harapan karakter",
-                                    tint = Color(0xFF047857)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (isEn) "Character & Attitude Expectations *" else "Harapan Karakter & Sikap Ananda *",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        OutlinedTextField(
+                            value = characterText,
+                            onValueChange = { characterText = it },
+                            placeholder = {
+                                Text(
+                                    if (isEn) {
+                                        "Example: More honest, disciplined in prayer, and polite..."
+                                    } else {
+                                        "Contoh: Semoga ananda lebih jujur, rajin sholat & ramah..."
+                                    },
+                                    fontSize = 12.sp
                                 )
-                            }
-                        },
-                        minLines = 3,
-                        maxLines = 6,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_parent_harapan_karakter")
-                    )
+                            },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { startVoiceInput(ParentHarapanVoiceField.CHARACTER) },
+                                    modifier = Modifier
+                                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                        .testTag("btn_voice_parent_harapan_karakter")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = if (isEn) "Voice input for character expectation" else "Suara ke teks harapan karakter",
+                                        tint = Color(0xFF047857),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
+                            textStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            minLines = 2,
+                            maxLines = 5,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_parent_harapan_karakter")
+                        )
+                    }
 
                     // Input 2: Kebiasaan / Sikap yang Perlu Dinasehatkan Wali Asuh + Voice
-                    OutlinedTextField(
-                        value = adviceNotesText,
-                        onValueChange = { adviceNotesText = it },
-                        label = {
-                            Text(
-                                if (isEn) "Habits / Areas for Wali Asuh to Advise" else "Hal / Kebiasaan yang Perlu Dinasehatkan Wali Asuh"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                if (isEn) {
-                                    "Example: Often forgets to tidy up clothes or tends to hold back emotions..."
-                                } else {
-                                    "Contoh: Mohon sesekali diingatkan agar lebih rajin merapikan barang dan sabar saat berbeda pendapat..."
-                                },
-                                fontSize = 12.sp
-                            )
-                        },
-                        trailingIcon = {
-                            IconButton(
-                                onClick = { startVoiceInput(ParentHarapanVoiceField.ADVICE) },
-                                modifier = Modifier
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .testTag("btn_voice_parent_harapan_nasehat")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = if (isEn) "Voice input for advice focus" else "Suara ke teks hal yang dinasehatkan",
-                                    tint = Color(0xFF047857)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (isEn) "Habits to Advise (Optional)" else "Hal yang Perlu Dinasehatkan Wali Asuh",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        OutlinedTextField(
+                            value = adviceNotesText,
+                            onValueChange = { adviceNotesText = it },
+                            placeholder = {
+                                Text(
+                                    if (isEn) {
+                                        "Example: Remind to tidy belongings and stay patient..."
+                                    } else {
+                                        "Contoh: Diingatkan merapikan barang & sabar..."
+                                    },
+                                    fontSize = 12.sp
                                 )
-                            }
-                        },
-                        minLines = 2,
-                        maxLines = 5,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_parent_harapan_nasehat")
-                    )
+                            },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { startVoiceInput(ParentHarapanVoiceField.ADVICE) },
+                                    modifier = Modifier
+                                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                        .testTag("btn_voice_parent_harapan_nasehat")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = if (isEn) "Voice input for advice focus" else "Suara ke teks hal yang dinasehatkan",
+                                        tint = Color(0xFF047857),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
+                            textStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            minLines = 1,
+                            maxLines = 4,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_parent_harapan_nasehat")
+                        )
+                    }
 
                     // Input 3: Doa & Pesan Penyemangat + Voice
-                    OutlinedTextField(
-                        value = prayerText,
-                        onValueChange = { prayerText = it },
-                        label = {
-                            Text(
-                                if (isEn) "Parent's Prayer / Encouragement (Optional)" else "Doa & Pesan Penyemangat Orang Tua (Opsional)"
-                            )
-                        },
-                        placeholder = {
-                            Text(
-                                if (isEn) {
-                                    "Example: Stay strong at Sekolah Rakyat, Mom and Dad always pray for you..."
-                                } else {
-                                    "Contoh: Tetap semangat belajar di Sekolah Rakyat ya Nak, ayah & bunda selalu mendoakan..."
-                                },
-                                fontSize = 12.sp
-                            )
-                        },
-                        trailingIcon = {
-                            IconButton(
-                                onClick = { startVoiceInput(ParentHarapanVoiceField.PRAYER) },
-                                modifier = Modifier
-                                    .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
-                                    .testTag("btn_voice_parent_harapan_doa")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = if (isEn) "Voice input for parent prayer" else "Suara ke teks doa orang tua",
-                                    tint = Color(0xFF047857)
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = if (isEn) "Parent's Prayer & Note (Optional)" else "Doa & Pesan Penyemangat (Opsional)",
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        OutlinedTextField(
+                            value = prayerText,
+                            onValueChange = { prayerText = it },
+                            placeholder = {
+                                Text(
+                                    if (isEn) {
+                                        "Example: Stay strong at Sekolah Rakyat, we pray for you..."
+                                    } else {
+                                        "Contoh: Semangat belajar ya Nak, ayah & bunda mendoakan..."
+                                    },
+                                    fontSize = 12.sp
                                 )
-                            }
-                        },
-                        minLines = 2,
-                        maxLines = 4,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("input_parent_harapan_doa")
-                    )
+                            },
+                            trailingIcon = {
+                                IconButton(
+                                    onClick = { startVoiceInput(ParentHarapanVoiceField.PRAYER) },
+                                    modifier = Modifier
+                                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                                        .testTag("btn_voice_parent_harapan_doa")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = if (isEn) "Voice input for parent prayer" else "Suara ke teks doa orang tua",
+                                        tint = Color(0xFF047857),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            },
+                            textStyle = TextStyle(fontSize = 13.sp, lineHeight = 18.sp),
+                            minLines = 1,
+                            maxLines = 4,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("input_parent_harapan_doa")
+                        )
+                    }
 
                     Button(
                         onClick = {
@@ -559,7 +590,7 @@ fun ParentHarapanContent(
                             containerColor = Color(0xFF047857),
                             contentColor = Color.White
                         ),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier
                             .fillMaxWidth()
                             .sizeIn(minHeight = 48.dp)
@@ -666,15 +697,15 @@ fun ParentHarapanContent(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(20.dp),
+                            .padding(16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Favorite,
                             contentDescription = null,
                             tint = Color(0xFF059669),
-                            modifier = Modifier.size(28.dp)
+                            modifier = Modifier.size(26.dp)
                         )
                         Text(
                             text = if (isEn) {
@@ -707,7 +738,7 @@ fun ParentHarapanContent(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("card_parent_harapan_item_${item.id}"),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = BorderStroke(
                         1.dp,
@@ -718,8 +749,8 @@ fun ParentHarapanContent(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         // Baris status & tanggal + tombol Edit/Hapus
                         Row(

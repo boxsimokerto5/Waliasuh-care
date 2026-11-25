@@ -9284,7 +9284,9 @@ class ExampleRobolectricTest {
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_profile_parent_change_password"))
     composeTestRule.onNodeWithTag("btn_profile_parent_change_password").assertIsDisplayed()
 
-    // 2. Buka dialog ganti password lewat ikon TopBar (Option A) tanpa input password lama
+    // 2. Buka dialog ganti password lewat menu titik tiga TopBar (Option A) tanpa input password lama
+    composeTestRule.onNodeWithTag("btn_parent_top_menu").performClick()
+    composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("btn_parent_change_password").performClick()
     composeTestRule.waitForIdle()
 
