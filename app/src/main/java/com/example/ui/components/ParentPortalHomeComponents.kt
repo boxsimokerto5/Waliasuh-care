@@ -1,11 +1,16 @@
 package com.example.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -45,11 +50,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -59,6 +68,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.lerp
+import kotlin.math.absoluteValue
+import kotlinx.coroutines.delay
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipRecord
@@ -972,179 +984,239 @@ fun ParentSwipeableHighlightsSection(
 
     if (cards.isEmpty()) return
 
-    val pagerState = rememberPagerState(pageCount = { cards.size })
+    val total = cards.size
+    val virtualPageCount = if (total > 1) total * 400 else total
+    val initialVirtualPage = if (total > 1) {
+        val mid = virtualPageCount / 2
+        mid - (mid % total)
+    } else {
+        0
+    }
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (isEn) "Latest Child Highlights" else "Kabar Terbaru Ananda",
-                fontSize = 14.5.sp,
-                fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (cards.size > 1) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Swipe,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                    Text(
-                        text = if (isEn) "Swipe left/right" else "Geser kiri/kanan",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
+    key(total) {
+        val pagerState = rememberPagerState(
+            initialPage = initialVirtualPage,
+            pageCount = { virtualPageCount }
+        )
+        val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
+
+        LaunchedEffect(total, isDragged) {
+            if (total <= 1 || isDragged) return@LaunchedEffect
+            while (true) {
+                delay(5_000L)
+                if (!pagerState.isScrollInProgress) {
+                    val nextPage = if (pagerState.currentPage + 1 < virtualPageCount) {
+                        pagerState.currentPage + 1
+                    } else {
+                        initialVirtualPage
+                    }
+                    pagerState.animateScrollToPage(
+                        page = nextPage,
+                        animationSpec = tween(
+                            durationMillis = 700,
+                            easing = FastOutSlowInEasing
+                        )
                     )
                 }
             }
         }
 
-        HorizontalPager(
-            state = pagerState,
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            pageSpacing = 12.dp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("pager_parent_highlights")
-        ) { page ->
-            val card = cards[page]
-            Card(
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(20.dp))
-                    .clickable(onClick = card.onClick)
-                    .testTag("card_highlight_${card.id}"),
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                border = BorderStroke(1.dp, card.accentColor.copy(alpha = 0.25f))
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
+                Text(
+                    text = if (isEn) "Latest Child Highlights" else "Kabar Terbaru Ananda",
+                    fontSize = 14.5.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (total > 1) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Swipe,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            text = if (isEn) "Swipe left/right" else "Geser kiri/kanan",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                contentPadding = PaddingValues(horizontal = 16.dp),
+                pageSpacing = 12.dp,
+                beyondViewportPageCount = 1,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("pager_parent_highlights")
+            ) { page ->
+                val realIdx = page % total
+                val card = cards[realIdx]
+                val pageOffset = ((pagerState.currentPage - page) + pagerState.currentPageOffsetFraction)
+                    .absoluteValue
+                    .coerceIn(0f, 1f)
+                val cardScale = lerp(0.96f, 1f, 1f - pageOffset)
+                val cardAlpha = lerp(0.84f, 1f, 1f - pageOffset)
+
+                Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Brush.linearGradient(card.gradientColors))
-                        .padding(16.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = card.badgeBg
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = card.icon,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(12.dp)
-                                    )
-                                    Text(
-                                        text = card.badge,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color.White
-                                    )
-                                }
-                            }
-                            Text(
-                                text = "${page + 1}/${cards.size}",
-                                fontSize = 10.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = card.accentColor.copy(alpha = 0.7f)
-                            )
+                        .graphicsLayer {
+                            scaleX = cardScale
+                            scaleY = cardScale
+                            alpha = cardAlpha
                         }
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = card.onClick)
+                        .testTag("card_highlight_${card.id}"),
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                    border = BorderStroke(1.dp, card.accentColor.copy(alpha = 0.25f))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.linearGradient(card.gradientColors))
+                            .padding(16.dp)
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = card.badgeBg
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = card.icon,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = card.badge,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = "${realIdx + 1}/$total",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = card.accentColor.copy(alpha = 0.7f)
+                                )
+                            }
 
-                        Text(
-                            text = card.title,
-                            fontSize = 16.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF0F172A),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Text(
-                            text = card.mainValue,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = card.accentColor,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Text(
-                            text = card.detailLine,
-                            fontSize = 12.sp,
-                            lineHeight = 16.5.sp,
-                            color = Color(0xFF334155),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-
-                        Spacer(modifier = Modifier.height(2.dp))
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
                             Text(
-                                text = card.footerAction,
-                                fontSize = 11.5.sp,
+                                text = card.title,
+                                fontSize = 16.5.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                color = card.accentColor
+                                color = Color(0xFF0F172A),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-                                contentDescription = null,
-                                tint = card.accentColor,
-                                modifier = Modifier.size(14.dp)
+
+                            Text(
+                                text = card.mainValue,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = card.accentColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
+
+                            Text(
+                                text = card.detailLine,
+                                fontSize = 12.sp,
+                                lineHeight = 16.5.sp,
+                                color = Color(0xFF334155),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+
+                            Spacer(modifier = Modifier.height(2.dp))
+
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = card.footerAction,
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = card.accentColor
+                                )
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                    contentDescription = null,
+                                    tint = card.accentColor,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        // Smooth pill dot indicators
-        if (cards.size > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(cards.size) { idx ->
-                    val isCurrent = pagerState.currentPage == idx
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 3.dp)
-                            .height(6.dp)
-                            .width(if (isCurrent) 20.dp else 6.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (isCurrent) Color(0xFF4338CA)
-                                else MaterialTheme.colorScheme.outlineVariant
-                            )
-                    )
+            // Smooth pill dot indicators
+            if (total > 1) {
+                val activeIndex = pagerState.currentPage % total
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    repeat(total) { idx ->
+                        val isCurrent = activeIndex == idx
+                        val dotWidth by animateDpAsState(
+                            targetValue = if (isCurrent) 20.dp else 6.dp,
+                            animationSpec = tween(
+                                durationMillis = 350,
+                                easing = FastOutSlowInEasing
+                            ),
+                            label = "highlight_dot_width_$idx"
+                        )
+                        val dotColor by animateColorAsState(
+                            targetValue = if (isCurrent) Color(0xFF4338CA) else MaterialTheme.colorScheme.outlineVariant,
+                            animationSpec = tween(durationMillis = 350),
+                            label = "highlight_dot_color_$idx"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 3.dp)
+                                .height(6.dp)
+                                .width(dotWidth)
+                                .clip(CircleShape)
+                                .background(dotColor)
+                        )
+                    }
                 }
             }
         }
