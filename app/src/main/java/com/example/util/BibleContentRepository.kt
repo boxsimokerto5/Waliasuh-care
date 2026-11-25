@@ -8,13 +8,25 @@ import com.example.data.model.BibleStoryItem
 import com.example.data.model.BibleTestament
 import com.example.data.model.BibleVerseItem
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.Call
+import okhttp3.Callback
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.net.HttpURLConnection
-import java.net.URL
+import java.io.IOException
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+import kotlin.coroutines.resume
 
 data class BibleChapterLoadResult(
     val verses: List<BibleVerseItem>,
@@ -39,10 +51,33 @@ object BibleContentRepository {
         val verses: List<BibleVerseItem>
     )
 
-    private val memoryCache = mutableMapOf<String, CachedChapterPayload>()
+    private val memoryCache = ConcurrentHashMap<String, CachedChapterPayload>()
+    private val activePrefetchKeys = ConcurrentHashMap.newKeySet<String>()
+
+    @Volatile
+    private var beebleCooldownUntilMs: Long = 0L
+
+    @Volatile
+    private var webApiCooldownUntilMs: Long = 0L
+
+    private const val SLOW_HOST_COOLDOWN_MS = 60_000L
+    private const val PRIMARY_PREFERENCE_WINDOW_MS = 1600L
+
+    private val httpClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(2500, TimeUnit.MILLISECONDS)
+            .readTimeout(3500, TimeUnit.MILLISECONDS)
+            .writeTimeout(2500, TimeUnit.MILLISECONDS)
+            .callTimeout(4500, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(true)
+            .build()
+    }
 
     internal fun clearMemoryCacheForTesting() {
         memoryCache.clear()
+        activePrefetchKeys.clear()
+        beebleCooldownUntilMs = 0L
+        webApiCooldownUntilMs = 0L
     }
 
     private val BEEBLE_BOOK_SLUGS: Map<String, String> = mapOf(
@@ -68,10 +103,9 @@ object BibleContentRepository {
     /**
      * Memuat ayat untuk kitab & pasal tertentu sesuai bahasa aktif (`IND` atau `ENG`):
      * 1. Cek cache memori & JSON lokal terpisah bahasa (`_id.json` / `_en.json`) untuk teks pasal lengkap.
-     * 2. Jika belum ada (atau diminta muat ulang), ambil dari API bahasa terkait:
-     *    - Bahasa Indonesia (`isEnglish == false`): Beeble Alkitab Terjemahan Baru (`tb`) -> fallback HelloAO `ind_ayt`.
-     *    - Bahasa Inggris (`isEnglish == true`): Bible API Public Domain World English Bible (`web`) -> fallback HelloAO `BSB`.
-     *    (Teks Inggris tidak pernah dipakai untuk mengisi tampilan Bahasa Indonesia.)
+     * 2. Jika belum ada (atau diminta muat ulang), ambil secara cepat (paralel & timeout singkat):
+     *    - Bahasa Indonesia (`isEnglish == false`): Beeble (`tb`) diprioritaskan sebentar, paralel dengan HelloAO CDN (`ind_ayt`).
+     *    - Bahasa Inggris (`isEnglish == true`): Bible API (`web`) diprioritaskan sebentar, paralel dengan HelloAO CDN (`BSB`).
      * 3. Jika offline & belum di-cache, gunakan ayat pilihan internal (jika tersedia) atau ringkasan offline sesuai bahasa.
      */
     suspend fun loadChapterVerses(
@@ -149,108 +183,207 @@ object BibleContentRepository {
         )
     }
 
+    /**
+     * Mempersiapkan cache pasal sebelum & sesudahnya secara diam-diam di latar belakang
+     * agar perpindahan pasal (`Lanjut` / `Sblm`) terasa instan tanpa buffering.
+     */
+    suspend fun prefetchAdjacentChapters(
+        context: Context,
+        book: BibleBookSpec,
+        chapter: Int,
+        isEnglish: Boolean
+    ) = withContext(Dispatchers.IO) {
+        val targets = buildList {
+            if (chapter < book.chaptersCount) add(chapter + 1)
+            if (chapter > 1) add(chapter - 1)
+        }
+        val langCode = if (isEnglish) "en" else "id"
+        targets.forEach { targetCh ->
+            val key = "${book.id}_${targetCh}_$langCode"
+            if (memoryCache.containsKey(key)) return@forEach
+            val file = getCacheFile(context, book.id, targetCh, langCode)
+            if (file.exists()) return@forEach
+            if (!activePrefetchKeys.add(key)) return@forEach
+            launch {
+                try {
+                    val payload = if (isEnglish) {
+                        fetchEnglishChapterOnline(book, targetCh)
+                    } else {
+                        fetchIndonesianChapterOnline(book, targetCh)
+                    }
+                    if (payload != null && payload.verses.isNotEmpty()) {
+                        memoryCache[key] = payload
+                        writeNormalizedCacheFile(file, langCode, payload)
+                    }
+                } finally {
+                    activePrefetchKeys.remove(key)
+                }
+            }
+        }
+    }
+
     private fun getCacheFile(context: Context, bookId: String, chapter: Int, langCode: String): File {
         val dir = File(context.filesDir, "bible_cache")
         if (!dir.exists()) dir.mkdirs()
         return File(dir, "${bookId}_${chapter}_$langCode.json")
     }
 
-    private fun httpGetJson(urlString: String): String? {
-        var conn: HttpURLConnection? = null
-        return try {
-            val url = URL(urlString)
-            conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 6000
-                readTimeout = 8000
-                setRequestProperty("Accept", "application/json")
-                setRequestProperty("User-Agent", "WaliasuhCareAndroid/1.0")
-            }
-            if (conn.responseCode !in 200..299) return null
-            conn.inputStream.bufferedReader().use { it.readText() }.takeIf { it.isNotBlank() }
+    private suspend fun httpGetJson(urlString: String): String? = suspendCancellableCoroutine { cont ->
+        val request = try {
+            Request.Builder()
+                .url(urlString)
+                .get()
+                .header("Accept", "application/json")
+                .header("User-Agent", "WaliasuhCareAndroid/1.0")
+                .build()
         } catch (_: Exception) {
-            null
-        } finally {
-            conn?.disconnect()
+            if (cont.isActive) cont.resume(null)
+            return@suspendCancellableCoroutine
         }
-    }
+        val call = httpClient.newCall(request)
+        cont.invokeOnCancellation { runCatching { call.cancel() } }
+        call.enqueue(object : Callback {
+            override fun onFailure(call: Call, e: IOException) {
+                if (cont.isActive) cont.resume(null)
+            }
 
-    private fun fetchIndonesianChapterOnline(
-        book: BibleBookSpec,
-        chapter: Int
-    ): CachedChapterPayload? {
-        // 1. Primary: Beeble API (Alkitab Terjemahan Baru / TB)
-        val slug = BEEBLE_BOOK_SLUGS[book.id] ?: book.nameId.lowercase().replace(" ", "")
-        val beebleCandidates = listOf(slug, book.nameId)
-            .distinct()
-            .map { URLEncoder.encode(it, "UTF-8").replace("+", "%20") }
-        for (candidate in beebleCandidates) {
-            val body = httpGetJson("https://beeble.vercel.app/api/v1/passage/$candidate/$chapter?ver=tb")
-            if (body != null) {
-                val parsed = parseBeebleChapterJson(body)
-                if (parsed.isNotEmpty()) {
-                    return CachedChapterPayload(
-                        sourceLabel = "Terjemahan Baru (TB)",
-                        verses = parsed
-                    )
+            override fun onResponse(call: Call, response: Response) {
+                response.use { res ->
+                    val text = if (res.isSuccessful) {
+                        runCatching { res.body?.string()?.takeIf { it.isNotBlank() } }.getOrNull()
+                    } else {
+                        null
+                    }
+                    if (cont.isActive) cont.resume(text)
                 }
             }
+        })
+    }
+
+    private suspend fun fetchIndonesianChapterOnline(
+        book: BibleBookSpec,
+        chapter: Int
+    ): CachedChapterPayload? = coroutineScope {
+        val now = System.currentTimeMillis()
+        val tryBeeble = now >= beebleCooldownUntilMs
+        val slug = BEEBLE_BOOK_SLUGS[book.id] ?: book.nameId.lowercase().replace(" ", "")
+        val encodedSlug = URLEncoder.encode(slug, "UTF-8").replace("+", "%20")
+
+        val beebleDeferred = if (tryBeeble) {
+            async {
+                val body = httpGetJson("https://beeble.vercel.app/api/v1/passage/$encodedSlug/$chapter?ver=tb")
+                val parsed = if (body != null) parseBeebleChapterJson(body) else emptyList()
+                if (parsed.isNotEmpty()) {
+                    CachedChapterPayload(sourceLabel = "Terjemahan Baru (TB)", verses = parsed)
+                } else {
+                    null
+                }
+            }
+        } else {
+            null
         }
 
-        // 2. Fallback: HelloAO Free Use Bible API (Alkitab Yang Terbuka / ind_ayt)
-        val helloSimpleBody = httpGetJson("https://bible.helloao.org/api/ind_ayt/${book.id}/$chapter.simple.json")
-        if (helloSimpleBody != null) {
-            val parsed = parseHelloAoChapterJson(helloSimpleBody, isEnglishTarget = false)
+        val helloSimpleDeferred = async {
+            val body = httpGetJson("https://bible.helloao.org/api/ind_ayt/${book.id}/$chapter.simple.json")
+            val parsed = if (body != null) parseHelloAoChapterJson(body, isEnglishTarget = false) else emptyList()
             if (parsed.isNotEmpty()) {
-                return CachedChapterPayload(
-                    sourceLabel = "Alkitab Terjemahan (AYT)",
-                    verses = parsed
-                )
+                CachedChapterPayload(sourceLabel = "Alkitab Terjemahan (AYT)", verses = parsed)
+            } else {
+                null
             }
+        }
+
+        if (beebleDeferred != null) {
+            val fastBeeble = withTimeoutOrNull(PRIMARY_PREFERENCE_WINDOW_MS) { beebleDeferred.await() }
+            if (fastBeeble != null) {
+                helloSimpleDeferred.cancel()
+                return@coroutineScope fastBeeble
+            }
+            // Beeble lambat atau gagal -> cek apakah HelloAO CDN sudah siap atau tunggu sebentar
+            val helloResult = helloSimpleDeferred.await()
+            if (helloResult != null) {
+                if (beebleDeferred.isCompleted) {
+                    // Gagal dalam window cepat: aktifkan cooldown singkat agar pasal berikutnya langsung cepat
+                    beebleCooldownUntilMs = System.currentTimeMillis() + SLOW_HOST_COOLDOWN_MS
+                } else {
+                    beebleCooldownUntilMs = System.currentTimeMillis() + SLOW_HOST_COOLDOWN_MS
+                    beebleDeferred.cancel()
+                }
+                return@coroutineScope helloResult
+            }
+            val lateBeeble = beebleDeferred.await()
+            if (lateBeeble != null) return@coroutineScope lateBeeble
+            beebleCooldownUntilMs = System.currentTimeMillis() + SLOW_HOST_COOLDOWN_MS
+        } else {
+            val helloResult = helloSimpleDeferred.await()
+            if (helloResult != null) return@coroutineScope helloResult
         }
 
         val helloFullBody = httpGetJson("https://bible.helloao.org/api/ind_ayt/${book.id}/$chapter.json")
         if (helloFullBody != null) {
             val parsed = parseHelloAoChapterJson(helloFullBody, isEnglishTarget = false)
             if (parsed.isNotEmpty()) {
-                return CachedChapterPayload(
+                return@coroutineScope CachedChapterPayload(
                     sourceLabel = "Alkitab Terjemahan (AYT)",
                     verses = parsed
                 )
             }
         }
 
-        return null
+        null
     }
 
-    private fun fetchEnglishChapterOnline(
+    private suspend fun fetchEnglishChapterOnline(
         book: BibleBookSpec,
         chapter: Int
-    ): CachedChapterPayload? {
+    ): CachedChapterPayload? = coroutineScope {
+        val now = System.currentTimeMillis()
+        val tryWebApi = now >= webApiCooldownUntilMs
         val query = URLEncoder.encode("${book.apiQueryName} $chapter", "UTF-8")
-        val webBody = httpGetJson("https://bible-api.com/$query?translation=web")
-        if (webBody != null) {
-            val parsed = parseWebApiChapterJson(webBody)
+
+        val webDeferred = if (tryWebApi) {
+            async {
+                val webBody = httpGetJson("https://bible-api.com/$query?translation=web")
+                val parsed = if (webBody != null) parseWebApiChapterJson(webBody) else emptyList()
+                if (parsed.isNotEmpty()) {
+                    CachedChapterPayload(sourceLabel = "World English Bible (WEB)", verses = parsed)
+                } else {
+                    null
+                }
+            }
+        } else {
+            null
+        }
+
+        val helloEnDeferred = async {
+            val helloEnBody = httpGetJson("https://bible.helloao.org/api/BSB/${book.id}/$chapter.simple.json")
+            val parsed = if (helloEnBody != null) parseHelloAoChapterJson(helloEnBody, isEnglishTarget = true) else emptyList()
             if (parsed.isNotEmpty()) {
-                return CachedChapterPayload(
-                    sourceLabel = "World English Bible (WEB)",
-                    verses = parsed
-                )
+                CachedChapterPayload(sourceLabel = "Berean Standard Bible (BSB)", verses = parsed)
+            } else {
+                null
             }
         }
 
-        val helloEnBody = httpGetJson("https://bible.helloao.org/api/BSB/${book.id}/$chapter.simple.json")
-        if (helloEnBody != null) {
-            val parsed = parseHelloAoChapterJson(helloEnBody, isEnglishTarget = true)
-            if (parsed.isNotEmpty()) {
-                return CachedChapterPayload(
-                    sourceLabel = "Berean Standard Bible (BSB)",
-                    verses = parsed
-                )
+        if (webDeferred != null) {
+            val fastWeb = withTimeoutOrNull(PRIMARY_PREFERENCE_WINDOW_MS) { webDeferred.await() }
+            if (fastWeb != null) {
+                helloEnDeferred.cancel()
+                return@coroutineScope fastWeb
             }
+            val helloEnResult = helloEnDeferred.await()
+            if (helloEnResult != null) {
+                webApiCooldownUntilMs = System.currentTimeMillis() + SLOW_HOST_COOLDOWN_MS
+                webDeferred.cancel()
+                return@coroutineScope helloEnResult
+            }
+            val lateWeb = webDeferred.await()
+            if (lateWeb != null) return@coroutineScope lateWeb
+            webApiCooldownUntilMs = System.currentTimeMillis() + SLOW_HOST_COOLDOWN_MS
+            return@coroutineScope null
         }
 
-        return null
+        helloEnDeferred.await()
     }
 
     internal fun parseBeebleChapterJson(jsonText: String): List<BibleVerseItem> {

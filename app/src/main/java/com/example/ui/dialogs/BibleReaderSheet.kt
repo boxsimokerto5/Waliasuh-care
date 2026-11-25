@@ -1,5 +1,6 @@
 package com.example.ui.dialogs
 
+import android.os.Build
 import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
@@ -14,17 +15,20 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -209,14 +213,23 @@ fun BibleReaderSheet(
         forceRefreshNext = false
         isLoadingChapter = true
         stopAudio()
-        chapterResult = BibleContentRepository.loadChapterVerses(
+        val loaded = BibleContentRepository.loadChapterVerses(
             context = context,
             book = activeBook,
             chapter = activeChapter,
             isEnglish = isEnglish,
             forceRefresh = force
         )
+        chapterResult = loaded
         isLoadingChapter = false
+        if (loaded.isFromOnlineOrCache && !Build.FINGERPRINT.equals("robolectric", ignoreCase = true)) {
+            BibleContentRepository.prefetchAdjacentChapters(
+                context = context,
+                book = activeBook,
+                chapter = activeChapter,
+                isEnglish = isEnglish
+            )
+        }
     }
 
     val currentChapterBookmarks = remember(bookmarks, activeBook.id, activeChapter) {
@@ -271,7 +284,9 @@ fun BibleReaderSheet(
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(if (!useDialogWindow) Modifier.statusBarsPadding() else Modifier)
+                            .windowInsetsPadding(
+                                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
+                            )
                     ) {
                         // Dekorasi garis titik warna-warni tipis di atas bar (nuansa perayaan Alkitab)
                         Canvas(
@@ -301,21 +316,21 @@ fun BibleReaderSheet(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                     // Left Golden Cross Emblem Button
                     Surface(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(36.dp)
                             .clickable {
                                 activeTab = BibleBottomTab.ALKITAB
                                 activeBook = BibleCatalog.findBook("JHN")
                                 activeChapter = 3
                             }
                             .testTag("bible_emblem_button"),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = BibleParchmentPalette.CardSurface,
                         border = BorderStroke(1.dp, Color(0xFFD9B882)),
                         shadowElevation = 2.dp
@@ -323,41 +338,41 @@ fun BibleReaderSheet(
                         Box(contentAlignment = Alignment.Center) {
                             Text(
                                 text = "✝",
-                                fontSize = 18.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFB45309)
                             )
                         }
                     }
 
-                    // Book & Chapter Selector Pill ("📖 2 Ti... v")
+                    // Book & Chapter Selector Pill ("📖 Kisah... 11 v")
                     val activeBookLabel = if (isEnglish) activeBook.nameEn else activeBook.nameId
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .height(40.dp)
+                            .height(38.dp)
                             .clickable { showBookPicker = true }
                             .testTag("bible_book_dropdown_button"),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = BibleParchmentPalette.PillSurface,
                         border = BorderStroke(1.dp, BibleParchmentPalette.Border)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 8.dp),
+                                .padding(horizontal = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.MenuBook,
                                 contentDescription = if (isEnglish) "Book selector" else "Pilih kitab",
                                 tint = BibleParchmentPalette.MaroonAccent,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
-                            Spacer(Modifier.width(5.dp))
+                            Spacer(Modifier.width(4.dp))
                             Text(
                                 text = "$activeBookLabel $activeChapter",
-                                fontSize = 12.sp,
+                                fontSize = 11.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = BibleParchmentPalette.InkPrimary,
                                 maxLines = 1,
@@ -368,18 +383,18 @@ fun BibleReaderSheet(
                                 imageVector = Icons.Rounded.KeyboardArrowDown,
                                 contentDescription = null,
                                 tint = BibleParchmentPalette.InkSecondary,
-                                modifier = Modifier.size(16.dp)
+                                modifier = Modifier.size(15.dp)
                             )
                         }
                     }
 
                     // IND | ENG Bilingual Pill Toggle
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = BibleParchmentPalette.PillSurface,
                         border = BorderStroke(1.dp, BibleParchmentPalette.Border)
                     ) {
-                        Row(modifier = Modifier.padding(3.dp)) {
+                        Row(modifier = Modifier.padding(2.dp)) {
                             BibleLangSegment(
                                 text = "IND",
                                 selected = !isEnglish,
@@ -414,7 +429,7 @@ fun BibleReaderSheet(
                             }
                         },
                         modifier = Modifier
-                            .size(38.dp)
+                            .size(36.dp)
                             .testTag("bible_audio_button")
                     ) {
                         Icon(
@@ -425,14 +440,14 @@ fun BibleReaderSheet(
                                 if (isEnglish) "Read chapter aloud" else "Dengarkan pasal"
                             },
                             tint = if (isSpeaking) BibleParchmentPalette.MaroonAccent else BibleParchmentPalette.InkPrimary,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(19.dp)
                         )
                     }
 
                     // Typography "T" Toggle Button
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .clip(RoundedCornerShape(10.dp))
                             .background(
                                 if (showTypographyStrip) BibleParchmentPalette.PillSurface else Color.Transparent
@@ -443,7 +458,7 @@ fun BibleReaderSheet(
                     ) {
                         Text(
                             text = "T",
-                            fontSize = 18.sp,
+                            fontSize = 17.sp,
                             fontFamily = FontFamily.Serif,
                             fontWeight = FontWeight.Bold,
                             color = BibleParchmentPalette.MaroonAccent
@@ -454,13 +469,13 @@ fun BibleReaderSheet(
                     // Right Golden Close / Exit Button
                     Surface(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(36.dp)
                             .clickable {
                                 stopAudio()
                                 onDismiss()
                             }
                             .testTag("bible_close_button"),
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(10.dp),
                         color = Color(0xFFF59E0B),
                         border = BorderStroke(1.dp, Color(0xFFD97706)),
                         shadowElevation = 2.dp
@@ -470,7 +485,7 @@ fun BibleReaderSheet(
                                 imageVector = Icons.Rounded.Close,
                                 contentDescription = if (isEnglish) "Close Bible" else "Tutup Alkitab",
                                 tint = Color.White,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(19.dp)
                             )
                         }
                     }
@@ -676,7 +691,10 @@ fun BibleReaderSheet(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .then(if (!useDialogWindow) Modifier.navigationBarsPadding() else Modifier)
+                                .windowInsetsPadding(
+                                    WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)
+                                )
+                                .imePadding()
                                 .padding(horizontal = 4.dp, vertical = 6.dp),
                             horizontalArrangement = Arrangement.SpaceEvenly,
                             verticalAlignment = Alignment.CenterVertically
@@ -851,7 +869,7 @@ fun BibleReaderSheet(
             },
             properties = DialogProperties(
                 usePlatformDefaultWidth = false,
-                decorFitsSystemWindows = true
+                decorFitsSystemWindows = false
             )
         ) {
             readerBody()
@@ -870,10 +888,10 @@ private fun BibleLangSegment(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(9.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(if (selected) BibleParchmentPalette.MaroonAccent else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 5.dp),
+            .padding(horizontal = 6.dp, vertical = 4.dp),
         contentAlignment = Alignment.Center
     ) {
         Text(
