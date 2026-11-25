@@ -3,6 +3,7 @@ package com.example.util
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import com.example.BuildConfig
 import com.example.data.model.ChildStudent
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.SchoolProfile
@@ -15,6 +16,17 @@ import com.example.util.i18n.AppLanguageManager
 import kotlin.random.Random
 
 object PasswordGenerator {
+    val PLAY_STORE_URL: String
+        get() = "https://play.google.com/store/apps/details?id=${BuildConfig.APPLICATION_ID}"
+
+    fun formatPlayStoreDownloadSection(isEnglish: Boolean): String {
+        return if (isEnglish) {
+            "📲 *Download Wali Asuh Care App (Play Store):*\n$PLAY_STORE_URL"
+        } else {
+            "📲 *Unduh Aplikasi Wali Asuh Care (Play Store):*\n$PLAY_STORE_URL"
+        }
+    }
+
     private val prefixes = listOf("Wali", "Asuh", "SRT", "Sehat", "Siaga", "Peduli", "Ceria", "Bakti")
     private val symbols = listOf("#", "@", "!")
 
@@ -51,8 +63,9 @@ object PasswordGenerator {
         val adminDisplay = schoolProfile.adminName.ifBlank {
             if (isEnglish) "School Administrator" else "Administrator Sekolah"
         }
+        val downloadSection = formatPlayStoreDownloadSection(isEnglish)
         if (account.isGuruNgaji()) {
-            return if (isEnglish) {
+            val body = if (isEnglish) {
                 """
                     *MENGAJI TEACHER ACCESS CARD — WALI ASUH CARE*
                     _${schoolDisplay}_
@@ -65,8 +78,6 @@ object PasswordGenerator {
                     📖 *Access Scope:* Student Mengaji Progress & Card (All Students)
                     
                     Use the account above to record and monitor student Mengaji sessions.
-                    
-                    _Sent by Administrator ($adminDisplay)._
                 """.trimIndent()
             } else {
                 """
@@ -81,13 +92,13 @@ object PasswordGenerator {
                     📖 *Hak Akses:* Input Setoran Mengaji & Kartu Mengaji (Semua Siswa)
                     
                     Gunakan akun di atas untuk mencatat setoran mengaji santri secara langsung.
-                    
-                    _Pesan ini dikirim oleh Administrator ($adminDisplay)._
                 """.trimIndent()
             }
+            val signature = if (isEnglish) "_Sent by Administrator ($adminDisplay)._" else "_Pesan ini dikirim oleh Administrator ($adminDisplay)._"
+            return "$body\n\n$downloadSection\n\n$signature"
         }
         if (account.isPetugasKesehatan()) {
-            return if (isEnglish) {
+            val body = if (isEnglish) {
                 """
                     *HEALTH OFFICER ACCESS CARD — WALI ASUH CARE*
                     _${schoolDisplay}_
@@ -100,8 +111,6 @@ object PasswordGenerator {
                     🩺 *Access Scope:* Treatment Plans, Medical Actions, Monthly Health Reports & Student Medical History
                     
                     Use the account above to log medical plans, treatments, and monthly school health recaps.
-                    
-                    _Sent by Administrator ($adminDisplay)._
                 """.trimIndent()
             } else {
                 """
@@ -116,12 +125,12 @@ object PasswordGenerator {
                     🩺 *Hak Akses:* Rencana & Tindakan Kesehatan, Laporan Bulanan, serta Profil & Riwayat Kesehatan Anak Asuh
                     
                     Gunakan akun di atas untuk mencatat pemeriksaan, rencana berobat, dan memantau laporan kesehatan siswa.
-                    
-                    _Pesan ini dikirim oleh Administrator ($adminDisplay)._
                 """.trimIndent()
             }
+            val signature = if (isEnglish) "_Sent by Administrator ($adminDisplay)._" else "_Pesan ini dikirim oleh Administrator ($adminDisplay)._"
+            return "$body\n\n$downloadSection\n\n$signature"
         }
-        return if (isEnglish) {
+        val body = if (isEnglish) {
             """
                 *WALI ASUH CARE APP LOGIN ACCESS CARD*
                 _${schoolDisplay}_
@@ -134,8 +143,6 @@ object PasswordGenerator {
                 🏢 *Asrama Assignment:* ${account.dormitory}
                 
                 Use the account above to monitor student health and referrals to $faskesText.
-                
-                _Sent by Administrator ($adminDisplay)._
             """.trimIndent()
         } else {
             """
@@ -150,10 +157,10 @@ object PasswordGenerator {
                 🏢 *Tugas Asrama:* ${account.dormitory}
                 
                 Gunakan akun di atas untuk memantau kesehatan anak asuh dan rujukan ke $faskesText.
-                
-                _Pesan ini dikirim oleh Administrator ($adminDisplay)._
             """.trimIndent()
         }
+        val signature = if (isEnglish) "_Sent by Administrator ($adminDisplay)._" else "_Pesan ini dikirim oleh Administrator ($adminDisplay)._"
+        return "$body\n\n$downloadSection\n\n$signature"
     }
 
     /**
@@ -190,7 +197,8 @@ object PasswordGenerator {
             listOf(if (isEnglish) "Messages with Caregiver" else "Pesan dengan Wali Asuh")
         }.joinToString(", ")
 
-        return if (isEnglish) {
+        val downloadSection = formatPlayStoreDownloadSection(isEnglish)
+        val body = if (isEnglish) {
             """
                 *PARENT ACCESS CARD — WALI ASUH CARE*
                 _${schoolDisplay}_
@@ -223,6 +231,7 @@ object PasswordGenerator {
                 Silakan buka aplikasi Wali Asuh Care dan login menggunakan username & password di atas.
             """.trimIndent()
         }
+        return "$body\n\n$downloadSection"
     }
 
     /**

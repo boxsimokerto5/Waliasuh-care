@@ -531,6 +531,8 @@ fun AdminScreen(
                 }
                 sb.appendLine("")
             }
+            sb.appendLine(PasswordGenerator.formatPlayStoreDownloadSection(true))
+            sb.appendLine("")
             sb.appendLine("_Managed by Administrator (${schoolProfile.adminName})_")
         } else {
             sb.appendLine("*DAFTAR KARTU AKSES WALI ASUH*")
@@ -550,6 +552,8 @@ fun AdminScreen(
                 }
                 sb.appendLine("")
             }
+            sb.appendLine(PasswordGenerator.formatPlayStoreDownloadSection(false))
+            sb.appendLine("")
             sb.appendLine("_Dikelola oleh Administrator (${schoolProfile.adminName})_")
         }
         val summaryText = sb.toString().trim()

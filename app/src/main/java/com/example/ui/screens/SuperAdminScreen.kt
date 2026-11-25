@@ -233,7 +233,8 @@ fun SuperAdminScreen(
     val rejectedCount = registrations.count { it.status.trim().uppercase() == "REJECTED" }
 
     fun sendAccessCardViaWhatsApp(reg: SchoolRegistration) {
-        val message = if (isEn) {
+        val downloadSection = com.example.util.PasswordGenerator.formatPlayStoreDownloadSection(isEn)
+        val body = if (isEn) {
             """
                 *OFFICIAL SCHOOL ADMIN LOGIN ACCESS CARD*
                 _Wali Asuh Care App Platform_
@@ -251,8 +252,6 @@ fun SuperAdminScreen(
                 
                 --------------------------------------------------
                 Please open the *Wali Asuh Care* app and use the username and password above to start managing your healthcare profile, student records, and Wali Asuh accounts.
-                
-                _Issued by Main Superadmin of Wali Asuh Care._
             """.trimIndent()
         } else {
             """
@@ -272,10 +271,10 @@ fun SuperAdminScreen(
                 
                 --------------------------------------------------
                 Silakan buka aplikasi *Wali Asuh Care* dan gunakan username serta password di atas untuk mulai mengelola profil faskes, data siswa anak asuh, dan akun wali asuh.
-                
-                _Diterbitkan oleh Superadmin Utama Wali Asuh Care._
             """.trimIndent()
         }
+        val signature = if (isEn) "_Issued by Main Superadmin of Wali Asuh Care._" else "_Diterbitkan oleh Superadmin Utama Wali Asuh Care._"
+        val message = "$body\n\n$downloadSection\n\n$signature"
 
         val cleanPhone = reg.picPhone.replace("-", "").replace(" ", "").trim()
         val intlPhone = if (cleanPhone.startsWith("0")) "62" + cleanPhone.drop(1) else cleanPhone
@@ -301,7 +300,7 @@ fun SuperAdminScreen(
     }
 
     fun copyAdminCredentials(reg: SchoolRegistration) {
-        val text = "ID: ${reg.generatedSchoolCode}\nUsername: ${reg.generatedAdminUsername}\nPassword: ${reg.generatedAdminPassword}"
+        val text = "ID: ${reg.generatedSchoolCode}\nUsername: ${reg.generatedAdminUsername}\nPassword: ${reg.generatedAdminPassword}\nPlay Store: ${com.example.util.PasswordGenerator.PLAY_STORE_URL}"
         val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(ClipData.newPlainText(if (isEn) "Admin Account" else "Akun Admin", text))
         Toast.makeText(
