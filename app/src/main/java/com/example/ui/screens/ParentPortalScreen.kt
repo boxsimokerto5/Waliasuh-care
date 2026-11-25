@@ -1791,7 +1791,9 @@ private fun ParentOverviewContent(
             }
         }
 
-        if (link != null && !link.deletionRequested && onOpenRequestDeleteAccount != null) {
+        // Sembunyikan kartu hapus akun di Beranda selama Profil Anak aktif (sudah tersedia di Profil Anak);
+        // tampilkan hanya sebagai cadangan bila izin Profil Anak dinonaktifkan.
+        if (link != null && !link.canViewProfile && !link.deletionRequested && onOpenRequestDeleteAccount != null) {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
