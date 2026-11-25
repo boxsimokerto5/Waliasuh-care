@@ -450,6 +450,16 @@ fun KartuMengajiSheet(
                         }
                     }
 
+                    RewardAdDeclarationHint(
+                        text = if (isEn) {
+                            "Watch a short video ad to print or export PDF"
+                        } else {
+                            "Tonton iklan video singkat untuk Print / Unduh PDF Kartu"
+                        },
+                        accentColor = emeraldPrimary,
+                        compact = true
+                    )
+
                     // Tombol Print Kartu, PDF & Share WA
                     Row(
                         modifier = Modifier.fillMaxWidth(),

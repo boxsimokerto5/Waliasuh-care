@@ -60,6 +60,7 @@ import com.example.ui.HealthViewModel
 import com.example.ui.components.StudentAvatar
 import com.example.ui.dialogs.ChangeWaliPasswordDialog
 import com.example.ui.dialogs.MonthlyReportContent
+import com.example.util.TopOnAdManager
 import com.example.util.i18n.LocalAppStrings
 
 private enum class PetugasKesehatanTab(val testTag: String) {
@@ -180,6 +181,7 @@ fun PetugasKesehatanScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
                                     viewModel.syncAllWithCloud { _, msg ->
                                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                     }
@@ -273,6 +275,7 @@ fun PetugasKesehatanScreen(
                 items = navItems,
                 selectedIndex = currentTab.ordinal,
                 onSelectIndex = { idx ->
+                    TopOnAdManager.onUserActionClick(context)
                     currentTab = PetugasKesehatanTab.entries[idx]
                 }
             )

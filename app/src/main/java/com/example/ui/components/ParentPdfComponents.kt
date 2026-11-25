@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.dialogs.RewardAdDeclarationHint
 import com.example.util.PdfReportGenerator
 import java.io.File
 
@@ -114,6 +115,7 @@ fun ParentMenuPdfHeaderCard(
     buttonLabel: String? = null,
     selectedMonthOnly: Boolean? = null,
     onToggleMonthOnly: ((Boolean) -> Unit)? = null,
+    showRewardAdHint: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -208,6 +210,18 @@ fun ParentMenuPdfHeaderCard(
                         modifier = Modifier.testTag("${pdfButtonTestTag}_filter_all")
                     )
                 }
+            }
+
+            if (showRewardAdHint) {
+                RewardAdDeclarationHint(
+                    text = if (isEn) {
+                        "Watch a short video ad to download the PDF report"
+                    } else {
+                        "Tonton iklan video singkat untuk mengunduh laporan PDF"
+                    },
+                    accentColor = accentColor,
+                    compact = true
+                )
             }
         }
     }

@@ -85,6 +85,7 @@ import com.example.ui.dialogs.ScannerFeedbackStatus
 import com.example.ui.dialogs.ScannerFloatingFeedback
 import com.example.util.DateUtils
 import com.example.util.StudentClassifier
+import com.example.util.TopOnAdManager
 import com.example.util.i18n.LocalAppStrings
 
 private data class GuruStudentMengajiRow(
@@ -292,6 +293,7 @@ fun GuruNgajiScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             IconButton(
                                 onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
                                     viewModel.syncAllWithCloud { _, msg ->
                                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                                     }
@@ -504,6 +506,7 @@ fun GuruNgajiScreen(
 
                                 OutlinedButton(
                                     onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
                                         kartuTargetStudent = null
                                         showKartuMengajiSheet = true
                                     },
@@ -534,7 +537,10 @@ fun GuruNgajiScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 OutlinedButton(
-                                    onClick = { showRekapMengajiSheet = true },
+                                    onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        showRekapMengajiSheet = true
+                                    },
                                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = Color.White.copy(alpha = 0.12f),
@@ -559,7 +565,10 @@ fun GuruNgajiScreen(
                                 }
 
                                 OutlinedButton(
-                                    onClick = { showQuranSheet = true },
+                                    onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        showQuranSheet = true
+                                    },
                                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.65f)),
                                     colors = ButtonDefaults.outlinedButtonColors(
                                         containerColor = Color.White.copy(alpha = 0.12f),
@@ -604,7 +613,10 @@ fun GuruNgajiScreen(
                             ).forEach { (idx, title) ->
                                 val active = selectedTab == idx
                                 Surface(
-                                    onClick = { selectedTab = idx },
+                                    onClick = {
+                                        TopOnAdManager.onUserActionClick(context)
+                                        selectedTab = idx
+                                    },
                                     shape = RoundedCornerShape(9.dp),
                                     color = if (active) emeraldPrimary else Color.Transparent,
                                     modifier = Modifier
@@ -671,7 +683,10 @@ fun GuruNgajiScreen(
                                 ).forEach { (key, label) ->
                                     FilterChip(
                                         selected = studentFilter == key,
-                                        onClick = { studentFilter = key },
+                                        onClick = {
+                                            TopOnAdManager.onUserActionClick(context)
+                                            studentFilter = key
+                                        },
                                         label = { Text(label, fontSize = 11.sp) },
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = emeraldLight,
@@ -687,7 +702,10 @@ fun GuruNgajiScreen(
                                 ).forEach { (key, label) ->
                                     FilterChip(
                                         selected = historyFilter == key,
-                                        onClick = { historyFilter = key },
+                                        onClick = {
+                                            TopOnAdManager.onUserActionClick(context)
+                                            historyFilter = key
+                                        },
                                         label = { Text(label, fontSize = 11.sp) },
                                         colors = FilterChipDefaults.filterChipColors(
                                             selectedContainerColor = emeraldLight,
@@ -855,6 +873,7 @@ fun GuruNgajiScreen(
                                         }
                                         OutlinedButton(
                                             onClick = {
+                                                TopOnAdManager.onUserActionClick(context)
                                                 kartuTargetStudent = st
                                                 showKartuMengajiSheet = true
                                             },

@@ -161,6 +161,8 @@ import com.example.ui.components.StudentAvatar
 import com.example.ui.components.StudentLargeProfilePhoto
 import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.ui.dialogs.DeleteParentAccountDialog
+import com.example.ui.dialogs.RewardAdDeclarationDialog
+import com.example.ui.dialogs.RewardAdDeclarationHint
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.ui.dialogs.WaliOfficialProfileSheet
 import com.example.ui.dialogs.sholatStatusColors
@@ -168,6 +170,7 @@ import com.example.util.DateUtils
 import com.example.util.ParentPortalPdfHelper
 import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
+import com.example.util.TopOnAdManager
 import com.example.util.i18n.AppLanguage
 import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
@@ -356,8 +359,19 @@ fun ParentPortalScreen(
     var showQuranSheet by remember { mutableStateOf(false) }
     var showBibleSheet by remember { mutableStateOf(false) }
     var readyPdfDialogData by remember { mutableStateOf<ParentReadyPdfDialogData?>(null) }
+    var pendingRewardPdfAction by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     val currentTab = visibleTabs.getOrElse(safeTabIndex) { ParentPortalTab.HOME }
+
+    fun triggerRewardPdf(actionDescription: String, onGenerate: () -> Unit) {
+        if (TopOnAdManager.isRewardAdReady()) {
+            pendingRewardPdfAction = actionDescription to onGenerate
+        } else {
+            TopOnAdManager.showRewardAdForPdfReport(context) {
+                onGenerate()
+            }
+        }
+    }
 
     LaunchedEffect(isCurrentParentAccountDeleted) {
         if (isCurrentParentAccountDeleted) {
@@ -516,7 +530,10 @@ fun ParentPortalScreen(
                 navigationIcon = {
                     if (isSubScreen) {
                         IconButton(
-                            onClick = { selectedTabIndex = 0 },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedTabIndex = 0
+                            },
                             modifier = Modifier.testTag("btn_parent_back_home")
                         ) {
                             Icon(
@@ -569,6 +586,7 @@ fun ParentPortalScreen(
                 actions = {
                     IconButton(
                         onClick = {
+                            TopOnAdManager.onUserActionClick(context)
                             viewModel.syncAllWithCloud { _, msg ->
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
@@ -694,6 +712,7 @@ fun ParentPortalScreen(
                         NavigationBarItem(
                             selected = isSelected,
                             onClick = {
+                                TopOnAdManager.onUserActionClick(context)
                                 val targetIdx = visibleTabs.indexOf(navTab)
                                 if (targetIdx >= 0) selectedTabIndex = targetIdx
                             },
@@ -788,6 +807,7 @@ fun ParentPortalScreen(
                         visitRecords = visitRecords,
                         unreadMessageCount = unreadFromWaliCount,
                         onOpenTab = { targetTab ->
+                            TopOnAdManager.onUserActionClick(context)
                             val idx = visibleTabs.indexOf(targetTab)
                             if (idx >= 0) selectedTabIndex = idx
                         },
@@ -801,8 +821,12 @@ fun ParentPortalScreen(
                                 }
                             }
                         } else null,
-                        onPreviewPhoto = { showPhotoPreview = true },
+                        onPreviewPhoto = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showPhotoPreview = true
+                        },
                         onOpenWaliProfile = {
+                            TopOnAdManager.onUserActionClick(context)
                             selectedWaliBadgeForSheet = resolvedWaliBadges.firstOrNull { it.isOnDutyNow }
                                 ?: resolvedWaliBadges.firstOrNull()
                                 ?: ResolvedWaliBadgeInfo(
@@ -812,51 +836,64 @@ fun ParentPortalScreen(
                                     account = assignedWaliAccount
                                 )
                         },
-                        onOpenQuran = { showQuranSheet = true },
-                        onOpenBible = { showBibleSheet = true },
+                        onOpenQuran = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showQuranSheet = true
+                        },
+                        onOpenBible = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showBibleSheet = true
+                        },
                         onDownloadComprehensivePdf = if (student != null) {
                             {
-                                val teamName = resolvedWaliBadges.joinToString(", ") { it.name }.ifBlank {
-                                    assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
-                                }
-                                val file = ParentPortalPdfHelper.generateParentComprehensiveReportPdf(
-                                    context = context,
-                                    student = student,
-                                    schoolProfile = schoolProfile,
-                                    waliName = teamName.ifBlank { "Wali Asuh" },
-                                    isChristianStudent = isChristianStudent,
-                                    isFemaleStudent = isFemaleStudent,
-                                    sholatRecords = studentSholat,
-                                    mengajiRecords = studentMengaji,
-                                    christianRecords = studentChristianWorship,
-                                    fastingRecords = studentFasting,
-                                    haidRecords = studentHaid,
-                                    medicalRecords = studentMedical,
-                                    tabunganTransactions = sortedTabungan,
-                                    expectations = studentExpectations
-                                )
-                                if (file != null) {
-                                    readyPdfDialogData = ParentReadyPdfDialogData(
-                                        file = file,
-                                        title = if (isEn) "Integrated Report PDF Ready" else "PDF Rapor Terpadu Siap",
-                                        description = if (isEn) {
-                                            "Open or share the complete development summary for ${student.name}."
-                                        } else {
-                                            "Pilih buka PDF atau bagikan rapor perkembangan lengkap ${student.name}."
-                                        },
-                                        shareSubject = if (isEn) "Integrated Report: ${student.name}" else "Rapor Terpadu: ${student.name}",
-                                        shareText = if (isEn) {
-                                            "Attached integrated Parent Portal PDF report for ${student.name}."
-                                        } else {
-                                            "Terlampir PDF Rapor Terpadu Portal Orang Tua untuk ${student.name}."
-                                        }
-                                    )
+                                val actionDesc = if (isEn) {
+                                    "download and open ${student.name}'s Integrated Development PDF"
                                 } else {
-                                    Toast.makeText(
-                                        context,
-                                        if (isEn) "Unable to create integrated PDF" else "Gagal membuat PDF Rapor Terpadu",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    "mengunduh dan membuka PDF Rapor Terpadu ${student.name}"
+                                }
+                                triggerRewardPdf(actionDesc) {
+                                    val teamName = resolvedWaliBadges.joinToString(", ") { it.name }.ifBlank {
+                                        assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
+                                    }
+                                    val file = ParentPortalPdfHelper.generateParentComprehensiveReportPdf(
+                                        context = context,
+                                        student = student,
+                                        schoolProfile = schoolProfile,
+                                        waliName = teamName.ifBlank { "Wali Asuh" },
+                                        isChristianStudent = isChristianStudent,
+                                        isFemaleStudent = isFemaleStudent,
+                                        sholatRecords = studentSholat,
+                                        mengajiRecords = studentMengaji,
+                                        christianRecords = studentChristianWorship,
+                                        fastingRecords = studentFasting,
+                                        haidRecords = studentHaid,
+                                        medicalRecords = studentMedical,
+                                        tabunganTransactions = sortedTabungan,
+                                        expectations = studentExpectations
+                                    )
+                                    if (file != null) {
+                                        readyPdfDialogData = ParentReadyPdfDialogData(
+                                            file = file,
+                                            title = if (isEn) "Integrated Report PDF Ready" else "PDF Rapor Terpadu Siap",
+                                            description = if (isEn) {
+                                                "Open or share the complete development summary for ${student.name}."
+                                            } else {
+                                                "Pilih buka PDF atau bagikan rapor perkembangan lengkap ${student.name}."
+                                            },
+                                            shareSubject = if (isEn) "Integrated Report: ${student.name}" else "Rapor Terpadu: ${student.name}",
+                                            shareText = if (isEn) {
+                                                "Attached integrated Parent Portal PDF report for ${student.name}."
+                                            } else {
+                                                "Terlampir PDF Rapor Terpadu Portal Orang Tua untuk ${student.name}."
+                                            }
+                                        )
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Unable to create integrated PDF" else "Gagal membuat PDF Rapor Terpadu",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 }
                             }
                         } else null
@@ -868,6 +905,7 @@ fun ParentPortalScreen(
                         waliBadges = resolvedWaliBadges,
                         schoolName = resolvedSchoolName,
                         onOpenWaliProfile = {
+                            TopOnAdManager.onUserActionClick(context)
                             selectedWaliBadgeForSheet = resolvedWaliBadges.firstOrNull { it.isOnDutyNow }
                                 ?: resolvedWaliBadges.firstOrNull()
                                 ?: ResolvedWaliBadgeInfo(
@@ -878,9 +916,11 @@ fun ParentPortalScreen(
                                 )
                         },
                         onOpenWaliBadge = { badge ->
+                            TopOnAdManager.onUserActionClick(context)
                             selectedWaliBadgeForSheet = badge
                         },
                         onOpenWaliChat = {
+                            TopOnAdManager.onUserActionClick(context)
                             val idx = visibleTabs.indexOf(ParentPortalTab.MESSAGES)
                             if (idx >= 0) selectedTabIndex = idx
                         },
@@ -897,50 +937,60 @@ fun ParentPortalScreen(
                                 }
                             }
                         } else null,
-                        onPreviewPhoto = { showPhotoPreview = true },
+                        onPreviewPhoto = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showPhotoPreview = true
+                        },
                         onDownloadComprehensivePdf = if (student != null) {
                             {
-                                val teamName = resolvedWaliBadges.joinToString(", ") { it.name }.ifBlank {
-                                    assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
-                                }
-                                val file = ParentPortalPdfHelper.generateParentComprehensiveReportPdf(
-                                    context = context,
-                                    student = student,
-                                    schoolProfile = schoolProfile,
-                                    waliName = teamName.ifBlank { "Wali Asuh" },
-                                    isChristianStudent = isChristianStudent,
-                                    isFemaleStudent = isFemaleStudent,
-                                    sholatRecords = studentSholat,
-                                    mengajiRecords = studentMengaji,
-                                    christianRecords = studentChristianWorship,
-                                    fastingRecords = studentFasting,
-                                    haidRecords = studentHaid,
-                                    medicalRecords = studentMedical,
-                                    tabunganTransactions = sortedTabungan,
-                                    expectations = studentExpectations
-                                )
-                                if (file != null) {
-                                    readyPdfDialogData = ParentReadyPdfDialogData(
-                                        file = file,
-                                        title = if (isEn) "Integrated Report PDF Ready" else "PDF Rapor Terpadu Siap",
-                                        description = if (isEn) {
-                                            "Open or share the complete development & profile summary for ${student.name}."
-                                        } else {
-                                            "Pilih buka PDF atau bagikan rapor profil & perkembangan ${student.name}."
-                                        },
-                                        shareSubject = if (isEn) "Student Report: ${student.name}" else "Rapor Anak: ${student.name}",
-                                        shareText = if (isEn) {
-                                            "Attached Student Profile & Development Report PDF for ${student.name}."
-                                        } else {
-                                            "Terlampir PDF Rapor Profil & Perkembangan ${student.name}."
-                                        }
-                                    )
+                                val actionDesc = if (isEn) {
+                                    "download and open ${student.name}'s Student Report PDF"
                                 } else {
-                                    Toast.makeText(
-                                        context,
-                                        if (isEn) "Unable to create report PDF" else "Gagal membuat PDF Rapor Anak",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    "mengunduh dan membuka PDF Rapor Anak ${student.name}"
+                                }
+                                triggerRewardPdf(actionDesc) {
+                                    val teamName = resolvedWaliBadges.joinToString(", ") { it.name }.ifBlank {
+                                        assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
+                                    }
+                                    val file = ParentPortalPdfHelper.generateParentComprehensiveReportPdf(
+                                        context = context,
+                                        student = student,
+                                        schoolProfile = schoolProfile,
+                                        waliName = teamName.ifBlank { "Wali Asuh" },
+                                        isChristianStudent = isChristianStudent,
+                                        isFemaleStudent = isFemaleStudent,
+                                        sholatRecords = studentSholat,
+                                        mengajiRecords = studentMengaji,
+                                        christianRecords = studentChristianWorship,
+                                        fastingRecords = studentFasting,
+                                        haidRecords = studentHaid,
+                                        medicalRecords = studentMedical,
+                                        tabunganTransactions = sortedTabungan,
+                                        expectations = studentExpectations
+                                    )
+                                    if (file != null) {
+                                        readyPdfDialogData = ParentReadyPdfDialogData(
+                                            file = file,
+                                            title = if (isEn) "Integrated Report PDF Ready" else "PDF Rapor Terpadu Siap",
+                                            description = if (isEn) {
+                                                "Open or share the complete development & profile summary for ${student.name}."
+                                            } else {
+                                                "Pilih buka PDF atau bagikan rapor profil & perkembangan ${student.name}."
+                                            },
+                                            shareSubject = if (isEn) "Student Report: ${student.name}" else "Rapor Anak: ${student.name}",
+                                            shareText = if (isEn) {
+                                                "Attached Student Profile & Development Report PDF for ${student.name}."
+                                            } else {
+                                                "Terlampir PDF Rapor Profil & Perkembangan ${student.name}."
+                                            }
+                                        )
+                                    } else {
+                                        Toast.makeText(
+                                            context,
+                                            if (isEn) "Unable to create report PDF" else "Gagal membuat PDF Rapor Anak",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
                                 }
                             }
                         } else null
@@ -977,7 +1027,10 @@ fun ParentPortalScreen(
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
                         },
-                        onOpenBible = { showBibleSheet = true },
+                        onOpenBible = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showBibleSheet = true
+                        },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.SHOLAT -> ParentSholatContent(
@@ -986,6 +1039,7 @@ fun ParentPortalScreen(
                         haidRecords = studentHaid,
                         schoolProfile = schoolProfile,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+                        onRequestRewardPdf = { desc, block -> triggerRewardPdf(desc, block) },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.MENGAJI -> ParentMengajiContent(
@@ -993,7 +1047,11 @@ fun ParentPortalScreen(
                         records = studentMengaji,
                         schoolProfile = schoolProfile,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
-                        onOpenQuran = { showQuranSheet = true },
+                        onOpenQuran = {
+                            TopOnAdManager.onUserActionClick(context)
+                            showQuranSheet = true
+                        },
+                        onRequestRewardPdf = { desc, block -> triggerRewardPdf(desc, block) },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.MEDICAL -> ParentMedicalContent(
@@ -1001,6 +1059,7 @@ fun ParentPortalScreen(
                         records = studentMedical,
                         schoolProfile = schoolProfile,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+                        onRequestRewardPdf = { desc, block -> triggerRewardPdf(desc, block) },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.FASTING -> ParentFastingContent(
@@ -1008,6 +1067,7 @@ fun ParentPortalScreen(
                         records = studentFasting,
                         schoolProfile = schoolProfile,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+                        onRequestRewardPdf = { desc, block -> triggerRewardPdf(desc, block) },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.HAID -> ParentHaidContent(
@@ -1015,6 +1075,7 @@ fun ParentPortalScreen(
                         records = studentHaid,
                         schoolProfile = schoolProfile,
                         waliName = assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName,
+                        onRequestRewardPdf = { desc, block -> triggerRewardPdf(desc, block) },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.TABUNGAN -> ParentTabunganContent(
@@ -1024,6 +1085,7 @@ fun ParentPortalScreen(
                             assignedWaliAccount?.name?.ifBlank { assignedWaliName } ?: assignedWaliName
                         },
                         schoolProfile = schoolProfile,
+                        onRequestRewardPdf = { desc, block -> triggerRewardPdf(desc, block) },
                         onPdfReady = { readyPdfDialogData = it }
                     )
                     ParentPortalTab.VISIT -> ParentVisitContent(
@@ -1270,6 +1332,20 @@ fun ParentPortalScreen(
             data = pdfData,
             isEn = isEn,
             onDismiss = { readyPdfDialogData = null }
+        )
+    }
+    pendingRewardPdfAction?.let { (actionDesc, onProceed) ->
+        RewardAdDeclarationDialog(
+            title = if (isEn) "Download PDF Report" else "Unduh Laporan PDF",
+            actionDescription = actionDesc,
+            confirmButtonText = if (isEn) "Watch & Download PDF" else "Tonton & Unduh PDF",
+            onConfirmWatchAd = {
+                pendingRewardPdfAction = null
+                TopOnAdManager.showRewardAdForPdfReport(context) {
+                    onProceed()
+                }
+            },
+            onDismiss = { pendingRewardPdfAction = null }
         )
     }
 }
@@ -1852,6 +1928,7 @@ private fun ParentOverviewContent(
                     onDownloadPdf = onDownloadComprehensivePdf,
                     pdfButtonTestTag = "btn_parent_home_comprehensive_pdf",
                     buttonLabel = if (isEn) "Full PDF" else "Rapor PDF",
+                    showRewardAdHint = true,
                     modifier = Modifier.testTag("card_parent_home_comprehensive_pdf")
                 )
             }
@@ -2071,7 +2148,8 @@ private fun ParentProfileContent(
                     isEn = isEn,
                     onDownloadPdf = onDownloadComprehensivePdf,
                     pdfButtonTestTag = "btn_parent_profile_pdf",
-                    buttonLabel = if (isEn) "PDF Report" else "Unduh PDF"
+                    buttonLabel = if (isEn) "PDF Report" else "Unduh PDF",
+                    showRewardAdHint = true
                 )
             }
         }
@@ -2737,6 +2815,7 @@ private fun ParentSholatContent(
     haidRecords: List<HaidRecord>,
     schoolProfile: SchoolProfile,
     waliName: String,
+    onRequestRewardPdf: (String, () -> Unit) -> Unit = { _, onProceed -> onProceed() },
     onPdfReady: ((ParentReadyPdfDialogData) -> Unit)? = null
 ) {
     val context = LocalContext.current
@@ -2858,42 +2937,49 @@ private fun ParentSholatContent(
                         if (student != null) {
                             OutlinedButton(
                                 onClick = {
-                                    val file = PdfReportGenerator.generateSholatStudentReportPdf(
-                                        context = context,
-                                        schoolProfile = schoolProfile,
-                                        student = student,
-                                        sholatRecords = records,
-                                        monthKey = if (monthOnly) currentMonthKey else "ALL",
-                                        waliName = waliName.ifBlank { "Wali Asuh" }
-                                    )
-                                    if (file != null) {
-                                        val ready = ParentReadyPdfDialogData(
-                                            file = file,
-                                            title = if (isEn) "Prayer Report PDF Ready" else "PDF Rapor Sholat Siap",
-                                            description = if (isEn) {
-                                                "Open or share your child's 5-time prayer report PDF."
-                                            } else {
-                                                "Pilih buka PDF atau bagikan rapor sholat 5 waktu ananda ${student.name}."
-                                            },
-                                            shareSubject = if (isEn) "Prayer Report: ${student.name}" else "Rapor Sholat: ${student.name}",
-                                            shareText = if (isEn) "Attached 5-time prayer report for ${student.name}." else "Terlampir PDF Rapor Sholat 5 Waktu ${student.name}."
-                                        )
-                                        if (onPdfReady != null) {
-                                            onPdfReady(ready)
-                                        } else {
-                                            PdfReportGenerator.shareSholatPdf(
-                                                context = context,
-                                                pdfFile = file,
-                                                subject = ready.shareSubject,
-                                                text = ready.shareText
-                                            )
-                                        }
+                                    val actionDesc = if (isEn) {
+                                        "download and open ${student.name}'s 5-time prayer PDF report"
                                     } else {
-                                        Toast.makeText(
-                                            context,
-                                            if (isEn) "Unable to create Sholat PDF" else "Gagal membuat PDF Rapor Sholat",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        "mengunduh dan membuka PDF rapor sholat 5 waktu ${student.name}"
+                                    }
+                                    onRequestRewardPdf(actionDesc) {
+                                        val file = PdfReportGenerator.generateSholatStudentReportPdf(
+                                            context = context,
+                                            schoolProfile = schoolProfile,
+                                            student = student,
+                                            sholatRecords = records,
+                                            monthKey = if (monthOnly) currentMonthKey else "ALL",
+                                            waliName = waliName.ifBlank { "Wali Asuh" }
+                                        )
+                                        if (file != null) {
+                                            val ready = ParentReadyPdfDialogData(
+                                                file = file,
+                                                title = if (isEn) "Prayer Report PDF Ready" else "PDF Rapor Sholat Siap",
+                                                description = if (isEn) {
+                                                    "Open or share your child's 5-time prayer report PDF."
+                                                } else {
+                                                    "Pilih buka PDF atau bagikan rapor sholat 5 waktu ananda ${student.name}."
+                                                },
+                                                shareSubject = if (isEn) "Prayer Report: ${student.name}" else "Rapor Sholat: ${student.name}",
+                                                shareText = if (isEn) "Attached 5-time prayer report for ${student.name}." else "Terlampir PDF Rapor Sholat 5 Waktu ${student.name}."
+                                            )
+                                            if (onPdfReady != null) {
+                                                onPdfReady(ready)
+                                            } else {
+                                                PdfReportGenerator.shareSholatPdf(
+                                                    context = context,
+                                                    pdfFile = file,
+                                                    subject = ready.shareSubject,
+                                                    text = ready.shareText
+                                                )
+                                            }
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Unable to create Sholat PDF" else "Gagal membuat PDF Rapor Sholat",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     }
                                 },
                                 shape = RoundedCornerShape(10.dp),
@@ -2993,7 +3079,10 @@ private fun ParentSholatContent(
                     ) {
                         FilterChip(
                             selected = monthOnly,
-                            onClick = { monthOnly = true },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                monthOnly = true
+                            },
                             label = {
                                 Text(
                                     text = if (isEn) "This Month" else "Bulan Ini",
@@ -3009,7 +3098,10 @@ private fun ParentSholatContent(
                         )
                         FilterChip(
                             selected = !monthOnly,
-                            onClick = { monthOnly = false },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                monthOnly = false
+                            },
                             label = {
                                 Text(
                                     text = if (isEn) "All History" else "Semua Riwayat",
@@ -3022,6 +3114,17 @@ private fun ParentSholatContent(
                                 selectedLabelColor = Color(0xFF0F766E)
                             ),
                             modifier = Modifier.testTag("btn_parent_sholat_pdf_filter_all")
+                        )
+                    }
+                    if (student != null) {
+                        RewardAdDeclarationHint(
+                            text = if (isEn) {
+                                "Watch a short video ad to download the Sholat PDF report"
+                            } else {
+                                "Tonton iklan video singkat untuk mengunduh PDF Rapor Sholat"
+                            },
+                            accentColor = Color(0xFF0F766E),
+                            compact = true
                         )
                     }
                 }
@@ -3200,6 +3303,7 @@ private fun ParentMengajiContent(
     schoolProfile: SchoolProfile,
     waliName: String,
     onOpenQuran: () -> Unit = {},
+    onRequestRewardPdf: (String, () -> Unit) -> Unit = { _, onProceed -> onProceed() },
     onPdfReady: (ParentReadyPdfDialogData) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -3292,41 +3396,52 @@ private fun ParentMengajiContent(
                     borderColor = Color(0xFFBBF7D0),
                     isEn = isEn,
                     selectedMonthOnly = monthOnly,
-                    onToggleMonthOnly = { monthOnly = it },
+                    onToggleMonthOnly = {
+                        TopOnAdManager.onUserActionClick(context)
+                        monthOnly = it
+                    },
+                    showRewardAdHint = true,
                     pdfButtonTestTag = "btn_parent_mengaji_pdf",
                     onDownloadPdf = {
-                        val file = PdfReportGenerator.generateKartuMengajiPdf(
-                            context = context,
-                            student = student,
-                            records = filteredRecords,
-                            periodLabel = periodLabel,
-                            waliName = waliName.ifBlank { "Wali Asuh" },
-                            schoolProfile = schoolProfile
-                        )
-                        if (file != null) {
-                            onPdfReady(
-                                ParentReadyPdfDialogData(
-                                    file = file,
-                                    title = if (isEn) "Mengaji Card PDF Ready" else "PDF Kartu Mengaji Siap",
-                                    description = if (isEn) {
-                                        "Open or share ${student.name}'s Mengaji Progress Card ($periodLabel)."
-                                    } else {
-                                        "Pilih buka PDF atau bagikan Kartu Kendali Mengaji ${student.name} ($periodLabel)."
-                                    },
-                                    shareSubject = if (isEn) "Mengaji Card: ${student.name}" else "Kartu Mengaji: ${student.name}",
-                                    shareText = if (isEn) {
-                                        "Attached Mengaji Progress Card PDF for ${student.name} ($periodLabel)."
-                                    } else {
-                                        "Terlampir PDF Kartu Kendali Mengaji ${student.name} ($periodLabel)."
-                                    }
-                                )
-                            )
+                        val actionDesc = if (isEn) {
+                            "download and open ${student.name}'s Mengaji Progress Card PDF"
                         } else {
-                            Toast.makeText(
-                                context,
-                                if (isEn) "Unable to create Mengaji PDF" else "Gagal membuat PDF Kartu Mengaji",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            "mengunduh dan membuka PDF Kartu Kendali Mengaji ${student.name}"
+                        }
+                        onRequestRewardPdf(actionDesc) {
+                            val file = PdfReportGenerator.generateKartuMengajiPdf(
+                                context = context,
+                                student = student,
+                                records = filteredRecords,
+                                periodLabel = periodLabel,
+                                waliName = waliName.ifBlank { "Wali Asuh" },
+                                schoolProfile = schoolProfile
+                            )
+                            if (file != null) {
+                                onPdfReady(
+                                    ParentReadyPdfDialogData(
+                                        file = file,
+                                        title = if (isEn) "Mengaji Card PDF Ready" else "PDF Kartu Mengaji Siap",
+                                        description = if (isEn) {
+                                            "Open or share ${student.name}'s Mengaji Progress Card ($periodLabel)."
+                                        } else {
+                                            "Pilih buka PDF atau bagikan Kartu Kendali Mengaji ${student.name} ($periodLabel)."
+                                        },
+                                        shareSubject = if (isEn) "Mengaji Card: ${student.name}" else "Kartu Mengaji: ${student.name}",
+                                        shareText = if (isEn) {
+                                            "Attached Mengaji Progress Card PDF for ${student.name} ($periodLabel)."
+                                        } else {
+                                            "Terlampir PDF Kartu Kendali Mengaji ${student.name} ($periodLabel)."
+                                        }
+                                    )
+                                )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to create Mengaji PDF" else "Gagal membuat PDF Kartu Mengaji",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
                 )
@@ -3390,6 +3505,7 @@ private fun ParentMedicalContent(
     records: List<MedicalRecord>,
     schoolProfile: SchoolProfile,
     waliName: String,
+    onRequestRewardPdf: (String, () -> Unit) -> Unit = { _, onProceed -> onProceed() },
     onPdfReady: (ParentReadyPdfDialogData) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -3424,42 +3540,53 @@ private fun ParentMedicalContent(
                     borderColor = Color(0xFFBAE6FD),
                     isEn = isEn,
                     selectedMonthOnly = monthOnly,
-                    onToggleMonthOnly = { monthOnly = it },
+                    onToggleMonthOnly = {
+                        TopOnAdManager.onUserActionClick(context)
+                        monthOnly = it
+                    },
+                    showRewardAdHint = true,
                     pdfButtonTestTag = "btn_parent_medical_pdf",
                     onDownloadPdf = {
-                        val file = PdfReportGenerator.generateHealthReportPdf(
-                            context = context,
-                            student = student,
-                            records = filteredRecords,
-                            periodType = if (monthOnly) PdfReportGenerator.ReportPeriodType.MONTHLY else PdfReportGenerator.ReportPeriodType.ALL,
-                            periodLabel = periodLabel,
-                            waliName = waliName.ifBlank { "Wali Asuh" },
-                            schoolProfile = schoolProfile
-                        )
-                        if (file != null) {
-                            onPdfReady(
-                                ParentReadyPdfDialogData(
-                                    file = file,
-                                    title = if (isEn) "Medical Report PDF Ready" else "PDF Rekap Kesehatan Siap",
-                                    description = if (isEn) {
-                                        "Open or share ${student.name}'s health screening & medical visits PDF ($periodLabel)."
-                                    } else {
-                                        "Pilih buka PDF atau bagikan rekap riwayat kesehatan & berobat ${student.name} ($periodLabel)."
-                                    },
-                                    shareSubject = if (isEn) "Health Report: ${student.name}" else "Rekap Kesehatan: ${student.name}",
-                                    shareText = if (isEn) {
-                                        "Attached health & medical visit recap PDF for ${student.name} ($periodLabel)."
-                                    } else {
-                                        "Terlampir PDF rekap riwayat sakit & berobat ${student.name} ($periodLabel)."
-                                    }
-                                )
-                            )
+                        val actionDesc = if (isEn) {
+                            "download and open ${student.name}'s health & medical visits PDF"
                         } else {
-                            Toast.makeText(
-                                context,
-                                if (isEn) "Unable to create Medical PDF" else "Gagal membuat PDF Rekap Kesehatan",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            "mengunduh dan membuka PDF rekap kesehatan & berobat ${student.name}"
+                        }
+                        onRequestRewardPdf(actionDesc) {
+                            val file = PdfReportGenerator.generateHealthReportPdf(
+                                context = context,
+                                student = student,
+                                records = filteredRecords,
+                                periodType = if (monthOnly) PdfReportGenerator.ReportPeriodType.MONTHLY else PdfReportGenerator.ReportPeriodType.ALL,
+                                periodLabel = periodLabel,
+                                waliName = waliName.ifBlank { "Wali Asuh" },
+                                schoolProfile = schoolProfile
+                            )
+                            if (file != null) {
+                                onPdfReady(
+                                    ParentReadyPdfDialogData(
+                                        file = file,
+                                        title = if (isEn) "Medical Report PDF Ready" else "PDF Rekap Kesehatan Siap",
+                                        description = if (isEn) {
+                                            "Open or share ${student.name}'s health screening & medical visits PDF ($periodLabel)."
+                                        } else {
+                                            "Pilih buka PDF atau bagikan rekap riwayat kesehatan & berobat ${student.name} ($periodLabel)."
+                                        },
+                                        shareSubject = if (isEn) "Health Report: ${student.name}" else "Rekap Kesehatan: ${student.name}",
+                                        shareText = if (isEn) {
+                                            "Attached health & medical visit recap PDF for ${student.name} ($periodLabel)."
+                                        } else {
+                                            "Terlampir PDF rekap riwayat sakit & berobat ${student.name} ($periodLabel)."
+                                        }
+                                    )
+                                )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to create Medical PDF" else "Gagal membuat PDF Rekap Kesehatan",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
                 )
@@ -3520,6 +3647,7 @@ private fun ParentFastingContent(
     records: List<FastingRecord>,
     schoolProfile: SchoolProfile,
     waliName: String,
+    onRequestRewardPdf: (String, () -> Unit) -> Unit = { _, onProceed -> onProceed() },
     onPdfReady: (ParentReadyPdfDialogData) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -3555,41 +3683,52 @@ private fun ParentFastingContent(
                     borderColor = Color(0xFF99F6E4),
                     isEn = isEn,
                     selectedMonthOnly = monthOnly,
-                    onToggleMonthOnly = { monthOnly = it },
+                    onToggleMonthOnly = {
+                        TopOnAdManager.onUserActionClick(context)
+                        monthOnly = it
+                    },
+                    showRewardAdHint = true,
                     pdfButtonTestTag = "btn_parent_fasting_pdf",
                     onDownloadPdf = {
-                        val file = ParentPortalPdfHelper.generateStudentFastingReportPdf(
-                            context = context,
-                            student = student,
-                            records = filteredRecords,
-                            periodLabel = periodLabel,
-                            waliName = waliName.ifBlank { "Wali Asuh" },
-                            schoolProfile = schoolProfile
-                        )
-                        if (file != null) {
-                            onPdfReady(
-                                ParentReadyPdfDialogData(
-                                    file = file,
-                                    title = if (isEn) "Fasting Report PDF Ready" else "PDF Rekap Puasa Siap",
-                                    description = if (isEn) {
-                                        "Open or share ${student.name}'s fasting history PDF ($periodLabel)."
-                                    } else {
-                                        "Pilih buka PDF atau bagikan laporan riwayat puasa ${student.name} ($periodLabel)."
-                                    },
-                                    shareSubject = if (isEn) "Fasting Report: ${student.name}" else "Rekap Puasa: ${student.name}",
-                                    shareText = if (isEn) {
-                                        "Attached fasting history PDF for ${student.name} ($periodLabel)."
-                                    } else {
-                                        "Terlampir PDF rekap ibadah puasa ${student.name} ($periodLabel)."
-                                    }
-                                )
-                            )
+                        val actionDesc = if (isEn) {
+                            "download and open ${student.name}'s fasting history PDF"
                         } else {
-                            Toast.makeText(
-                                context,
-                                if (isEn) "Unable to create Fasting PDF" else "Gagal membuat PDF Rekap Puasa",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            "mengunduh dan membuka PDF rekap ibadah puasa ${student.name}"
+                        }
+                        onRequestRewardPdf(actionDesc) {
+                            val file = ParentPortalPdfHelper.generateStudentFastingReportPdf(
+                                context = context,
+                                student = student,
+                                records = filteredRecords,
+                                periodLabel = periodLabel,
+                                waliName = waliName.ifBlank { "Wali Asuh" },
+                                schoolProfile = schoolProfile
+                            )
+                            if (file != null) {
+                                onPdfReady(
+                                    ParentReadyPdfDialogData(
+                                        file = file,
+                                        title = if (isEn) "Fasting Report PDF Ready" else "PDF Rekap Puasa Siap",
+                                        description = if (isEn) {
+                                            "Open or share ${student.name}'s fasting history PDF ($periodLabel)."
+                                        } else {
+                                            "Pilih buka PDF atau bagikan laporan riwayat puasa ${student.name} ($periodLabel)."
+                                        },
+                                        shareSubject = if (isEn) "Fasting Report: ${student.name}" else "Rekap Puasa: ${student.name}",
+                                        shareText = if (isEn) {
+                                            "Attached fasting history PDF for ${student.name} ($periodLabel)."
+                                        } else {
+                                            "Terlampir PDF rekap ibadah puasa ${student.name} ($periodLabel)."
+                                        }
+                                    )
+                                )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to create Fasting PDF" else "Gagal membuat PDF Rekap Puasa",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
                 )
@@ -3643,6 +3782,7 @@ private fun ParentHaidContent(
     records: List<HaidRecord>,
     schoolProfile: SchoolProfile,
     waliName: String,
+    onRequestRewardPdf: (String, () -> Unit) -> Unit = { _, onProceed -> onProceed() },
     onPdfReady: (ParentReadyPdfDialogData) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -3677,41 +3817,52 @@ private fun ParentHaidContent(
                     borderColor = Color(0xFFF9A8D4),
                     isEn = isEn,
                     selectedMonthOnly = monthOnly,
-                    onToggleMonthOnly = { monthOnly = it },
+                    onToggleMonthOnly = {
+                        TopOnAdManager.onUserActionClick(context)
+                        monthOnly = it
+                    },
+                    showRewardAdHint = true,
                     pdfButtonTestTag = "btn_parent_haid_pdf",
                     onDownloadPdf = {
-                        val file = ParentPortalPdfHelper.generateStudentHaidReportPdf(
-                            context = context,
-                            student = student,
-                            records = filteredRecords,
-                            periodLabel = periodLabel,
-                            waliName = waliName.ifBlank { "Wali Asuh" },
-                            schoolProfile = schoolProfile
-                        )
-                        if (file != null) {
-                            onPdfReady(
-                                ParentReadyPdfDialogData(
-                                    file = file,
-                                    title = if (isEn) "Haid Cycle PDF Ready" else "PDF Rekap Haid Siap",
-                                    description = if (isEn) {
-                                        "Open or share ${student.name}'s haid cycle monitoring PDF ($periodLabel)."
-                                    } else {
-                                        "Pilih buka PDF atau bagikan rekap pemantauan siklus haid ${student.name} ($periodLabel)."
-                                    },
-                                    shareSubject = if (isEn) "Haid Cycle Report: ${student.name}" else "Rekap Siklus Haid: ${student.name}",
-                                    shareText = if (isEn) {
-                                        "Attached haid cycle monitoring PDF for ${student.name} ($periodLabel)."
-                                    } else {
-                                        "Terlampir PDF pemantauan siklus haid ${student.name} ($periodLabel)."
-                                    }
-                                )
-                            )
+                        val actionDesc = if (isEn) {
+                            "download and open ${student.name}'s haid cycle monitoring PDF"
                         } else {
-                            Toast.makeText(
-                                context,
-                                if (isEn) "Unable to create Haid PDF" else "Gagal membuat PDF Rekap Haid",
-                                Toast.LENGTH_SHORT
-                            ).show()
+                            "mengunduh dan membuka PDF pemantauan siklus haid ${student.name}"
+                        }
+                        onRequestRewardPdf(actionDesc) {
+                            val file = ParentPortalPdfHelper.generateStudentHaidReportPdf(
+                                context = context,
+                                student = student,
+                                records = filteredRecords,
+                                periodLabel = periodLabel,
+                                waliName = waliName.ifBlank { "Wali Asuh" },
+                                schoolProfile = schoolProfile
+                            )
+                            if (file != null) {
+                                onPdfReady(
+                                    ParentReadyPdfDialogData(
+                                        file = file,
+                                        title = if (isEn) "Haid Cycle PDF Ready" else "PDF Rekap Haid Siap",
+                                        description = if (isEn) {
+                                            "Open or share ${student.name}'s haid cycle monitoring PDF ($periodLabel)."
+                                        } else {
+                                            "Pilih buka PDF atau bagikan rekap pemantauan siklus haid ${student.name} ($periodLabel)."
+                                        },
+                                        shareSubject = if (isEn) "Haid Cycle Report: ${student.name}" else "Rekap Siklus Haid: ${student.name}",
+                                        shareText = if (isEn) {
+                                            "Attached haid cycle monitoring PDF for ${student.name} ($periodLabel)."
+                                        } else {
+                                            "Terlampir PDF pemantauan siklus haid ${student.name} ($periodLabel)."
+                                        }
+                                    )
+                                )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    if (isEn) "Unable to create Haid PDF" else "Gagal membuat PDF Rekap Haid",
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
                         }
                     }
                 )
@@ -4143,6 +4294,7 @@ private fun ParentTabunganContent(
     transactions: List<TabunganTransaction>,
     waliName: String,
     schoolProfile: SchoolProfile,
+    onRequestRewardPdf: (String, () -> Unit) -> Unit = { _, onProceed -> onProceed() },
     onPdfReady: (ParentReadyPdfDialogData) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -4210,37 +4362,44 @@ private fun ParentTabunganContent(
                         if (student != null) {
                             OutlinedButton(
                                 onClick = {
-                                    val file = PdfReportGenerator.generateTabunganStudentPdf(
-                                        context = context,
-                                        student = student,
-                                        transactions = filteredTransactions,
-                                        waliName = waliName.ifBlank { "Wali Asuh" },
-                                        schoolProfile = schoolProfile
-                                    )
-                                    if (file != null) {
-                                        onPdfReady(
-                                            ParentReadyPdfDialogData(
-                                                file = file,
-                                                title = if (isEn) "Savings Ledger PDF Ready" else "PDF Mutasi Tabungan Siap",
-                                                description = if (isEn) {
-                                                    "Open or share ${student.name}'s allowance savings ledger PDF ($periodLabel)."
-                                                } else {
-                                                    "Pilih buka PDF atau bagikan laporan mutasi tabungan titipan ${student.name} ($periodLabel)."
-                                                },
-                                                shareSubject = if (isEn) "Savings Ledger: ${student.name}" else "Mutasi Tabungan: ${student.name}",
-                                                shareText = if (isEn) {
-                                                    "Attached personal allowance savings ledger PDF for ${student.name} ($periodLabel)."
-                                                } else {
-                                                    "Terlampir PDF laporan tabungan titipan uang ${student.name} ($periodLabel)."
-                                                }
-                                            )
-                                        )
+                                    val actionDesc = if (isEn) {
+                                        "download and open ${student.name}'s savings ledger PDF"
                                     } else {
-                                        Toast.makeText(
-                                            context,
-                                            if (isEn) "Unable to create Savings PDF" else "Gagal membuat PDF Tabungan",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        "mengunduh dan membuka PDF mutasi tabungan ${student.name}"
+                                    }
+                                    onRequestRewardPdf(actionDesc) {
+                                        val file = PdfReportGenerator.generateTabunganStudentPdf(
+                                            context = context,
+                                            student = student,
+                                            transactions = filteredTransactions,
+                                            waliName = waliName.ifBlank { "Wali Asuh" },
+                                            schoolProfile = schoolProfile
+                                        )
+                                        if (file != null) {
+                                            onPdfReady(
+                                                ParentReadyPdfDialogData(
+                                                    file = file,
+                                                    title = if (isEn) "Savings Ledger PDF Ready" else "PDF Mutasi Tabungan Siap",
+                                                    description = if (isEn) {
+                                                        "Open or share ${student.name}'s allowance savings ledger PDF ($periodLabel)."
+                                                    } else {
+                                                        "Pilih buka PDF atau bagikan laporan mutasi tabungan titipan ${student.name} ($periodLabel)."
+                                                    },
+                                                    shareSubject = if (isEn) "Savings Ledger: ${student.name}" else "Mutasi Tabungan: ${student.name}",
+                                                    shareText = if (isEn) {
+                                                        "Attached personal allowance savings ledger PDF for ${student.name} ($periodLabel)."
+                                                    } else {
+                                                        "Terlampir PDF laporan tabungan titipan uang ${student.name} ($periodLabel)."
+                                                    }
+                                                )
+                                            )
+                                        } else {
+                                            Toast.makeText(
+                                                context,
+                                                if (isEn) "Unable to create Savings PDF" else "Gagal membuat PDF Tabungan",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
                                     }
                                 },
                                 shape = RoundedCornerShape(10.dp),
@@ -4272,7 +4431,10 @@ private fun ParentTabunganContent(
                     ) {
                         FilterChip(
                             selected = monthOnly,
-                            onClick = { monthOnly = true },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                monthOnly = true
+                            },
                             label = {
                                 Text(
                                     text = if (isEn) "This Month" else "Bulan Ini",
@@ -4288,7 +4450,10 @@ private fun ParentTabunganContent(
                         )
                         FilterChip(
                             selected = !monthOnly,
-                            onClick = { monthOnly = false },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                monthOnly = false
+                            },
                             label = {
                                 Text(
                                     text = if (isEn) "All History" else "Semua Riwayat",
@@ -4301,6 +4466,17 @@ private fun ParentTabunganContent(
                                 selectedLabelColor = Color(0xFFB45309)
                             ),
                             modifier = Modifier.testTag("btn_parent_tabungan_pdf_filter_all")
+                        )
+                    }
+                    if (student != null) {
+                        RewardAdDeclarationHint(
+                            text = if (isEn) {
+                                "Watch a short video ad to download the Savings PDF report"
+                            } else {
+                                "Tonton iklan video singkat untuk mengunduh PDF Tabungan"
+                            },
+                            accentColor = Color(0xFFB45309),
+                            compact = true
                         )
                     }
                     Row(

@@ -75,8 +75,11 @@ import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.SchoolProfile
 import com.example.ui.components.ParentReadyPdfDialogData
+import com.example.ui.dialogs.RewardAdDeclarationDialog
+import com.example.ui.dialogs.RewardAdDeclarationHint
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
+import com.example.util.TopOnAdManager
 import com.example.util.i18n.LocalAppStrings
 import java.io.File
 import java.text.SimpleDateFormat
@@ -120,6 +123,7 @@ fun ParentChristianWorshipContent(
     var monthOnly by remember { mutableStateOf(false) }
     var previewState by remember { mutableStateOf<Pair<ChristianWorshipRecord, Int>?>(null) }
     var readyPdfFile by remember { mutableStateOf<File?>(null) }
+    var pendingChristianPdfReward by remember { mutableStateOf(false) }
 
     val periodLabel = remember(monthOnly, isEn) {
         if (monthOnly) currentChristianMonthLabel(isEn) else if (isEn) "All History" else "Semua Riwayat"
@@ -266,56 +270,66 @@ fun ParentChristianWorshipContent(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
+                            fun executeChristianPdfExport() {
+                                val filterSummaryTitle = buildString {
+                                    append(student?.name.orEmpty())
+                                    if (periodLabel.isNotBlank()) {
+                                        if (isNotEmpty()) append(" • ")
+                                        append(periodLabel)
+                                    }
+                                }
+                                val pdf = PdfReportGenerator.generateChristianWorshipPdf(
+                                    context = context,
+                                    students = listOfNotNull(student),
+                                    records = filteredRecords,
+                                    schoolProfile = schoolProfile,
+                                    filterTitle = filterSummaryTitle,
+                                    waliName = waliName
+                                )
+                                if (pdf != null) {
+                                    val ready = ParentReadyPdfDialogData(
+                                        file = pdf,
+                                        title = if (isEn) "Worship Report PDF Ready" else "PDF Laporan Ibadah Siap",
+                                        description = if (isEn) {
+                                            "Open or share your child's Christian worship report PDF ($periodLabel)."
+                                        } else {
+                                            "Pilih buka PDF atau bagikan laporan ibadah ananda ($periodLabel)."
+                                        },
+                                        shareSubject = if (isEn) {
+                                            "Christian Worship Report - ${student?.name.orEmpty()}"
+                                        } else {
+                                            "Laporan Ibadah Kristen - ${student?.name.orEmpty()}"
+                                        },
+                                        shareText = ChristianWorshipHelper.buildDailyWhatsappSummary(
+                                            records = filteredRecords,
+                                            students = listOfNotNull(student),
+                                            filterTitle = filterSummaryTitle,
+                                            waliName = waliName,
+                                            isEn = isEn
+                                        )
+                                    )
+                                    if (onPdfReady != null) {
+                                        onPdfReady(ready)
+                                    } else {
+                                        readyPdfFile = pdf
+                                    }
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Failed to generate PDF report." else "Gagal membuat laporan PDF.",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+
                             Button(
                                 onClick = {
-                                    val filterSummaryTitle = buildString {
-                                        append(student?.name.orEmpty())
-                                        if (periodLabel.isNotBlank()) {
-                                            if (isNotEmpty()) append(" • ")
-                                            append(periodLabel)
-                                        }
-                                    }
-                                    val pdf = PdfReportGenerator.generateChristianWorshipPdf(
-                                        context = context,
-                                        students = listOfNotNull(student),
-                                        records = filteredRecords,
-                                        schoolProfile = schoolProfile,
-                                        filterTitle = filterSummaryTitle,
-                                        waliName = waliName
-                                    )
-                                    if (pdf != null) {
-                                        val ready = ParentReadyPdfDialogData(
-                                            file = pdf,
-                                            title = if (isEn) "Worship Report PDF Ready" else "PDF Laporan Ibadah Siap",
-                                            description = if (isEn) {
-                                                "Open or share your child's Christian worship report PDF ($periodLabel)."
-                                            } else {
-                                                "Pilih buka PDF atau bagikan laporan ibadah ananda ($periodLabel)."
-                                            },
-                                            shareSubject = if (isEn) {
-                                                "Christian Worship Report - ${student?.name.orEmpty()}"
-                                            } else {
-                                                "Laporan Ibadah Kristen - ${student?.name.orEmpty()}"
-                                            },
-                                            shareText = ChristianWorshipHelper.buildDailyWhatsappSummary(
-                                                records = filteredRecords,
-                                                students = listOfNotNull(student),
-                                                filterTitle = filterSummaryTitle,
-                                                waliName = waliName,
-                                                isEn = isEn
-                                            )
-                                        )
-                                        if (onPdfReady != null) {
-                                            onPdfReady(ready)
-                                        } else {
-                                            readyPdfFile = pdf
-                                        }
+                                    if (TopOnAdManager.isRewardAdReady()) {
+                                        pendingChristianPdfReward = true
                                     } else {
-                                        Toast.makeText(
-                                            context,
-                                            if (isEn) "Failed to generate PDF report." else "Gagal membuat laporan PDF.",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
+                                        TopOnAdManager.showRewardAdForPdfReport(context) {
+                                            executeChristianPdfExport()
+                                        }
                                     }
                                 },
                                 colors = ButtonDefaults.buttonColors(
@@ -366,7 +380,10 @@ fun ParentChristianWorshipContent(
             if (onOpenBible != null) {
                 item(key = "parent_chris_bible_cta") {
                     Card(
-                        onClick = onOpenBible,
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            onOpenBible()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("btn_parent_christian_open_bible"),
@@ -434,7 +451,10 @@ fun ParentChristianWorshipContent(
                     ) {
                         FilterChip(
                             selected = monthOnly,
-                            onClick = { monthOnly = true },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                monthOnly = true
+                            },
                             label = {
                                 Text(
                                     text = if (isEn) "This Month" else "Bulan Ini",
@@ -446,7 +466,10 @@ fun ParentChristianWorshipContent(
                         )
                         FilterChip(
                             selected = !monthOnly,
-                            onClick = { monthOnly = false },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                monthOnly = false
+                            },
                             label = {
                                 Text(
                                     text = if (isEn) "All History" else "Semua Riwayat",
@@ -465,13 +488,19 @@ fun ParentChristianWorshipContent(
                     ) {
                         FilterChip(
                             selected = selectedTypeFilter == "ALL",
-                            onClick = { selectedTypeFilter = "ALL" },
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedTypeFilter = "ALL"
+                            },
                             label = { Text(if (isEn) "All (${activeRecords.size})" else "Semua (${activeRecords.size})", fontSize = 11.5.sp) }
                         )
                         ChristianWorshipHelper.ALL_TYPES.forEach { type ->
                             FilterChip(
                                 selected = selectedTypeFilter == type,
-                                onClick = { selectedTypeFilter = type },
+                                onClick = {
+                                    TopOnAdManager.onUserActionClick(context)
+                                    selectedTypeFilter = type
+                                },
                                 label = { Text(ChristianWorshipHelper.activityShortLabel(type, isEn), fontSize = 11.5.sp) }
                             )
                         }
@@ -760,6 +789,73 @@ fun ParentChristianWorshipContent(
                 }
             }
         }
+    }
+
+    if (pendingChristianPdfReward) {
+        RewardAdDeclarationDialog(
+            title = if (isEn) "Download Christian Worship PDF" else "Unduh Laporan Ibadah Kristen PDF",
+            actionDescription = if (isEn) {
+                "download and open your child's Christian worship PDF report"
+            } else {
+                "mengunduh dan membuka laporan PDF ibadah Kristen ananda"
+            },
+            confirmButtonText = if (isEn) "Watch & Download PDF" else "Tonton & Unduh PDF",
+            onConfirmWatchAd = {
+                pendingChristianPdfReward = false
+                TopOnAdManager.showRewardAdForPdfReport(context) {
+                    val filterSummaryTitle = buildString {
+                        append(student?.name.orEmpty())
+                        if (periodLabel.isNotBlank()) {
+                            if (isNotEmpty()) append(" • ")
+                            append(periodLabel)
+                        }
+                    }
+                    val pdf = PdfReportGenerator.generateChristianWorshipPdf(
+                        context = context,
+                        students = listOfNotNull(student),
+                        records = filteredRecords,
+                        schoolProfile = schoolProfile,
+                        filterTitle = filterSummaryTitle,
+                        waliName = waliName
+                    )
+                    if (pdf != null) {
+                        val ready = ParentReadyPdfDialogData(
+                            file = pdf,
+                            title = if (isEn) "Worship Report PDF Ready" else "PDF Laporan Ibadah Siap",
+                            description = if (isEn) {
+                                "Open or share your child's Christian worship report PDF ($periodLabel)."
+                            } else {
+                                "Pilih buka PDF atau bagikan laporan ibadah ananda ($periodLabel)."
+                            },
+                            shareSubject = if (isEn) {
+                                "Christian Worship Report - ${student?.name.orEmpty()}"
+                            } else {
+                                "Laporan Ibadah Kristen - ${student?.name.orEmpty()}"
+                            },
+                            shareText = ChristianWorshipHelper.buildDailyWhatsappSummary(
+                                records = filteredRecords,
+                                students = listOfNotNull(student),
+                                filterTitle = filterSummaryTitle,
+                                waliName = waliName,
+                                isEn = isEn
+                            )
+                        )
+                        if (onPdfReady != null) {
+                            onPdfReady(ready)
+                        } else {
+                            readyPdfFile = pdf
+                        }
+                    } else {
+                        Toast.makeText(
+                            context,
+                            if (isEn) "Failed to generate PDF report." else "Gagal membuat laporan PDF.",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            },
+            onDismiss = { pendingChristianPdfReward = false }
+        )
     }
 
     readyPdfFile?.let { file ->

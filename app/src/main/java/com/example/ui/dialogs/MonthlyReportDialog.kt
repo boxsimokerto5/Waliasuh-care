@@ -75,6 +75,7 @@ import com.example.data.model.SchoolProfile
 import com.example.ui.theme.WaliPrimary
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
+import com.example.util.TopOnAdManager
 import com.example.util.i18n.LocalAppStrings
 import java.util.Calendar
 
@@ -138,6 +139,7 @@ fun MonthlyReportContent(
     var selectedMonth by remember { mutableIntStateOf(currentCal.get(Calendar.MONTH)) }
     var selectedYear by remember { mutableIntStateOf(currentCal.get(Calendar.YEAR)) }
     var selectedTab by remember { mutableIntStateOf(0) }
+    var showMonthlyPdfRewardDialog by remember { mutableStateOf(false) }
 
     val monthNames = remember(s.language) {
         if (isEn) {
@@ -405,6 +407,7 @@ fun MonthlyReportContent(
                     ) {
                         IconButton(
                             onClick = {
+                                TopOnAdManager.onUserActionClick(context)
                                 if (selectedMonth == 0) {
                                     selectedMonth = 11
                                     selectedYear--
@@ -441,6 +444,7 @@ fun MonthlyReportContent(
 
                         IconButton(
                             onClick = {
+                                TopOnAdManager.onUserActionClick(context)
                                 if (selectedMonth == 11) {
                                     selectedMonth = 0
                                     selectedYear++
@@ -466,17 +470,26 @@ fun MonthlyReportContent(
                 ) {
                     Tab(
                         selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTab = 0
+                        },
                         text = { Text(if (isEn) "Summary" else "Ringkasan", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTab = 1
+                        },
                         text = { Text(if (isEn) "Cases (${monthRecords.size})" else "Daftar Kasus (${monthRecords.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                     Tab(
                         selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            selectedTab = 2
+                        },
                         text = { Text(if (isEn) "WhatsApp Format" else "Format WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
                     )
                 }
@@ -805,6 +818,37 @@ fun MonthlyReportContent(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    fun exportMonthlyAggregatePdf() {
+                        val pdfFile = PdfReportGenerator.generateMonthlyAggregatePdf(
+                            context = context,
+                            records = monthRecords,
+                            totalStudentsCount = totalStudents,
+                            monthYearLabel = periodLabel,
+                            waliName = waliName,
+                            schoolProfile = schoolProfile,
+                            isPetugasKesehatan = isPetugasKesehatan
+                        )
+                        if (pdfFile != null) {
+                            PdfReportGenerator.openPdfFile(context, pdfFile)
+                        } else {
+                            Toast.makeText(
+                                context,
+                                if (isEn) "Failed to create PDF document" else "Gagal membuat dokumen PDF",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    }
+
+                    RewardAdDeclarationHint(
+                        text = if (isEn) {
+                            "Watch a short video ad to print/open the Monthly Health PDF"
+                        } else {
+                            "Tonton iklan video singkat untuk mencetak PDF Laporan Bulanan"
+                        },
+                        accentColor = WaliPrimary,
+                        compact = true
+                    )
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -812,23 +856,12 @@ fun MonthlyReportContent(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                val pdfFile = PdfReportGenerator.generateMonthlyAggregatePdf(
-                                    context = context,
-                                    records = monthRecords,
-                                    totalStudentsCount = totalStudents,
-                                    monthYearLabel = periodLabel,
-                                    waliName = waliName,
-                                    schoolProfile = schoolProfile,
-                                    isPetugasKesehatan = isPetugasKesehatan
-                                )
-                                if (pdfFile != null) {
-                                    PdfReportGenerator.openPdfFile(context, pdfFile)
+                                if (TopOnAdManager.isRewardAdReady()) {
+                                    showMonthlyPdfRewardDialog = true
                                 } else {
-                                    Toast.makeText(
-                                        context,
-                                        if (isEn) "Failed to create PDF document" else "Gagal membuat dokumen PDF",
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                                    TopOnAdManager.showRewardAdForPdfReport(context) {
+                                        exportMonthlyAggregatePdf()
+                                    }
                                 }
                             },
                             shape = RoundedCornerShape(10.dp),
@@ -886,6 +919,42 @@ fun MonthlyReportContent(
                             Text(s.close, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                         }
                     }
+                }
+
+                if (showMonthlyPdfRewardDialog) {
+                    RewardAdDeclarationDialog(
+                        title = if (isEn) "Print Monthly Health PDF" else "Cetak PDF Laporan Bulanan",
+                        actionDescription = if (isEn) {
+                            "generate and open the Monthly Health Report PDF ($periodLabel)"
+                        } else {
+                            "membuat dan membuka PDF Laporan Kesehatan Bulanan ($periodLabel)"
+                        },
+                        confirmButtonText = if (isEn) "Watch & Print PDF" else "Tonton & Cetak PDF",
+                        onConfirmWatchAd = {
+                            showMonthlyPdfRewardDialog = false
+                            TopOnAdManager.showRewardAdForPdfReport(context) {
+                                val pdfFile = PdfReportGenerator.generateMonthlyAggregatePdf(
+                                    context = context,
+                                    records = monthRecords,
+                                    totalStudentsCount = totalStudents,
+                                    monthYearLabel = periodLabel,
+                                    waliName = waliName,
+                                    schoolProfile = schoolProfile,
+                                    isPetugasKesehatan = isPetugasKesehatan
+                                )
+                                if (pdfFile != null) {
+                                    PdfReportGenerator.openPdfFile(context, pdfFile)
+                                } else {
+                                    Toast.makeText(
+                                        context,
+                                        if (isEn) "Failed to create PDF document" else "Gagal membuat dokumen PDF",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                }
+                            }
+                        },
+                        onDismiss = { showMonthlyPdfRewardDialog = false }
+                    )
                 }
     }
 }
