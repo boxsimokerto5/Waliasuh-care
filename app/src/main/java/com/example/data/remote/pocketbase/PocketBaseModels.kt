@@ -455,21 +455,26 @@ data class PbChristianWorshipRecordDto(
         val recId = pbRecordId.orEmpty().trim().ifBlank { id.orEmpty().trim() }
         val colId = pbCollectionId.orEmpty().trim().ifBlank { collectionId.orEmpty().trim() }
             .ifBlank { "christian_worship_records" }
-        val files = ChristianWorshipHelper.decodePhotoValues(pbFilename).ifEmpty {
-            photoFile?.files.orEmpty().map { it.trim() }.filter { it.isNotBlank() }.distinct().take(ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY)
-        }
+        val explicitFiles = ChristianWorshipHelper.decodePhotoValues(pbFilename)
+        val serverFiles = photoFile?.files.orEmpty()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+        val files = (explicitFiles + serverFiles)
+            .distinct()
+            .take(ChristianWorshipHelper.MAX_PHOTOS_PER_ACTIVITY)
         val encodedFiles = ChristianWorshipHelper.encodePhotoValues(files)
         val explicitPrimary = ChristianWorshipHelper.decodePhotoValues(photoUrl)
         val explicitFallback = ChristianWorshipHelper.decodePhotoValues(photoFallbackUrl)
         val resolvedPrimary = if (purged) "" else {
-            if (explicitPrimary.isNotEmpty()) {
+            if (explicitPrimary.isNotEmpty() && (explicitPrimary.size >= files.size || recId.isBlank())) {
                 ChristianWorshipHelper.encodePhotoValues(explicitPrimary)
             } else if (recId.isNotBlank() && files.isNotEmpty()) {
                 ChristianWorshipHelper.encodePhotoValues(files.map { DashboardBannerItem.buildR2CdnUrl(colId, recId, it) })
             } else ""
         }
         val resolvedFallback = if (purged) "" else {
-            if (explicitFallback.isNotEmpty()) {
+            if (explicitFallback.isNotEmpty() && (explicitFallback.size >= files.size || recId.isBlank())) {
                 ChristianWorshipHelper.encodePhotoValues(explicitFallback)
             } else if (recId.isNotBlank() && files.isNotEmpty()) {
                 ChristianWorshipHelper.encodePhotoValues(files.map { DashboardBannerItem.buildPbApiFileUrl(pbBaseUrl, colId, recId, it) })

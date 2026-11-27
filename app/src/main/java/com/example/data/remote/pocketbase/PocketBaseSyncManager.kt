@@ -4777,8 +4777,42 @@ object PocketBaseSyncManager {
                 allCdnUrls.addAll(out.cdnUrls)
                 allFallbackUrls.addAll(out.fallbackUrls)
                 hostFilenamesByLocalId[primaryHost.id] = out.filenames
+
+                // Jika server PocketBase masih memakai maxSelect = 1 lalu merespons 200 OK dengan hanya 1 file,
+                // unggah sisa foto ke record ke-2 atau hidden holder agar tetap masuk ke Portal Orang Tua.
+                if (out.filenames.size < compressedPhotos.size) {
+                    val remainingPhotos = compressedPhotos.drop(out.filenames.size)
+                    remainingPhotos.forEachIndexed { remIdx, extraBytes ->
+                        val useSecondDraft = remIdx == 0 && draftRecords.size >= 2
+                        val targetHost = if (useSecondDraft) {
+                            draftRecords[1]
+                        } else {
+                            val holderId = generateCloudSafeId()
+                            primaryHost.copy(
+                                id = holderId,
+                                studentId = -999L,
+                                pbRecordId = PocketBaseIdCodec.toPbId(holderId),
+                                isDeleted = true
+                            )
+                        }
+                        val extraRes = executePhotoPost(
+                            hostRecord = targetHost,
+                            photoBytesList = listOf(extraBytes),
+                            isHiddenHolder = !useSecondDraft
+                        )
+                        if (extraRes.isFailure) {
+                            return@withContext Result.failure(extraRes.exceptionOrNull()!!)
+                        }
+                        val extraOut = extraRes.getOrThrow()
+                        allCdnUrls.addAll(extraOut.cdnUrls)
+                        allFallbackUrls.addAll(extraOut.fallbackUrls)
+                        if (useSecondDraft) {
+                            hostFilenamesByLocalId[targetHost.id] = extraOut.filenames
+                        }
+                    }
+                }
             } else if (compressedPhotos.size > 1) {
-                // Fallback bila skema server masih maxSelect = 1: unggah foto ke-1 & ke-2 terpisah
+                // Fallback bila skema server menolak >1 file sekaligus (HTTP 400): unggah foto ke-1 & ke-2 terpisah
                 val firstRes = executePhotoPost(primaryHost, listOf(compressedPhotos[0]))
                 if (firstRes.isFailure) {
                     return@withContext Result.failure(firstRes.exceptionOrNull()!!)
@@ -4844,11 +4878,13 @@ object PocketBaseSyncManager {
 
             val service = PocketBaseClient.getService(context)
             if (service != null && finalizedRecords.isNotEmpty()) {
-                val pairs = finalizedRecords.map { rec ->
+                for (rec in finalizedRecords) {
                     val dto = PbChristianWorshipRecordDto.fromDomain(rec)
-                    dto.id!! to dto
+                    val ok = upsertSingleDto(service, "christian_worship_records", dto.id!!, dto)
+                    if (!ok) {
+                        Log.w(TAG, "Gagal menyinkronkan metadata URL foto ibadah Kristen ke PocketBase: ${dto.id}")
+                    }
                 }
-                upsertBatchOrFallback(service, "christian_worship_records", pairs)
             }
             Result.success(finalizedRecords)
         } catch (e: Exception) {

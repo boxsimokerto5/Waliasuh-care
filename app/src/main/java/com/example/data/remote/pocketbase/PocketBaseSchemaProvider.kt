@@ -1417,7 +1417,7 @@ python3 /tmp/sync_pb_waliasuh.py && rm -f /tmp/sync_pb_waliasuh.py
                         updatedCount++
                         val addedDesc = when {
                             addedFieldNames.isNotEmpty() -> "+${addedFieldNames.size} field (${addedFieldNames.joinToString(", ")})"
-                            fileFieldUpdated -> "mimeTypes GIF/Video +20MB"
+                            fileFieldUpdated -> "skema file (maxSelect/mimeTypes)"
                             else -> "index/rules"
                         }
                         logs.add("[UPDATE $addedDesc] $name -> OK")
