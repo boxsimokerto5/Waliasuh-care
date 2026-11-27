@@ -272,6 +272,12 @@ private fun WaliAsuhCareAppContent(
     val konselingLogs by viewModel.konselingLogs.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
+    val shiftHandovers by viewModel.shiftHandovers.collectAsStateWithLifecycle()
+    val shiftHandoverDraftCount = remember(shiftHandovers) {
+        shiftHandovers.count {
+            it.status.equals(com.example.data.model.ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true)
+        }
+    }
     val sholatRecords by viewModel.sholatRecords.collectAsStateWithLifecycle()
     val christianWorshipRecords by viewModel.christianWorshipRecords.collectAsStateWithLifecycle()
     val waliGalleryPosts by viewModel.waliGalleryPosts.collectAsStateWithLifecycle()
@@ -335,6 +341,7 @@ private fun WaliAsuhCareAppContent(
         dashboardModalState.showDaftarKodeSopSheet,
         dashboardModalState.showManageShiftCodesDialog,
         dashboardModalState.showImportJadwalMatriksDialog,
+        dashboardModalState.showSerahTerimaShiftSheet,
         schoolProfile.tenantCode
     ) {
         if (currentScreen == WaliNavScreen.JADWAL ||
@@ -342,9 +349,11 @@ private fun WaliAsuhCareAppContent(
             dashboardModalState.showJadwalMatriksSheet ||
             dashboardModalState.showDaftarKodeSopSheet ||
             dashboardModalState.showManageShiftCodesDialog ||
-            dashboardModalState.showImportJadwalMatriksDialog
+            dashboardModalState.showImportJadwalMatriksDialog ||
+            dashboardModalState.showSerahTerimaShiftSheet
         ) {
             viewModel.ensureSchoolShiftCodesSeeded(schoolProfile.tenantCode)
+            viewModel.syncShiftHandoversOnlineQuietly()
         }
     }
     LaunchedEffect(
@@ -1015,6 +1024,11 @@ private fun WaliAsuhCareAppContent(
                             android.widget.Toast.LENGTH_SHORT
                         ).show()
                     }
+                },
+                shiftHandoverDraftCount = shiftHandoverDraftCount,
+                onOpenSerahTerimaShift = {
+                    TopOnAdManager.onUserActionClick(context)
+                    dashboardModalState.showSerahTerimaShiftSheet = true
                 },
                 sholatRecords = sholatRecords,
                 onOpenAbsenSholatSheet = { tabIdx, autoScan, scopeFilter, targetStudent ->

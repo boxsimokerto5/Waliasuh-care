@@ -328,6 +328,15 @@ interface PocketBaseService {
         @Query("sort") sort: String? = "-updated_at"
     ): Response<PbListResponse<PbSharedJournalNoteDto>>
 
+    // --- Serah Terima Shift Wali Asuh (Draft & Laporan Sinkron) ---
+    @GET("api/collections/shift_handovers/records")
+    suspend fun listShiftHandovers(
+        @Query("page") page: Int = 1,
+        @Query("perPage") perPage: Int = 500,
+        @Query("filter") filter: String? = null,
+        @Query("sort") sort: String? = "-report_date_millis,-updated_at"
+    ): Response<PbListResponse<PbShiftHandoverDto>>
+
     // --- Generic Record IDs & CRUD ---
     @GET("api/collections/{collection}/records")
     suspend fun listRecordIds(

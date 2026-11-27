@@ -33,7 +33,7 @@ data class PocketBaseCollectionMeta(
 )
 
 object PocketBaseSchemaProvider {
-    const val SCHEMA_VERSION = "PocketBase v0.51.0 • 29 Koleksi Multi-Tenant + Agama Kristen & Ibadah R2 (2026.11)"
+    const val SCHEMA_VERSION = "PocketBase v0.52.0 • 30 Koleksi Multi-Tenant + Serah Terima Shift (2026.11)"
 
     val COLLECTIONS = listOf(
         PocketBaseCollectionMeta(
@@ -1004,6 +1004,39 @@ object PocketBaseSchemaProvider {
                 PbFieldDef("updated_at", "number")
             ),
             indexes = listOf("CREATE INDEX idx_sjn_school ON shared_journal_notes (school_id, updated_at)")
+        ),
+        PocketBaseCollectionMeta(
+            collectionName = "shift_handovers",
+            description = "Laporan & draft serah terima shift Wali Asuh per sekolah (sinkron lintas perangkat)",
+            multiTenantField = "school_id",
+            fields = listOf(
+                PbFieldDef("local_id", "number"),
+                PbFieldDef("school_id", "text"),
+                PbFieldDef("month_key", "text"),
+                PbFieldDef("day", "number"),
+                PbFieldDef("report_date_millis", "number"),
+                PbFieldDef("handover_type", "text"),
+                PbFieldDef("status", "text"),
+                PbFieldDef("title", "text"),
+                PbFieldDef("school_name", "text"),
+                PbFieldDef("service_unit", "text"),
+                PbFieldDef("date_label", "text"),
+                PbFieldDef("handover_time", "text"),
+                PbFieldDef("from_shift_label", "text"),
+                PbFieldDef("to_shift_label", "text"),
+                PbFieldDef("total_students", "number"),
+                PbFieldDef("present_students", "number"),
+                PbFieldDef("sick_students_count", "number"),
+                PbFieldDef("fasting_students_count", "number"),
+                PbFieldDef("payload_json", "text"),
+                PbFieldDef("author_username", "text"),
+                PbFieldDef("author_name", "text"),
+                PbFieldDef("last_edited_by", "text"),
+                PbFieldDef("is_deleted", "bool"),
+                PbFieldDef("created_at", "number"),
+                PbFieldDef("updated_at", "number")
+            ),
+            indexes = listOf("CREATE INDEX idx_sh_school ON shift_handovers (school_id, updated_at)")
         )
     )
 

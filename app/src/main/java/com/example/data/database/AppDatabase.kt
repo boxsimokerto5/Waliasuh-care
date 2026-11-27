@@ -41,6 +41,7 @@ import com.example.data.dao.InfoPentingPostDao
 import com.example.data.dao.InfoPentingReactionDao
 import com.example.data.dao.SholatRecordDao
 import com.example.data.dao.SharedJournalNoteDao
+import com.example.data.dao.ShiftHandoverDao
 import com.example.data.dao.ChatMediaLocalSaveDao
 import com.example.data.dao.BibleBookmarkDao
 import com.example.data.dao.BibleNoteDao
@@ -69,6 +70,7 @@ import com.example.data.model.ParentAccessLink
 import com.example.data.model.ParentExpectation
 import com.example.data.model.ParentMessage
 import com.example.data.model.SharedJournalNote
+import com.example.data.model.ShiftHandoverReport
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -117,9 +119,10 @@ import com.example.data.model.WaliShiftCode
         ChristianWorshipLocalSave::class,
         BibleBookmark::class,
         BibleNote::class,
-        SharedJournalNote::class
+        SharedJournalNote::class,
+        ShiftHandoverReport::class
     ],
-    version = 43,
+    version = 44,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -158,6 +161,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun bibleBookmarkDao(): BibleBookmarkDao
     abstract fun bibleNoteDao(): BibleNoteDao
     abstract fun sharedJournalNoteDao(): SharedJournalNoteDao
+    abstract fun shiftHandoverDao(): ShiftHandoverDao
 
     companion object {
         @Volatile
@@ -1165,6 +1169,42 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_43_44 = object : androidx.room.migration.Migration(43, 44) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS shift_handovers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        schoolId TEXT NOT NULL DEFAULT 'SRT1-KDR',
+                        monthKey TEXT NOT NULL DEFAULT '',
+                        day INTEGER NOT NULL DEFAULT 1,
+                        reportDateMillis INTEGER NOT NULL DEFAULT 0,
+                        handoverType TEXT NOT NULL DEFAULT 'PAGI_KE_SORE',
+                        status TEXT NOT NULL DEFAULT 'DRAFT',
+                        title TEXT NOT NULL DEFAULT '',
+                        schoolName TEXT NOT NULL DEFAULT '',
+                        serviceUnit TEXT NOT NULL DEFAULT 'Pelayanan Wali Asuh',
+                        dateLabel TEXT NOT NULL DEFAULT '',
+                        handoverTime TEXT NOT NULL DEFAULT '15:00 WIB',
+                        fromShiftLabel TEXT NOT NULL DEFAULT '',
+                        toShiftLabel TEXT NOT NULL DEFAULT '',
+                        totalStudents INTEGER NOT NULL DEFAULT 0,
+                        presentStudents INTEGER NOT NULL DEFAULT 0,
+                        sickStudentsCount INTEGER NOT NULL DEFAULT 0,
+                        fastingStudentsCount INTEGER NOT NULL DEFAULT 0,
+                        payloadJson TEXT NOT NULL DEFAULT '{}',
+                        authorUsername TEXT NOT NULL DEFAULT '',
+                        authorName TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        lastEditedBy TEXT NOT NULL DEFAULT 'Wali Asuh',
+                        isDeleted INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0,
+                        updatedAt INTEGER NOT NULL DEFAULT 0
+                    )
+                    """.trimIndent()
+                )
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val appContext = context.applicationContext
@@ -1208,7 +1248,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_39_40,
                         MIGRATION_40_41,
                         MIGRATION_41_42,
-                        MIGRATION_42_43
+                        MIGRATION_42_43,
+                        MIGRATION_43_44
                     )
                     .addCallback(DatabaseCallback(appContext))
                     .fallbackToDestructiveMigration()

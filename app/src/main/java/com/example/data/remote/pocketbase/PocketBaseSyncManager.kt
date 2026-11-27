@@ -39,6 +39,7 @@ import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
+import com.example.data.model.ShiftHandoverReport
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganHelper
@@ -1897,6 +1898,7 @@ object PocketBaseSyncManager {
             runCatching { deleteCollectionByFilter(service, "bible_bookmarks", filter) }
             runCatching { deleteCollectionByFilter(service, "bible_notes", filter) }
             runCatching { deleteCollectionByFilter(service, "shared_journal_notes", filter) }
+            runCatching { deleteCollectionByFilter(service, "shift_handovers", filter) }
             runCatching { deleteCollectionByFilter(service, "parent_access_links", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_records", filter) }
             runCatching { deleteCollectionByFilter(service, "fasting_sessions", filter) }
@@ -2117,6 +2119,7 @@ object PocketBaseSyncManager {
         runCatching { syncParentAccessLinksMerged(service, cleanSchoolId, filter, repository, deletedParentLinkIds) }
         runCatching { syncWaliShiftCodesMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncWaliScheduleEntriesMerged(service, cleanSchoolId, filter, repository) }
+        runCatching { syncShiftHandoversMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncParentMessagesMerged(service, cleanSchoolId, filter, repository, deletedParentMsgIds, pbBaseUrl) }
         runCatching { syncParentExpectationsMerged(service, cleanSchoolId, filter, repository) }
         runCatching {
@@ -3433,6 +3436,11 @@ object PocketBaseSyncManager {
             // 15. Sinkronkan Catatan Jurnal & Aturan Bersama (shared_journal_notes)
             runCatching {
                 syncSharedJournalNotesMerged(service, cleanSchoolId, filter, repository)
+            }
+
+            // 16. Sinkronkan Laporan & Draft Serah Terima Shift (shift_handovers)
+            runCatching {
+                syncShiftHandoversMerged(service, cleanSchoolId, filter, repository)
             }
 
             PocketBaseConfig.setLastSyncTime(context, System.currentTimeMillis())
@@ -5299,5 +5307,106 @@ object PocketBaseSyncManager {
         val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
         val filter = buildSchoolFilter(cleanSchoolId)
         runCatching { syncSharedJournalNotesMerged(service, cleanSchoolId, filter, repository) }
+    }
+
+    // --- Serah Terima Shift Wali Asuh (Draft & Laporan Sinkron) ---
+
+    suspend fun uploadSingleShiftHandover(context: Context, report: ShiftHandoverReport): Boolean =
+        withContext(Dispatchers.IO) {
+            if (!PocketBaseConfig.isConfigured(context)) return@withContext false
+            try {
+                val service = PocketBaseClient.getService(context) ?: return@withContext false
+                val probe = service.listShiftHandovers(page = 1, perPage = 1, filter = buildSchoolFilter(report.schoolId))
+                if (probe.code() == 404) {
+                    val mirrorDto = PbShiftHandoverDto.toMirrorJournalDto(report)
+                    return@withContext upsertSingleDto(service, "shared_journal_notes", mirrorDto.id!!, mirrorDto)
+                }
+                val dto = PbShiftHandoverDto.fromDomain(report)
+                upsertSingleDto(service, "shift_handovers", dto.id!!, dto)
+            } catch (e: Exception) {
+                Log.e(TAG, "Silent error uploadSingleShiftHandover ke PocketBase", e)
+                false
+            }
+        }
+
+    private suspend fun syncShiftHandoversMerged(
+        service: PocketBaseService,
+        schoolId: String,
+        filter: String,
+        repository: HealthRepository
+    ) {
+        val localAll = repository.getAllShiftHandoversIncludingDeletedList()
+            .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
+
+        val firstResp = service.listShiftHandovers(page = 1, perPage = 500, filter = filter)
+        val useMirrorFallback = firstResp.code() == 404
+
+        val remoteList: List<ShiftHandoverReport> = if (useMirrorFallback) {
+            val journalRes = fetchAllPages { page ->
+                service.listSharedJournalNotes(page = page, perPage = 500, filter = filter)
+            }
+            val notes = journalRes.getOrNull() ?: return
+            notes.mapNotNull { PbShiftHandoverDto.fromMirrorJournalDto(it, schoolId) }
+        } else {
+            val allDtos = mutableListOf<PbShiftHandoverDto>()
+            if (!firstResp.isSuccessful) return
+            val firstBody = firstResp.body() ?: return
+            allDtos.addAll(firstBody.items)
+            if (firstBody.totalPages > 1) {
+                var page = 2
+                while (page <= firstBody.totalPages) {
+                    val pageResp = service.listShiftHandovers(page = page, perPage = 500, filter = filter)
+                    if (!pageResp.isSuccessful) break
+                    val pageBody = pageResp.body() ?: break
+                    allDtos.addAll(pageBody.items)
+                    if (pageBody.items.isEmpty()) break
+                    page++
+                }
+            }
+            allDtos.map { it.toDomainModel(schoolId) }
+        }
+
+        val localById = localAll.associateBy { it.id }
+        val remoteById = remoteList.associateBy { it.id }
+
+        val toInsertLocal = remoteList.filter { rem ->
+            val loc = localById[rem.id]
+            loc == null || rem.updatedAt >= loc.updatedAt
+        }
+        if (toInsertLocal.isNotEmpty()) {
+            repository.insertAllShiftHandovers(toInsertLocal)
+        }
+
+        val toPushRemote = localAll.filter { loc ->
+            val rem = remoteById[loc.id]
+            rem == null || loc.updatedAt > rem.updatedAt
+        }
+        if (toPushRemote.isNotEmpty()) {
+            if (useMirrorFallback) {
+                val pairs = toPushRemote.map { item ->
+                    val dto = PbShiftHandoverDto.toMirrorJournalDto(item)
+                    dto.id!! to dto
+                }
+                upsertBatchOrFallback(service, "shared_journal_notes", pairs)
+            } else {
+                val pairs = toPushRemote.map { item ->
+                    val dto = PbShiftHandoverDto.fromDomain(item)
+                    dto.id!! to dto
+                }
+                upsertBatchOrFallback(service, "shift_handovers", pairs)
+            }
+        }
+    }
+
+    suspend fun syncShiftHandoversOnlineQuietly(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository
+    ) = withContext(Dispatchers.IO) {
+        if (!PocketBaseConfig.isConfigured(context)) return@withContext
+        val service = PocketBaseClient.getService(context) ?: return@withContext
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val filter = buildSchoolFilter(cleanSchoolId)
+        runCatching { syncShiftHandoversMerged(service, cleanSchoolId, filter, repository) }
     }
 }

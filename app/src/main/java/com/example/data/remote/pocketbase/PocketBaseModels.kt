@@ -30,6 +30,8 @@ import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
+import com.example.data.model.ShiftHandoverHelper
+import com.example.data.model.ShiftHandoverReport
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatHelper
 import com.example.data.model.SholatRecord
@@ -2873,6 +2875,218 @@ data class PbSharedJournalNoteDto(
         }
     }
 }
+
+@JsonClass(generateAdapter = true)
+data class PbShiftHandoverDto(
+    @Json(name = "id") val id: String? = null,
+    @Json(name = "local_id") val localId: Long? = null,
+    @Json(name = "school_id") val schoolId: String? = null,
+    @Json(name = "month_key") val monthKey: String? = null,
+    @Json(name = "day") val day: Int? = null,
+    @Json(name = "report_date_millis") val reportDateMillis: Long? = null,
+    @Json(name = "handover_type") val handoverType: String? = null,
+    @Json(name = "status") val status: String? = null,
+    @Json(name = "title") val title: String? = null,
+    @Json(name = "school_name") val schoolName: String? = null,
+    @Json(name = "service_unit") val serviceUnit: String? = null,
+    @Json(name = "date_label") val dateLabel: String? = null,
+    @Json(name = "handover_time") val handoverTime: String? = null,
+    @Json(name = "from_shift_label") val fromShiftLabel: String? = null,
+    @Json(name = "to_shift_label") val toShiftLabel: String? = null,
+    @Json(name = "total_students") val totalStudents: Int? = null,
+    @Json(name = "present_students") val presentStudents: Int? = null,
+    @Json(name = "sick_students_count") val sickStudentsCount: Int? = null,
+    @Json(name = "fasting_students_count") val fastingStudentsCount: Int? = null,
+    @Json(name = "payload_json") val payloadJson: String? = null,
+    @Json(name = "author_username") val authorUsername: String? = null,
+    @Json(name = "author_name") val authorName: String? = null,
+    @Json(name = "last_edited_by") val lastEditedBy: String? = null,
+    @Json(name = "is_deleted") val isDeleted: Boolean? = null,
+    @Json(name = "created_at") val createdAt: Long? = null,
+    @Json(name = "updated_at") val updatedAt: Long? = null
+) {
+    fun toDomainModel(fallbackSchoolId: String = "SRT1-KDR"): ShiftHandoverReport {
+        val now = System.currentTimeMillis()
+        val resolvedSchool = schoolId?.takeIf { it.isNotBlank() } ?: fallbackSchoolId
+        val resolvedType = ShiftHandoverHelper.normalizeType(handoverType)
+        val resolvedMonth = monthKey?.takeIf { it.isNotBlank() }
+            ?: com.example.data.model.WaliScheduleHelper.currentMonthKey(now)
+        val resolvedDay = (day ?: com.example.data.model.WaliScheduleHelper.currentDayOfMonth(now))
+            .coerceIn(1, com.example.data.model.WaliScheduleHelper.daysInMonth(resolvedMonth))
+        return ShiftHandoverReport(
+            id = PocketBaseIdCodec.resolveLocalId(localId, id),
+            schoolId = resolvedSchool,
+            monthKey = resolvedMonth,
+            day = resolvedDay,
+            reportDateMillis = reportDateMillis?.takeIf { it > 0L }
+                ?: ShiftHandoverHelper.dateMillisFor(resolvedMonth, resolvedDay),
+            handoverType = resolvedType,
+            status = ShiftHandoverHelper.normalizeStatus(status),
+            title = title?.takeIf { it.isNotBlank() } ?: ShiftHandoverHelper.defaultTitleForType(resolvedType),
+            schoolName = schoolName.orEmpty(),
+            serviceUnit = serviceUnit?.takeIf { it.isNotBlank() } ?: "Pelayanan Wali Asuh",
+            dateLabel = dateLabel?.takeIf { it.isNotBlank() }
+                ?: ShiftHandoverHelper.formatFullIndonesianDate(resolvedMonth, resolvedDay),
+            handoverTime = handoverTime?.takeIf { it.isNotBlank() }
+                ?: ShiftHandoverHelper.defaultTimeForType(resolvedType),
+            fromShiftLabel = fromShiftLabel.orEmpty(),
+            toShiftLabel = toShiftLabel.orEmpty(),
+            totalStudents = totalStudents ?: 0,
+            presentStudents = presentStudents ?: 0,
+            sickStudentsCount = sickStudentsCount ?: 0,
+            fastingStudentsCount = fastingStudentsCount ?: 0,
+            payloadJson = payloadJson?.takeIf { it.isNotBlank() } ?: "{}",
+            authorUsername = authorUsername.orEmpty().trim(),
+            authorName = authorName?.takeIf { it.isNotBlank() } ?: "Wali Asuh",
+            lastEditedBy = lastEditedBy?.takeIf { it.isNotBlank() }
+                ?: authorName?.takeIf { it.isNotBlank() }
+                ?: "Wali Asuh",
+            isDeleted = isDeleted ?: false,
+            createdAt = createdAt?.takeIf { it > 0L } ?: now,
+            updatedAt = updatedAt?.takeIf { it > 0L } ?: now
+        )
+    }
+
+    companion object {
+        fun fromDomain(model: ShiftHandoverReport): PbShiftHandoverDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "shift_handover:${model.schoolId}:${model.monthKey}:${model.day}:${model.handoverType}:${model.createdAt}"
+            )
+            return PbShiftHandoverDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                monthKey = model.monthKey,
+                day = model.day,
+                reportDateMillis = model.reportDateMillis,
+                handoverType = ShiftHandoverHelper.normalizeType(model.handoverType),
+                status = ShiftHandoverHelper.normalizeStatus(model.status),
+                title = model.title,
+                schoolName = model.schoolName,
+                serviceUnit = model.serviceUnit,
+                dateLabel = model.dateLabel,
+                handoverTime = model.handoverTime,
+                fromShiftLabel = model.fromShiftLabel,
+                toShiftLabel = model.toShiftLabel,
+                totalStudents = model.totalStudents,
+                presentStudents = model.presentStudents,
+                sickStudentsCount = model.sickStudentsCount,
+                fastingStudentsCount = model.fastingStudentsCount,
+                payloadJson = model.payloadJson,
+                authorUsername = model.authorUsername,
+                authorName = model.authorName,
+                lastEditedBy = model.lastEditedBy,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+
+        fun toMirrorJournalDto(model: ShiftHandoverReport): PbSharedJournalNoteDto {
+            val safeId = if (model.id > 0L) model.id else PocketBaseIdCodec.stablePositiveHash(
+                "shift_handover:${model.schoolId}:${model.monthKey}:${model.day}:${model.handoverType}:${model.createdAt}"
+            )
+            val envelope = org.json.JSONObject()
+                .put("localId", safeId)
+                .put("schoolId", model.schoolId.ifBlank { "SRT1-KDR" })
+                .put("monthKey", model.monthKey)
+                .put("day", model.day)
+                .put("reportDateMillis", model.reportDateMillis)
+                .put("handoverType", ShiftHandoverHelper.normalizeType(model.handoverType))
+                .put("status", ShiftHandoverHelper.normalizeStatus(model.status))
+                .put("title", model.title)
+                .put("schoolName", model.schoolName)
+                .put("serviceUnit", model.serviceUnit)
+                .put("dateLabel", model.dateLabel)
+                .put("handoverTime", model.handoverTime)
+                .put("fromShiftLabel", model.fromShiftLabel)
+                .put("toShiftLabel", model.toShiftLabel)
+                .put("totalStudents", model.totalStudents)
+                .put("presentStudents", model.presentStudents)
+                .put("sickStudentsCount", model.sickStudentsCount)
+                .put("fastingStudentsCount", model.fastingStudentsCount)
+                .put("payloadJson", model.payloadJson)
+                .put("authorUsername", model.authorUsername)
+                .put("authorName", model.authorName)
+                .put("lastEditedBy", model.lastEditedBy)
+                .put("isDeleted", model.isDeleted)
+                .put("createdAt", model.createdAt)
+                .put("updatedAt", model.updatedAt)
+                .toString()
+            return PbSharedJournalNoteDto(
+                id = PocketBaseIdCodec.toPbId(safeId),
+                localId = safeId,
+                schoolId = model.schoolId.ifBlank { "SRT1-KDR" },
+                category = SharedJournalHelper.CATEGORY_SHIFT_HANDOVER_MIRROR,
+                title = model.title,
+                content = envelope,
+                checklistJson = "",
+                imageUrlsJson = "",
+                isPinned = false,
+                authorUsername = model.authorUsername,
+                authorName = model.authorName,
+                isDeleted = model.isDeleted,
+                createdAt = model.createdAt,
+                updatedAt = model.updatedAt
+            )
+        }
+
+        fun fromMirrorJournalDto(
+            note: PbSharedJournalNoteDto,
+            fallbackSchoolId: String = "SRT1-KDR"
+        ): ShiftHandoverReport? {
+            if (!note.category.equals(SharedJournalHelper.CATEGORY_SHIFT_HANDOVER_MIRROR, ignoreCase = true)) {
+                return null
+            }
+            val raw = note.content.orEmpty()
+            if (raw.isBlank()) return null
+            return runCatching {
+                val obj = org.json.JSONObject(raw)
+                val now = System.currentTimeMillis()
+                val resolvedSchool = obj.optString("schoolId", note.schoolId.orEmpty())
+                    .ifBlank { fallbackSchoolId }
+                val resolvedMonth = obj.optString("monthKey", "")
+                    .ifBlank { com.example.data.model.WaliScheduleHelper.currentMonthKey(now) }
+                val resolvedDay = obj.optInt("day", com.example.data.model.WaliScheduleHelper.currentDayOfMonth(now))
+                    .coerceIn(1, com.example.data.model.WaliScheduleHelper.daysInMonth(resolvedMonth))
+                val resolvedType = ShiftHandoverHelper.normalizeType(obj.optString("handoverType", ""))
+                ShiftHandoverReport(
+                    id = PocketBaseIdCodec.resolveLocalId(note.localId ?: obj.optLong("localId", 0L), note.id),
+                    schoolId = resolvedSchool,
+                    monthKey = resolvedMonth,
+                    day = resolvedDay,
+                    reportDateMillis = obj.optLong("reportDateMillis", 0L).takeIf { it > 0L }
+                        ?: ShiftHandoverHelper.dateMillisFor(resolvedMonth, resolvedDay),
+                    handoverType = resolvedType,
+                    status = ShiftHandoverHelper.normalizeStatus(obj.optString("status", "")),
+                    title = obj.optString("title", note.title.orEmpty())
+                        .ifBlank { ShiftHandoverHelper.defaultTitleForType(resolvedType) },
+                    schoolName = obj.optString("schoolName", ""),
+                    serviceUnit = obj.optString("serviceUnit", "Pelayanan Wali Asuh")
+                        .ifBlank { "Pelayanan Wali Asuh" },
+                    dateLabel = obj.optString("dateLabel", "")
+                        .ifBlank { ShiftHandoverHelper.formatFullIndonesianDate(resolvedMonth, resolvedDay) },
+                    handoverTime = obj.optString("handoverTime", "")
+                        .ifBlank { ShiftHandoverHelper.defaultTimeForType(resolvedType) },
+                    fromShiftLabel = obj.optString("fromShiftLabel", ""),
+                    toShiftLabel = obj.optString("toShiftLabel", ""),
+                    totalStudents = obj.optInt("totalStudents", 0),
+                    presentStudents = obj.optInt("presentStudents", 0),
+                    sickStudentsCount = obj.optInt("sickStudentsCount", 0),
+                    fastingStudentsCount = obj.optInt("fastingStudentsCount", 0),
+                    payloadJson = obj.optString("payloadJson", "{}").ifBlank { "{}" },
+                    authorUsername = obj.optString("authorUsername", note.authorUsername.orEmpty()),
+                    authorName = obj.optString("authorName", note.authorName.orEmpty()).ifBlank { "Wali Asuh" },
+                    lastEditedBy = obj.optString("lastEditedBy", note.authorName.orEmpty()).ifBlank { "Wali Asuh" },
+                    isDeleted = note.isDeleted ?: obj.optBoolean("isDeleted", false),
+                    createdAt = note.createdAt?.takeIf { it > 0L } ?: obj.optLong("createdAt", now),
+                    updatedAt = note.updatedAt?.takeIf { it > 0L } ?: obj.optLong("updatedAt", now)
+                )
+            }.getOrNull()
+        }
+    }
+}
+
 
 
 

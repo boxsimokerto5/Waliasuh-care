@@ -8,11 +8,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,9 +28,11 @@ import com.example.data.model.WaliShiftCode
 import com.example.ui.HealthViewModel
 import com.example.ui.components.DashboardModalState
 import com.example.ui.components.jadwalDailyRosterItems
+import com.example.data.model.ShiftHandoverHelper
 import com.example.ui.dialogs.EditJadwalSelDialog
 import com.example.ui.dialogs.ImportJadwalMatriksDialog
 import com.example.ui.dialogs.JadwalPersonalSheet
+import com.example.ui.dialogs.SerahTerimaShiftSheet
 import com.example.util.TopOnAdManager
 import com.example.util.i18n.LocalAppStrings
 
@@ -50,6 +54,24 @@ fun JadwalQuickScreen(
     val isEn = LocalAppStrings.current.isEnglish
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedGroup by rememberSaveable { mutableStateOf("ALL") }
+
+    val shiftHandovers by viewModel.shiftHandovers.collectAsStateWithLifecycle()
+    val students by viewModel.students.collectAsStateWithLifecycle()
+    val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
+    val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
+    val shiftHandoverDraftCount = remember(shiftHandovers) {
+        shiftHandovers.count { it.status.equals(ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true) }
+    }
+
+    LaunchedEffect(Unit) {
+        viewModel.syncShiftHandoversOnlineQuietly()
+    }
+    LaunchedEffect(modalState.showSerahTerimaShiftSheet) {
+        if (modalState.showSerahTerimaShiftSheet) {
+            viewModel.syncShiftHandoversOnlineQuietly()
+        }
+    }
 
     val monthEntries = remember(scheduleEntries, modalState.jadwalSelectedMonthKey) {
         scheduleEntries.filter { it.monthKey == modalState.jadwalSelectedMonthKey }
@@ -110,7 +132,12 @@ fun JadwalQuickScreen(
                         modalState.importJadwalInitialTab = 0
                         modalState.showImportJadwalMatriksDialog = true
                     }
-                } else null
+                } else null,
+                shiftHandoverDraftCount = shiftHandoverDraftCount,
+                onOpenSerahTerimaShift = {
+                    TopOnAdManager.onUserActionClick(context)
+                    modalState.showSerahTerimaShiftSheet = true
+                }
             )
         }
     }
@@ -230,5 +257,53 @@ fun JadwalQuickScreen(
                 onDismiss = { modalState.showImportJadwalMatriksDialog = false }
             )
         }
+    }
+
+    if (modalState.showSerahTerimaShiftSheet) {
+        SerahTerimaShiftSheet(
+            isEn = isEn,
+            reports = shiftHandovers,
+            schoolProfile = schoolProfile,
+            initialMonthKey = modalState.jadwalSelectedMonthKey,
+            initialDay = modalState.jadwalSelectedDay,
+            allScheduleEntries = scheduleEntries,
+            shiftCodes = shiftCodes,
+            students = students,
+            medicalRecords = allRecords,
+            fastingRecords = fastingRecords,
+            shiftMessages = shiftMessages,
+            waliAccounts = waliAccounts,
+            currentUsername = currentUsername,
+            currentWaliName = currentWaliName,
+            onSyncOnline = { onDone ->
+                viewModel.syncShiftHandoversOnlineQuietly(onDone)
+            },
+            onSaveReport = { existing, mKey, dayVal, hType, st, titleStr, sName, sUnit, dLabel, hTime, fromLbl, toLbl, tot, pres, sickC, fastC, payloadObj, cb ->
+                viewModel.saveShiftHandover(
+                    existing = existing,
+                    monthKey = mKey,
+                    day = dayVal,
+                    handoverType = hType,
+                    status = st,
+                    title = titleStr,
+                    schoolName = sName,
+                    serviceUnit = sUnit,
+                    dateLabel = dLabel,
+                    handoverTime = hTime,
+                    fromShiftLabel = fromLbl,
+                    toShiftLabel = toLbl,
+                    totalStudents = tot,
+                    presentStudents = pres,
+                    sickStudentsCount = sickC,
+                    fastingStudentsCount = fastC,
+                    payload = payloadObj,
+                    onResult = cb
+                )
+            },
+            onDeleteReport = { report, cb ->
+                viewModel.deleteShiftHandover(report, cb)
+            },
+            onDismiss = { modalState.showSerahTerimaShiftSheet = false }
+        )
     }
 }

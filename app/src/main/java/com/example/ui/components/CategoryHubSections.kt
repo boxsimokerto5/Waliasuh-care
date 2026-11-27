@@ -56,6 +56,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.filled.WarningAmber
@@ -2332,7 +2333,9 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
     onOpenUploadCsv: () -> Unit = onOpenImportMatriks,
     onEditCell: (WaliScheduleEntry, Int) -> Unit,
     onShareDailyWhatsapp: () -> Unit,
-    onExportMatriksPdf: () -> Unit
+    onExportMatriksPdf: () -> Unit,
+    shiftHandoverDraftCount: Int = 0,
+    onOpenSerahTerimaShift: (() -> Unit)? = null
 ) {
     val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
     val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, schoolProfile.tenantCode)
@@ -3000,7 +3003,9 @@ internal fun LazyListScope.jadwalWaliCategoryItems(
         onChangeDay = onChangeDay,
         onOpenPersonal = onOpenPersonal,
         onEditCell = onEditCell,
-        onOpenImportMatriks = onOpenImportMatriks
+        onOpenImportMatriks = onOpenImportMatriks,
+        shiftHandoverDraftCount = shiftHandoverDraftCount,
+        onOpenSerahTerimaShift = onOpenSerahTerimaShift
     )
 }
 
@@ -3022,13 +3027,105 @@ internal fun LazyListScope.jadwalDailyRosterItems(
     onChangeDay: (Int) -> Unit,
     onOpenPersonal: (WaliScheduleEntry) -> Unit,
     onEditCell: (WaliScheduleEntry, Int) -> Unit,
-    onOpenImportMatriks: (() -> Unit)? = null
+    onOpenImportMatriks: (() -> Unit)? = null,
+    shiftHandoverDraftCount: Int = 0,
+    onOpenSerahTerimaShift: (() -> Unit)? = null
 ) {
     val canEditAnyCell = canManageSchedule || canPinScheduleTasks
     val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(schoolProfile.tenantCode) }
     val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, schoolProfile.tenantCode)
     val daysInMonth = WaliScheduleHelper.daysInMonth(monthKey)
     val safeDay = selectedDay.coerceIn(1, daysInMonth)
+
+    if (onOpenSerahTerimaShift != null) {
+        item(key = "jadwal_serah_terima_shift_card") {
+            Surface(
+                onClick = onOpenSerahTerimaShift,
+                shape = RoundedCornerShape(14.dp),
+                color = Color(0xFF0F766E).copy(alpha = 0.09f),
+                border = BorderStroke(1.dp, Color(0xFF0F766E).copy(alpha = 0.35f)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("card_jadwal_serah_terima_shift")
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = Color(0xFF0F766E)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SwapHoriz,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(20.dp)
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (isEn) "Shift Handover Report" else "Serah Terima Shift",
+                                fontSize = 13.5.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0F766E)
+                            )
+                            if (shiftHandoverDraftCount > 0) {
+                                Surface(
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = Color(0xFFD97706)
+                                ) {
+                                    Text(
+                                        text = "$shiftHandoverDraftCount Draft",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = if (isEn) {
+                                "Auto-fill handover, save draft, sync & share WhatsApp"
+                            } else {
+                                "Buat laporan otomatis, lanjutkan draft & share WhatsApp"
+                            },
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(9.dp),
+                        color = Color(0xFF0F766E)
+                    ) {
+                        Text(
+                            text = if (shiftHandoverDraftCount > 0) {
+                                if (isEn) "Open" else "Lanjutkan"
+                            } else {
+                                if (isEn) "Create" else "Buka"
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
 
     // Date Switcher + Search Bar + Filter Chips
     item(key = "jadwal_date_and_filter_controls") {

@@ -189,6 +189,8 @@ fun CategoryHubOverlay(
     onEditScheduleCell: (WaliScheduleEntry, Int) -> Unit = { _, _ -> },
     onShareJadwalWhatsapp: () -> Unit = {},
     onExportJadwalMatriksPdf: () -> Unit = {},
+    shiftHandoverDraftCount: Int = 0,
+    onOpenSerahTerimaShift: (() -> Unit)? = null,
     sholatRecords: List<SholatRecord> = emptyList(),
     onOpenAbsenSholatSheet: (tabIndex: Int, autoScanner: Boolean, scopeFilter: String, targetStudent: ChildStudent?) -> Unit = { _, _, _, _ -> },
     christianWorshipRecords: List<ChristianWorshipRecord> = emptyList(),
@@ -719,7 +721,9 @@ fun CategoryHubOverlay(
                                     onOpenUploadCsv = onOpenUploadJadwalCsv,
                                     onEditCell = onEditScheduleCell,
                                     onShareDailyWhatsapp = onShareJadwalWhatsapp,
-                                    onExportMatriksPdf = onExportJadwalMatriksPdf
+                                    onExportMatriksPdf = onExportJadwalMatriksPdf,
+                                    shiftHandoverDraftCount = shiftHandoverDraftCount,
+                                    onOpenSerahTerimaShift = onOpenSerahTerimaShift
                                 )
                                 DashboardCategoryHub.SHOLAT -> sholatCategoryItems(
                                     isEn = isEn,

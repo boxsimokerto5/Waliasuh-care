@@ -163,6 +163,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import com.example.ui.dialogs.InputTreatmentResultDialog
 import com.example.ui.dialogs.JadwalKunjunganSheet
 import com.example.ui.dialogs.JadwalMatriksSheet
+import com.example.ui.dialogs.SerahTerimaShiftSheet
 import com.example.ui.dialogs.JadwalPersonalSheet
 import com.example.ui.dialogs.KartuAksesOrangTuaSheet
 import com.example.ui.dialogs.KartuMengajiSheet
@@ -256,6 +257,12 @@ fun DashboardScreen(
     val incomingTandemBundles by viewModel.incomingTandemRequestBundles.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
+    val shiftHandovers by viewModel.shiftHandovers.collectAsStateWithLifecycle()
+    val shiftHandoverDraftCount = remember(shiftHandovers) {
+        shiftHandovers.count {
+            it.status.equals(com.example.data.model.ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true)
+        }
+    }
     val currentUserRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
     val currentUsername by viewModel.currentUsername.collectAsStateWithLifecycle()
     val isAnakSuperAdmin by viewModel.isAnakSuperAdmin.collectAsStateWithLifecycle()
@@ -358,15 +365,18 @@ fun DashboardScreen(
         modalState.showDaftarKodeSopSheet,
         modalState.showManageShiftCodesDialog,
         modalState.showImportJadwalMatriksDialog,
+        modalState.showSerahTerimaShiftSheet,
         schoolProfile.tenantCode
     ) {
         if (modalState.activeCategoryHub == DashboardCategoryHub.JADWAL_WALI ||
             modalState.showJadwalMatriksSheet ||
             modalState.showDaftarKodeSopSheet ||
             modalState.showManageShiftCodesDialog ||
-            modalState.showImportJadwalMatriksDialog
+            modalState.showImportJadwalMatriksDialog ||
+            modalState.showSerahTerimaShiftSheet
         ) {
             viewModel.ensureSchoolShiftCodesSeeded(schoolProfile.tenantCode)
+            viewModel.syncShiftHandoversOnlineQuietly()
         }
     }
     LaunchedEffect(
@@ -1472,6 +1482,8 @@ fun DashboardScreen(
                         ).show()
                     }
                 },
+                shiftHandoverDraftCount = shiftHandoverDraftCount,
+                onOpenSerahTerimaShift = { modalState.showSerahTerimaShiftSheet = true },
                 sholatRecords = sholatRecords,
                 onOpenAbsenSholatSheet = { tabIdx, autoScan, scopeFilter, targetStudent ->
                     TopOnAdManager.onUserActionClick(context)
@@ -2282,6 +2294,11 @@ fun DashboardScreen(
         waliAccounts = waliAccounts,
         schoolShiftCodes = schoolShiftCodes,
         schoolScheduleEntries = schoolScheduleEntries,
+        shiftHandovers = shiftHandovers,
+        students = students,
+        allRecords = allRecords,
+        fastingRecords = fastingRecords,
+        shiftMessages = shiftMessages,
         canManageSchedule = canManageSchedule,
         canPinScheduleTasks = canPinScheduleTasks,
         isAnakSuperAdmin = isAnakSuperAdmin,
@@ -3788,6 +3805,11 @@ private fun DashboardJadwalAndInfoModalsHost(
     waliAccounts: List<com.example.data.model.WaliAccount>,
     schoolShiftCodes: List<WaliShiftCode>,
     schoolScheduleEntries: List<WaliScheduleEntry>,
+    shiftHandovers: List<com.example.data.model.ShiftHandoverReport>,
+    students: List<ChildStudent>,
+    allRecords: List<MedicalRecord>,
+    fastingRecords: List<com.example.data.model.FastingRecord>,
+    shiftMessages: List<com.example.data.model.ShiftMessage>,
     canManageSchedule: Boolean,
     canPinScheduleTasks: Boolean = canManageSchedule,
     isAnakSuperAdmin: Boolean,
@@ -3912,6 +3934,54 @@ private fun DashboardJadwalAndInfoModalsHost(
                 }
             },
             onDismiss = { modalState.showDaftarKodeSopSheet = false }
+        )
+    }
+
+    if (modalState.showSerahTerimaShiftSheet) {
+        SerahTerimaShiftSheet(
+            isEn = isEn,
+            reports = shiftHandovers,
+            schoolProfile = schoolProfile,
+            initialMonthKey = modalState.jadwalSelectedMonthKey,
+            initialDay = modalState.jadwalSelectedDay,
+            allScheduleEntries = schoolScheduleEntries,
+            shiftCodes = schoolShiftCodes,
+            students = students,
+            medicalRecords = allRecords,
+            fastingRecords = fastingRecords,
+            shiftMessages = shiftMessages,
+            waliAccounts = waliAccounts,
+            currentUsername = currentUsername,
+            currentWaliName = waliName,
+            onSyncOnline = { onDone ->
+                viewModel.syncShiftHandoversOnlineQuietly(onDone)
+            },
+            onSaveReport = { existing, mKey, dayVal, hType, st, titleStr, sName, sUnit, dLabel, hTime, fromLbl, toLbl, tot, pres, sickC, fastC, payloadObj, cb ->
+                viewModel.saveShiftHandover(
+                    existing = existing,
+                    monthKey = mKey,
+                    day = dayVal,
+                    handoverType = hType,
+                    status = st,
+                    title = titleStr,
+                    schoolName = sName,
+                    serviceUnit = sUnit,
+                    dateLabel = dLabel,
+                    handoverTime = hTime,
+                    fromShiftLabel = fromLbl,
+                    toShiftLabel = toLbl,
+                    totalStudents = tot,
+                    presentStudents = pres,
+                    sickStudentsCount = sickC,
+                    fastingStudentsCount = fastC,
+                    payload = payloadObj,
+                    onResult = cb
+                )
+            },
+            onDeleteReport = { report, cb ->
+                viewModel.deleteShiftHandover(report, cb)
+            },
+            onDismiss = { modalState.showSerahTerimaShiftSheet = false }
         )
     }
 

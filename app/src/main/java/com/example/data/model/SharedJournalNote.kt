@@ -53,14 +53,20 @@ object SharedJournalHelper {
     const val CATEGORY_PRIBADI = "PRIBADI"
     const val CATEGORY_JURNAL = "JURNAL"
     const val CATEGORY_ATURAN = "ATURAN"
+    const val CATEGORY_SHIFT_HANDOVER_MIRROR = "SHIFT_HANDOVER_MIRROR"
 
     fun normalizeCategory(raw: String?): String {
         val clean = raw?.trim()?.uppercase().orEmpty()
         return when (clean) {
+            CATEGORY_SHIFT_HANDOVER_MIRROR -> CATEGORY_SHIFT_HANDOVER_MIRROR
             CATEGORY_PRIBADI, "PRIVATE", "PERSONAL", "CATATAN PRIBADI" -> CATEGORY_PRIBADI
             CATEGORY_ATURAN, "RULE", "RULES", "ATURAN BERSAMA" -> CATEGORY_ATURAN
             else -> CATEGORY_JURNAL
         }
+    }
+
+    fun isShiftHandoverMirror(note: SharedJournalNote): Boolean {
+        return note.category.trim().equals(CATEGORY_SHIFT_HANDOVER_MIRROR, ignoreCase = true)
     }
 
     fun categoryLabel(category: String, isEn: Boolean): String {

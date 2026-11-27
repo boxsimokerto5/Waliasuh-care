@@ -25,6 +25,7 @@ import com.example.data.dao.VisitRecordDao
 import com.example.data.dao.VisitSessionDao
 import com.example.data.dao.VisitSessionSwapDao
 import com.example.data.dao.SharedJournalNoteDao
+import com.example.data.dao.ShiftHandoverDao
 import com.example.data.dao.ParentAccessLinkDao
 import com.example.data.dao.ParentExpectationDao
 import com.example.data.dao.ParentMessageDao
@@ -62,6 +63,7 @@ import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.ParentMessage
 import com.example.data.model.SharedJournalNote
+import com.example.data.model.ShiftHandoverReport
 import com.example.data.model.SholatRecord
 import com.example.data.model.TabunganLog
 import com.example.data.model.TabunganTransaction
@@ -109,7 +111,8 @@ class HealthRepository(
     private val bibleNoteDao: BibleNoteDao? = null,
     private val visitConfirmationDao: VisitConfirmationDao? = null,
     private val visitSessionSwapDao: VisitSessionSwapDao? = null,
-    private val sharedJournalNoteDao: SharedJournalNoteDao? = null
+    private val sharedJournalNoteDao: SharedJournalNoteDao? = null,
+    private val shiftHandoverDao: ShiftHandoverDao? = null
 ) {
     val allStudents: Flow<List<ChildStudent>> = studentDao.getAllStudents()
     val allRecords: Flow<List<MedicalRecord>> = recordDao.getAllRecords()
@@ -168,6 +171,8 @@ class HealthRepository(
         bibleNoteDao?.getAllActiveNotes() ?: emptyFlow()
     val allSharedJournalNotes: Flow<List<SharedJournalNote>> =
         sharedJournalNoteDao?.getAllActiveNotes() ?: emptyFlow()
+    val allShiftHandovers: Flow<List<ShiftHandoverReport>> =
+        shiftHandoverDao?.getAllActiveReports() ?: emptyFlow()
 
     suspend fun insertWaliAccount(account: WaliAccount): Long =
         waliAccountDao.insert(account)
@@ -1098,5 +1103,30 @@ class HealthRepository(
 
     suspend fun deleteSharedJournalNotesBySchool(schoolId: String) {
         sharedJournalNoteDao?.deleteBySchool(schoolId)
+    }
+
+    // --- Serah Terima Shift Wali Asuh (Draft & Laporan Sinkron) ---
+    suspend fun insertShiftHandover(report: ShiftHandoverReport): Long =
+        shiftHandoverDao?.insert(report) ?: 0L
+
+    suspend fun insertAllShiftHandovers(reports: List<ShiftHandoverReport>) {
+        shiftHandoverDao?.insertAll(reports)
+    }
+
+    suspend fun updateShiftHandover(report: ShiftHandoverReport) {
+        shiftHandoverDao?.update(report)
+    }
+
+    suspend fun getShiftHandoverById(id: Long): ShiftHandoverReport? =
+        shiftHandoverDao?.getById(id)
+
+    suspend fun getAllShiftHandoversIncludingDeletedList(): List<ShiftHandoverReport> =
+        shiftHandoverDao?.getAllReportsIncludingDeletedList() ?: emptyList()
+
+    suspend fun getShiftHandoversBySchoolList(schoolId: String): List<ShiftHandoverReport> =
+        shiftHandoverDao?.getReportsBySchoolList(schoolId) ?: emptyList()
+
+    suspend fun deleteShiftHandoversBySchool(schoolId: String) {
+        shiftHandoverDao?.deleteBySchool(schoolId)
     }
 }

@@ -43,6 +43,9 @@ import com.example.data.model.SchoolRegistration
 import com.example.data.model.JournalImageAttachment
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
+import com.example.data.model.ShiftHandoverHelper
+import com.example.data.model.ShiftHandoverPayload
+import com.example.data.model.ShiftHandoverReport
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatDisciplineTag
 import com.example.data.model.SholatHelper
@@ -163,7 +166,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             db.bibleNoteDao(),
             db.visitConfirmationDao(),
             db.visitSessionSwapDao(),
-            db.sharedJournalNoteDao()
+            db.sharedJournalNoteDao(),
+            db.shiftHandoverDao()
         )
     }
 
@@ -7916,6 +7920,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.deleteBibleBookmarksBySchool(targetSchoolId)
                 repository.deleteBibleNotesBySchool(targetSchoolId)
                 repository.deleteShiftMessagesBySchool(targetSchoolId)
+                repository.deleteSharedJournalNotesBySchool(targetSchoolId)
+                repository.deleteShiftHandoversBySchool(targetSchoolId)
                 repository.deleteStudentsBySchool(targetSchoolId)
                 repository.deleteWaliAccountsBySchool(targetSchoolId)
             }
@@ -9690,6 +9696,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         val activeSchool = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
         list.filter { item ->
             !item.isDeleted &&
+                !SharedJournalHelper.isShiftHandoverMirror(item) &&
                 item.schoolId.equals(activeSchool, ignoreCase = true) &&
                 SharedJournalHelper.isVisibleToUser(item, username, wali)
         }.sortedWith(
@@ -9958,5 +9965,179 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             )
         }
     }
+
+    // --- Serah Terima Shift Wali Asuh (Draft & Laporan Sinkron Antar Perangkat) ---
+
+    val shiftHandovers: StateFlow<List<ShiftHandoverReport>> = combine(
+        repository.allShiftHandovers,
+        _schoolProfile
+    ) { list, profile ->
+        val activeSchool = profile.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        list.filter { item ->
+            !item.isDeleted && item.schoolId.equals(activeSchool, ignoreCase = true)
+        }.sortedWith(
+            compareByDescending<ShiftHandoverReport> { it.reportDateMillis }
+                .thenByDescending { it.updatedAt }
+                .thenByDescending { it.createdAt }
+        )
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun syncShiftHandoversOnlineQuietly(onComplete: () -> Unit = {}) {
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.syncShiftHandoversOnlineQuietly(
+                    context = getApplication(),
+                    schoolId = schoolId,
+                    repository = repository
+                )
+            }
+            onComplete()
+        }
+    }
+
+    fun saveShiftHandover(
+        existing: ShiftHandoverReport? = null,
+        monthKey: String,
+        day: Int,
+        handoverType: String,
+        status: String,
+        title: String,
+        schoolName: String,
+        serviceUnit: String,
+        dateLabel: String,
+        handoverTime: String,
+        fromShiftLabel: String,
+        toShiftLabel: String,
+        totalStudents: Int,
+        presentStudents: Int,
+        sickStudentsCount: Int,
+        fastingStudentsCount: Int,
+        payload: ShiftHandoverPayload,
+        silent: Boolean = false,
+        onResult: (Boolean, String, ShiftHandoverReport?) -> Unit = { _, _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        val maxDay = WaliScheduleHelper.daysInMonth(monthKey)
+        val safeDay = day.coerceIn(1, maxDay)
+        val cleanType = ShiftHandoverHelper.normalizeType(handoverType)
+        val cleanStatus = ShiftHandoverHelper.normalizeStatus(status)
+        val cleanTitle = title.trim().ifBlank { ShiftHandoverHelper.defaultTitleForType(cleanType) }
+        val cleanSchool = schoolName.trim().ifBlank {
+            _schoolProfile.value.schoolName.ifBlank { _schoolProfile.value.shortName }.uppercase()
+        }
+        val cleanUnit = serviceUnit.trim().ifBlank { "Pelayanan Wali Asuh" }
+        val cleanDate = dateLabel.trim().ifBlank { ShiftHandoverHelper.formatFullIndonesianDate(monthKey, safeDay) }
+        val cleanTime = handoverTime.trim().ifBlank { ShiftHandoverHelper.defaultTimeForType(cleanType) }
+        val actorUser = _currentUsername.value?.trim().orEmpty()
+        val actorName = _waliName.value.trim().ifBlank {
+            if (_currentUserRole.value == UserRole.ADMIN) _schoolProfile.value.adminName.ifBlank { "Admin Sekolah" }
+            else "Wali Asuh"
+        }
+        val serializedPayload = ShiftHandoverHelper.serializePayload(payload)
+
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val saved = if (existing != null) {
+                val updated = existing.copy(
+                    monthKey = monthKey,
+                    day = safeDay,
+                    reportDateMillis = ShiftHandoverHelper.dateMillisFor(monthKey, safeDay),
+                    handoverType = cleanType,
+                    status = cleanStatus,
+                    title = cleanTitle,
+                    schoolName = cleanSchool,
+                    serviceUnit = cleanUnit,
+                    dateLabel = cleanDate,
+                    handoverTime = cleanTime,
+                    fromShiftLabel = fromShiftLabel.trim(),
+                    toShiftLabel = toShiftLabel.trim(),
+                    totalStudents = totalStudents.coerceAtLeast(0),
+                    presentStudents = presentStudents.coerceAtLeast(0),
+                    sickStudentsCount = sickStudentsCount.coerceAtLeast(0),
+                    fastingStudentsCount = fastingStudentsCount.coerceAtLeast(0),
+                    payloadJson = serializedPayload,
+                    lastEditedBy = actorName,
+                    isDeleted = false,
+                    updatedAt = maxOf(now, existing.updatedAt + 1L)
+                )
+                repository.updateShiftHandover(updated)
+                updated
+            } else {
+                val deterministicId = PocketBaseIdCodec.stablePositiveHash(
+                    "shift_handover:$schoolId:$monthKey:$safeDay:$cleanType:$actorUser:$now"
+                )
+                val inserted = ShiftHandoverReport(
+                    id = deterministicId,
+                    schoolId = schoolId,
+                    monthKey = monthKey,
+                    day = safeDay,
+                    reportDateMillis = ShiftHandoverHelper.dateMillisFor(monthKey, safeDay),
+                    handoverType = cleanType,
+                    status = cleanStatus,
+                    title = cleanTitle,
+                    schoolName = cleanSchool,
+                    serviceUnit = cleanUnit,
+                    dateLabel = cleanDate,
+                    handoverTime = cleanTime,
+                    fromShiftLabel = fromShiftLabel.trim(),
+                    toShiftLabel = toShiftLabel.trim(),
+                    totalStudents = totalStudents.coerceAtLeast(0),
+                    presentStudents = presentStudents.coerceAtLeast(0),
+                    sickStudentsCount = sickStudentsCount.coerceAtLeast(0),
+                    fastingStudentsCount = fastingStudentsCount.coerceAtLeast(0),
+                    payloadJson = serializedPayload,
+                    authorUsername = actorUser,
+                    authorName = actorName,
+                    lastEditedBy = actorName,
+                    isDeleted = false,
+                    createdAt = now,
+                    updatedAt = now
+                )
+                repository.insertShiftHandover(inserted)
+                inserted
+            }
+
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleShiftHandover(getApplication(), saved)
+            }
+            val msg = when {
+                silent -> ""
+                cleanStatus == ShiftHandoverHelper.STATUS_FINAL -> {
+                    if (isEn) "Shift handover report finalized & synced!"
+                    else "Laporan serah terima shift selesai & tersinkron!"
+                }
+                else -> {
+                    if (isEn) "Draft saved & synced to cloud!"
+                    else "Draft serah terima tersimpan & disinkronkan!"
+                }
+            }
+            onResult(true, msg, saved)
+        }
+    }
+
+    fun deleteShiftHandover(
+        report: ShiftHandoverReport,
+        onResult: (Boolean, String) -> Unit = { _, _ -> }
+    ) {
+        val isEn = _appLanguage.value == AppLanguage.ENGLISH
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val deleted = report.copy(
+                isDeleted = true,
+                updatedAt = maxOf(now, report.updatedAt + 1L)
+            )
+            repository.updateShiftHandover(deleted)
+            if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                PocketBaseSyncManager.uploadSingleShiftHandover(getApplication(), deleted)
+            }
+            onResult(
+                true,
+                if (isEn) "Handover report deleted." else "Laporan serah terima berhasil dihapus."
+            )
+        }
+    }
 }
+
 

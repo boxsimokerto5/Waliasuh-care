@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Verified
@@ -181,6 +182,7 @@ import com.example.ui.dialogs.PenyematanTugasSheet
 import com.example.ui.dialogs.PetugasJamIniDialog
 import com.example.ui.dialogs.RekapIzinJadwalSheet
 import com.example.ui.dialogs.SchedulePinChip
+import com.example.ui.dialogs.SerahTerimaShiftSheet
 import com.example.ui.dialogs.StudentDetailDialog
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
 import com.example.ui.dialogs.VisitCircularPdfDialog
@@ -228,6 +230,13 @@ fun AdminScreen(
     val visitSessionSwaps by viewModel.visitSessionSwaps.collectAsStateWithLifecycle()
     val schoolShiftCodes by viewModel.schoolShiftCodes.collectAsStateWithLifecycle()
     val schoolScheduleEntries by viewModel.schoolScheduleEntries.collectAsStateWithLifecycle()
+    val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
+    val shiftHandovers by viewModel.shiftHandovers.collectAsStateWithLifecycle()
+    val adminShiftHandoverDraftCount = remember(shiftHandovers) {
+        shiftHandovers.count {
+            it.status.equals(com.example.data.model.ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true)
+        }
+    }
     val infoPentingPosts by viewModel.infoPentingPosts.collectAsStateWithLifecycle()
     val infoPentingReactions by viewModel.infoPentingReactions.collectAsStateWithLifecycle()
     val infoPentingComments by viewModel.infoPentingComments.collectAsStateWithLifecycle()
@@ -258,6 +267,7 @@ fun AdminScreen(
     var showImportJadwalMatriks by remember { mutableStateOf(false) }
     var importJadwalInitialTab by remember { mutableIntStateOf(0) }
     var editingJadwalCellTarget by remember { mutableStateOf<Pair<WaliScheduleEntry, Int>?>(null) }
+    var showSerahTerimaShiftSheet by remember { mutableStateOf(false) }
     var readyAdminJadwalPdf by remember { mutableStateOf<File?>(null) }
     var showEditSchoolDialog by remember { mutableStateOf(false) }
     var showCsvBackupSheet by remember { mutableStateOf(false) }
@@ -352,10 +362,12 @@ fun AdminScreen(
         activeSchoolCode,
         showJadwalMatriksSheet,
         showManageShiftCodes,
-        showImportJadwalMatriks
+        showImportJadwalMatriks,
+        showSerahTerimaShiftSheet
     ) {
-        if (selectedAdminTab == 4 || showJadwalMatriksSheet || showManageShiftCodes || showImportJadwalMatriks) {
+        if (selectedAdminTab == 4 || showJadwalMatriksSheet || showManageShiftCodes || showImportJadwalMatriks || showSerahTerimaShiftSheet) {
             viewModel.ensureSchoolShiftCodesSeeded(activeSchoolCode)
+            viewModel.syncShiftHandoversOnlineQuietly()
         }
     }
 
@@ -2700,6 +2712,27 @@ fun AdminScreen(
                                         Text(if (isEn) "Full Matrix" else "Matriks Lengkap", fontSize = 11.5.sp, fontWeight = FontWeight.Bold)
                                     }
                                     Button(
+                                        onClick = { showSerahTerimaShiftSheet = true },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = if (adminShiftHandoverDraftCount > 0) Color(0xFFD97706) else Color(0xFF047857)
+                                        ),
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                                        modifier = Modifier.testTag("btn_admin_serah_terima_shift")
+                                    ) {
+                                        Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(15.dp))
+                                        Spacer(modifier = Modifier.width(5.dp))
+                                        Text(
+                                            text = if (adminShiftHandoverDraftCount > 0) {
+                                                if (isEn) "Handover ($adminShiftHandoverDraftCount Draft)" else "Serah Terima ($adminShiftHandoverDraftCount Draft)"
+                                            } else {
+                                                if (isEn) "Shift Handover" else "Serah Terima Shift"
+                                            },
+                                            fontSize = 11.5.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Button(
                                         onClick = { showManageShiftCodes = true },
                                         shape = RoundedCornerShape(10.dp),
                                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
@@ -4359,6 +4392,54 @@ fun AdminScreen(
                 }
             },
             onDismiss = { showManageShiftCodes = false }
+        )
+    }
+
+    if (showSerahTerimaShiftSheet) {
+        SerahTerimaShiftSheet(
+            isEn = isEn,
+            reports = shiftHandovers,
+            schoolProfile = schoolProfile,
+            initialMonthKey = jadwalMonthKey,
+            initialDay = jadwalSelectedDay,
+            allScheduleEntries = schoolScheduleEntries,
+            shiftCodes = schoolShiftCodes,
+            students = schoolStudents,
+            medicalRecords = allRecords,
+            fastingRecords = fastingRecords,
+            shiftMessages = shiftMessages,
+            waliAccounts = schoolAccounts,
+            currentUsername = currentUsername,
+            currentWaliName = schoolProfile.adminName.ifBlank { waliName.ifBlank { "Admin Sekolah" } },
+            onSyncOnline = { onDone ->
+                viewModel.syncShiftHandoversOnlineQuietly(onDone)
+            },
+            onSaveReport = { existing, mKey, dayVal, hType, st, titleStr, sName, sUnit, dLabel, hTime, fromLbl, toLbl, tot, pres, sickC, fastC, payloadObj, cb ->
+                viewModel.saveShiftHandover(
+                    existing = existing,
+                    monthKey = mKey,
+                    day = dayVal,
+                    handoverType = hType,
+                    status = st,
+                    title = titleStr,
+                    schoolName = sName,
+                    serviceUnit = sUnit,
+                    dateLabel = dLabel,
+                    handoverTime = hTime,
+                    fromShiftLabel = fromLbl,
+                    toShiftLabel = toLbl,
+                    totalStudents = tot,
+                    presentStudents = pres,
+                    sickStudentsCount = sickC,
+                    fastingStudentsCount = fastC,
+                    payload = payloadObj,
+                    onResult = cb
+                )
+            },
+            onDeleteReport = { report, cb ->
+                viewModel.deleteShiftHandover(report, cb)
+            },
+            onDismiss = { showSerahTerimaShiftSheet = false }
         )
     }
 
