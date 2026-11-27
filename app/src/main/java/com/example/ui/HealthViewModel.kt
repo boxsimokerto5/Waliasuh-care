@@ -10035,15 +10035,65 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             if (_currentUserRole.value == UserRole.ADMIN) _schoolProfile.value.adminName.ifBlank { "Admin Sekolah" }
             else "Wali Asuh"
         }
-        val serializedPayload = ShiftHandoverHelper.serializePayload(payload)
 
         viewModelScope.launch {
             val now = System.currentTimeMillis()
+            val reportMillis = ShiftHandoverHelper.dateMillisFor(monthKey, safeDay)
+            val cleanFollowUp = payload.followUpNotes.trim()
+            var effectivePayload = payload
+            var syncedShiftMsgSaved = false
+
+            if (payload.autoSyncShiftMessage && cleanFollowUp.isNotBlank()) {
+                val targetShift = ShiftHandoverHelper.resolveTargetShiftMessageLabel(cleanType, toShiftLabel)
+                val msgTitle = "Tindak Lanjut: $cleanTitle"
+                val existingMsg = payload.syncedShiftMessageId
+                    .takeIf { it > 0L }
+                    ?.let { repository.getShiftMessageById(it) }
+
+                val savedShiftMsg = if (existingMsg != null) {
+                    val updatedMsg = existingMsg.copy(
+                        title = msgTitle,
+                        followUpDate = reportMillis,
+                        shift = targetShift,
+                        targetWali = "Semua Wali Asuh",
+                        messageContent = cleanFollowUp,
+                        senderName = actorName
+                    )
+                    repository.updateShiftMessage(updatedMsg)
+                    updatedMsg
+                } else {
+                    val newMsgId = payload.syncedShiftMessageId.takeIf { it > 0L }
+                        ?: PocketBaseSyncManager.generateCloudSafeId()
+                    val newMsg = ShiftMessage(
+                        id = newMsgId,
+                        title = msgTitle,
+                        followUpDate = reportMillis,
+                        shift = targetShift,
+                        targetWali = "Semua Wali Asuh",
+                        messageContent = cleanFollowUp,
+                        priority = "SEDANG",
+                        senderName = actorName,
+                        createdAt = now,
+                        isCompleted = false,
+                        schoolId = schoolId
+                    )
+                    val insertedMsgId = repository.insertShiftMessage(newMsg)
+                    newMsg.copy(id = insertedMsgId)
+                }
+
+                if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                    PocketBaseSyncManager.uploadSingleShiftMessage(getApplication(), savedShiftMsg)
+                }
+                effectivePayload = payload.copy(syncedShiftMessageId = savedShiftMsg.id)
+                syncedShiftMsgSaved = true
+            }
+
+            val serializedPayload = ShiftHandoverHelper.serializePayload(effectivePayload)
             val saved = if (existing != null) {
                 val updated = existing.copy(
                     monthKey = monthKey,
                     day = safeDay,
-                    reportDateMillis = ShiftHandoverHelper.dateMillisFor(monthKey, safeDay),
+                    reportDateMillis = reportMillis,
                     handoverType = cleanType,
                     status = cleanStatus,
                     title = cleanTitle,
@@ -10073,7 +10123,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     schoolId = schoolId,
                     monthKey = monthKey,
                     day = safeDay,
-                    reportDateMillis = ShiftHandoverHelper.dateMillisFor(monthKey, safeDay),
+                    reportDateMillis = reportMillis,
                     handoverType = cleanType,
                     status = cleanStatus,
                     title = cleanTitle,
@@ -10105,12 +10155,22 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             val msg = when {
                 silent -> ""
                 cleanStatus == ShiftHandoverHelper.STATUS_FINAL -> {
-                    if (isEn) "Shift handover report finalized & synced!"
-                    else "Laporan serah terima shift selesai & tersinkron!"
+                    if (syncedShiftMsgSaved) {
+                        if (isEn) "Handover finalized & saved to Next Shift Messages!"
+                        else "Laporan selesai & catatan tersimpan ke Pesan Shift Berikutnya!"
+                    } else {
+                        if (isEn) "Shift handover report finalized & synced!"
+                        else "Laporan serah terima shift selesai & tersinkron!"
+                    }
                 }
                 else -> {
-                    if (isEn) "Draft saved & synced to cloud!"
-                    else "Draft serah terima tersimpan & disinkronkan!"
+                    if (syncedShiftMsgSaved) {
+                        if (isEn) "Draft saved & follow-up sent to Next Shift Messages!"
+                        else "Draft tersimpan & catatan dikirim ke Pesan Shift Berikutnya!"
+                    } else {
+                        if (isEn) "Draft saved & synced to cloud!"
+                        else "Draft serah terima tersimpan & disinkronkan!"
+                    }
                 }
             }
             onResult(true, msg, saved)

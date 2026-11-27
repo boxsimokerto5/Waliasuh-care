@@ -1,11 +1,16 @@
 package com.example.ui.dialogs
 
+import android.app.Activity
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.speech.RecognizerIntent
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -49,6 +54,7 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
@@ -66,6 +72,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -76,6 +83,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -198,6 +206,66 @@ internal fun SerahTerimaShiftEditor(
     var followUpNotes by remember(initialReport.id) { mutableStateOf(initialPayload.followUpNotes) }
     var completedActivities by remember(initialReport.id) { mutableStateOf(initialPayload.completedActivities) }
     var footerText by remember(initialReport.id) { mutableStateOf(initialPayload.footerText) }
+    var syncedShiftMessageId by remember(initialReport.id) { mutableStateOf(initialPayload.syncedShiftMessageId) }
+    var autoSyncShiftMessage by remember(initialReport.id) {
+        mutableStateOf(
+            if (isExistingRecord) {
+                initialPayload.autoSyncShiftMessage || initialPayload.syncedShiftMessageId > 0L
+            } else {
+                initialPayload.followUpNotes.isBlank()
+            }
+        )
+    }
+
+    val followUpVoiceLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val transcript = result.data
+                ?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)
+                ?.firstOrNull()
+                ?.trim()
+                .orEmpty()
+            if (transcript.isNotBlank()) {
+                followUpNotes = appendVoiceTranscript(followUpNotes, transcript)
+                autoSyncShiftMessage = true
+            }
+        }
+    }
+
+    fun startFollowUpVoiceInput() {
+        val intent = buildGoogleSpeechToTextIntent(
+            promptText = if (isEn) {
+                "Speak follow-up notes for next shift..."
+            } else {
+                "Ucapkan catatan tindak lanjut untuk shift berikutnya..."
+            },
+            languageTag = if (isEn) "en-US" else "id-ID"
+        )
+        try {
+            followUpVoiceLauncher.launch(intent)
+        } catch (_: ActivityNotFoundException) {
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Google Voice-to-Text service is not available on this device."
+                } else {
+                    "Layanan Suara ke Teks Google belum tersedia di perangkat ini."
+                },
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            Toast.makeText(
+                context,
+                if (isEn) {
+                    "Unable to launch voice input: ${e.message ?: "Error"}"
+                } else {
+                    "Gagal membuka input suara: ${e.message ?: "Error"}"
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+    }
 
     var showPreview by remember { mutableStateOf(false) }
     var showUnsavedDialog by remember { mutableStateOf(false) }
@@ -214,7 +282,9 @@ internal fun SerahTerimaShiftEditor(
         outsideDutyStaff = outsideDutyStaff,
         followUpNotes = followUpNotes,
         completedActivities = completedActivities,
-        footerText = footerText
+        footerText = footerText,
+        syncedShiftMessageId = syncedShiftMessageId,
+        autoSyncShiftMessage = autoSyncShiftMessage
     )
 
     fun currentPreviewReport(targetStatus: String = status): ShiftHandoverReport = initialReport.copy(
@@ -271,7 +341,10 @@ internal fun SerahTerimaShiftEditor(
         handingOverStaff = autoPay.handingOverStaff
         receivingStaff = autoPay.receivingStaff
         outsideDutyStaff = autoPay.outsideDutyStaff
-        if (followUpNotes.isBlank()) followUpNotes = autoPay.followUpNotes
+        if (followUpNotes.isBlank() && autoPay.followUpNotes.isNotBlank()) {
+            followUpNotes = autoPay.followUpNotes
+            if (syncedShiftMessageId == 0L) autoSyncShiftMessage = false
+        }
         if (footerText.isBlank()) footerText = autoPay.footerText
     }
 
@@ -298,6 +371,10 @@ internal fun SerahTerimaShiftEditor(
         ) { ok, msg, saved ->
             if (msg.isNotBlank()) Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
             if (ok && saved != null) {
+                val savedPayload = ShiftHandoverHelper.parsePayload(saved.payloadJson)
+                if (savedPayload.syncedShiftMessageId > 0L) {
+                    syncedShiftMessageId = savedPayload.syncedShiftMessageId
+                }
                 onSaved(saved)
                 if (closeAfter) onBack()
             }
@@ -676,6 +753,7 @@ internal fun SerahTerimaShiftEditor(
                                         Icon(Icons.Default.DeleteOutline, contentDescription = "Hapus", tint = Color(0xFFDC2626))
                                     }
                                 }
+                                var isNameFocused by remember(item.id) { mutableStateOf(false) }
                                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     OutlinedTextField(
                                         value = item.studentName,
@@ -683,8 +761,12 @@ internal fun SerahTerimaShiftEditor(
                                             sickStudents = sickStudents.mapIndexed { i, s -> if (i == idx) s.copy(studentName = newVal) else s }
                                         },
                                         label = { Text("Nama Siswa") },
+                                        placeholder = { Text(if (isEn) "Type name for auto-suggest..." else "Ketik nama untuk saran...") },
                                         singleLine = true,
-                                        modifier = Modifier.weight(1.6f)
+                                        modifier = Modifier
+                                            .weight(1.6f)
+                                            .onFocusChanged { isNameFocused = it.isFocused }
+                                            .testTag("input_sick_student_name_$idx")
                                     )
                                     OutlinedTextField(
                                         value = item.classGrade,
@@ -695,6 +777,100 @@ internal fun SerahTerimaShiftEditor(
                                         singleLine = true,
                                         modifier = Modifier.weight(0.9f)
                                     )
+                                }
+                                val matchingStudents = remember(item.studentName, item.classGrade, isNameFocused, students) {
+                                    val q = item.studentName.trim().lowercase()
+                                    val alreadyExactMatched = q.isNotBlank() && students.any { st ->
+                                        st.name.trim().equals(item.studentName.trim(), ignoreCase = true) &&
+                                            (item.classGrade.isBlank() || st.classGrade.trim().equals(item.classGrade.trim(), ignoreCase = true))
+                                    }
+                                    if (alreadyExactMatched || (!isNameFocused && q.isBlank())) {
+                                        emptyList()
+                                    } else if (q.isBlank()) {
+                                        students.sortedBy { it.name.lowercase() }.take(5)
+                                    } else {
+                                        students
+                                            .filter { st ->
+                                                st.name.lowercase().contains(q) || st.classGrade.lowercase().contains(q)
+                                            }
+                                            .sortedWith(
+                                                compareByDescending<ChildStudent> { it.name.lowercase().startsWith(q) }
+                                                    .thenBy { it.name.lowercase() }
+                                            )
+                                            .take(6)
+                                    }
+                                }
+                                AnimatedVisibility(visible = matchingStudents.isNotEmpty()) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.surface,
+                                        border = BorderStroke(1.dp, Color(0xFF0F766E).copy(alpha = 0.45f)),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("card_sick_student_suggestions_$idx")
+                                    ) {
+                                        Column {
+                                            Text(
+                                                text = if (isEn) {
+                                                    "Database Suggestions (tap to fill name & class):"
+                                                } else {
+                                                    "Saran Database Siswa (ketuk untuk isi nama & kelas):"
+                                                },
+                                                fontSize = 10.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF0F766E),
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                            )
+                                            matchingStudents.forEach { candidate ->
+                                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .heightIn(min = 48.dp)
+                                                        .clickable {
+                                                            sickStudents = sickStudents.mapIndexed { i, s ->
+                                                                if (i == idx) {
+                                                                    s.copy(
+                                                                        studentName = candidate.name.trim().uppercase(),
+                                                                        classGrade = candidate.classGrade.trim()
+                                                                    )
+                                                                } else s
+                                                            }
+                                                        }
+                                                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                                                        .testTag("btn_suggest_sick_student_${idx}_${candidate.id}"),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = candidate.name.trim().uppercase(),
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Text(
+                                                            text = listOfNotNull(
+                                                                candidate.classGrade.takeIf { it.isNotBlank() },
+                                                                candidate.dormitory.takeIf { it.isNotBlank() }
+                                                            ).joinToString(" • "),
+                                                            fontSize = 10.5.sp,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = if (isEn) "Select" else "Pilih",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = Color(0xFF0F766E)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                                 OutlinedTextField(
                                     value = item.statusText,
@@ -891,26 +1067,154 @@ internal fun SerahTerimaShiftEditor(
                 EditorSectionCard(title = "📝 Catatan Tindak Lanjut") {
                     OutlinedTextField(
                         value = followUpNotes,
-                        onValueChange = { followUpNotes = it },
+                        onValueChange = { newVal ->
+                            followUpNotes = newVal
+                            if (newVal.isNotBlank()) {
+                                autoSyncShiftMessage = true
+                            }
+                        },
                         label = { Text("Catatan Tindak Lanjut Shift Berikutnya") },
+                        placeholder = {
+                            Text(
+                                text = if (isEn) {
+                                    "Type or tap mic to dictate follow-up notes..."
+                                } else {
+                                    "Ketik manual atau ketuk mikrofon untuk dikte suara..."
+                                },
+                                fontSize = 12.sp
+                            )
+                        },
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { startFollowUpVoiceInput() },
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .testTag("btn_handover_voice_followup_inline")
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Mic,
+                                    contentDescription = if (isEn) "Voice to text" else "Dikte suara ke teks",
+                                    tint = Color(0xFF0F766E)
+                                )
+                            }
+                        },
                         minLines = 3,
                         maxLines = 8,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("input_handover_followup_notes")
                     )
+
                     val openShiftMsgs = remember(shiftMessages) { shiftMessages.filter { !it.isCompleted } }
-                    if (openShiftMsgs.isNotEmpty()) {
-                        OutlinedButton(
-                            onClick = {
-                                val imported = openShiftMsgs.take(5).joinToString("\n") { msg ->
-                                    val c = msg.messageContent.trim().ifBlank { msg.title.trim() }
-                                    if (msg.title.isNotBlank() && c != msg.title.trim()) "• ${msg.title.trim()}: $c" else "• $c"
-                                }
-                                followUpNotes = if (followUpNotes.isBlank()) imported else "${followUpNotes.trim()}\n$imported"
-                            },
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { startFollowUpVoiceInput() },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0369A1)),
                             shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_handover_voice_followup")
                         ) {
-                            Text("Ambil dari Pesan Operan Shift (${openShiftMsgs.size} Aktif)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = if (isEn) "Voice to Text" else "Dikte Suara",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
+                        if (openShiftMsgs.isNotEmpty()) {
+                            OutlinedButton(
+                                onClick = {
+                                    val imported = openShiftMsgs.take(5).joinToString("\n") { msg ->
+                                        val c = msg.messageContent.trim().ifBlank { msg.title.trim() }
+                                        if (msg.title.isNotBlank() && c != msg.title.trim()) "• ${msg.title.trim()}: $c" else "• $c"
+                                    }
+                                    val wasEmpty = followUpNotes.isBlank()
+                                    followUpNotes = if (wasEmpty) imported else "${followUpNotes.trim()}\n$imported"
+                                    if (wasEmpty && syncedShiftMessageId == 0L) {
+                                        autoSyncShiftMessage = false
+                                    }
+                                },
+                                shape = RoundedCornerShape(10.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .heightIn(min = 48.dp)
+                                    .testTag("btn_handover_import_shift_msgs")
+                            ) {
+                                Text(
+                                    text = if (isEn) {
+                                        "Pull Shift Notes (${openShiftMsgs.size})"
+                                    } else {
+                                        "Ambil Pesan (${openShiftMsgs.size} Aktif)"
+                                    },
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+
+                    val targetShiftLabel = remember(handoverType, toShiftLabel) {
+                        ShiftHandoverHelper.resolveTargetShiftMessageLabel(handoverType, toShiftLabel)
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (autoSyncShiftMessage) Color(0xFFECFDF5) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        border = BorderStroke(
+                            1.dp,
+                            if (autoSyncShiftMessage) Color(0xFF10B981).copy(alpha = 0.45f)
+                            else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { autoSyncShiftMessage = !autoSyncShiftMessage }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isEn) {
+                                        "Auto-save to Next Shift Messages"
+                                    } else {
+                                        "Otomatis simpan ke Pesan Shift Berikutnya"
+                                    },
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (autoSyncShiftMessage) Color(0xFF065F46) else MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = buildString {
+                                        append(if (isEn) "Target: " else "Target: ")
+                                        append(targetShiftLabel)
+                                        append(" • Sync PocketBase")
+                                        if (syncedShiftMessageId > 0L) {
+                                            append(if (isEn) " • Linked" else " • Sudah tertaut")
+                                        }
+                                    },
+                                    fontSize = 10.5.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Switch(
+                                checked = autoSyncShiftMessage,
+                                onCheckedChange = { autoSyncShiftMessage = it },
+                                modifier = Modifier.testTag("switch_handover_auto_shift_message")
+                            )
                         }
                     }
                 }

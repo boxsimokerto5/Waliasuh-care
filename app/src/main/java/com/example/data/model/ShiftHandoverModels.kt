@@ -66,7 +66,9 @@ data class ShiftHandoverPayload(
     val outsideDutyStaff: List<HandoverOutsideDutyItem> = emptyList(),
     val followUpNotes: String = "",
     val completedActivities: List<String> = emptyList(),
-    val footerText: String = ""
+    val footerText: String = "",
+    val syncedShiftMessageId: Long = 0L,
+    val autoSyncShiftMessage: Boolean = false
 )
 
 object ShiftHandoverHelper {
@@ -133,6 +135,23 @@ object ShiftHandoverHelper {
             in 4..10 -> TYPE_MALAM_KE_PAGI
             in 11..18 -> TYPE_PAGI_KE_SORE
             else -> TYPE_SORE_KE_MALAM
+        }
+    }
+
+    fun resolveTargetShiftMessageLabel(handoverType: String, toShiftLabel: String = ""): String {
+        return when (normalizeType(handoverType)) {
+            TYPE_PAGI_KE_SORE -> "Shift Sore"
+            TYPE_SORE_KE_MALAM -> "Shift Malam"
+            TYPE_MALAM_KE_PAGI -> "Shift Pagi"
+            else -> {
+                val lower = toShiftLabel.lowercase()
+                when {
+                    lower.contains("pagi") -> "Shift Pagi"
+                    lower.contains("sore") -> "Shift Sore"
+                    lower.contains("malam") -> "Shift Malam"
+                    else -> "Semua Shift"
+                }
+            }
         }
     }
 
@@ -260,7 +279,9 @@ object ShiftHandoverHelper {
                 outsideDutyStaff = outList,
                 followUpNotes = obj.optString("followUpNotes", ""),
                 completedActivities = actList,
-                footerText = obj.optString("footerText", "")
+                footerText = obj.optString("footerText", ""),
+                syncedShiftMessageId = obj.optLong("syncedShiftMessageId", 0L),
+                autoSyncShiftMessage = obj.optBoolean("autoSyncShiftMessage", false)
             )
         }.getOrDefault(ShiftHandoverPayload())
     }
@@ -317,6 +338,10 @@ object ShiftHandoverHelper {
         obj.put("followUpNotes", payload.followUpNotes.trim())
         obj.put("completedActivities", actArr)
         obj.put("footerText", payload.footerText.trim())
+        if (payload.syncedShiftMessageId > 0L) {
+            obj.put("syncedShiftMessageId", payload.syncedShiftMessageId)
+        }
+        obj.put("autoSyncShiftMessage", payload.autoSyncShiftMessage)
         return obj.toString()
     }
 
