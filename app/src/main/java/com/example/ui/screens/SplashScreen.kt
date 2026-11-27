@@ -116,7 +116,7 @@ private data class SplashAtmosphere(
  * - Full-bleed time-aware atmospheric ocean-emerald gradient & undulating horizon waves
  * - 4 converging pillar nodes (Kesehatan, Ibadah, Asrama, Orang Tua) merging into the official crest
  * - Spring logo reveal with guardian ripple rings & diagonal shimmer sweep
- * - Clean ~2.4s sequence with subtle breathing dots (no heavy progress bar/countdown)
+ * - Clean 5-second sequence with subtle breathing dots & second shimmer sweep (no heavy progress bar/countdown)
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -219,14 +219,14 @@ fun SplashScreen(
         launch {
             convergenceProgress.animateTo(
                 targetValue = 1f,
-                animationSpec = tween(durationMillis = 720, easing = FastOutSlowInEasing)
+                animationSpec = tween(durationMillis = 900, easing = FastOutSlowInEasing)
             )
         }
 
-        // Phase 2: Crest springs into view as pillars meet
-        delay(360)
+        // Phase 2: Crest springs into view as pillars meet (t = 480ms)
+        delay(480)
         launch {
-            logoAlpha.animateTo(1f, tween(durationMillis = 280))
+            logoAlpha.animateTo(1f, tween(durationMillis = 320))
         }
         launch {
             logoScale.animateTo(
@@ -238,20 +238,29 @@ fun SplashScreen(
             )
         }
         launch {
-            burstProgress.animateTo(1f, tween(durationMillis = 820, easing = FastOutSlowInEasing))
+            burstProgress.animateTo(1f, tween(durationMillis = 950, easing = FastOutSlowInEasing))
         }
 
-        // Phase 3: Brand title + greeting + 4-pillar pills + diagonal shimmer
-        delay(420)
+        // Phase 3: Brand title + greeting + diagonal shimmer (t = 980ms)
+        delay(500)
         showBrandCopy = true
         launch {
-            shimmerSweep.animateTo(1.8f, tween(durationMillis = 750, easing = FastOutSlowInEasing))
+            shimmerSweep.animateTo(1.8f, tween(durationMillis = 900, easing = FastOutSlowInEasing))
         }
-        delay(180)
+
+        // Phase 4: 4-Pillar ecosystem chips appear (t = 1320ms)
+        delay(340)
         showPillarsStrip = true
 
-        // Hold cleanly to appreciate motion, then silky exit (~2.45s total)
-        delay(1300)
+        // Phase 5: Second gentle light shimmer sweep during atmospheric hold (t = 3100ms)
+        delay(1780)
+        launch {
+            shimmerSweep.snapTo(-0.6f)
+            shimmerSweep.animateTo(1.8f, tween(durationMillis = 950, easing = FastOutSlowInEasing))
+        }
+
+        // Finish at ~5.0 seconds total (4760ms + 240ms graceful exit = 5000ms)
+        delay(1660)
         finishGracefully()
     }
 
