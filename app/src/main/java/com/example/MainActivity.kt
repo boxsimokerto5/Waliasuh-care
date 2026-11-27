@@ -10,6 +10,12 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalConfiguration
@@ -131,12 +137,20 @@ class MainActivity : ComponentActivity() {
                 LocalAppStrings provides appStrings
             ) {
                 MyApplicationTheme(darkTheme = isDarkTheme) {
-                    if (showSplashScreen) {
-                        SplashScreen(
-                            onFinish = { showSplashScreen = false }
-                        )
-                    } else {
-                        when {
+                    AnimatedContent(
+                        targetState = showSplashScreen,
+                        transitionSpec = {
+                            (fadeIn(animationSpec = tween(360)) + scaleIn(initialScale = 0.98f, animationSpec = tween(360)))
+                                .togetherWith(fadeOut(animationSpec = tween(220)))
+                        },
+                        label = "splash_to_app_transition"
+                    ) { isSplashVisible ->
+                        if (isSplashVisible) {
+                            SplashScreen(
+                                onFinish = { showSplashScreen = false }
+                            )
+                        } else {
+                            when {
                             userRole == UserRole.NOT_LOGGED_IN -> {
                                 LoginScreen(
                                     viewModel = viewModel,
@@ -186,6 +200,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
+                        }
                         }
                     }
                 }
