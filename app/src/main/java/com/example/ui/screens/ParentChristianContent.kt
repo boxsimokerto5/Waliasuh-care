@@ -5,6 +5,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,8 +20,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -34,6 +38,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -49,31 +54,41 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import coil.compose.AsyncImage
 import coil.compose.rememberAsyncImagePainter
+import coil.request.ImageRequest
 import com.example.R
 import com.example.data.model.ChildStudent
 import com.example.data.model.ChristianWorshipHelper
 import com.example.data.model.ChristianWorshipLocalSave
 import com.example.data.model.ChristianWorshipRecord
 import com.example.data.model.SchoolProfile
+import com.example.ui.components.ConfigureEdgeToEdgeDialogWindow
 import com.example.ui.components.ParentReadyPdfDialogData
 import com.example.ui.dialogs.RewardAdDeclarationDialog
 import com.example.ui.dialogs.RewardAdDeclarationHint
@@ -733,56 +748,239 @@ fun ParentChristianWorshipContent(
         var activeIdx by remember(rec.id, initialIdx) {
             mutableStateOf(initialIdx.coerceIn(0, (entries.size - 1).coerceAtLeast(0)))
         }
-        val activeModel: Any? = entries.getOrNull(activeIdx)?.primaryModel
+        val activeEntry = entries.getOrNull(activeIdx)
+        val fallbackModel = activeEntry?.fallbackUrl?.takeIf { it.isNotBlank() }
+            ?: rec.photoFallbackUrl.takeIf { it.isNotBlank() }
+        var useFallback by remember(rec.id, activeIdx) { mutableStateOf(false) }
+        val primaryCandidate: Any? = activeEntry?.primaryModel
             ?: localSave?.localGalleryUri?.takeIf { it.isNotBlank() }
             ?: rec.localPhotoPath.takeIf { it.isNotBlank() }
             ?: rec.photoUrl.takeIf { it.isNotBlank() }
-            ?: rec.photoFallbackUrl.takeIf { it.isNotBlank() }
+            ?: fallbackModel
+        val activeModel: Any? = if (useFallback && !fallbackModel.isNullOrBlank()) fallbackModel else primaryCandidate
+
+        var scale by remember(rec.id, activeIdx) { mutableFloatStateOf(1f) }
+        var offset by remember(rec.id, activeIdx) { mutableStateOf(Offset.Zero) }
+        var containerSize by remember { mutableStateOf(IntSize.Zero) }
+
         Dialog(
             onDismissRequest = { previewState = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false
+            )
         ) {
+            ConfigureEdgeToEdgeDialogWindow(
+                lightStatusBars = false,
+                lightNavigationBars = false
+            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.92f))
-                    .padding(16.dp)
+                    .background(Color.Black.copy(alpha = 0.96f))
+                    .clipToBounds()
+                    .onSizeChanged { containerSize = it }
+                    .pointerInput(rec.id, activeIdx) {
+                        detectTransformGestures { centroid, pan, zoom, _ ->
+                            val oldScale = scale
+                            val newScale = (oldScale * zoom).coerceIn(1f, 5f)
+                            scale = newScale
+                            if (newScale <= 1.01f) {
+                                scale = 1f
+                                offset = Offset.Zero
+                            } else {
+                                val scaleFactor = if (oldScale > 0f) newScale / oldScale else 1f
+                                val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                val centroidFromCenter = centroid - center
+                                val maxX = (containerSize.width * (newScale - 1f)) / 2f
+                                val maxY = (containerSize.height * (newScale - 1f)) / 2f
+                                val nextOffset = (offset - centroidFromCenter) * scaleFactor + centroidFromCenter + pan
+                                offset = Offset(
+                                    x = nextOffset.x.coerceIn(-maxX, maxX),
+                                    y = nextOffset.y.coerceIn(-maxY, maxY)
+                                )
+                            }
+                        }
+                    }
+                    .pointerInput(rec.id, activeIdx) {
+                        detectTapGestures(
+                            onDoubleTap = { tapOffset ->
+                                if (scale > 1.2f) {
+                                    scale = 1f
+                                    offset = Offset.Zero
+                                } else {
+                                    val targetScale = 2.5f
+                                    val center = Offset(containerSize.width / 2f, containerSize.height / 2f)
+                                    val tapFromCenter = tapOffset - center
+                                    val maxX = (containerSize.width * (targetScale - 1f)) / 2f
+                                    val maxY = (containerSize.height * (targetScale - 1f)) / 2f
+                                    scale = targetScale
+                                    offset = Offset(
+                                        x = (-tapFromCenter.x * (targetScale - 1f)).coerceIn(-maxX, maxX),
+                                        y = (-tapFromCenter.y * (targetScale - 1f)).coerceIn(-maxY, maxY)
+                                    )
+                                }
+                            }
+                        )
+                    }
             ) {
                 if (activeModel != null) {
-                    Image(
-                        painter = rememberAsyncImagePainter(model = activeModel),
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(activeModel)
+                            .crossfade(true)
+                            .build(),
                         contentDescription = rec.title.ifBlank { rec.studentName },
                         contentScale = ContentScale.Fit,
-                        modifier = Modifier.fillMaxSize()
+                        onError = {
+                            if (!useFallback && !fallbackModel.isNullOrBlank() && activeModel != fallbackModel) {
+                                useFallback = true
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                                translationX = offset.x
+                                translationY = offset.y
+                            }
+                            .testTag("img_parent_christian_preview_zoomable")
                     )
                 }
-                IconButton(
-                    onClick = { previewState = null },
-                    modifier = Modifier.align(Alignment.TopEnd)
+
+                // Header bar dengan judul kegiatan, indikator zoom, dan tombol tutup (min 48.dp)
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.55f))
+                        .statusBarsPadding()
+                        .padding(start = 16.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup", tint = Color.White)
-                }
-                if (entries.size > 1) {
-                    Row(
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        entries.forEachIndexed { idx, _ ->
-                            val isSelected = idx == activeIdx
-                            Button(
-                                onClick = { activeIdx = idx },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isSelected) Color(0xFF4F46E5) else Color.White.copy(alpha = 0.22f),
-                                    contentColor = Color.White
-                                ),
-                                modifier = Modifier.heightIn(min = 48.dp)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = rec.title.ifBlank { ChristianWorshipHelper.activityLabel(rec.activityType, isEn) },
+                            color = Color.White,
+                            fontSize = 14.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = DateUtils.formatShortDate(rec.activityDate, lang),
+                            color = Color.White.copy(alpha = 0.78f),
+                            fontSize = 11.5.sp,
+                            maxLines = 1
+                        )
+                    }
+
+                    if (scale > 1.05f) {
+                        Surface(
+                            onClick = {
+                                scale = 1f
+                                offset = Offset.Zero
+                            },
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.White.copy(alpha = 0.22f),
+                            modifier = Modifier
+                                .heightIn(min = 36.dp)
+                                .testTag("btn_reset_parent_christian_zoom")
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
                             ) {
+                                Icon(
+                                    imageVector = Icons.Default.ZoomOutMap,
+                                    contentDescription = if (isEn) "Reset zoom" else "Reset zoom",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Text(
-                                    text = if (isEn) "Photo ${idx + 1}" else "Foto ${idx + 1}",
+                                    text = "${(scale * 100).toInt()}%",
+                                    color = Color.White,
+                                    fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold
                                 )
+                            }
+                        }
+                    }
+
+                    IconButton(
+                        onClick = { previewState = null },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .testTag("btn_close_parent_christian_preview")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = if (isEn) "Close" else "Tutup",
+                            tint = Color.White
+                        )
+                    }
+                }
+
+                // Footer: petunjuk zoom 2 jari + tombol ganti Foto 1 / Foto 2
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    if (scale <= 1.05f) {
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = Color.Black.copy(alpha = 0.58f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ZoomIn,
+                                    contentDescription = null,
+                                    tint = Color.White.copy(alpha = 0.9f),
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = if (isEn) "Pinch with 2 fingers or double-tap to zoom" else "Cubit 2 jari atau ketuk 2x untuk zoom",
+                                    color = Color.White.copy(alpha = 0.9f),
+                                    fontSize = 11.5.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+
+                    if (entries.size > 1) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            entries.forEachIndexed { idx, _ ->
+                                val isSelected = idx == activeIdx
+                                Button(
+                                    onClick = { activeIdx = idx },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isSelected) Color(0xFF4F46E5) else Color.White.copy(alpha = 0.22f),
+                                        contentColor = Color.White
+                                    ),
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_parent_christian_preview_photo_$idx")
+                                ) {
+                                    Text(
+                                        text = if (isEn) "Photo ${idx + 1}" else "Foto ${idx + 1}",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
                     }

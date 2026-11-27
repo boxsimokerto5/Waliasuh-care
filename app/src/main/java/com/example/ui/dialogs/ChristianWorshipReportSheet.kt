@@ -7,6 +7,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -59,21 +61,28 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.rememberAsyncImagePainter
@@ -566,15 +575,96 @@ fun ChristianWorshipReportSheet(
                         Icon(Icons.Default.Close, contentDescription = if (isEn) "Close" else "Tutup")
                     }
                 }
-                Image(
-                    painter = rememberAsyncImagePainter(activeModel),
-                    contentDescription = rec.title.ifBlank { rec.studentName },
-                    contentScale = ContentScale.Fit,
+                var zoomScale by remember(rec.id, activeIdx) { mutableFloatStateOf(1f) }
+                var zoomOffset by remember(rec.id, activeIdx) { mutableStateOf(Offset.Zero) }
+                var previewContainerSize by remember { mutableStateOf(IntSize.Zero) }
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(300.dp)
                         .clip(RoundedCornerShape(14.dp))
-                )
+                        .clipToBounds()
+                        .background(Color.Black.copy(alpha = 0.08f))
+                        .onSizeChanged { previewContainerSize = it }
+                        .pointerInput(rec.id, activeIdx) {
+                            detectTransformGestures { centroid, pan, zoom, _ ->
+                                val oldScale = zoomScale
+                                val newScale = (oldScale * zoom).coerceIn(1f, 5f)
+                                zoomScale = newScale
+                                if (newScale <= 1.01f) {
+                                    zoomScale = 1f
+                                    zoomOffset = Offset.Zero
+                                } else {
+                                    val scaleFactor = if (oldScale > 0f) newScale / oldScale else 1f
+                                    val center = Offset(previewContainerSize.width / 2f, previewContainerSize.height / 2f)
+                                    val centroidFromCenter = centroid - center
+                                    val maxX = (previewContainerSize.width * (newScale - 1f)) / 2f
+                                    val maxY = (previewContainerSize.height * (newScale - 1f)) / 2f
+                                    val nextOffset = (zoomOffset - centroidFromCenter) * scaleFactor + centroidFromCenter + pan
+                                    zoomOffset = Offset(
+                                        x = nextOffset.x.coerceIn(-maxX, maxX),
+                                        y = nextOffset.y.coerceIn(-maxY, maxY)
+                                    )
+                                }
+                            }
+                        }
+                        .pointerInput(rec.id, activeIdx) {
+                            detectTapGestures(
+                                onDoubleTap = { tapOffset ->
+                                    if (zoomScale > 1.2f) {
+                                        zoomScale = 1f
+                                        zoomOffset = Offset.Zero
+                                    } else {
+                                        val targetScale = 2.5f
+                                        val center = Offset(previewContainerSize.width / 2f, previewContainerSize.height / 2f)
+                                        val tapFromCenter = tapOffset - center
+                                        val maxX = (previewContainerSize.width * (targetScale - 1f)) / 2f
+                                        val maxY = (previewContainerSize.height * (targetScale - 1f)) / 2f
+                                        zoomScale = targetScale
+                                        zoomOffset = Offset(
+                                            x = (-tapFromCenter.x * (targetScale - 1f)).coerceIn(-maxX, maxX),
+                                            y = (-tapFromCenter.y * (targetScale - 1f)).coerceIn(-maxY, maxY)
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                ) {
+                    Image(
+                        painter = rememberAsyncImagePainter(activeModel),
+                        contentDescription = rec.title.ifBlank { rec.studentName },
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .graphicsLayer {
+                                scaleX = zoomScale
+                                scaleY = zoomScale
+                                translationX = zoomOffset.x
+                                translationY = zoomOffset.y
+                            }
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color.Black.copy(alpha = 0.58f),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = if (zoomScale > 1.05f) {
+                                "${(zoomScale * 100).toInt()}%"
+                            } else if (isEn) {
+                                "Pinch / 2x tap to zoom"
+                            } else {
+                                "Cubit 2 jari / ketuk 2x"
+                            },
+                            color = Color.White,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
                 if (entries.size > 1) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
