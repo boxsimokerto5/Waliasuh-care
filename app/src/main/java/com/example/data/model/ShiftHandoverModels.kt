@@ -438,28 +438,13 @@ object ShiftHandoverHelper {
         }.distinct()
 
         // Leave Wali Asuh pada hari laporan
-        val leaveEntries = monthEntries.mapNotNull { entry ->
-            val leaveInfo = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[safeDay]
-            val code = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[safeDay]
-                ?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
-            val group = if (code.isNotBlank()) WaliScheduleHelper.resolveShiftGroup(code, shiftMap) else ""
-            when {
-                leaveInfo != null -> HandoverLeaveItem(
-                    waliName = entry.waliName.trim(),
-                    leaveDetail = formatLeaveDetailText(leaveInfo),
-                    driveUrl = leaveInfo.driveUrl.trim()
-                )
-                group == WaliScheduleHelper.GROUP_IZIN -> {
-                    val shiftName = shiftMap[code]?.name?.takeIf { it.isNotBlank() } ?: "Izin"
-                    HandoverLeaveItem(
-                        waliName = entry.waliName.trim(),
-                        leaveDetail = shiftName,
-                        driveUrl = ""
-                    )
-                }
-                else -> null
-            }
-        }
+        val leaveEntries = extractScheduleLeavesForDay(
+            schoolId = cleanSchoolId,
+            monthKey = monthKey,
+            day = safeDay,
+            allScheduleEntries = monthEntries,
+            shiftCodes = effectiveCodes
+        )
 
         // Petugas Jaga di Luar Sekolah Rakyat (Pin Faskes / RS pada hari tersebut)
         val outsideDutyStaff = mutableListOf<HandoverOutsideDutyItem>()
@@ -601,9 +586,113 @@ object ShiftHandoverHelper {
         return report.copy(payloadJson = serializePayload(payload)) to payload
     }
 
+    fun extractScheduleLeavesForDay(
+        schoolId: String,
+        monthKey: String,
+        day: Int,
+        allScheduleEntries: List<WaliScheduleEntry>,
+        shiftCodes: List<WaliShiftCode>
+    ): List<HandoverLeaveItem> {
+        if (allScheduleEntries.isEmpty()) return emptyList()
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val maxDay = WaliScheduleHelper.daysInMonth(monthKey)
+        val safeDay = day.coerceIn(1, maxDay)
+        val effectiveCodes = shiftCodes.ifEmpty { WaliScheduleHelper.defaultShiftCodes(cleanSchoolId) }
+        val shiftMap = WaliScheduleHelper.buildShiftMap(effectiveCodes, cleanSchoolId)
+
+        val monthEntries = allScheduleEntries
+            .filter { it.monthKey == monthKey }
+            .sortedWith(compareBy<WaliScheduleEntry> { it.sortOrder }.thenBy { it.waliName.lowercase() })
+
+        return monthEntries.mapNotNull { entry ->
+            val leaveInfo = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[safeDay]
+            val code = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[safeDay]
+                ?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
+            val group = if (code.isNotBlank()) WaliScheduleHelper.resolveShiftGroup(code, shiftMap) else ""
+            when {
+                leaveInfo != null -> {
+                    val formatted = formatLeaveDetailText(leaveInfo)
+                    val fallbackCodeName = shiftMap[code]?.name?.takeIf { it.isNotBlank() }
+                    val resolvedDetail = if (formatted == "Izin" && fallbackCodeName != null) {
+                        fallbackCodeName
+                    } else {
+                        formatted
+                    }
+                    HandoverLeaveItem(
+                        waliName = entry.waliName.trim(),
+                        leaveDetail = resolvedDetail,
+                        driveUrl = leaveInfo.driveUrl.trim()
+                    )
+                }
+                group == WaliScheduleHelper.GROUP_IZIN -> {
+                    val shiftName = shiftMap[code]?.name?.takeIf { it.isNotBlank() } ?: "Izin"
+                    HandoverLeaveItem(
+                        waliName = entry.waliName.trim(),
+                        leaveDetail = shiftName,
+                        driveUrl = ""
+                    )
+                }
+                else -> null
+            }
+        }
+    }
+
+    private fun isGenericLeaveDetail(detail: String): Boolean {
+        val norm = detail.trim().lowercase()
+        return norm.isBlank() ||
+            norm == "izin" ||
+            norm == "izin / sakit" ||
+            norm == "izin/sakit" ||
+            norm == "cuti" ||
+            norm == "cuti resmi"
+    }
+
+    fun enrichLeaveEntriesFromSchedule(
+        existingLeaves: List<HandoverLeaveItem>,
+        schoolId: String,
+        monthKey: String,
+        day: Int,
+        allScheduleEntries: List<WaliScheduleEntry>,
+        shiftCodes: List<WaliShiftCode>
+    ): List<HandoverLeaveItem> {
+        if (existingLeaves.isEmpty() || allScheduleEntries.isEmpty()) return existingLeaves
+        val scheduleLeaves = extractScheduleLeavesForDay(
+            schoolId = schoolId,
+            monthKey = monthKey,
+            day = day,
+            allScheduleEntries = allScheduleEntries,
+            shiftCodes = shiftCodes
+        )
+        if (scheduleLeaves.isEmpty()) return existingLeaves
+        val scheduleByName = scheduleLeaves
+            .filter { it.waliName.isNotBlank() }
+            .associateBy { it.waliName.trim().lowercase() }
+
+        return existingLeaves.map { item ->
+            val key = item.waliName.trim().lowercase()
+            val matched = scheduleByName[key] ?: return@map item
+            val mergedUrl = item.driveUrl.trim().ifBlank { matched.driveUrl.trim() }
+            val mergedDetail = if (
+                isGenericLeaveDetail(item.leaveDetail) &&
+                !isGenericLeaveDetail(matched.leaveDetail)
+            ) {
+                matched.leaveDetail
+            } else {
+                item.leaveDetail
+            }
+            if (mergedUrl == item.driveUrl && mergedDetail == item.leaveDetail) {
+                item
+            } else {
+                item.copy(leaveDetail = mergedDetail, driveUrl = mergedUrl)
+            }
+        }
+    }
+
     fun formatWhatsAppReport(
         report: ShiftHandoverReport,
-        payload: ShiftHandoverPayload = parsePayload(report.payloadJson)
+        payload: ShiftHandoverPayload = parsePayload(report.payloadJson),
+        allScheduleEntries: List<WaliScheduleEntry> = emptyList(),
+        shiftCodes: List<WaliShiftCode> = emptyList()
     ): String {
         val sb = StringBuilder()
         val cleanTitle = report.title.trim().ifBlank { defaultTitleForType(report.handoverType) }.uppercase()
@@ -643,7 +732,19 @@ object ShiftHandoverHelper {
         }
         sb.appendLine()
         sb.appendLine("📄 *DATA IZIN WALI ASUH (DILENGKAPI BUKTI):*")
-        val validLeaves = payload.leaveEntries.filter { it.waliName.isNotBlank() }
+        val enrichedLeaves = if (allScheduleEntries.isNotEmpty() && payload.leaveEntries.isNotEmpty()) {
+            enrichLeaveEntriesFromSchedule(
+                existingLeaves = payload.leaveEntries,
+                schoolId = report.schoolId,
+                monthKey = report.monthKey,
+                day = report.day,
+                allScheduleEntries = allScheduleEntries,
+                shiftCodes = shiftCodes
+            )
+        } else {
+            payload.leaveEntries
+        }
+        val validLeaves = enrichedLeaves.filter { it.waliName.isNotBlank() }
         if (validLeaves.isEmpty()) {
             sb.appendLine("  - Tidak ada Wali Asuh izin hari ini")
         } else {

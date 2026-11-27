@@ -751,11 +751,19 @@ fun SerahTerimaShiftSheet(
                                 },
                                 onShareWa = {
                                     TopOnAdManager.onUserActionClick(context)
-                                    val text = ShiftHandoverHelper.formatWhatsAppReport(report)
+                                    val text = ShiftHandoverHelper.formatWhatsAppReport(
+                                        report = report,
+                                        allScheduleEntries = allScheduleEntries,
+                                        shiftCodes = shiftCodes
+                                    )
                                     shareHandoverToWhatsApp(context, text, isEn)
                                 },
                                 onCopy = {
-                                    val text = ShiftHandoverHelper.formatWhatsAppReport(report)
+                                    val text = ShiftHandoverHelper.formatWhatsAppReport(
+                                        report = report,
+                                        allScheduleEntries = allScheduleEntries,
+                                        shiftCodes = shiftCodes
+                                    )
                                     copyHandoverText(context, text, isEn)
                                 },
                                 onDelete = { pendingDeleteReport = report }

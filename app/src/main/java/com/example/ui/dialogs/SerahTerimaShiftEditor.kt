@@ -76,6 +76,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -215,6 +216,22 @@ internal fun SerahTerimaShiftEditor(
                 initialPayload.followUpNotes.isBlank()
             }
         )
+    }
+
+    LaunchedEffect(initialReport.id, allScheduleEntries, shiftCodes, monthKey, day) {
+        if (allScheduleEntries.isNotEmpty() && leaveEntries.isNotEmpty()) {
+            val enriched = ShiftHandoverHelper.enrichLeaveEntriesFromSchedule(
+                existingLeaves = leaveEntries,
+                schoolId = initialReport.schoolId.ifBlank { schoolProfile.tenantCode },
+                monthKey = monthKey,
+                day = day,
+                allScheduleEntries = allScheduleEntries,
+                shiftCodes = shiftCodes
+            )
+            if (enriched != leaveEntries) {
+                leaveEntries = enriched
+            }
+        }
     }
 
     val followUpVoiceLauncher = rememberLauncherForActivityResult(
@@ -385,9 +402,15 @@ internal fun SerahTerimaShiftEditor(
         monthKey, day, handoverType, status, title, schoolName, serviceUnit, dateLabel,
         handoverTime, fromShiftLabel, toShiftLabel, totalStudentsText, presentStudentsText,
         sickCountText, fastingCountText, sickStudents, leaveEntries, handingOverStaff,
-        receivingStaff, outsideDutyStaff, followUpNotes, completedActivities, footerText
+        receivingStaff, outsideDutyStaff, followUpNotes, completedActivities, footerText,
+        allScheduleEntries, shiftCodes
     ) {
-        ShiftHandoverHelper.formatWhatsAppReport(currentPreviewReport(), currentPayload())
+        ShiftHandoverHelper.formatWhatsAppReport(
+            report = currentPreviewReport(),
+            payload = currentPayload(),
+            allScheduleEntries = allScheduleEntries,
+            shiftCodes = shiftCodes
+        )
     }
 
     BackHandler {

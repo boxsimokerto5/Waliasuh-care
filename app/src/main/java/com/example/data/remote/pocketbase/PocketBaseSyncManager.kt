@@ -5407,6 +5407,7 @@ object PocketBaseSyncManager {
         val service = PocketBaseClient.getService(context) ?: return@withContext
         val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
         val filter = buildSchoolFilter(cleanSchoolId)
+        runCatching { syncWaliScheduleEntriesMerged(service, cleanSchoolId, filter, repository) }
         runCatching { syncShiftHandoversMerged(service, cleanSchoolId, filter, repository) }
     }
 }
