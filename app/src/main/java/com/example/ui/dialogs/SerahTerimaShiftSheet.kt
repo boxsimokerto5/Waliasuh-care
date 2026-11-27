@@ -74,6 +74,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
+import com.example.data.model.HaidRecord
 import com.example.data.model.MedicalRecord
 import com.example.data.model.SchoolProfile
 import com.example.data.model.ShiftHandoverHelper
@@ -104,6 +105,7 @@ fun SerahTerimaShiftSheet(
     students: List<ChildStudent>,
     medicalRecords: List<MedicalRecord>,
     fastingRecords: List<FastingRecord>,
+    haidRecords: List<HaidRecord> = emptyList(),
     shiftMessages: List<ShiftMessage>,
     waliAccounts: List<WaliAccount>,
     currentUsername: String?,
@@ -179,6 +181,7 @@ fun SerahTerimaShiftSheet(
                 students = students,
                 medicalRecords = medicalRecords,
                 fastingRecords = fastingRecords,
+                haidRecords = haidRecords,
                 shiftMessages = shiftMessages,
                 waliAccounts = waliAccounts,
                 currentUsername = currentUsername,
@@ -264,7 +267,8 @@ fun SerahTerimaShiftSheet(
                 fastingRecords = fastingRecords,
                 shiftMessages = shiftMessages,
                 authorUsername = currentUsername.orEmpty(),
-                authorName = currentWaliName
+                authorName = currentWaliName,
+                haidRecords = haidRecords
             )
             editingExistingId = null
             newDraftCandidate = draftReport
@@ -743,6 +747,7 @@ fun SerahTerimaShiftSheet(
                         items(filteredReports, key = { it.id }) { report ->
                             ShiftHandoverCard(
                                 report = report,
+                                haidRecords = haidRecords,
                                 isEn = isEn,
                                 onEdit = {
                                     TopOnAdManager.onUserActionClick(context)
@@ -754,7 +759,8 @@ fun SerahTerimaShiftSheet(
                                     val text = ShiftHandoverHelper.formatWhatsAppReport(
                                         report = report,
                                         allScheduleEntries = allScheduleEntries,
-                                        shiftCodes = shiftCodes
+                                        shiftCodes = shiftCodes,
+                                        haidRecords = haidRecords
                                     )
                                     shareHandoverToWhatsApp(context, text, isEn)
                                 },
@@ -762,7 +768,8 @@ fun SerahTerimaShiftSheet(
                                     val text = ShiftHandoverHelper.formatWhatsAppReport(
                                         report = report,
                                         allScheduleEntries = allScheduleEntries,
-                                        shiftCodes = shiftCodes
+                                        shiftCodes = shiftCodes,
+                                        haidRecords = haidRecords
                                     )
                                     copyHandoverText(context, text, isEn)
                                 },
@@ -871,6 +878,7 @@ private fun HandoverPresetButton(
 @Composable
 private fun ShiftHandoverCard(
     report: ShiftHandoverReport,
+    haidRecords: List<HaidRecord>,
     isEn: Boolean,
     onEdit: () -> Unit,
     onShareWa: () -> Unit,
@@ -880,6 +888,13 @@ private fun ShiftHandoverCard(
     val isDraft = report.status.equals(ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true)
     val payload = remember(report.id, report.payloadJson) {
         ShiftHandoverHelper.parsePayload(report.payloadJson)
+    }
+    val effectiveHaidCount = remember(payload.haidStudentsCount, haidRecords, report.monthKey, report.day) {
+        payload.haidStudentsCount ?: ShiftHandoverHelper.countActiveHaidForDate(
+            haidRecords = haidRecords,
+            monthKey = report.monthKey,
+            day = report.day
+        )
     }
     val updatedLabel = remember(report.updatedAt) {
         runCatching {
@@ -954,6 +969,7 @@ private fun ShiftHandoverCard(
                 StatPill("Hadir ${report.presentStudents}", Color(0xFF0F766E))
                 StatPill("Sakit ${report.sickStudentsCount}", Color(0xFFDC2626))
                 StatPill("Puasa ${report.fastingStudentsCount}", Color(0xFF0369A1))
+                StatPill("Haid $effectiveHaidCount", Color(0xFFBE185D))
                 if (payload.leaveEntries.isNotEmpty()) {
                     StatPill("Izin Wali ${payload.leaveEntries.size}", Color(0xFFB45309))
                 }

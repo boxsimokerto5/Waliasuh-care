@@ -59,6 +59,7 @@ fun JadwalQuickScreen(
     val students by viewModel.students.collectAsStateWithLifecycle()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val fastingRecords by viewModel.fastingRecords.collectAsStateWithLifecycle()
+    val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
     val shiftMessages by viewModel.shiftMessages.collectAsStateWithLifecycle()
     val shiftHandoverDraftCount = remember(shiftHandovers) {
         shiftHandovers.count { it.status.equals(ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true) }
@@ -271,6 +272,7 @@ fun JadwalQuickScreen(
             students = students,
             medicalRecords = allRecords,
             fastingRecords = fastingRecords,
+            haidRecords = haidRecords,
             shiftMessages = shiftMessages,
             waliAccounts = waliAccounts,
             currentUsername = currentUsername,

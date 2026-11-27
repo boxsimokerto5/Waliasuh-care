@@ -96,6 +96,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
 import com.example.data.model.FastingRecord
+import com.example.data.model.HaidRecord
 import com.example.data.model.HandoverLeaveItem
 import com.example.data.model.HandoverOutsideDutyItem
 import com.example.data.model.HandoverSickStudentItem
@@ -150,6 +151,7 @@ internal fun SerahTerimaShiftEditor(
     students: List<ChildStudent>,
     medicalRecords: List<MedicalRecord>,
     fastingRecords: List<FastingRecord>,
+    haidRecords: List<HaidRecord> = emptyList(),
     shiftMessages: List<ShiftMessage>,
     waliAccounts: List<WaliAccount>,
     currentUsername: String?,
@@ -198,6 +200,15 @@ internal fun SerahTerimaShiftEditor(
     var presentStudentsText by remember(initialReport.id) { mutableStateOf(initialReport.presentStudents.toString()) }
     var sickCountText by remember(initialReport.id) { mutableStateOf(initialReport.sickStudentsCount.toString()) }
     var fastingCountText by remember(initialReport.id) { mutableStateOf(initialReport.fastingStudentsCount.toString()) }
+    var haidCountEditedManually by remember(initialReport.id) { mutableStateOf(false) }
+    var haidCountText by remember(initialReport.id) {
+        val initialHaid = initialPayload.haidStudentsCount ?: if (haidRecords.isNotEmpty()) {
+            ShiftHandoverHelper.countActiveHaidForDate(haidRecords, initialReport.monthKey, initialReport.day)
+        } else {
+            0
+        }
+        mutableStateOf(initialHaid.toString())
+    }
 
     var sickStudents by remember(initialReport.id) { mutableStateOf(initialPayload.sickStudents) }
     var leaveEntries by remember(initialReport.id) { mutableStateOf(initialPayload.leaveEntries) }
@@ -218,7 +229,7 @@ internal fun SerahTerimaShiftEditor(
         )
     }
 
-    LaunchedEffect(initialReport.id, allScheduleEntries, shiftCodes, monthKey, day) {
+    LaunchedEffect(initialReport.id, allScheduleEntries, shiftCodes, haidRecords, monthKey, day) {
         if (allScheduleEntries.isNotEmpty() && leaveEntries.isNotEmpty()) {
             val enriched = ShiftHandoverHelper.enrichLeaveEntriesFromSchedule(
                 existingLeaves = leaveEntries,
@@ -231,6 +242,9 @@ internal fun SerahTerimaShiftEditor(
             if (enriched != leaveEntries) {
                 leaveEntries = enriched
             }
+        }
+        if (initialPayload.haidStudentsCount == null && !haidCountEditedManually && haidRecords.isNotEmpty()) {
+            haidCountText = ShiftHandoverHelper.countActiveHaidForDate(haidRecords, monthKey, day).toString()
         }
     }
 
@@ -301,7 +315,8 @@ internal fun SerahTerimaShiftEditor(
         completedActivities = completedActivities,
         footerText = footerText,
         syncedShiftMessageId = syncedShiftMessageId,
-        autoSyncShiftMessage = autoSyncShiftMessage
+        autoSyncShiftMessage = autoSyncShiftMessage,
+        haidStudentsCount = haidCountText.toIntOrNull()?.coerceAtLeast(0) ?: 0
     )
 
     fun currentPreviewReport(targetStatus: String = status): ShiftHandoverReport = initialReport.copy(
@@ -337,7 +352,8 @@ internal fun SerahTerimaShiftEditor(
             authorUsername = currentUsername.orEmpty(),
             authorName = currentWaliName,
             existingFollowUpNotes = followUpNotes,
-            existingActivities = completedActivities
+            existingActivities = completedActivities,
+            haidRecords = haidRecords
         )
         monthKey = autoRep.monthKey
         day = autoRep.day
@@ -353,6 +369,8 @@ internal fun SerahTerimaShiftEditor(
         presentStudentsText = autoRep.presentStudents.toString()
         sickCountText = autoRep.sickStudentsCount.toString()
         fastingCountText = autoRep.fastingStudentsCount.toString()
+        haidCountText = (autoPay.haidStudentsCount ?: 0).toString()
+        haidCountEditedManually = false
         sickStudents = autoPay.sickStudents
         leaveEntries = autoPay.leaveEntries
         handingOverStaff = autoPay.handingOverStaff
@@ -401,15 +419,16 @@ internal fun SerahTerimaShiftEditor(
     val currentWaText = remember(
         monthKey, day, handoverType, status, title, schoolName, serviceUnit, dateLabel,
         handoverTime, fromShiftLabel, toShiftLabel, totalStudentsText, presentStudentsText,
-        sickCountText, fastingCountText, sickStudents, leaveEntries, handingOverStaff,
+        sickCountText, fastingCountText, haidCountText, sickStudents, leaveEntries, handingOverStaff,
         receivingStaff, outsideDutyStaff, followUpNotes, completedActivities, footerText,
-        allScheduleEntries, shiftCodes
+        allScheduleEntries, shiftCodes, haidRecords
     ) {
         ShiftHandoverHelper.formatWhatsAppReport(
             report = currentPreviewReport(),
             payload = currentPayload(),
             allScheduleEntries = allScheduleEntries,
-            shiftCodes = shiftCodes
+            shiftCodes = shiftCodes,
+            haidRecords = haidRecords
         )
     }
 
@@ -744,6 +763,50 @@ internal fun SerahTerimaShiftEditor(
                             singleLine = true,
                             modifier = Modifier.weight(1f)
                         )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = haidCountText,
+                            onValueChange = {
+                                haidCountText = it.filter(Char::isDigit)
+                                haidCountEditedManually = true
+                            },
+                            label = { Text("Siswi Sedang Haid") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("input_handover_haid_count")
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                haidCountText = ShiftHandoverHelper.countActiveHaidForDate(
+                                    haidRecords = haidRecords,
+                                    monthKey = monthKey,
+                                    day = day
+                                ).toString()
+                                haidCountEditedManually = false
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 52.dp)
+                                .testTag("btn_handover_sync_haid")
+                        ) {
+                            Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (isEn) "Pull Haid Data" else "Ambil Data Haid",
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
 

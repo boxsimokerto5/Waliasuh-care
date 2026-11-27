@@ -68,7 +68,8 @@ data class ShiftHandoverPayload(
     val completedActivities: List<String> = emptyList(),
     val footerText: String = "",
     val syncedShiftMessageId: Long = 0L,
-    val autoSyncShiftMessage: Boolean = false
+    val autoSyncShiftMessage: Boolean = false,
+    val haidStudentsCount: Int? = null
 )
 
 object ShiftHandoverHelper {
@@ -281,7 +282,12 @@ object ShiftHandoverHelper {
                 completedActivities = actList,
                 footerText = obj.optString("footerText", ""),
                 syncedShiftMessageId = obj.optLong("syncedShiftMessageId", 0L),
-                autoSyncShiftMessage = obj.optBoolean("autoSyncShiftMessage", false)
+                autoSyncShiftMessage = obj.optBoolean("autoSyncShiftMessage", false),
+                haidStudentsCount = if (obj.has("haidStudentsCount") && !obj.isNull("haidStudentsCount")) {
+                    obj.optInt("haidStudentsCount", 0).coerceAtLeast(0)
+                } else {
+                    null
+                }
             )
         }.getOrDefault(ShiftHandoverPayload())
     }
@@ -342,6 +348,9 @@ object ShiftHandoverHelper {
             obj.put("syncedShiftMessageId", payload.syncedShiftMessageId)
         }
         obj.put("autoSyncShiftMessage", payload.autoSyncShiftMessage)
+        if (payload.haidStudentsCount != null) {
+            obj.put("haidStudentsCount", payload.haidStudentsCount.coerceAtLeast(0))
+        }
         return obj.toString()
     }
 
@@ -380,6 +389,63 @@ object ShiftHandoverHelper {
             cal.get(Calendar.DAY_OF_MONTH) == day
     }
 
+    private fun startOfDayMillis(millis: Long): Long {
+        return Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+    }
+
+    fun countActiveHaidForDate(
+        haidRecords: List<HaidRecord>,
+        monthKey: String,
+        day: Int
+    ): Int {
+        if (haidRecords.isEmpty()) return 0
+        val (targetYear, targetMonth) = WaliScheduleHelper.parseMonthYear(monthKey)
+        val maxDay = WaliScheduleHelper.daysInMonth(monthKey)
+        val safeDay = day.coerceIn(1, maxDay)
+        val todayCal = Calendar.getInstance()
+        val isTargetToday = todayCal.get(Calendar.YEAR) == targetYear &&
+            (todayCal.get(Calendar.MONTH) + 1) == targetMonth &&
+            todayCal.get(Calendar.DAY_OF_MONTH) == safeDay
+
+        val targetStart = Calendar.getInstance().apply {
+            set(Calendar.YEAR, targetYear)
+            set(Calendar.MONTH, targetMonth - 1)
+            set(Calendar.DAY_OF_MONTH, safeDay)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val targetEnd = targetStart + 86_399_999L
+
+        return haidRecords.filter { haid ->
+            if (isTargetToday) {
+                haid.isActive
+            } else {
+                val haidStartDay = startOfDayMillis(haid.startDate)
+                val effEnd = haid.effectiveEndDate
+                val haidEndDay = when {
+                    effEnd != null -> startOfDayMillis(effEnd) + 86_399_999L
+                    haid.isActive -> maxOf(targetEnd, System.currentTimeMillis() + 86_399_999L)
+                    else -> startOfDayMillis(haid.startDate) + 86_399_999L
+                }
+                targetEnd >= haidStartDay && targetStart <= haidEndDay
+            }
+        }.map { rec ->
+            when {
+                rec.studentId > 0L -> "id:${rec.studentId}"
+                rec.studentNik.isNotBlank() -> "nik:${rec.studentNik.trim()}"
+                else -> "name:${rec.studentName.trim().lowercase()}"
+            }
+        }.distinct().size
+    }
+
     fun buildAutoPopulatedDraft(
         schoolProfile: SchoolProfile,
         monthKey: String,
@@ -394,7 +460,8 @@ object ShiftHandoverHelper {
         authorUsername: String,
         authorName: String,
         existingFollowUpNotes: String = "",
-        existingActivities: List<String> = emptyList()
+        existingActivities: List<String> = emptyList(),
+        haidRecords: List<HaidRecord> = emptyList()
     ): Pair<ShiftHandoverReport, ShiftHandoverPayload> {
         val cleanSchoolId = schoolProfile.tenantCode.trim().ifBlank { "SRT1-KDR" }
         val normalizedType = normalizeType(handoverType)
@@ -573,6 +640,9 @@ object ShiftHandoverHelper {
             createdAt = now,
             updatedAt = now
         )
+        // Siswi aktif haid pada tanggal laporan
+        val haidStudentsCount = countActiveHaidForDate(haidRecords, monthKey, safeDay)
+
         val payload = ShiftHandoverPayload(
             sickStudents = sickItems,
             leaveEntries = leaveEntries,
@@ -581,7 +651,8 @@ object ShiftHandoverHelper {
             outsideDutyStaff = outsideDutyStaff,
             followUpNotes = resolvedFollowUp,
             completedActivities = existingActivities,
-            footerText = "Laporan Serah Terima disusun oleh Wali Asuh $shortSchool"
+            footerText = "Laporan Serah Terima disusun oleh Wali Asuh $shortSchool",
+            haidStudentsCount = haidStudentsCount
         )
         return report.copy(payloadJson = serializePayload(payload)) to payload
     }
@@ -692,7 +763,8 @@ object ShiftHandoverHelper {
         report: ShiftHandoverReport,
         payload: ShiftHandoverPayload = parsePayload(report.payloadJson),
         allScheduleEntries: List<WaliScheduleEntry> = emptyList(),
-        shiftCodes: List<WaliShiftCode> = emptyList()
+        shiftCodes: List<WaliShiftCode> = emptyList(),
+        haidRecords: List<HaidRecord> = emptyList()
     ): String {
         val sb = StringBuilder()
         val cleanTitle = report.title.trim().ifBlank { defaultTitleForType(report.handoverType) }.uppercase()
@@ -702,6 +774,13 @@ object ShiftHandoverHelper {
         val cleanTime = report.handoverTime.trim().ifBlank { defaultTimeForType(report.handoverType) }
         val cleanFrom = report.fromShiftLabel.trim().ifBlank { "Shift Menyerahkan" }
         val cleanTo = report.toShiftLabel.trim().ifBlank { "Shift Menerima" }
+        val effectiveHaidCount = (
+            payload.haidStudentsCount ?: if (haidRecords.isNotEmpty()) {
+                countActiveHaidForDate(haidRecords, report.monthKey, report.day)
+            } else {
+                0
+            }
+            ).coerceAtLeast(0)
 
         sb.appendLine("*📋 LAPORAN $cleanTitle*")
         sb.appendLine("*$cleanSchool*")
@@ -718,6 +797,7 @@ object ShiftHandoverHelper {
         sb.appendLine("• Hadir di Asrama: *${report.presentStudents} Anak Asuh*")
         sb.appendLine("• Sakit / di UKS: *${report.sickStudentsCount} Anak Asuh*")
         sb.appendLine("• Siswa Berpuasa: *${report.fastingStudentsCount} Anak Asuh*")
+        sb.appendLine("• Siswi Sedang Haid: *$effectiveHaidCount Anak Asuh*")
         sb.appendLine()
         sb.appendLine("🏥 *DATA SISWA SAKIT / UKS:*")
         val validSick = payload.sickStudents.filter { it.studentName.isNotBlank() }

@@ -4407,6 +4407,7 @@ fun AdminScreen(
             students = schoolStudents,
             medicalRecords = allRecords,
             fastingRecords = fastingRecords,
+            haidRecords = haidRecords,
             shiftMessages = shiftMessages,
             waliAccounts = schoolAccounts,
             currentUsername = currentUsername,

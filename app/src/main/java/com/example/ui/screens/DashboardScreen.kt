@@ -3938,6 +3938,7 @@ private fun DashboardJadwalAndInfoModalsHost(
     }
 
     if (modalState.showSerahTerimaShiftSheet) {
+        val haidRecords by viewModel.allHaidRecords.collectAsStateWithLifecycle()
         SerahTerimaShiftSheet(
             isEn = isEn,
             reports = shiftHandovers,
@@ -3949,6 +3950,7 @@ private fun DashboardJadwalAndInfoModalsHost(
             students = students,
             medicalRecords = allRecords,
             fastingRecords = fastingRecords,
+            haidRecords = haidRecords,
             shiftMessages = shiftMessages,
             waliAccounts = waliAccounts,
             currentUsername = currentUsername,
