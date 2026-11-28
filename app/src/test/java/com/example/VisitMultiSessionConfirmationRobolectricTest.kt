@@ -40,6 +40,7 @@ import com.example.ui.LoginResult
 import com.example.ui.dialogs.CreateVisitSessionDialog
 import com.example.ui.dialogs.DaftarHadirKunjunganSheet
 import com.example.ui.screens.ParentPortalScreen
+import com.example.ui.screens.ParentVisitContent
 import com.example.util.ParentPortalPdfHelper
 import com.example.util.PdfReportGenerator
 import com.example.util.i18n.AppLanguage
@@ -251,8 +252,9 @@ class VisitMultiSessionConfirmationRobolectricTest {
         val vm = HealthViewModel(app)
         val db = AppDatabase.getDatabase(app)
         val schoolId = "SRT1-KDR"
-        val visitDate1 = dayMillis(2026, Calendar.NOVEMBER, 15)
-        val visitDate2 = dayMillis(2026, Calendar.NOVEMBER, 22)
+        val nowDay = VisitHelper.normalizeDayStart(System.currentTimeMillis())
+        val visitDate1 = nowDay + 3L * 24L * 60L * 60L * 1000L
+        val visitDate2 = nowDay + 10L * 24L * 60L * 60L * 1000L
 
         val studentWates = ChildStudent(
             id = 7701L,
@@ -366,23 +368,22 @@ class VisitMultiSessionConfirmationRobolectricTest {
         composeTestRule.onAllNodesWithText("Wates", substring = true).onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
             .performScrollToNode(hasTestTag("card_parent_visit_session_8801"))
-        composeTestRule.onNodeWithTag("card_parent_visit_session_8801").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_parent_visit_session_8801")
+            .assertIsDisplayed()
+            .performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("sheet_parent_visit_detail_8801").assertIsDisplayed()
         composeTestRule.onAllNodesWithText("08.00 - 11.00 WIB", substring = true).onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_parent_visit_session_8802").assertDoesNotExist()
 
-        // Confirm attendance & verify QR pass renders
-        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
-            .performScrollToNode(hasTestTag("input_parent_visit_visitor_name_8801"))
+        // Confirm attendance & verify QR pass renders inside the bottom sheet
         composeTestRule.onNodeWithTag("input_parent_visit_visitor_name_8801")
+            .performScrollTo()
             .performTextReplacement("Ibu Aminah Wates")
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
-            .performScrollToNode(hasTestTag("btn_parent_visit_confirm_8801"))
-        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
-            .performTouchInput { swipeUp() }
-        composeTestRule.waitForIdle()
         composeTestRule.onNodeWithTag("btn_parent_visit_confirm_8801")
+            .performScrollTo()
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
             .performClick()
@@ -400,10 +401,11 @@ class VisitMultiSessionConfirmationRobolectricTest {
         )
         composeTestRule.waitForIdle()
 
-        // Barcode card & QR image appear!
-        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
-            .performScrollToNode(hasTestTag("card_parent_visit_barcode_8801"))
-        composeTestRule.onNodeWithTag("img_parent_visit_qrcode_8801").assertIsDisplayed()
+        // Barcode card & QR image appear inside the open bottom sheet!
+        composeTestRule.onNodeWithTag("card_parent_visit_barcode_8801").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("img_parent_visit_qrcode_8801").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_parent_visit_sheet_close").performClick()
+        composeTestRule.waitForIdle()
 
         // Check PDF download button & close dialog
         composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
@@ -544,5 +546,207 @@ class VisitMultiSessionConfirmationRobolectricTest {
         composeTestRule.onNodeWithTag("list_visit_barcode_tab")
             .performScrollToNode(hasTestTag("badge_visit_scan_confirmed_5501"))
         composeTestRule.onNodeWithTag("badge_visit_scan_confirmed_5501").assertIsDisplayed()
+    }
+
+    @Test
+    fun `ParentVisitContent groups Jadwal Mendatang and Riwayat Selesai into compact cards opening bottom sheet detail`() {
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val now = System.currentTimeMillis()
+        val futureDate = now + 7L * 24L * 60L * 60L * 1000L
+        val pastDate = now - 10L * 24L * 60L * 60L * 1000L
+
+        val student = ChildStudent(
+            id = 5901L,
+            name = "Ahmad Fauzi",
+            nis = "5901",
+            nik = "3506590100010001",
+            gender = "L",
+            age = 13,
+            dormitory = "Asrama Putra",
+            classGrade = "VII-A",
+            district = "Puncu",
+            schoolId = "SRT1-KDR"
+        )
+        val upcomingSession = VisitSession(
+            id = 9101L,
+            title = "Kunjungan Desember Sesi 1",
+            monthYear = "2026-12",
+            sessionDatesCsv = futureDate.toString(),
+            selectedDistrictsCsv = "Badas|Gurah|Puncu",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+        val pastSession = VisitSession(
+            id = 9102L,
+            title = "Kunjungan Oktober Sesi 2",
+            monthYear = "2026-10",
+            sessionDatesCsv = pastDate.toString(),
+            selectedDistrictsCsv = "Puncu",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = false,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                ParentVisitContent(
+                    student = student,
+                    sessions = listOf(upcomingSession, pastSession),
+                    confirmations = emptyList(),
+                    visitRecords = emptyList(),
+                    onSaveConfirmation = { _, _, _, _, _, _, _, _ -> }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Both section headers and compact cards are shown; inline form & bottom sheet are closed initially
+        composeTestRule.onNodeWithTag("card_parent_visit_district").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("header_parent_visit_upcoming").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_parent_visit_session_9101")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
+            .performScrollToNode(hasTestTag("header_parent_visit_completed"))
+        composeTestRule.onNodeWithTag("header_parent_visit_completed").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
+            .performScrollToNode(hasTestTag("card_parent_visit_session_9102"))
+        composeTestRule.onNodeWithTag("card_parent_visit_session_9102")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+        composeTestRule.onNodeWithTag("sheet_parent_visit_detail_9101").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("input_parent_visit_visitor_name_9101").assertDoesNotExist()
+
+        // Tap upcoming card -> bottom sheet opens with full details and confirmation form
+        composeTestRule.onNodeWithTag("parent_visit_matched_sessions_list")
+            .performScrollToNode(hasTestTag("card_parent_visit_session_9101"))
+        composeTestRule.onNodeWithTag("card_parent_visit_session_9101").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("sheet_parent_visit_detail_9101").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("input_parent_visit_visitor_name_9101").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_parent_visit_sheet_close").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("sheet_parent_visit_detail_9101").assertDoesNotExist()
+    }
+
+    @Test
+    fun `ParentPortalHome hides passed visit banner next day and shows upcoming or today visit`() = runBlocking {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = HealthViewModel(app)
+        val db = AppDatabase.getDatabase(app)
+        val schoolId = "SRT1-KDR"
+        val today = VisitHelper.normalizeDayStart(System.currentTimeMillis())
+        val yesterday = today - 24L * 60L * 60L * 1000L
+        val tomorrow = today + 24L * 60L * 60L * 1000L
+        val nextWeek = today + 7L * 24L * 60L * 60L * 1000L
+
+        val student = ChildStudent(
+            id = 5911L,
+            name = "Auliana Widiani",
+            nis = "5911",
+            nik = "3506591100010001",
+            gender = "P",
+            age = 15,
+            dormitory = "Asrama Putri",
+            classGrade = "X-1",
+            district = "Puncu",
+            schoolId = schoolId
+        )
+        val pastActiveSession = VisitSession(
+            id = 9201L,
+            title = "Kunjungan Lampau Sesi 1",
+            monthYear = "2026-10",
+            sessionDatesCsv = yesterday.toString(),
+            selectedDistrictsCsv = "Puncu",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToParent = true,
+            schoolId = schoolId
+        )
+        val upcomingSoonSession = VisitSession(
+            id = 9202L,
+            title = "Kunjungan Besok Sesi 2",
+            monthYear = "2026-11",
+            sessionDatesCsv = tomorrow.toString(),
+            selectedDistrictsCsv = "Puncu",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToParent = true,
+            schoolId = schoolId
+        )
+        val upcomingLaterSession = VisitSession(
+            id = 9203L,
+            title = "Kunjungan Pekan Depan Sesi 3",
+            monthYear = "2026-12",
+            sessionDatesCsv = nextWeek.toString(),
+            selectedDistrictsCsv = "Puncu",
+            visitTimeRange = "09.00 - 12.00 WIB",
+            isActive = true,
+            publishedToParent = true,
+            schoolId = schoolId
+        )
+        val parentLink = ParentAccessLink(
+            id = 5991L,
+            username = "ortu_auliana_5911",
+            password = "Pass#5911",
+            studentId = 5911L,
+            studentName = student.name,
+            studentNis = student.nis,
+            studentClass = student.classGrade,
+            studentDorm = student.dormitory,
+            studentDistrict = "Puncu",
+            parentName = "Ibu Widiani",
+            assignedWaliUsername = "ust_eko",
+            assignedWaliName = "Eko Wahyudi",
+            schoolId = schoolId
+        )
+
+        db.childStudentDao().insert(student)
+        db.visitSessionDao().insert(pastActiveSession)
+        db.parentAccessLinkDao().insert(parentLink)
+
+        assertTrue(vm.executeLogin("ortu_auliana_5911", "Pass#5911") is LoginResult.SuccessParent)
+        var loops = 0
+        while (loops < 30 && vm.activeParentAccessLink.value == null) {
+            ShadowLooper.idleMainLooper()
+            delay(40)
+            loops++
+        }
+
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                ParentPortalScreen(viewModel = vm, onLogout = {})
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // 1. Only yesterday's session exists -> Home banner must NOT appear
+        composeTestRule.onNodeWithTag("banner_parent_home_visit_schedule").assertDoesNotExist()
+
+        // 2. Add two upcoming sessions -> Home banner appears showing the nearest upcoming one (tomorrow)
+        db.visitSessionDao().insert(upcomingLaterSession)
+        db.visitSessionDao().insert(upcomingSoonSession)
+        var sessLoops = 0
+        while (sessLoops < 40 && vm.parentVisibleVisitSessions.value.none { it.id == 9202L }) {
+            ShadowLooper.idleMainLooper()
+            delay(40)
+            sessLoops++
+        }
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("banner_parent_home_visit_schedule")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertTextContains("Kunjungan Besok Sesi 2", substring = true)
+
+        vm.logout()
+        db.visitSessionDao().deleteById(9201L)
+        db.visitSessionDao().deleteById(9202L)
+        db.visitSessionDao().deleteById(9203L)
+        db.parentAccessLinkDao().delete(parentLink)
+        db.childStudentDao().delete(student)
     }
 }

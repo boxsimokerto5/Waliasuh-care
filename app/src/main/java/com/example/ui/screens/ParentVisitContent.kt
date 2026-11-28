@@ -2,20 +2,20 @@ package com.example.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,29 +23,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventAvailable
-import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,14 +47,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.ChildStudent
@@ -73,12 +67,18 @@ import com.example.data.model.VisitSessionSwap
 import com.example.ui.components.ParentMenuPdfHeaderCard
 import com.example.ui.components.ParentReadyPdfDialogData
 import com.example.util.ParentPortalPdfHelper
-import com.example.util.StudentCardRenderer
 import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
 import java.util.Date
 
-@OptIn(ExperimentalLayoutApi::class)
+private fun isVisitSessionCompleted(session: VisitSession, todayStartMillis: Long): Boolean {
+    if (!session.isActive) return true
+    val dates = session.getVisitDatesList()
+    if (dates.isEmpty()) return false
+    val latestDayStart = dates.maxOf { VisitHelper.normalizeDayStart(it) }
+    return latestDayStart < todayStartMillis
+}
+
 @Composable
 fun ParentVisitContent(
     student: ChildStudent?,
@@ -118,6 +118,8 @@ fun ParentVisitContent(
         VisitHelper.displayDistrict(studentDistrictKey, isEn)
     }
 
+    val todayStartMillis = remember { VisitHelper.normalizeDayStart(System.currentTimeMillis()) }
+
     val matchedSessions = remember(sessions, allVisitSessions, visitSessionSwaps, student) {
         if (student == null) emptyList()
         else {
@@ -127,16 +129,35 @@ fun ParentVisitContent(
                     it.publishedToParent &&
                         VisitHelper.isStudentEffectiveInSession(it, student, visitSessionSwaps, allSess)
                 }
-                .sortedWith(
-                    compareByDescending<VisitSession> { it.isActive }
-                        .thenBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
-                        .thenByDescending { it.createdAt }
-                )
         }
     }
 
+    val upcomingSessions = remember(matchedSessions, todayStartMillis) {
+        matchedSessions
+            .filterNot { isVisitSessionCompleted(it, todayStartMillis) }
+            .sortedWith(
+                compareBy<VisitSession> { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
+                    .thenByDescending { it.createdAt }
+            )
+    }
+
+    val completedSessions = remember(matchedSessions, todayStartMillis) {
+        matchedSessions
+            .filter { isVisitSessionCompleted(it, todayStartMillis) }
+            .sortedWith(
+                compareByDescending<VisitSession> { it.getVisitDatesList().maxOrNull() ?: 0L }
+                    .thenByDescending { it.createdAt }
+            )
+    }
+
     val dateFmt = remember(locale) { SimpleDateFormat("EEEE, d MMMM yyyy", locale) }
+    val compactDateFmt = remember(locale) { SimpleDateFormat("EEE, d MMM yyyy", locale) }
     val timeFmt = remember(locale) { SimpleDateFormat("HH:mm", locale) }
+
+    var selectedSessionId by remember { mutableStateOf<Long?>(null) }
+    val selectedSession = remember(selectedSessionId, matchedSessions) {
+        selectedSessionId?.let { id -> matchedSessions.firstOrNull { it.id == id } }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -145,7 +166,7 @@ fun ParentVisitContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        item(key = "visit_pdf_header") {
             ParentMenuPdfHeaderCard(
                 title = if (isEn) "Parent Visit Schedule & Pass" else "Jadwal Kunjungan & Tiket Barcode",
                 subtitle = if (isEn) {
@@ -168,10 +189,11 @@ fun ParentVisitContent(
                             Toast.LENGTH_SHORT
                         ).show()
                     } else {
+                        val orderedForPdf = upcomingSessions + completedSessions
                         val file = ParentPortalPdfHelper.generateStudentVisitPassPdf(
                             context = context,
                             student = target,
-                            matchedSessions = matchedSessions,
+                            matchedSessions = orderedForPdf,
                             confirmations = confirmations,
                             visitRecords = visitRecords,
                             waliName = waliName,
@@ -207,75 +229,17 @@ fun ParentVisitContent(
             )
         }
 
-        item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("card_parent_visit_district"),
-                shape = RoundedCornerShape(14.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0))
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = tealPrimary.copy(alpha = 0.12f),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Default.LocationOn,
-                                contentDescription = null,
-                                tint = tealPrimary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-                    }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (isEn) "Registered Home District (Kecamatan)" else "Kecamatan Domisili Anak Asuh",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = studentDistrictLabel,
-                            fontSize = 14.5.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (studentDistrictKey == VisitHelper.UNASSIGNED_DISTRICT) {
-                                Color(0xFFB45309)
-                            } else {
-                                tealPrimary
-                            }
-                        )
-                        Text(
-                            text = if (studentDistrictKey == VisitHelper.UNASSIGNED_DISTRICT) {
-                                if (isEn) {
-                                    "Your child's district is not filled in yet. Contact Wali Asuh / Admin so automatic visit dates appear."
-                                } else {
-                                    "Data kecamatan ananda belum diisi Admin/Wali Asuh. Hubungi pembina agar jadwal otomatis muncul."
-                                }
-                            } else {
-                                if (isEn) {
-                                    "Sessions selecting $studentDistrictLabel automatically notify and appear here."
-                                } else {
-                                    "Sesi kunjungan yang memilih Kec. $studentDistrictLabel otomatis tampil sebagai pemberitahuan jadwal Anda."
-                                }
-                            },
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            lineHeight = 15.sp
-                        )
-                    }
-                }
-            }
+        item(key = "visit_domicile_banner") {
+            ParentVisitDomicileCompactCard(
+                studentDistrictKey = studentDistrictKey,
+                studentDistrictLabel = studentDistrictLabel,
+                tealPrimary = tealPrimary,
+                isEn = isEn
+            )
         }
 
         if (matchedSessions.isEmpty()) {
-            item {
+            item(key = "visit_empty") {
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -317,637 +281,602 @@ fun ParentVisitContent(
                 }
             }
         } else {
-            items(matchedSessions, key = { it.id }) { sess ->
-                val targetStudent = student ?: return@items
-                val sessionDate = sess.getVisitDatesList().firstOrNull() ?: 0L
-                val existingConf = VisitHelper.findConfirmationForStudent(
-                    confirmations = confirmations,
-                    sessionId = sess.id,
-                    student = targetStudent,
-                    targetDayStart = if (sessionDate > 0L) sessionDate else null
+            item(key = "header_upcoming") {
+                ParentVisitSectionHeader(
+                    title = if (isEn) "Upcoming Visits" else "Jadwal Mendatang",
+                    count = upcomingSessions.size,
+                    icon = Icons.Default.EventAvailable,
+                    accentColor = tealPrimary,
+                    isEn = isEn,
+                    modifier = Modifier.testTag("header_parent_visit_upcoming")
                 )
-                val checkInRec = visitRecords
-                    .filter { it.sessionId == sess.id }
-                    .let { recs ->
-                        VisitHelper.findVisitForStudent(
-                            recs,
-                            targetStudent,
-                            if (sessionDate > 0L) sessionDate else null
-                        )
-                    }
+            }
 
-                var isEditing by remember(sess.id, existingConf?.updatedAt) {
-                    mutableStateOf(existingConf == null)
-                }
-                var statusChoice by remember(sess.id, existingConf?.attendanceStatus) {
-                    mutableStateOf(existingConf?.attendanceStatus ?: VisitConfirmation.STATUS_HADIR)
-                }
-                var relationChoice by remember(sess.id, existingConf?.visitorRelation) {
-                    mutableStateOf(existingConf?.visitorRelation?.ifBlank { "Ibu" } ?: "Ibu")
-                }
-                var visitorNameInput by remember(sess.id, existingConf?.visitorName, defaultParentName) {
-                    mutableStateOf(existingConf?.visitorName?.ifBlank { defaultParentName } ?: defaultParentName)
-                }
-                var etaInput by remember(sess.id, existingConf?.estimatedArrivalTime) {
-                    mutableStateOf(existingConf?.estimatedArrivalTime.orEmpty())
-                }
-                var notesInput by remember(sess.id, existingConf?.notes) {
-                    mutableStateOf(existingConf?.notes.orEmpty())
-                }
-
-                val isHadirSelected = statusChoice.equals(VisitConfirmation.STATUS_HADIR, ignoreCase = true)
-
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("card_parent_visit_session_${sess.id}"),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                    border = BorderStroke(
-                        width = if (sess.isActive) 1.5.dp else 1.dp,
-                        color = when {
-                            checkInRec != null -> Color(0xFF16A34A)
-                            existingConf?.isHadir == true -> tealPrimary
-                            existingConf != null -> Color(0xFFD97706)
-                            else -> Color(0xFFCBD5E1)
-                        }
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+            if (upcomingSessions.isEmpty()) {
+                item(key = "upcoming_empty") {
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("card_parent_visit_upcoming_empty"),
+                        shape = RoundedCornerShape(14.dp),
+                        color = Color(0xFFF8FAFC),
+                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.Top
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.NotificationsActive,
-                                        contentDescription = null,
-                                        tint = tealPrimary,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = sess.title,
-                                        fontSize = 14.5.sp,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.weight(1f, fill = false)
-                                    )
-                                    if (sess.updatedNoticeAfterParentLaunch) {
-                                        Surface(
-                                            shape = RoundedCornerShape(6.dp),
-                                            color = Color(0xFFFEF3C7),
-                                            border = BorderStroke(1.dp, Color(0xFFF59E0B))
-                                        ) {
-                                            Text(
-                                                text = if (isEn) "Updated" else "Diperbarui",
-                                                fontSize = 9.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF92400E),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                            )
-                                        }
-                                    }
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.EventAvailable,
-                                        contentDescription = null,
-                                        tint = Color(0xFF0369A1),
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = if (sessionDate > 0L) dateFmt.format(Date(sessionDate)) else "-",
-                                        fontSize = 12.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF0369A1)
-                                    )
-                                }
-                                Spacer(modifier = Modifier.height(3.dp))
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Schedule,
-                                        contentDescription = null,
-                                        tint = tealPrimary,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(5.dp))
-                                    Text(
-                                        text = if (isEn) {
-                                            "Visiting Hours: ${sess.displayTimeRange()}"
-                                        } else {
-                                            "Jam Kunjungan: ${sess.displayTimeRange()}"
-                                        },
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = tealPrimary
-                                    )
-                                }
-                            }
-                            Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = when {
-                                    checkInRec != null -> Color(0xFFDCFCE7)
-                                    existingConf?.isHadir == true -> tealPrimary.copy(alpha = 0.14f)
-                                    existingConf != null -> Color(0xFFFEF3C7)
-                                    sess.isActive -> Color(0xFFE0F2FE)
-                                    else -> Color(0xFFF1F5F9)
-                                }
-                            ) {
-                                Text(
-                                    text = when {
-                                        checkInRec != null -> if (isEn) "Checked In" else "Sudah Hadir"
-                                        existingConf?.isHadir == true -> if (isEn) "Confirmed" else "Terkonfirmasi"
-                                        existingConf != null -> if (isEn) "Absent" else "Berhalangan"
-                                        sess.isActive -> if (isEn) "Scheduled" else "Terjadwal"
-                                        else -> if (isEn) "Closed" else "Selesai"
-                                    },
-                                    fontSize = 10.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = when {
-                                        checkInRec != null -> Color(0xFF15803D)
-                                        existingConf?.isHadir == true -> tealPrimary
-                                        existingConf != null -> Color(0xFFB45309)
-                                        sess.isActive -> Color(0xFF0369A1)
-                                        else -> Color(0xFF64748B)
-                                    },
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                )
-                            }
-                        }
-
-                        if (sess.description.isNotBlank()) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
+                            )
                             Text(
-                                text = sess.description,
-                                fontSize = 11.5.sp,
+                                text = if (isEn) {
+                                    "No upcoming visit schedules right now."
+                                } else {
+                                    "Belum ada jadwal kunjungan mendatang saat ini."
+                                },
+                                fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            sess.getDistrictsList().forEach { dist ->
-                                val isMine = dist.equals(studentDistrictKey, ignoreCase = true)
-                                Surface(
-                                    shape = RoundedCornerShape(999.dp),
-                                    color = if (isMine) tealPrimary.copy(alpha = 0.14f) else Color(0xFFF1F5F9),
-                                    border = if (isMine) BorderStroke(1.dp, tealPrimary) else null
-                                ) {
-                                    Text(
-                                        text = VisitHelper.displayDistrict(dist, isEn),
-                                        fontSize = 10.5.sp,
-                                        fontWeight = if (isMine) FontWeight.Bold else FontWeight.Medium,
-                                        color = if (isMine) tealPrimary else Color(0xFF475569),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-                                    )
-                                }
-                            }
+                    }
+                }
+            } else {
+                items(upcomingSessions, key = { "upcoming_${it.id}" }) { sess ->
+                    val targetStudent = student ?: return@items
+                    val sessionDate = sess.getVisitDatesList().firstOrNull() ?: 0L
+                    val existingConf = VisitHelper.findConfirmationForStudent(
+                        confirmations = confirmations,
+                        sessionId = sess.id,
+                        student = targetStudent,
+                        targetDayStart = if (sessionDate > 0L) sessionDate else null
+                    )
+                    val checkInRec = visitRecords
+                        .filter { it.sessionId == sess.id }
+                        .let { recs ->
+                            VisitHelper.findVisitForStudent(
+                                recs,
+                                targetStudent,
+                                if (sessionDate > 0L) sessionDate else null
+                            )
                         }
+                    val incomingSwap = remember(sess.id, targetStudent.id, visitSessionSwaps) {
+                        VisitHelper.findIncomingSwapToSession(sess.id, targetStudent, visitSessionSwaps)
+                    }
 
-                        val incomingSwap = remember(sess.id, targetStudent.id, visitSessionSwaps) {
-                            VisitHelper.findIncomingSwapToSession(sess.id, targetStudent, visitSessionSwaps)
+                    ParentVisitSessionListCard(
+                        session = sess,
+                        sessionDates = sess.getVisitDatesList(),
+                        studentDistrictKey = studentDistrictKey,
+                        existingConf = existingConf,
+                        checkInRec = checkInRec,
+                        incomingSwap = incomingSwap,
+                        isCompletedHistory = false,
+                        tealPrimary = tealPrimary,
+                        isEn = isEn,
+                        compactDateFmt = compactDateFmt,
+                        onClick = { selectedSessionId = sess.id }
+                    )
+                }
+            }
+
+            if (completedSessions.isNotEmpty()) {
+                item(key = "header_completed") {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    ParentVisitSectionHeader(
+                        title = if (isEn) "Completed History" else "Riwayat Selesai",
+                        count = completedSessions.size,
+                        icon = Icons.Default.History,
+                        accentColor = Color(0xFF475569),
+                        isEn = isEn,
+                        modifier = Modifier.testTag("header_parent_visit_completed")
+                    )
+                }
+
+                items(completedSessions, key = { "completed_${it.id}" }) { sess ->
+                    val targetStudent = student ?: return@items
+                    val sessionDate = sess.getVisitDatesList().firstOrNull() ?: 0L
+                    val existingConf = VisitHelper.findConfirmationForStudent(
+                        confirmations = confirmations,
+                        sessionId = sess.id,
+                        student = targetStudent,
+                        targetDayStart = if (sessionDate > 0L) sessionDate else null
+                    )
+                    val checkInRec = visitRecords
+                        .filter { it.sessionId == sess.id }
+                        .let { recs ->
+                            VisitHelper.findVisitForStudent(
+                                recs,
+                                targetStudent,
+                                if (sessionDate > 0L) sessionDate else null
+                            )
+                        }
+                    val incomingSwap = remember(sess.id, targetStudent.id, visitSessionSwaps) {
+                        VisitHelper.findIncomingSwapToSession(sess.id, targetStudent, visitSessionSwaps)
+                    }
+
+                    ParentVisitSessionListCard(
+                        session = sess,
+                        sessionDates = sess.getVisitDatesList(),
+                        studentDistrictKey = studentDistrictKey,
+                        existingConf = existingConf,
+                        checkInRec = checkInRec,
+                        incomingSwap = incomingSwap,
+                        isCompletedHistory = true,
+                        tealPrimary = tealPrimary,
+                        isEn = isEn,
+                        compactDateFmt = compactDateFmt,
+                        onClick = { selectedSessionId = sess.id }
+                    )
+                }
+            }
+        }
+    }
+
+    val activeSheetSession = selectedSession
+    val targetStudent = student
+    if (activeSheetSession != null && targetStudent != null) {
+        val sessionDate = activeSheetSession.getVisitDatesList().firstOrNull() ?: 0L
+        val existingConf = VisitHelper.findConfirmationForStudent(
+            confirmations = confirmations,
+            sessionId = activeSheetSession.id,
+            student = targetStudent,
+            targetDayStart = if (sessionDate > 0L) sessionDate else null
+        )
+        val checkInRec = visitRecords
+            .filter { it.sessionId == activeSheetSession.id }
+            .let { recs ->
+                VisitHelper.findVisitForStudent(
+                    recs,
+                    targetStudent,
+                    if (sessionDate > 0L) sessionDate else null
+                )
+            }
+        val incomingSwap = remember(activeSheetSession.id, targetStudent.id, visitSessionSwaps) {
+            VisitHelper.findIncomingSwapToSession(activeSheetSession.id, targetStudent, visitSessionSwaps)
+        }
+        val isCompleted = isVisitSessionCompleted(activeSheetSession, todayStartMillis)
+
+        ParentVisitDetailBottomSheet(
+            session = activeSheetSession,
+            student = targetStudent,
+            studentDistrictKey = studentDistrictKey,
+            existingConf = existingConf,
+            checkInRec = checkInRec,
+            incomingSwap = incomingSwap,
+            defaultParentName = defaultParentName,
+            isCompletedHistory = isCompleted,
+            isEn = isEn,
+            dateFmt = dateFmt,
+            timeFmt = timeFmt,
+            onDismiss = { selectedSessionId = null },
+            onSaveConfirmation = onSaveConfirmation
+        )
+    }
+}
+
+@Composable
+private fun ParentVisitDomicileCompactCard(
+    studentDistrictKey: String,
+    studentDistrictLabel: String,
+    tealPrimary: Color,
+    isEn: Boolean
+) {
+    val isUnassigned = studentDistrictKey == VisitHelper.UNASSIGNED_DISTRICT
+    val accent = if (isUnassigned) Color(0xFFB45309) else tealPrimary
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("card_parent_visit_district"),
+        shape = RoundedCornerShape(14.dp),
+        color = if (isUnassigned) Color(0xFFFFFBEB) else MaterialTheme.colorScheme.surface,
+        border = BorderStroke(
+            1.dp,
+            if (isUnassigned) Color(0xFFFCD34D) else Color(0xFFE2E8F0)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = accent.copy(alpha = 0.12f),
+                modifier = Modifier.size(34.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Default.LocationOn,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = if (isEn) "Domicile:" else "Domisili:",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = studentDistrictLabel,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = accent,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Text(
+                    text = if (isUnassigned) {
+                        if (isEn) {
+                            "District not set yet. Contact Wali Asuh / Admin."
+                        } else {
+                            "Kecamatan belum diisi. Hubungi Admin/Wali Asuh."
+                        }
+                    } else {
+                        if (isEn) {
+                            "Sessions matching $studentDistrictLabel appear automatically"
+                        } else {
+                            "Jadwal wilayah Kec. $studentDistrictLabel otomatis masuk ke daftar"
+                        }
+                    },
+                    fontSize = 11.sp,
+                    color = if (isUnassigned) Color(0xFF92400E) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ParentVisitSectionHeader(
+    title: String,
+    count: Int,
+    icon: ImageVector,
+    accentColor: Color,
+    isEn: Boolean,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = 2.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier.size(17.dp)
+            )
+            Text(
+                text = title,
+                fontSize = 13.5.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = accentColor.copy(alpha = 0.12f)
+        ) {
+            Text(
+                text = if (isEn) "$count sessions" else "$count sesi",
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = accentColor,
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp)
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ParentVisitSessionListCard(
+    session: VisitSession,
+    sessionDates: List<Long>,
+    studentDistrictKey: String,
+    existingConf: VisitConfirmation?,
+    checkInRec: VisitRecord?,
+    incomingSwap: VisitSessionSwap?,
+    isCompletedHistory: Boolean,
+    tealPrimary: Color,
+    isEn: Boolean,
+    compactDateFmt: SimpleDateFormat,
+    onClick: () -> Unit
+) {
+    val accentColor = when {
+        checkInRec != null -> Color(0xFF16A34A)
+        existingConf?.isHadir == true -> tealPrimary
+        existingConf != null -> Color(0xFFD97706)
+        !isCompletedHistory -> Color(0xFF0369A1)
+        else -> Color(0xFF94A3B8)
+    }
+
+    val statusBgColor = when {
+        checkInRec != null -> Color(0xFFDCFCE7)
+        existingConf?.isHadir == true -> tealPrimary.copy(alpha = 0.14f)
+        existingConf != null -> Color(0xFFFEF3C7)
+        !isCompletedHistory -> Color(0xFFE0F2FE)
+        else -> Color(0xFFF1F5F9)
+    }
+
+    val statusTextColor = when {
+        checkInRec != null -> Color(0xFF15803D)
+        existingConf?.isHadir == true -> tealPrimary
+        existingConf != null -> Color(0xFFB45309)
+        !isCompletedHistory -> Color(0xFF0369A1)
+        else -> Color(0xFF64748B)
+    }
+
+    val statusLabel = when {
+        checkInRec != null -> if (isEn) "Checked In" else "Sudah Hadir"
+        existingConf?.isHadir == true -> if (isEn) "Confirmed" else "Terkonfirmasi"
+        existingConf != null -> if (isEn) "Absent" else "Berhalangan"
+        !isCompletedHistory -> if (isEn) "Scheduled" else "Terjadwal"
+        else -> if (isEn) "Completed" else "Selesai"
+    }
+
+    val firstDateText = sessionDates.firstOrNull()?.let { compactDateFmt.format(Date(it)) } ?: "-"
+    val extraDatesCount = (sessionDates.size - 1).coerceAtLeast(0)
+    val dateSummary = if (extraDatesCount > 0) {
+        "$firstDateText (+$extraDatesCount)"
+    } else {
+        firstDateText
+    }
+
+    val districts = session.getDistrictsList()
+    val hasMyDistrict = districts.any { it.equals(studentDistrictKey, ignoreCase = true) }
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .minimumInteractiveComponentSize()
+            .testTag("card_parent_visit_session_${session.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isCompletedHistory) {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+            } else {
+                MaterialTheme.colorScheme.surface
+            }
+        ),
+        border = BorderStroke(
+            width = if (!isCompletedHistory && existingConf == null) 1.4.dp else 1.dp,
+            color = if (isCompletedHistory) Color(0xFFE2E8F0) else accentColor.copy(alpha = 0.55f)
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(accentColor)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (checkInRec != null) Icons.Default.CheckCircle else Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Text(
+                            text = session.title,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = statusBgColor
+                    ) {
+                        Text(
+                            text = statusLabel,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = statusTextColor,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EventAvailable,
+                            contentDescription = null,
+                            tint = Color(0xFF0369A1),
+                            modifier = Modifier.size(13.5.dp)
+                        )
+                        Text(
+                            text = dateSummary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF0369A1)
+                        )
+                    }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Schedule,
+                            contentDescription = null,
+                            tint = tealPrimary,
+                            modifier = Modifier.size(13.5.dp)
+                        )
+                        Text(
+                            text = session.displayTimeRange(),
+                            fontSize = 11.5.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = tealPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    FlowRow(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        if (session.updatedNoticeAfterParentLaunch) {
+                            MiniBadgeChip(
+                                text = if (isEn) "Updated" else "Diperbarui",
+                                bgColor = Color(0xFFFEF3C7),
+                                textColor = Color(0xFF92400E)
+                            )
                         }
                         if (incomingSwap != null) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("banner_parent_visit_swapped_${sess.id}"),
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFEEF2FF),
-                                border = BorderStroke(1.dp, Color(0xFFA5B4FC))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.Top
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.SwapHoriz,
-                                        contentDescription = null,
-                                        tint = Color(0xFF4338CA),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                                        Text(
-                                            text = if (isEn) {
-                                                "Visit Schedule Moved to This Session"
-                                            } else {
-                                                "Jadwal Kunjungan Dipindahkan ke Sesi Ini"
-                                            },
-                                            fontSize = 11.5.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = Color(0xFF3730A3)
-                                        )
-                                        val originLabel = incomingSwap.fromSessionTitle.ifBlank {
-                                            if (isEn) "previous session" else "sesi sebelumnya"
-                                        }
-                                        Text(
-                                            text = if (isEn) {
-                                                "Adjusted by Wali Asuh from \"$originLabel\"."
-                                            } else {
-                                                "Disesuaikan oleh Wali Asuh dari sesi \"$originLabel\"."
-                                            },
-                                            fontSize = 11.sp,
-                                            color = Color(0xFF312E81)
-                                        )
-                                        if (incomingSwap.reason.isNotBlank()) {
-                                            Text(
-                                                text = (if (isEn) "Reason: " else "Alasan: ") + incomingSwap.reason,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF4338CA)
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (checkInRec != null) {
-                            Surface(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("badge_parent_visit_checkedin_${sess.id}"),
-                                shape = RoundedCornerShape(10.dp),
-                                color = Color(0xFFECFDF5),
-                                border = BorderStroke(1.dp, Color(0xFF86EFAC))
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(10.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.CheckCircle,
-                                        contentDescription = null,
-                                        tint = Color(0xFF15803D),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (isEn) {
-                                            "Arrival checked in at ${timeFmt.format(Date(checkInRec.checkedInAt))} (${checkInRec.visitorRelation})"
-                                        } else {
-                                            "Sudah check-in di asrama pukul ${timeFmt.format(Date(checkInRec.checkedInAt))} (${checkInRec.visitorRelation})"
-                                        },
-                                        fontSize = 11.5.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF166534)
-                                    )
-                                }
-                            }
-                        }
-
-                        if (existingConf != null && !isEditing) {
-                            HorizontalDivider(color = Color(0xFFE2E8F0))
-                            if (existingConf.isHadir) {
-                                val qrPayload = existingConf.qrPayload()
-                                val qrBitmap = remember(qrPayload) {
-                                    StudentCardRenderer.generateQrBitmap(qrPayload, 512)?.asImageBitmap()
-                                }
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("card_parent_visit_barcode_${sess.id}"),
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = tealLight,
-                                    border = BorderStroke(1.dp, tealBorder)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.Center
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.QrCode2,
-                                                contentDescription = null,
-                                                tint = tealPrimary,
-                                                modifier = Modifier.size(18.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = if (isEn) "Official Visit QR Pass" else "Barcode Kehadiran Kunjungan",
-                                                fontSize = 13.sp,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color = tealPrimary
-                                            )
-                                        }
-                                        if (qrBitmap != null) {
-                                            Surface(
-                                                shape = RoundedCornerShape(12.dp),
-                                                color = Color.White,
-                                                border = BorderStroke(1.dp, Color(0xFFCBD5E1))
-                                            ) {
-                                                Image(
-                                                    bitmap = qrBitmap,
-                                                    contentDescription = if (isEn) "Visit Barcode QR" else "Barcode QR Kunjungan",
-                                                    contentScale = ContentScale.Fit,
-                                                    modifier = Modifier
-                                                        .size(176.dp)
-                                                        .padding(10.dp)
-                                                        .testTag("img_parent_visit_qrcode_${sess.id}")
-                                                )
-                                            }
-                                        }
-                                        Text(
-                                            text = existingConf.barcodeToken,
-                                            fontSize = 12.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color(0xFF0F172A)
-                                        )
-                                        val visitorSummary = listOfNotNull(
-                                            existingConf.visitorRelation.takeIf { it.isNotBlank() },
-                                            existingConf.visitorName.takeIf { it.isNotBlank() }
-                                        ).joinToString(" — ")
-                                        if (visitorSummary.isNotBlank()) {
-                                            Text(
-                                                text = (if (isEn) "Visitor: " else "Pengunjung: ") + visitorSummary,
-                                                fontSize = 11.5.sp,
-                                                fontWeight = FontWeight.SemiBold,
-                                                color = Color(0xFF1E293B),
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                        if (existingConf.estimatedArrivalTime.isNotBlank()) {
-                                            Text(
-                                                text = (if (isEn) "Est. Arrival: " else "Perkiraan Tiba: ") + existingConf.estimatedArrivalTime,
-                                                fontSize = 11.sp,
-                                                color = Color(0xFF475569)
-                                            )
-                                        }
-                                        Text(
-                                            text = if (isEn) {
-                                                "Show this QR code to Wali Asuh upon arrival for fast check-in."
-                                            } else {
-                                                "Tunjukkan QR Code ini ke Wali Asuh saat tiba di sekolah untuk scan daftar hadir."
-                                            },
-                                            fontSize = 11.sp,
-                                            color = tealPrimary,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                }
-                            } else {
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("card_parent_visit_absent_${sess.id}"),
-                                    shape = RoundedCornerShape(12.dp),
-                                    color = Color(0xFFFFFBEB),
-                                    border = BorderStroke(1.dp, Color(0xFFFCD34D))
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.EventBusy,
-                                            contentDescription = null,
-                                            tint = Color(0xFFB45309),
-                                            modifier = Modifier.size(20.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Column {
-                                            Text(
-                                                text = if (isEn) "Marked Unable to Attend" else "Tercatat Berhalangan Hadir",
-                                                fontSize = 12.5.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF92400E)
-                                            )
-                                            if (existingConf.notes.isNotBlank()) {
-                                                Text(
-                                                    text = existingConf.notes,
-                                                    fontSize = 11.5.sp,
-                                                    color = Color(0xFF78350F)
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            if (sess.isActive) {
-                                OutlinedButton(
-                                    onClick = { isEditing = true },
-                                    shape = RoundedCornerShape(10.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(min = 48.dp)
-                                        .testTag("btn_parent_visit_edit_${sess.id}")
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Edit,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text(
-                                        text = if (isEn) "Update Confirmation" else "Ubah Konfirmasi Kehadiran",
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                }
-                            }
-                        } else if (sess.isActive || existingConf == null) {
-                            HorizontalDivider(color = Color(0xFFE2E8F0))
-                            Text(
-                                text = if (isEn) "Visit Attendance Confirmation" else "Konfirmasi Kehadiran Kunjungan",
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
+                            MiniBadgeChip(
+                                text = if (isEn) "Moved" else "Jadwal Dipindah",
+                                icon = Icons.Default.SwapHoriz,
+                                bgColor = Color(0xFFEEF2FF),
+                                textColor = Color(0xFF4338CA)
                             )
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                FilterChip(
-                                    selected = isHadirSelected,
-                                    onClick = { statusChoice = VisitConfirmation.STATUS_HADIR },
-                                    label = {
-                                        Text(
-                                            text = if (isEn) "Attending" else "Akan Hadir",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = tealPrimary.copy(alpha = 0.16f),
-                                        selectedLabelColor = tealPrimary
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("chip_parent_visit_hadir_${sess.id}")
-                                )
-                                FilterChip(
-                                    selected = !isHadirSelected,
-                                    onClick = { statusChoice = VisitConfirmation.STATUS_BERHALANGAN },
-                                    label = {
-                                        Text(
-                                            text = if (isEn) "Unable to Attend" else "Berhalangan",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 12.sp
-                                        )
-                                    },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = Color(0xFFFEF3C7),
-                                        selectedLabelColor = Color(0xFFB45309)
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("chip_parent_visit_berhalangan_${sess.id}")
-                                )
-                            }
-
-                            if (isHadirSelected) {
-                                Text(
-                                    text = if (isEn) "Visitor Relation" else "Hubungan Pengunjung",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                val relationOptions = listOf("Ibu", "Ayah", "Wali / Keluarga")
-                                FlowRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    relationOptions.forEach { rel ->
-                                        FilterChip(
-                                            selected = relationChoice == rel,
-                                            onClick = { relationChoice = rel },
-                                            label = { Text(rel, fontSize = 11.5.sp) },
-                                            modifier = Modifier.testTag("chip_parent_visit_rel_${sess.id}_${rel.replace(" ", "_").replace("/", "_")}")
-                                        )
-                                    }
-                                }
-                                OutlinedTextField(
-                                    value = visitorNameInput,
-                                    onValueChange = { visitorNameInput = it },
-                                    label = {
-                                        Text(if (isEn) "Visitor Name" else "Nama Pengunjung")
-                                    },
-                                    placeholder = {
-                                        Text(if (isEn) "e.g. Mrs. Siti Aminah" else "Contoh: Ibu Siti Aminah")
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("input_parent_visit_visitor_name_${sess.id}")
-                                )
-                                OutlinedTextField(
-                                    value = etaInput,
-                                    onValueChange = { etaInput = it },
-                                    label = {
-                                        Text(if (isEn) "Estimated Arrival Time (Optional)" else "Perkiraan Jam Tiba (Opsional)")
-                                    },
-                                    placeholder = {
-                                        Text("09:30 WIB")
-                                    },
-                                    leadingIcon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Schedule,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("input_parent_visit_eta_${sess.id}")
-                                )
-                            }
-
-                            OutlinedTextField(
-                                value = notesInput,
-                                onValueChange = { notesInput = it },
-                                label = {
-                                    Text(
-                                        if (isHadirSelected) {
-                                            if (isEn) "Notes for Caregiver (Optional)" else "Pesan / Catatan (Opsional)"
-                                        } else {
-                                            if (isEn) "Reason / Message for Caregiver" else "Alasan / Keterangan Berhalangan"
-                                        }
-                                    )
+                        }
+                        if (existingConf?.isHadir == true) {
+                            MiniBadgeChip(
+                                text = if (isEn) "QR Ready" else "Barcode Siap",
+                                icon = Icons.Default.QrCode2,
+                                bgColor = tealPrimary.copy(alpha = 0.12f),
+                                textColor = tealPrimary
+                            )
+                        } else if (!isCompletedHistory && existingConf == null) {
+                            MiniBadgeChip(
+                                text = if (isEn) "Tap to confirm" else "Perlu konfirmasi",
+                                bgColor = Color(0xFFE0F2FE),
+                                textColor = Color(0xFF0369A1)
+                            )
+                        }
+                        if (hasMyDistrict) {
+                            MiniBadgeChip(
+                                text = if (districts.size > 1) {
+                                    "${VisitHelper.displayDistrict(studentDistrictKey, isEn)} (+${districts.size - 1})"
+                                } else {
+                                    VisitHelper.displayDistrict(studentDistrictKey, isEn)
                                 },
-                                maxLines = 2,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("input_parent_visit_notes_${sess.id}")
+                                bgColor = Color(0xFFF1F5F9),
+                                textColor = Color(0xFF475569)
                             )
-
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                if (existingConf != null) {
-                                    OutlinedButton(
-                                        onClick = { isEditing = false },
-                                        shape = RoundedCornerShape(10.dp),
-                                        modifier = Modifier
-                                            .heightIn(min = 48.dp)
-                                            .testTag("btn_parent_visit_cancel_edit_${sess.id}")
-                                    ) {
-                                        Text(if (isEn) "Cancel" else "Batal")
-                                    }
-                                }
-                                Button(
-                                    onClick = {
-                                        if (isHadirSelected && visitorNameInput.isBlank()) {
-                                            Toast.makeText(
-                                                context,
-                                                if (isEn) "Please enter visitor name first." else "Mohon isi nama pengunjung terlebih dahulu.",
-                                                Toast.LENGTH_SHORT
-                                            ).show()
-                                            return@Button
-                                        }
-                                        val effectiveDate = sessionDate.takeIf { it > 0L } ?: System.currentTimeMillis()
-                                        onSaveConfirmation(
-                                            sess,
-                                            targetStudent,
-                                            effectiveDate,
-                                            visitorNameInput.trim(),
-                                            relationChoice,
-                                            statusChoice,
-                                            etaInput.trim(),
-                                            notesInput.trim()
-                                        )
-                                        isEditing = false
-                                    },
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isHadirSelected) tealPrimary else Color(0xFFD97706)
-                                    ),
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .heightIn(min = 48.dp)
-                                        .testTag("btn_parent_visit_confirm_${sess.id}")
-                                ) {
-                                    Text(
-                                        text = if (isHadirSelected) {
-                                            if (isEn) "Confirm & Generate QR Pass" else "Konfirmasi Hadir & Buat Barcode"
-                                        } else {
-                                            if (isEn) "Save Absence Notice" else "Simpan Pemberitahuan"
-                                        },
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
                         }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(start = 6.dp)
+                    ) {
+                        Text(
+                            text = if (isEn) "Detail" else "Detail",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = accentColor
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = if (isEn) "Open visit detail" else "Buka detail kunjungan",
+                            tint = accentColor,
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun MiniBadgeChip(
+    text: String,
+    bgColor: Color,
+    textColor: Color,
+    icon: ImageVector? = null
+) {
+    Surface(
+        shape = RoundedCornerShape(999.dp),
+        color = bgColor
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = textColor,
+                    modifier = Modifier.size(11.dp)
+                )
+            }
+            Text(
+                text = text,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }

@@ -1390,29 +1390,48 @@ private fun ParentOverviewContent(
     val isEn = s.isEnglish
     val lang = s.language
 
-    val matchedActiveVisitSessions = remember(visitSessions, allVisitSessions, visitSessionSwaps, student) {
+    val todayStartMillis = remember { VisitHelper.normalizeDayStart(System.currentTimeMillis()) }
+    val matchedActiveVisitSessions = remember(visitSessions, allVisitSessions, visitSessionSwaps, student, todayStartMillis) {
         if (student == null) emptyList()
         else {
             val allSess = allVisitSessions.ifEmpty { visitSessions }
             visitSessions
-                .filter {
-                    it.publishedToParent &&
-                        it.isActive &&
-                        VisitHelper.isStudentEffectiveInSession(it, student, visitSessionSwaps, allSess)
+                .filter { sess ->
+                    if (!sess.publishedToParent || !sess.isActive) return@filter false
+                    if (!VisitHelper.isStudentEffectiveInSession(sess, student, visitSessionSwaps, allSess)) return@filter false
+                    val dates = sess.getVisitDatesList()
+                    if (dates.isEmpty()) true
+                    else dates.any { d -> VisitHelper.normalizeDayStart(d) >= todayStartMillis }
                 }
-                .sortedBy { it.getVisitDatesList().firstOrNull() ?: Long.MAX_VALUE }
+                .sortedWith(
+                    compareBy<VisitSession> { sess ->
+                        sess.getVisitDatesList()
+                            .map { VisitHelper.normalizeDayStart(it) }
+                            .filter { it >= todayStartMillis }
+                            .minOrNull() ?: Long.MAX_VALUE
+                    }.thenByDescending { it.createdAt }
+                )
         }
     }
     val nextVisitSession = matchedActiveVisitSessions.firstOrNull()
+    val nextVisitDisplayDateMillis = remember(nextVisitSession, todayStartMillis) {
+        val sess = nextVisitSession ?: return@remember 0L
+        val dates = sess.getVisitDatesList()
+        dates.map { VisitHelper.normalizeDayStart(it) }
+            .filter { it >= todayStartMillis }
+            .minOrNull()
+            ?: dates.firstOrNull()
+            ?: 0L
+    }
     val nextVisitIncomingSwap = remember(nextVisitSession, student, visitSessionSwaps) {
         val sess = nextVisitSession ?: return@remember null
         val targetStudent = student ?: return@remember null
         VisitHelper.findIncomingSwapToSession(sess.id, targetStudent, visitSessionSwaps)
     }
-    val nextVisitConf = remember(nextVisitSession, visitConfirmations, student) {
+    val nextVisitConf = remember(nextVisitSession, visitConfirmations, student, nextVisitDisplayDateMillis) {
         val sess = nextVisitSession ?: return@remember null
         val targetStudent = student ?: return@remember null
-        val d = sess.getVisitDatesList().firstOrNull()
+        val d = nextVisitDisplayDateMillis.takeIf { it > 0L }
         VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, targetStudent, d)
     }
 
@@ -1586,7 +1605,11 @@ private fun ParentOverviewContent(
                 )
             }
             val unconfirmedVisitCount = if (student == null) 0 else matchedActiveVisitSessions.count { sess ->
-                val d = sess.getVisitDatesList().firstOrNull()
+                val d = sess.getVisitDatesList()
+                    .map { VisitHelper.normalizeDayStart(it) }
+                    .filter { it >= todayStartMillis }
+                    .minOrNull()
+                    ?: sess.getVisitDatesList().firstOrNull()
                 VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, student, d) == null
             }
             add(
@@ -1761,7 +1784,7 @@ private fun ParentOverviewContent(
         }
 
         if (nextVisitSession != null) {
-            val nextDateMillis = nextVisitSession.getVisitDatesList().firstOrNull() ?: 0L
+            val nextDateMillis = nextVisitDisplayDateMillis
             val nextDateLabel = if (nextDateMillis > 0L) {
                 SimpleDateFormat("EEEE, d MMM yyyy", lang.locale).format(Date(nextDateMillis))
             } else "-"
