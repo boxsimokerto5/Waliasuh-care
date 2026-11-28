@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -73,7 +74,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -92,7 +95,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.platform.testTag
@@ -202,8 +207,14 @@ fun MedicalRecordScreen(
         }
     }
 
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val screenBg = if (isLight) Color(0xFFF3FBF8) else MaterialTheme.colorScheme.background
+    val tealAccent = if (isLight) Color(0xFF0F766E) else Color(0xFF5EEAD4)
+    val indigoAccent = if (isLight) Color(0xFF4F46E5) else Color(0xFFA5B4FC)
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
+        containerColor = screenBg,
         contentWindowInsets = androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
@@ -211,7 +222,7 @@ fun MedicalRecordScreen(
                     TopOnAdManager.onUserActionClick(context)
                     showDirectTreatmentDialog = true
                 },
-                containerColor = WaliPrimary,
+                containerColor = if (selectedTabMode == 0) Color(0xFF0F766E) else Color(0xFF4F46E5),
                 contentColor = Color.White,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.testTag("fab_direct_treatment")
@@ -238,67 +249,125 @@ fun MedicalRecordScreen(
                     .fillMaxSize()
                     .widthIn(max = 640.dp)
             ) {
-                // Header Titles + Tombol Kaca Pembesar Pencarian
-                Row(
+                // Header Gradien Teal-Cyan Segar & Lembut
+                Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 12.dp, end = 6.dp, top = 2.dp, bottom = 0.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = if (isEn) "Medical Records & Actions" else "Rekam Medis & Tindakan",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "Wali: $waliName",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.clickable(onClick = onNavigateToProfile)
-                        )
-                    }
-                    IconButton(
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            if (showSearchField) {
-                                viewModel.setHistorySearchQuery("")
-                                isSearchExpanded = false
-                            } else {
-                                isSearchExpanded = true
-                            }
-                        },
-                        modifier = Modifier
-                            .clip(CircleShape)
-                            .background(
-                                if (showSearchField) WaliPrimary.copy(alpha = 0.12f)
-                                else Color.Transparent
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .clip(RoundedCornerShape(18.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                if (selectedTabMode == 0) {
+                                    listOf(
+                                        Color(0xFF0F766E),
+                                        Color(0xFF0D9488),
+                                        Color(0xFF0284C7)
+                                    )
+                                } else {
+                                    listOf(
+                                        Color(0xFF3730A3),
+                                        Color(0xFF4F46E5),
+                                        Color(0xFF7C3AED)
+                                    )
+                                }
                             )
-                            .testTag("btn_toggle_medical_search")
-                    ) {
-                        Icon(
-                            imageVector = if (showSearchField) Icons.Default.Close else Icons.Default.Search,
-                            contentDescription = if (isEn) {
-                                if (showSearchField) "Close search" else "Search medical records"
-                            } else {
-                                if (showSearchField) "Tutup pencarian" else "Cari rekam medis"
-                            },
-                            tint = if (showSearchField) WaliPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(22.dp)
                         )
+                        .padding(start = 12.dp, end = 6.dp, top = 10.dp, bottom = 10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(38.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .border(
+                                        1.5.dp,
+                                        if (selectedTabMode == 0) Color(0xFF99F6E4) else Color(0xFFC7D2FE),
+                                        CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (selectedTabMode == 0) Icons.Default.LocalHospital else Icons.Default.Person,
+                                    contentDescription = null,
+                                    tint = if (selectedTabMode == 0) Color(0xFF0F766E) else Color(0xFF4F46E5),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = if (isEn) "Medical Records & Actions" else "Rekam Medis & Tindakan",
+                                    fontSize = 15.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "Wali: $waliName",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = if (selectedTabMode == 0) Color(0xFFCCFBF1) else Color(0xFFE0E7FF),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.clickable(onClick = onNavigateToProfile)
+                                )
+                            }
+                        }
+
+                        IconButton(
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                if (showSearchField) {
+                                    viewModel.setHistorySearchQuery("")
+                                    isSearchExpanded = false
+                                } else {
+                                    isSearchExpanded = true
+                                }
+                            },
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_toggle_medical_search")
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (showSearchField) Color.White
+                                        else Color.White.copy(alpha = 0.20f)
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (showSearchField) Icons.Default.Close else Icons.Default.Search,
+                                    contentDescription = if (isEn) {
+                                        if (showSearchField) "Close search" else "Search medical records"
+                                    } else {
+                                        if (showSearchField) "Tutup pencarian" else "Cari rekam medis"
+                                    },
+                                    tint = if (showSearchField) {
+                                        if (selectedTabMode == 0) Color(0xFF0F766E) else Color(0xFF4F46E5)
+                                    } else {
+                                        Color.White
+                                    },
+                                    modifier = Modifier.size(19.dp)
+                                )
+                            }
+                        }
                     }
                 }
 
-                // Search Field Ringkas (Muncul Saat Ikon Kaca Pembesar Ditekan)
+                // Search Field Ringkas Berwarna Pastel Lembut
                 AnimatedVisibility(
                     visible = showSearchField,
                     enter = expandVertically() + fadeIn(),
@@ -328,7 +397,7 @@ fun MedicalRecordScreen(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                tint = WaliPrimary,
+                                tint = tealAccent,
                                 modifier = Modifier.size(18.dp)
                             )
                         },
@@ -350,7 +419,13 @@ fun MedicalRecordScreen(
                             }
                         },
                         singleLine = true,
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = tealAccent,
+                            unfocusedBorderColor = if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            focusedContainerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            unfocusedContainerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp, vertical = 4.dp)
@@ -359,75 +434,118 @@ fun MedicalRecordScreen(
                     )
                 }
 
-                // Tab Switcher: Tab 0 = Riwayat Tindakan, Tab 1 = Screening Anak (Rapi 1 Baris)
-                TabRow(
-                    selectedTabIndex = selectedTabMode,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    contentColor = WaliPrimary,
-                    modifier = Modifier.padding(horizontal = 12.dp)
+                // Tab Switcher Pill Pastel Lembut: Riwayat Tindakan vs Screening Anak
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isLight) Color(0xFFE6F6F2) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
                 ) {
-                    Tab(
-                        selected = selectedTabMode == 0,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            selectedTabMode = 0
-                        },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val tab0Selected = selectedTabMode == 0
+                        val tab1Selected = selectedTabMode == 1
+
+                        Surface(
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedTabMode = 0
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (tab0Selected) {
+                                if (isLight) Color(0xFF0F766E) else Color(0xFF14B8A6)
+                            } else {
+                                Color.Transparent
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.EventNote,
                                     contentDescription = null,
+                                    tint = if (tab0Selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
                                     text = if (isEn) "Treatment History" else "Riwayat Tindakan",
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = if (tab0Selected) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = if (tab0Selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
-                    )
-                    Tab(
-                        selected = selectedTabMode == 1,
-                        onClick = {
-                            TopOnAdManager.onUserActionClick(context)
-                            selectedTabMode = 1
-                        },
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+
+                        Surface(
+                            onClick = {
+                                TopOnAdManager.onUserActionClick(context)
+                                selectedTabMode = 1
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (tab1Selected) {
+                                if (isLight) Color(0xFF4F46E5) else Color(0xFF818CF8)
+                            } else {
+                                Color.Transparent
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(38.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(horizontal = 8.dp)
+                            ) {
                                 Icon(
                                     imageVector = Icons.Default.Person,
                                     contentDescription = null,
+                                    tint = if (tab1Selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.size(15.dp)
                                 )
                                 Spacer(modifier = Modifier.width(5.dp))
                                 Text(
                                     text = if (isEn) "Health Screening" else "Screening Anak",
                                     fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
+                                    fontWeight = if (tab1Selected) FontWeight.Bold else FontWeight.SemiBold,
+                                    color = if (tab1Selected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
-                    )
+                    }
                 }
 
-                // Filter Chips & Info Bar dalam 1 Baris Horizontal Ringkas
+                // Filter Chips Pastel Multi-Warna & Info Bar Ringkas
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(7.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     if (selectedTabMode == 0) {
+                        val todaySelected = selectedDateFilter == "Hari Ini"
                         FilterChip(
-                            selected = selectedDateFilter == "Hari Ini",
+                            selected = todaySelected,
                             onClick = {
                                 TopOnAdManager.onUserActionClick(context)
                                 selectedDateFilter = "Hari Ini"
@@ -436,18 +554,29 @@ fun MedicalRecordScreen(
                                 Text(
                                     text = if (isEn) "Today (${todayRecords.size})" else "Hari Ini (${todayRecords.size})",
                                     fontSize = 11.sp,
+                                    fontWeight = if (todaySelected) FontWeight.Bold else FontWeight.Medium,
                                     maxLines = 1
                                 )
                             },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = todaySelected,
+                                borderColor = if (isLight) Color(0xFFFDA4AF) else Color(0xFFBE123C).copy(alpha = 0.5f),
+                                selectedBorderColor = if (isLight) Color(0xFFFB7185) else Color(0xFFFDA4AF)
+                            ),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
-                                selectedLabelColor = WaliPrimary
+                                containerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surface,
+                                labelColor = if (isLight) Color(0xFF9F1239) else Color(0xFFFECDD3),
+                                selectedContainerColor = if (isLight) Color(0xFFFFE4E6) else Color(0xFF881337).copy(alpha = 0.65f),
+                                selectedLabelColor = if (isLight) Color(0xFFBE123C) else Color(0xFFFFE4E6)
                             ),
                             modifier = Modifier.testTag("chip_filter_today_records")
                         )
+
+                        val weekSelected = selectedDateFilter == "Minggu Ini"
                         FilterChip(
-                            selected = selectedDateFilter == "Minggu Ini",
+                            selected = weekSelected,
                             onClick = {
                                 TopOnAdManager.onUserActionClick(context)
                                 selectedDateFilter = "Minggu Ini"
@@ -456,18 +585,29 @@ fun MedicalRecordScreen(
                                 Text(
                                     text = if (isEn) "This Week (${thisWeekRecords.size})" else "Minggu (${thisWeekRecords.size})",
                                     fontSize = 11.sp,
+                                    fontWeight = if (weekSelected) FontWeight.Bold else FontWeight.Medium,
                                     maxLines = 1
                                 )
                             },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = weekSelected,
+                                borderColor = if (isLight) Color(0xFFC4B5FD) else Color(0xFF6D28D9).copy(alpha = 0.5f),
+                                selectedBorderColor = if (isLight) Color(0xFFA78BFA) else Color(0xFFC4B5FD)
+                            ),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
-                                selectedLabelColor = WaliPrimary
+                                containerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surface,
+                                labelColor = if (isLight) Color(0xFF5B21B6) else Color(0xFFDDD6FE),
+                                selectedContainerColor = if (isLight) Color(0xFFEDE9FE) else Color(0xFF4C1D95).copy(alpha = 0.65f),
+                                selectedLabelColor = if (isLight) Color(0xFF6D28D9) else Color(0xFFEDE9FE)
                             ),
                             modifier = Modifier.testTag("chip_filter_week_records")
                         )
+
+                        val allSelected = selectedDateFilter == "Semua"
                         FilterChip(
-                            selected = selectedDateFilter == "Semua",
+                            selected = allSelected,
                             onClick = {
                                 TopOnAdManager.onUserActionClick(context)
                                 selectedDateFilter = "Semua"
@@ -476,23 +616,34 @@ fun MedicalRecordScreen(
                                 Text(
                                     text = if (isEn) "All (${completedRecords.size})" else "Semua (${completedRecords.size})",
                                     fontSize = 11.sp,
+                                    fontWeight = if (allSelected) FontWeight.Bold else FontWeight.Medium,
                                     maxLines = 1
                                 )
                             },
-                            shape = RoundedCornerShape(8.dp),
+                            shape = RoundedCornerShape(10.dp),
+                            border = FilterChipDefaults.filterChipBorder(
+                                enabled = true,
+                                selected = allSelected,
+                                borderColor = if (isLight) Color(0xFF5EEAD4) else Color(0xFF0F766E).copy(alpha = 0.5f),
+                                selectedBorderColor = if (isLight) Color(0xFF2DD4BF) else Color(0xFF5EEAD4)
+                            ),
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = WaliPrimary.copy(alpha = 0.15f),
-                                selectedLabelColor = WaliPrimary
+                                containerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surface,
+                                labelColor = if (isLight) Color(0xFF0F766E) else Color(0xFF99F6E4),
+                                selectedContainerColor = if (isLight) Color(0xFFCCFBF1) else Color(0xFF134E4A).copy(alpha = 0.65f),
+                                selectedLabelColor = if (isLight) Color(0xFF0F766E) else Color(0xFFCCFBF1)
                             ),
                             modifier = Modifier.testTag("chip_filter_all_records")
                         )
                     }
 
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f))
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (isLight) Color(0xFFFEF3C7) else Color(0xFF78350F).copy(alpha = 0.55f),
+                        border = BorderStroke(
+                            0.8.dp,
+                            if (isLight) Color(0xFFFCD34D) else Color(0xFFD97706).copy(alpha = 0.45f)
+                        )
                     ) {
                         Text(
                             text = if (isEn) {
@@ -502,8 +653,9 @@ fun MedicalRecordScreen(
                             },
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
-                            color = WaliPrimary,
-                            maxLines = 1
+                            color = if (isLight) Color(0xFFB45309) else Color(0xFFFDE68A),
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                         )
                     }
                 }
@@ -514,76 +666,96 @@ fun MedicalRecordScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(20.dp),
+                                .padding(horizontal = 20.dp, vertical = 16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(5.dp)
+                            Surface(
+                                shape = RoundedCornerShape(20.dp),
+                                color = if (isLight) Color.White else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                                ),
+                                tonalElevation = 1.dp,
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.AssignmentTurnedIn,
-                                    contentDescription = null,
-                                    tint = WaliPrimary.copy(alpha = 0.4f),
-                                    modifier = Modifier.size(44.dp)
-                                )
-                                Text(
-                                    text = if (isEn) {
-                                        if (searchQuery.isNotBlank()) {
-                                            "No medical records found matching '$searchQuery'."
-                                        } else {
-                                            when (selectedDateFilter) {
-                                                "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
-                                                    "No treatment actions recorded today. There are ${thisWeekRecords.size} records in 'This Week'."
-                                                } else if (completedRecords.isNotEmpty()) {
-                                                    "No treatment actions recorded today. Tap 'All' to view full history."
-                                                } else {
-                                                    "No completed medical records yet."
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(CircleShape)
+                                            .background(if (isLight) Color(0xFFCCFBF1) else Color(0xFF134E4A)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.AssignmentTurnedIn,
+                                            contentDescription = null,
+                                            tint = tealAccent,
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = if (isEn) {
+                                            if (searchQuery.isNotBlank()) {
+                                                "No medical records found matching '$searchQuery'."
+                                            } else {
+                                                when (selectedDateFilter) {
+                                                    "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
+                                                        "No treatment actions recorded today. There are ${thisWeekRecords.size} records in 'This Week'."
+                                                    } else if (completedRecords.isNotEmpty()) {
+                                                        "No treatment actions recorded today. Tap 'All' to view full history."
+                                                    } else {
+                                                        "No completed medical records yet."
+                                                    }
+                                                    "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
+                                                        "No treatment actions recorded this week. Tap 'All' to view full history."
+                                                    } else {
+                                                        "No completed medical records yet."
+                                                    }
+                                                    else -> "No completed medical records yet."
                                                 }
-                                                "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
-                                                    "No treatment actions recorded this week. Tap 'All' to view full history."
-                                                } else {
-                                                    "No completed medical records yet."
-                                                }
-                                                else -> "No completed medical records yet."
                                             }
-                                        }
-                                    } else {
-                                        if (searchQuery.isNotBlank()) {
-                                            "Tidak ditemukan catatan medis yang cocok dengan '$searchQuery'."
                                         } else {
-                                            when (selectedDateFilter) {
-                                                "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
-                                                    "Belum ada tindakan pengobatan hari ini. Terdapat ${thisWeekRecords.size} catatan tindakan di 'Minggu Ini'."
-                                                } else if (completedRecords.isNotEmpty()) {
-                                                    "Belum ada tindakan pengobatan hari ini. Tekan 'Semua' untuk melihat seluruh riwayat."
-                                                } else {
-                                                    "Belum ada rekam medis pengobatan selesai."
+                                            if (searchQuery.isNotBlank()) {
+                                                "Tidak ditemukan catatan medis yang cocok dengan '$searchQuery'."
+                                            } else {
+                                                when (selectedDateFilter) {
+                                                    "Hari Ini" -> if (thisWeekRecords.isNotEmpty()) {
+                                                        "Belum ada tindakan pengobatan hari ini. Terdapat ${thisWeekRecords.size} catatan tindakan di 'Minggu Ini'."
+                                                    } else if (completedRecords.isNotEmpty()) {
+                                                        "Belum ada tindakan pengobatan hari ini. Tekan 'Semua' untuk melihat seluruh riwayat."
+                                                    } else {
+                                                        "Belum ada rekam medis pengobatan selesai."
+                                                    }
+                                                    "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
+                                                        "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua' untuk melihat seluruh riwayat."
+                                                    } else {
+                                                        "Belum ada rekam medis pengobatan selesai."
+                                                    }
+                                                    else -> "Belum ada rekam medis pengobatan selesai."
                                                 }
-                                                "Minggu Ini" -> if (completedRecords.isNotEmpty()) {
-                                                    "Belum ada tindakan pengobatan dalam minggu ini. Tekan 'Semua' untuk melihat seluruh riwayat."
-                                                } else {
-                                                    "Belum ada rekam medis pengobatan selesai."
-                                                }
-                                                else -> "Belum ada rekam medis pengobatan selesai."
                                             }
-                                        }
-                                    },
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                                Text(
-                                    text = if (isEn) {
-                                        "Use '+ Direct Treatment' to log treatment results from Puskesmas."
-                                    } else {
-                                        "Gunakan tombol '+ Tindakan Langsung' untuk mendata hasil berobat anak di puskesmas."
-                                    },
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
+                                        },
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                    Text(
+                                        text = if (isEn) {
+                                            "Use '+ Direct Treatment' to log treatment results from Puskesmas."
+                                        } else {
+                                            "Gunakan tombol '+ Tindakan Langsung' untuk mendata hasil berobat anak di puskesmas."
+                                        },
+                                        fontSize = 11.5.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -835,12 +1007,47 @@ fun SlimMedicalRecordCardItem(
     onShare: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     val dateStr = record.treatmentDate?.let { DateUtils.formatShortDate(it) }
         ?: DateUtils.formatShortDate(record.planDate)
     val timeStr = "${record.departureTime} WIB"
     val gradeText = student?.classGrade ?: if (isEn) "Class" else "Kelas Siswa"
     val dormText = record.studentDormitory
     val gender = student?.gender ?: "L"
+
+    // Warna pastel lembut berbeda sesuai status tindakan / urutan
+    val (cardBg, cardBorder, diagBg, diagTint) = when {
+        record.isInpatient -> listOf(
+            if (isLight) Color(0xFFFFF5F6) else Color(0xFF2B1418),
+            if (isLight) Color(0xFFFECDD3) else Color(0xFFE11D48).copy(alpha = 0.45f),
+            if (isLight) Color(0xFFFFE4E6) else Color(0xFF881337).copy(alpha = 0.4f),
+            if (isLight) Color(0xFFBE123C) else Color(0xFFFDA4AF)
+        )
+        record.needsControl -> listOf(
+            if (isLight) Color(0xFFFFFCF2) else Color(0xFF282012),
+            if (isLight) Color(0xFFFDE68A) else Color(0xFFD97706).copy(alpha = 0.45f),
+            if (isLight) Color(0xFFFEF3C7) else Color(0xFF78350F).copy(alpha = 0.4f),
+            if (isLight) Color(0xFFB45309) else Color(0xFFFCD34D)
+        )
+        number % 3 == 1 -> listOf(
+            if (isLight) Color(0xFFF2FCFA) else Color(0xFF102422),
+            if (isLight) Color(0xFF99F6E4) else Color(0xFF0D9488).copy(alpha = 0.45f),
+            if (isLight) Color(0xFFCCFBF1) else Color(0xFF134E4A).copy(alpha = 0.4f),
+            if (isLight) Color(0xFF0F766E) else Color(0xFF5EEAD4)
+        )
+        number % 3 == 2 -> listOf(
+            if (isLight) Color(0xFFF7F5FF) else Color(0xFF1C192E),
+            if (isLight) Color(0xFFDDD6FE) else Color(0xFF7C3AED).copy(alpha = 0.45f),
+            if (isLight) Color(0xFFEDE9FE) else Color(0xFF4C1D95).copy(alpha = 0.4f),
+            if (isLight) Color(0xFF6D28D9) else Color(0xFFC4B5FD)
+        )
+        else -> listOf(
+            if (isLight) Color(0xFFF2F9FF) else Color(0xFF11212E),
+            if (isLight) Color(0xFFBAE6FD) else Color(0xFF0284C7).copy(alpha = 0.45f),
+            if (isLight) Color(0xFFE0F2FE) else Color(0xFF0C4A6E).copy(alpha = 0.4f),
+            if (isLight) Color(0xFF0369A1) else Color(0xFF7DD3FC)
+        )
+    }
 
     Card(
         modifier = Modifier
@@ -849,13 +1056,13 @@ fun SlimMedicalRecordCardItem(
             .testTag("card_medical_record_${record.id}"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
+            containerColor = cardBg
         ),
         elevation = CardDefaults.cardElevation(
-            defaultElevation = 1.dp,
+            defaultElevation = 0.5.dp,
             pressedElevation = 3.dp
         ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        border = BorderStroke(1.dp, cardBorder)
     ) {
         Column(
             modifier = Modifier
@@ -943,20 +1150,20 @@ fun SlimMedicalRecordCardItem(
                 }
             }
 
-            // Baris 2: Diagnosa Medis (Sleek tinted container, nyaman dibaca di layar apapun)
+            // Baris 2: Diagnosa Medis (Soft pastel pill selaras kartu)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFF0284C7).copy(alpha = 0.08f))
-                    .padding(horizontal = 9.dp, vertical = 5.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(diagBg)
+                    .padding(horizontal = 10.dp, vertical = 6.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Medication,
                     contentDescription = null,
-                    tint = Color(0xFF0284C7),
+                    tint = diagTint,
                     modifier = Modifier.size(14.dp)
                 )
                 Text(
@@ -1096,15 +1303,25 @@ fun ChildHealthPrimaryCardItem(
     onClick: () -> Unit
 ) {
     val isEn = LocalAppStrings.current.isEnglish
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val (childCardBg, childCardBorder) = when {
+        thisMonthCount >= 2 -> (if (isLight) Color(0xFFFFF5F6) else Color(0xFF2B1418)) to
+            (if (isLight) Color(0xFFFECDD3) else Color(0xFFE11D48).copy(alpha = 0.45f))
+        thisMonthCount == 1 -> (if (isLight) Color(0xFFF2F9FF) else Color(0xFF11212E)) to
+            (if (isLight) Color(0xFFBAE6FD) else Color(0xFF0284C7).copy(alpha = 0.45f))
+        else -> (if (isLight) Color(0xFFF2FCF7) else Color(0xFF10241D)) to
+            (if (isLight) Color(0xFFA7F3D0) else Color(0xFF10B981).copy(alpha = 0.45f))
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
             .testTag("card_child_primary_${student.id}"),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp, pressedElevation = 3.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+        colors = CardDefaults.cardColors(containerColor = childCardBg),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp, pressedElevation = 3.dp),
+        border = BorderStroke(1.dp, childCardBorder)
     ) {
         Column(
             modifier = Modifier
@@ -1270,12 +1487,13 @@ fun MedicalRecordDetailSheet(
     val gradeText = student?.classGrade ?: if (isEn) "Class" else "Kelas Siswa"
     val gender = student?.gender ?: "L"
 
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        dragHandle = null,
+        containerColor = if (isLight) Color(0xFFF4FBF9) else MaterialTheme.colorScheme.surface
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
@@ -1285,76 +1503,142 @@ fun MedicalRecordDetailSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 600.dp)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Header Profil Siswa (Anak Asuh Sebagai Primary Entity)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        StudentAvatar(
-                            name = record.studentName,
-                            gender = gender,
-                            size = 46.dp,
-                            photoUrl = student?.photoUrl.orEmpty(),
-                            photoFallbackUrl = student?.photoFallbackUrl.orEmpty()
+                // Header Gradien Teal-Cyan untuk Detail Rekam Medis
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF0F766E),
+                                    Color(0xFF0D9488),
+                                    Color(0xFF0284C7)
+                                )
+                            )
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = record.studentName,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "$gradeText • Asrama: ${record.studentDormitory} • NIS: ${student?.nis ?: "-"}",
-                                fontSize = 11.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "Gender: ${if (gender == "L") "Putra" else "Putri"} • Age: ${student?.age ?: "-"} yrs"
-                                } else {
-                                    "Gender: ${if (gender == "L") "Putra" else "Putri"} • Usia: ${student?.age ?: "-"} Tahun"
-                                },
-                                fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.outline
-                            )
-                        }
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(38.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.48f))
+                        )
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (onEdit != null) {
-                            IconButton(
-                                onClick = onEdit,
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
                                 modifier = Modifier
-                                    .size(32.dp)
-                                    .testTag("btn_detail_edit_record")
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .padding(2.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Edit,
-                                    contentDescription = if (isEn) "Edit Record" else "Edit Rekam Tindakan",
-                                    tint = WaliPrimary,
-                                    modifier = Modifier.size(18.dp)
+                                StudentAvatar(
+                                    name = record.studentName,
+                                    gender = gender,
+                                    size = 44.dp,
+                                    photoUrl = student?.photoUrl.orEmpty(),
+                                    photoFallbackUrl = student?.photoFallbackUrl.orEmpty()
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = record.studentName,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "$gradeText • Asrama: ${record.studentDormitory} • NIS: ${student?.nis ?: "-"}",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFFCCFBF1),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "Gender: ${if (gender == "L") "Putra" else "Putri"} • Age: ${student?.age ?: "-"} yrs"
+                                    } else {
+                                        "Gender: ${if (gender == "L") "Putra" else "Putri"} • Usia: ${student?.age ?: "-"} Tahun"
+                                    },
+                                    fontSize = 10.5.sp,
+                                    color = Color.White.copy(alpha = 0.85f)
                                 )
                             }
                         }
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.size(32.dp)
-                        ) {
-                            Icon(imageVector = Icons.Default.Close, contentDescription = s.nav.closeBtn, modifier = Modifier.size(18.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (onEdit != null) {
+                                IconButton(
+                                    onClick = onEdit,
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .testTag("btn_detail_edit_record")
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(32.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.White.copy(alpha = 0.20f)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Edit,
+                                            contentDescription = if (isEn) "Edit Record" else "Edit Rekam Tindakan",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(17.dp)
+                                        )
+                                    }
+                                }
+                            }
+                            IconButton(
+                                onClick = onDismiss,
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.White.copy(alpha = 0.20f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = s.nav.closeBtn,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(17.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(bottom = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
 
                 // Ringkasan Frekuensi Sakit Bulan Ini yang Mengikat pada Anak Asuh (FlowRow responsif)
                 FlowRow(
@@ -1894,6 +2178,7 @@ fun MedicalRecordDetailSheet(
             }
         }
     }
+}
 
     if (showDischargeDialog && onDischargeInpatient != null) {
         var updDiagnosis by remember(record.id) { mutableStateOf(record.diagnosis) }
@@ -2029,12 +2314,13 @@ fun ChildHealthPassportSheet(
     val s = LocalAppStrings.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        dragHandle = null,
+        containerColor = if (isLight) Color(0xFFF6F5FF) else MaterialTheme.colorScheme.surface
     ) {
         Box(
             modifier = Modifier.fillMaxWidth(),
@@ -2044,52 +2330,108 @@ fun ChildHealthPassportSheet(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 600.dp)
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 24.dp)
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                // Header Profil Utama Siswa
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        StudentAvatar(
-                            name = student.name,
-                            gender = student.gender,
-                            size = 50.dp,
-                            photoUrl = student.photoUrl,
-                            photoFallbackUrl = student.photoFallbackUrl
+                // Header Gradien Indigo-Violet untuk Buku Screening Anak
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFF3730A3),
+                                    Color(0xFF4F46E5),
+                                    Color(0xFF7C3AED)
+                                )
+                            )
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = student.name,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "NIS: ${student.nis} • ${student.classGrade}",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = s.medical.passportBloodTypeLabel(student.dormitory, student.bloodType),
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.outline
-                            )
+                        .padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 14.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 8.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(38.dp)
+                                .height(4.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.48f))
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .background(Color.White)
+                                    .padding(2.dp)
+                            ) {
+                                StudentAvatar(
+                                    name = student.name,
+                                    gender = student.gender,
+                                    size = 46.dp,
+                                    photoUrl = student.photoUrl,
+                                    photoFallbackUrl = student.photoFallbackUrl
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = student.name,
+                                    fontSize = 16.5.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "NIS: ${student.nis} • ${student.classGrade}",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFFE0E7FF)
+                                )
+                                Text(
+                                    text = s.medical.passportBloodTypeLabel(student.dormitory, student.bloodType),
+                                    fontSize = 11.sp,
+                                    color = Color.White.copy(alpha = 0.85f)
+                                )
+                            }
+                        }
+                        IconButton(onClick = onDismiss) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(Color.White.copy(alpha = 0.20f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = s.nav.closeBtn,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
                         }
                     }
-                    IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.Default.Close, contentDescription = s.nav.closeBtn)
-                    }
                 }
+
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .padding(bottom = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
 
                 // Banner Status Kesehatan & Frekuensi Sakit Bulan Ini
                 Card(
@@ -2261,5 +2603,6 @@ fun ChildHealthPassportSheet(
                 }
             }
         }
+    }
     }
 }
