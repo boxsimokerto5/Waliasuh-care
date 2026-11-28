@@ -327,51 +327,46 @@ fun InputPuasaDialog(
                         }
                     }
                 } else {
-                    // Pemilih Sesi Dropdown (sesi terbaru selalu paling atas) + tombol buat sesi baru
-                    Row(
+                    // Pemilih Sesi Dropdown (membuka ke bawah + scrollable, sesi terbaru paling atas) & tombol buat sesi baru
+                    FastingSessionDropdown(
+                        sessions = availableSessions,
+                        selectedSession = selectedSession,
+                        accentColor = tealPrimary,
+                        accentLightColor = tealLight,
+                        isEn = isEn,
+                        lang = lang,
+                        onSelectSession = { selectedSessionId = it.id },
+                        testTagPrefix = "dropdown_session_input",
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        FastingSessionDropdown(
-                            sessions = availableSessions,
-                            selectedSession = selectedSession,
-                            accentColor = tealPrimary,
-                            accentLightColor = tealLight,
-                            isEn = isEn,
-                            lang = lang,
-                            onSelectSession = { selectedSessionId = it.id },
-                            testTagPrefix = "dropdown_session_input",
-                            modifier = Modifier.weight(1f)
-                        )
-
-                        if (onCreateSession != null) {
-                            OutlinedButton(
-                                onClick = { showCreateSessionDialog = true },
-                                shape = RoundedCornerShape(12.dp),
-                                border = BorderStroke(1.dp, tealPrimary),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                modifier = Modifier
-                                    .heightIn(min = 44.dp)
-                                    .testTag("btn_create_fasting_session_inline")
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Add,
-                                    contentDescription = if (isEn) "Create New Session" else "Buat Sesi Baru",
-                                    tint = tealPrimary,
-                                    modifier = Modifier.size(15.dp)
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = if (isEn) "New" else "Baru",
-                                    fontSize = 11.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = tealPrimary,
-                                    maxLines = 1
-                                )
+                        trailingAction = if (onCreateSession != null) {
+                            {
+                                OutlinedButton(
+                                    onClick = { showCreateSessionDialog = true },
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, tealPrimary),
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_create_fasting_session_inline")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = if (isEn) "Create New Session" else "Buat Sesi Baru",
+                                        tint = tealPrimary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = if (isEn) "New" else "Baru",
+                                        fontSize = 11.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = tealPrimary,
+                                        maxLines = 1
+                                    )
+                                }
                             }
-                        }
-                    }
+                        } else null
+                    )
 
                     // Tombol Scan Barcode Kartu Siswa -> Langsung terinput!
                     Button(
