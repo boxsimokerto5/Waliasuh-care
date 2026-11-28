@@ -332,21 +332,13 @@ fun GuruNgajiScreen(
                                     .size(48.dp)
                                     .testTag("btn_guru_ngaji_profile")
                             ) {
-                                if (currentAccount?.hasProfilePhoto() == true) {
-                                    StudentAvatar(
-                                        name = currentAccount.name.ifBlank { waliName },
-                                        gender = "L",
-                                        size = 32.dp,
-                                        photoUrl = currentAccount.photoUrl,
-                                        photoFallbackUrl = currentAccount.photoFallbackUrl
-                                    )
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Default.Lock,
-                                        contentDescription = if (isEn) "Profile, Photo & Password" else "Profil, Foto & Kata Sandi",
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                StudentAvatar(
+                                    name = currentAccount?.name?.ifBlank { waliName } ?: waliName,
+                                    gender = if (currentAccount?.dormitory?.contains("putri", ignoreCase = true) == true) "P" else "L",
+                                    size = 32.dp,
+                                    photoUrl = currentAccount?.photoUrl.orEmpty(),
+                                    photoFallbackUrl = currentAccount?.photoFallbackUrl.orEmpty()
+                                )
                             }
                             IconButton(
                                 onClick = { showLogoutDialog = true },

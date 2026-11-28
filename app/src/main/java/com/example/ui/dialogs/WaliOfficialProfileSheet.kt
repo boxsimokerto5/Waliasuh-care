@@ -227,12 +227,8 @@ fun WaliOfficialProfileSheet(
                                 .size(100.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.22f))
-                                .let { mod ->
-                                    if (hasPhoto) {
-                                        mod.clickable { showPhotoZoom = true }
-                                            .testTag("btn_zoom_wali_official_photo")
-                                    } else mod
-                                }
+                                .clickable { showPhotoZoom = true }
+                                .testTag("btn_zoom_wali_official_photo")
                                 .padding(3.dp),
                             contentAlignment = Alignment.Center
                         ) {
@@ -261,6 +257,26 @@ fun WaliOfficialProfileSheet(
                                         )
                                     }
                                 }
+                            }
+                        }
+
+                        if (!hasPhoto) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = Color.White.copy(alpha = 0.18f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                            ) {
+                                Text(
+                                    text = if (isEn) {
+                                        "Temporary logo • Photo not uploaded yet"
+                                    } else {
+                                        "Logo sementara • Foto belum diunggah"
+                                    },
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                                )
                             }
                         }
 

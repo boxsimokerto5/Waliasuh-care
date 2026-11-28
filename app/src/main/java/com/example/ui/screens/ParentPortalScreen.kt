@@ -1,7 +1,14 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -51,6 +58,7 @@ import androidx.compose.material.icons.filled.LocalHospital
 import androidx.compose.material.icons.filled.LockReset
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.NightlightRound
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -165,6 +173,7 @@ import com.example.ui.components.StudentAvatar
 import com.example.ui.components.StudentLargeProfilePhoto
 import com.example.ui.dialogs.ChangeParentPasswordDialog
 import com.example.ui.dialogs.DeleteParentAccountDialog
+import com.example.ui.dialogs.ParentNotificationSheet
 import com.example.ui.dialogs.RewardAdDeclarationDialog
 import com.example.ui.dialogs.RewardAdDeclarationHint
 import com.example.ui.dialogs.StudentPhotoPreviewDialog
@@ -207,7 +216,11 @@ private enum class ParentPortalTab(
 @Composable
 fun ParentPortalScreen(
     viewModel: HealthViewModel,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    deepLinkTabKey: String? = null,
+    deepLinkOpenNotificationsSheet: Boolean = false,
+    deepLinkNonce: Long = 0L,
+    onConsumeDeepLink: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val s = LocalAppStrings.current
@@ -249,6 +262,35 @@ fun ParentPortalScreen(
     val currentParentStudentId by viewModel.currentParentStudentId.collectAsStateWithLifecycle()
     val isCurrentParentAccountDeleted by viewModel.isCurrentParentAccountDeleted.collectAsStateWithLifecycle()
     val isSyncing by viewModel.isSyncing.collectAsStateWithLifecycle()
+    val parentNotifications by viewModel.parentNotifications.collectAsStateWithLifecycle()
+    val unreadParentNotificationsCount by viewModel.unreadParentNotificationsCount.collectAsStateWithLifecycle()
+    val parentBackgroundAlertsEnabled by viewModel.parentBackgroundAlertsEnabled.collectAsStateWithLifecycle()
+
+    var hasSystemNotificationPermission by remember {
+        mutableStateOf(
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    var notifRequestAttempts by remember { mutableIntStateOf(0) }
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasSystemNotificationPermission = granted
+    }
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !hasSystemNotificationPermission &&
+            !Build.FINGERPRINT.equals("robolectric", ignoreCase = true) &&
+            notifRequestAttempts == 0
+        ) {
+            notifRequestAttempts += 1
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
 
     val resolvedStudentId = activeLink?.studentId ?: currentParentStudentId
     val student = remember(students, resolvedStudentId) {
@@ -358,6 +400,7 @@ fun ParentPortalScreen(
     }
 
     var selectedTabIndex by remember { mutableIntStateOf(0) }
+    var showNotificationsSheet by remember { mutableStateOf(false) }
     var showChangePasswordSheet by remember { mutableStateOf(false) }
     var showDeleteAccountSheet by remember { mutableStateOf(false) }
     var showQuranSheet by remember { mutableStateOf(false) }
@@ -366,6 +409,23 @@ fun ParentPortalScreen(
     var pendingRewardPdfAction by remember { mutableStateOf<Pair<String, () -> Unit>?>(null) }
     val safeTabIndex = selectedTabIndex.coerceIn(0, (visibleTabs.size - 1).coerceAtLeast(0))
     val currentTab = visibleTabs.getOrElse(safeTabIndex) { ParentPortalTab.HOME }
+
+    LaunchedEffect(deepLinkNonce, deepLinkTabKey, deepLinkOpenNotificationsSheet, visibleTabs) {
+        if (deepLinkNonce > 0L) {
+            if (deepLinkOpenNotificationsSheet) {
+                showNotificationsSheet = true
+            } else if (!deepLinkTabKey.isNullOrBlank()) {
+                val targetIdx = visibleTabs.indexOfFirst { it.name == deepLinkTabKey }
+                if (targetIdx >= 0) {
+                    selectedTabIndex = targetIdx
+                    showNotificationsSheet = false
+                } else {
+                    showNotificationsSheet = true
+                }
+            }
+            onConsumeDeepLink()
+        }
+    }
 
     fun triggerRewardPdf(actionDescription: String, onGenerate: () -> Unit) {
         if (TopOnAdManager.isRewardAdReady()) {
@@ -588,6 +648,51 @@ fun ParentPortalScreen(
                     }
                 },
                 actions = {
+                    IconButton(
+                        onClick = {
+                            TopOnAdManager.onUserActionClick(context)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                hasSystemNotificationPermission = ContextCompat.checkSelfPermission(
+                                    context,
+                                    Manifest.permission.POST_NOTIFICATIONS
+                                ) == PackageManager.PERMISSION_GRANTED
+                            }
+                            showNotificationsSheet = true
+                        },
+                        modifier = Modifier.testTag("btn_parent_notifications")
+                    ) {
+                        if (unreadParentNotificationsCount > 0) {
+                            BadgedBox(
+                                badge = {
+                                    Badge(
+                                        containerColor = Color(0xFFDC2626),
+                                        modifier = Modifier.testTag("badge_parent_unread_notifs")
+                                    ) {
+                                        Text(
+                                            text = if (unreadParentNotificationsCount > 99) {
+                                                "99+"
+                                            } else {
+                                                unreadParentNotificationsCount.toString()
+                                            },
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = Color.White
+                                        )
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Notifications,
+                                    contentDescription = if (isEn) "Notifications" else "Notifikasi"
+                                )
+                            }
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Notifications,
+                                contentDescription = if (isEn) "Notifications" else "Notifikasi"
+                            )
+                        }
+                    }
                     IconButton(
                         onClick = {
                             TopOnAdManager.onUserActionClick(context)
@@ -1350,6 +1455,55 @@ fun ParentPortalScreen(
                 }
             },
             onDismiss = { pendingRewardPdfAction = null }
+        )
+    }
+    if (showNotificationsSheet) {
+        ParentNotificationSheet(
+            notifications = parentNotifications,
+            unreadCount = unreadParentNotificationsCount,
+            backgroundAlertsEnabled = parentBackgroundAlertsEnabled,
+            hasSystemNotificationPermission = hasSystemNotificationPermission,
+            onRequestSystemNotificationPermission = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    if (notifRequestAttempts == 0) {
+                        notifRequestAttempts += 1
+                        notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                    } else {
+                        val settingsIntent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        }
+                        runCatching { context.startActivity(settingsIntent) }
+                    }
+                }
+            },
+            onToggleBackgroundAlerts = { enabled ->
+                viewModel.setParentBackgroundAlertsEnabled(enabled)
+            },
+            onNotificationClick = { item ->
+                viewModel.markParentNotificationRead(item.key)
+                val targetIdx = visibleTabs.indexOfFirst { it.name == item.category.tabKey }
+                if (targetIdx >= 0) {
+                    selectedTabIndex = targetIdx
+                } else {
+                    Toast.makeText(
+                        context,
+                        if (isEn) {
+                            "This menu is currently hidden by school access settings."
+                        } else {
+                            "Menu ini sedang disembunyikan oleh pengaturan akses sekolah."
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+                showNotificationsSheet = false
+            },
+            onMarkAllRead = {
+                viewModel.markAllParentNotificationsRead()
+            },
+            onClearAll = {
+                viewModel.clearParentNotifications()
+            },
+            onDismiss = { showNotificationsSheet = false }
         )
     }
 }
@@ -2219,9 +2373,9 @@ private fun ParentProfileContent(
                             photoUrl = profilePhotoUrl,
                             photoFallbackUrl = profilePhotoFallbackUrl,
                             emptyHint = if (isEn) {
-                                "Student profile photo not uploaded yet"
+                                "Temporary logo • Student photo not uploaded yet"
                             } else {
-                                "Foto profil ananda belum diunggah"
+                                "Logo sementara • Foto ananda belum diunggah"
                             },
                             showZoomBadge = hasProfilePhoto,
                             contentScale = androidx.compose.ui.layout.ContentScale.Fit,

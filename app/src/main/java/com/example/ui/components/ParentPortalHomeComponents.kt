@@ -252,11 +252,13 @@ fun ParentGreetingHeroCard(
                         gender = student?.gender ?: "L",
                         photoUrl = heroPhotoUrl,
                         photoFallbackUrl = heroPhotoFallbackUrl,
+                        emptyHint = if (isEn) "Temp photo" else "Foto sementara",
+                        emptyHintFontSize = 9.5.sp,
                         showZoomBadge = hasHeroPhoto,
                         contentScale = ContentScale.Fit,
                         shape = RoundedCornerShape(16.dp),
                         borderColor = Color.White.copy(alpha = 0.78f),
-                        placeholderAvatarSize = 58.dp,
+                        placeholderAvatarSize = 54.dp,
                         modifier = Modifier
                             .width(96.dp)
                             .height(128.dp)

@@ -1,6 +1,7 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -12,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.ZoomIn
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -30,14 +30,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import coil.request.CachePolicy
 import coil.request.ImageRequest
+import com.example.R
 import java.io.File
 
 @Composable
@@ -62,42 +66,22 @@ fun StudentAvatar(
         else -> ""
     }
 
-    // Elegant soft gradient backgrounds inspired by the student portraits
-    val gradientColors = if (gender.equals("P", ignoreCase = true)) {
-        listOf(Color(0xFFFDE8E8), Color(0xFFFBCFE8), Color(0xFFF472B6))
-    } else {
-        listOf(Color(0xFFE0F2FE), Color(0xFFBAE6FD), Color(0xFF38BDF8))
-    }
-
-    val initials = name.trim().split(" ")
-        .filter { it.isNotEmpty() }
-        .take(2)
-        .map { it.first().uppercase() }
-        .joinToString("")
-
     Box(
         modifier = modifier
             .size(size)
             .clip(CircleShape)
-            .background(Brush.linearGradient(gradientColors))
+            .background(Color.White)
             .border(1.5.dp, Color.White, CircleShape),
         contentAlignment = Alignment.Center
     ) {
-        if (initials.isNotEmpty()) {
-            Text(
-                text = initials,
-                fontSize = (size.value * 0.38f).sp,
-                fontWeight = FontWeight.Bold,
-                color = if (gender.equals("P", ignoreCase = true)) Color(0xFF9D174D) else Color(0xFF0369A1)
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.Face,
-                contentDescription = name,
-                tint = Color.White,
-                modifier = Modifier.size(size * 0.6f)
-            )
-        }
+        Image(
+            painter = painterResource(id = R.drawable.logo_sr_care),
+            contentDescription = name,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+        )
 
         if (activeUrl.isNotBlank()) {
             val requestData: Any = if (activeUrl.startsWith("/")) File(activeUrl) else activeUrl
@@ -132,6 +116,7 @@ fun StudentLargeProfilePhoto(
     photoUrl: String = "",
     photoFallbackUrl: String = "",
     emptyHint: String = "",
+    emptyHintFontSize: TextUnit = 11.5.sp,
     showZoomBadge: Boolean = true,
     contentScale: ContentScale = ContentScale.Fit,
     shape: Shape = RoundedCornerShape(16.dp),
@@ -209,8 +194,8 @@ fun StudentLargeProfilePhoto(
         } else {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(12.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.padding(10.dp)
             ) {
                 StudentAvatar(
                     name = name,
@@ -220,10 +205,13 @@ fun StudentLargeProfilePhoto(
                 if (emptyHint.isNotBlank()) {
                     Text(
                         text = emptyHint,
-                        fontSize = 11.5.sp,
+                        fontSize = emptyHintFontSize,
+                        lineHeight = (emptyHintFontSize.value * 1.25f).sp,
                         fontWeight = FontWeight.Medium,
                         color = accentTint,
-                        textAlign = TextAlign.Center
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }

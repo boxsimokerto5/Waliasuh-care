@@ -20,6 +20,9 @@ import com.example.util.i18n.AppLanguageManager
 object NotificationHelper {
 
     const val CHANNEL_ID_HEALTH_ALERT = "channel_wali_asuh_health"
+    const val CHANNEL_ID_PARENT_PORTAL = "channel_parent_portal_updates"
+    const val EXTRA_PARENT_TAB = "EXTRA_PARENT_TAB"
+    const val EXTRA_OPEN_PARENT_NOTIFS = "EXTRA_OPEN_PARENT_NOTIFS"
 
     /**
      * Memastikan Notification Channel terdaftar di sistem Android (Android 8.0 Oreo ke atas).
@@ -37,6 +40,33 @@ object NotificationHelper {
                 setShowBadge(true)
             }
 
+            val notificationManager: NotificationManager? =
+                context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+            notificationManager?.createNotificationChannel(channel)
+        }
+    }
+
+    /**
+     * Memastikan Notification Channel khusus Portal Orang Tua terdaftar dengan prioritas tinggi
+     * agar pemberitahuan baru tampil di bilah atas Android (Heads-Up).
+     */
+    fun createParentNotificationChannel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val isEn = AppLanguageManager.getLanguage(context) == com.example.util.i18n.AppLanguage.ENGLISH
+            val name = if (isEn) "Parent Portal Notifications" else "Notifikasi Portal Orang Tua"
+            val desc = if (isEn) {
+                "Alerts for your child's latest updates, messages, health, savings, and visits."
+            } else {
+                "Pemberitahuan pembaruan terbaru ananda: pesan wali, kesehatan, mengaji, sholat, tabungan, & kunjungan."
+            }
+            val channel = NotificationChannel(CHANNEL_ID_PARENT_PORTAL, name, NotificationManager.IMPORTANCE_HIGH).apply {
+                description = desc
+                enableLights(true)
+                lightColor = Color.parseColor("#0D9488")
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 280, 120, 280)
+                setShowBadge(true)
+            }
             val notificationManager: NotificationManager? =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             notificationManager?.createNotificationChannel(channel)
@@ -249,6 +279,115 @@ object NotificationHelper {
             }
         } catch (e: Exception) {
             Log.e("NotificationHelper", "Failed to show deletion alert notification", e)
+        }
+    }
+
+    /**
+     * Menampilkan notifikasi resmi di bilah atas Android (Heads-Up) saat ada pembaruan baru di Portal Orang Tua.
+     * Jika lebih dari 1 item masuk sekaligus, otomatis diringkas menjadi 1 notifikasi InboxStyle agar tidak bising.
+     */
+    fun showParentPortalUpdateNotification(
+        context: Context,
+        studentName: String,
+        schoolName: String,
+        items: List<ParentNotificationItem>,
+        notificationId: Int = 7701
+    ) {
+        if (items.isEmpty()) return
+        try {
+            val isEn = AppLanguageManager.getLanguage(context) == com.example.util.i18n.AppLanguage.ENGLISH
+            createParentNotificationChannel(context)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                val permission = ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                )
+                if (permission != PackageManager.PERMISSION_GRANTED) {
+                    Log.w("NotificationHelper", "POST_NOTIFICATIONS not granted for parent update")
+                    return
+                }
+            }
+
+            val topItem = items.first()
+            val intent = Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                putExtra(EXTRA_PARENT_TAB, topItem.category.tabKey)
+                if (items.size > 1) {
+                    putExtra(EXTRA_OPEN_PARENT_NOTIFS, true)
+                }
+            }
+
+            val pendingIntentFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            } else {
+                PendingIntent.FLAG_UPDATE_CURRENT
+            }
+            val pendingIntent = PendingIntent.getActivity(
+                context,
+                notificationId,
+                intent,
+                pendingIntentFlags
+            )
+
+            val schoolBadge = if (schoolName.isNotBlank()) "[$schoolName] " else ""
+            val largeIconBitmap = try {
+                android.graphics.BitmapFactory.decodeResource(context.resources, R.drawable.logo_sr_care)
+            } catch (_: Exception) {
+                null
+            }
+
+            val builder = NotificationCompat.Builder(context, CHANNEL_ID_PARENT_PORTAL)
+                .setSmallIcon(R.drawable.ic_notification)
+                .apply {
+                    if (largeIconBitmap != null) setLargeIcon(largeIconBitmap)
+                }
+                .setColor(0xFF0D9488.toInt())
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+                .setAutoCancel(true)
+                .setDefaults(NotificationCompat.DEFAULT_ALL)
+                .setContentIntent(pendingIntent)
+
+            if (items.size == 1) {
+                val title = schoolBadge + if (isEn) topItem.titleEn else topItem.titleId
+                val body = if (isEn) topItem.bodyEn else topItem.bodyId
+                builder
+                    .setContentTitle(title)
+                    .setContentText(body)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            } else {
+                val summaryTitle = if (isEn) {
+                    "$schoolBadge${items.size} New Updates for $studentName"
+                } else {
+                    "$schoolBadge${items.size} Pembaruan Baru Ananda ($studentName)"
+                }
+                val summaryLine = items.take(3).joinToString(" • ") { item ->
+                    if (isEn) item.category.labelEn else item.category.labelId
+                }
+                val inboxStyle = NotificationCompat.InboxStyle()
+                    .setBigContentTitle(summaryTitle)
+                    .setSummaryText(if (isEn) "Tap to open Parent Portal" else "Ketuk untuk membuka Portal Orang Tua")
+                items.take(5).forEach { item ->
+                    val cat = if (isEn) item.category.labelEn else item.category.labelId
+                    val body = if (isEn) item.bodyEn else item.bodyId
+                    inboxStyle.addLine("$cat: $body")
+                }
+                if (items.size > 5) {
+                    inboxStyle.addLine(if (isEn) "+${items.size - 5} more updates" else "+${items.size - 5} pembaruan lainnya")
+                }
+                builder
+                    .setContentTitle(summaryTitle)
+                    .setContentText(summaryLine)
+                    .setStyle(inboxStyle)
+                    .setNumber(items.size)
+            }
+
+            with(NotificationManagerCompat.from(context)) {
+                notify(notificationId, builder.build())
+            }
+        } catch (e: Exception) {
+            Log.e("NotificationHelper", "Failed to show parent portal notification", e)
         }
     }
 

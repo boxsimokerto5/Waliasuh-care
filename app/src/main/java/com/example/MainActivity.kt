@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -37,12 +38,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import com.example.util.FlexibleUpdatePromptBanner
+import com.example.util.InAppUpdateCoordinator
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -65,6 +69,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -110,13 +115,48 @@ enum class WaliNavScreen(val title: String) {
 }
 
 class MainActivity : ComponentActivity() {
+    private lateinit var inAppUpdateCoordinator: InAppUpdateCoordinator
+    private var deepLinkParentTabState by mutableStateOf<String?>(null)
+    private var deepLinkOpenParentNotifsState by mutableStateOf(false)
+    private var deepLinkNonceState by mutableLongStateOf(0L)
+
+    private val flexibleUpdateLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (::inAppUpdateCoordinator.isInitialized) {
+            inAppUpdateCoordinator.onUpdateFlowResult(result.resultCode)
+        }
+    }
+
+    private fun applyIntentExtras(incomingIntent: Intent?) {
+        val tabKey = incomingIntent?.getStringExtra(NotificationHelper.EXTRA_PARENT_TAB)
+        val openSheet = incomingIntent?.getBooleanExtra(NotificationHelper.EXTRA_OPEN_PARENT_NOTIFS, false) == true
+        if (!tabKey.isNullOrBlank() || openSheet) {
+            deepLinkParentTabState = tabKey
+            deepLinkOpenParentNotifsState = openSheet
+            deepLinkNonceState = System.currentTimeMillis()
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        applyIntentExtras(intent)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         AppLanguageManager.init(applicationContext)
         NotificationHelper.createNotificationChannel(applicationContext)
+        NotificationHelper.createParentNotificationChannel(applicationContext)
         TopOnAdManager.init(this)
+        inAppUpdateCoordinator = InAppUpdateCoordinator(applicationContext).also { coordinator ->
+            coordinator.registerListener()
+            coordinator.checkForFlexibleUpdate(flexibleUpdateLauncher)
+        }
         val targetScreen = intent?.getStringExtra("EXTRA_NAV_SCREEN")
+        applyIntentExtras(intent)
 
         setContent {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
@@ -124,6 +164,7 @@ class MainActivity : ComponentActivity() {
             val userRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
             val forcedPasswordState by viewModel.forcedPasswordChangeState.collectAsStateWithLifecycle()
             val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
+            val flexibleUpdateState by inAppUpdateCoordinator.uiState.collectAsStateWithLifecycle()
             val baseContext = LocalContext.current
             val localizedContext = remember(baseContext, appLanguage) {
                 AppLanguageManager.createLocalizedContext(baseContext, appLanguage)
@@ -131,7 +172,12 @@ class MainActivity : ComponentActivity() {
             val appStrings = remember(appLanguage) {
                 AppLanguageManager.stringsFor(appLanguage)
             }
-            var showSplashScreen by rememberSaveable { mutableStateOf(true) }
+            var showSplashScreen by rememberSaveable { mutableStateOf(deepLinkNonceState == 0L) }
+            LaunchedEffect(deepLinkNonceState) {
+                if (deepLinkNonceState > 0L) {
+                    showSplashScreen = false
+                }
+            }
 
             CompositionLocalProvider(
                 LocalContext provides localizedContext,
@@ -139,82 +185,116 @@ class MainActivity : ComponentActivity() {
                 LocalAppStrings provides appStrings
             ) {
                 MyApplicationTheme(darkTheme = isDarkTheme) {
-                    AnimatedContent(
-                        targetState = showSplashScreen,
-                        transitionSpec = {
-                            (fadeIn(animationSpec = tween(360)) + scaleIn(initialScale = 0.98f, animationSpec = tween(360)))
-                                .togetherWith(fadeOut(animationSpec = tween(220)))
-                        },
-                        label = "splash_to_app_transition"
-                    ) { isSplashVisible ->
-                        if (isSplashVisible) {
-                            SplashScreen(
-                                onFinish = { showSplashScreen = false }
-                            )
-                        } else {
-                            when {
-                            userRole == UserRole.NOT_LOGGED_IN -> {
-                                LoginScreen(
-                                    viewModel = viewModel,
-                                    onLoginSuccessAdmin = {},
-                                    onLoginSuccessWali = { _ -> },
-                                    onLoginSuccessSuperAdmin = {}
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        AnimatedContent(
+                            targetState = showSplashScreen,
+                            transitionSpec = {
+                                (fadeIn(animationSpec = tween(360)) + scaleIn(initialScale = 0.98f, animationSpec = tween(360)))
+                                    .togetherWith(fadeOut(animationSpec = tween(220)))
+                            },
+                            label = "splash_to_app_transition"
+                        ) { isSplashVisible ->
+                            if (isSplashVisible) {
+                                SplashScreen(
+                                    onFinish = { showSplashScreen = false }
                                 )
+                            } else {
+                                when {
+                                userRole == UserRole.NOT_LOGGED_IN -> {
+                                    LoginScreen(
+                                        viewModel = viewModel,
+                                        onLoginSuccessAdmin = {},
+                                        onLoginSuccessWali = { _ -> },
+                                        onLoginSuccessSuperAdmin = {}
+                                    )
+                                }
+                                forcedPasswordState.required -> {
+                                    ForcePasswordChangeScreen(
+                                        state = forcedPasswordState,
+                                        viewModel = viewModel,
+                                        onLogout = { viewModel.logout() }
+                                    )
+                                }
+                                userRole == UserRole.SUPERADMIN -> {
+                                    SuperAdminScreen(
+                                        viewModel = viewModel,
+                                        onLogout = { viewModel.logout() }
+                                    )
+                                }
+                                userRole == UserRole.ADMIN -> {
+                                    AdminScreen(
+                                        viewModel = viewModel,
+                                        onLogout = { viewModel.logout() }
+                                    )
+                                }
+                                userRole == UserRole.PARENT -> {
+                                    ParentPortalScreen(
+                                        viewModel = viewModel,
+                                        onLogout = { viewModel.logout() },
+                                        deepLinkTabKey = deepLinkParentTabState,
+                                        deepLinkOpenNotificationsSheet = deepLinkOpenParentNotifsState,
+                                        deepLinkNonce = deepLinkNonceState,
+                                        onConsumeDeepLink = {
+                                            deepLinkParentTabState = null
+                                            deepLinkOpenParentNotifsState = false
+                                            deepLinkNonceState = 0L
+                                        }
+                                    )
+                                }
+                                userRole == UserRole.GURU_NGAJI -> {
+                                    com.example.ui.screens.GuruNgajiScreen(
+                                        viewModel = viewModel,
+                                        onLogout = { viewModel.logout() }
+                                    )
+                                }
+                                userRole == UserRole.PETUGAS_KESEHATAN -> {
+                                    com.example.ui.screens.PetugasKesehatanScreen(
+                                        viewModel = viewModel,
+                                        onLogout = { viewModel.logout() }
+                                    )
+                                }
+                                else -> {
+                                    WaliAsuhCareApp(
+                                        isDarkTheme = isDarkTheme,
+                                        onToggleTheme = { isDarkTheme = !isDarkTheme },
+                                        initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
+                                        viewModel = viewModel,
+                                        onLogout = {
+                                            viewModel.logout()
+                                        }
+                                    )
+                                }
                             }
-                            forcedPasswordState.required -> {
-                                ForcePasswordChangeScreen(
-                                    state = forcedPasswordState,
-                                    viewModel = viewModel,
-                                    onLogout = { viewModel.logout() }
-                                )
-                            }
-                            userRole == UserRole.SUPERADMIN -> {
-                                SuperAdminScreen(
-                                    viewModel = viewModel,
-                                    onLogout = { viewModel.logout() }
-                                )
-                            }
-                            userRole == UserRole.ADMIN -> {
-                                AdminScreen(
-                                    viewModel = viewModel,
-                                    onLogout = { viewModel.logout() }
-                                )
-                            }
-                            userRole == UserRole.PARENT -> {
-                                ParentPortalScreen(
-                                    viewModel = viewModel,
-                                    onLogout = { viewModel.logout() }
-                                )
-                            }
-                            userRole == UserRole.GURU_NGAJI -> {
-                                com.example.ui.screens.GuruNgajiScreen(
-                                    viewModel = viewModel,
-                                    onLogout = { viewModel.logout() }
-                                )
-                            }
-                            userRole == UserRole.PETUGAS_KESEHATAN -> {
-                                com.example.ui.screens.PetugasKesehatanScreen(
-                                    viewModel = viewModel,
-                                    onLogout = { viewModel.logout() }
-                                )
-                            }
-                            else -> {
-                                WaliAsuhCareApp(
-                                    isDarkTheme = isDarkTheme,
-                                    onToggleTheme = { isDarkTheme = !isDarkTheme },
-                                    initialScreen = if (targetScreen == "TINDAKAN") WaliNavScreen.TINDAKAN else WaliNavScreen.DASHBOARD,
-                                    viewModel = viewModel,
-                                    onLogout = {
-                                        viewModel.logout()
-                                    }
-                                )
                             }
                         }
-                        }
+
+                        FlexibleUpdatePromptBanner(
+                            state = flexibleUpdateState,
+                            onRestartClick = { inAppUpdateCoordinator.completeUpdate() },
+                            onDismissClick = { inAppUpdateCoordinator.dismissBanner() },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .navigationBarsPadding()
+                                .padding(horizontal = 16.dp, vertical = 14.dp)
+                        )
                     }
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (::inAppUpdateCoordinator.isInitialized) {
+            inAppUpdateCoordinator.checkDownloadedUpdateOnResume()
+        }
+    }
+
+    override fun onDestroy() {
+        if (::inAppUpdateCoordinator.isInitialized) {
+            inAppUpdateCoordinator.unregisterListener()
+        }
+        super.onDestroy()
     }
 }
 

@@ -170,7 +170,6 @@ fun WaliTopBar(
                     }
 
                     // Avatar Thumbnail
-                    val showWaliAvatar = waliPhotoUrl.isNotBlank() || waliPhotoFallbackUrl.isNotBlank() || waliName.isNotBlank()
                     val avatarGender = if (waliDormitory.contains("putri", ignoreCase = true)) "P" else "L"
                     Box(
                         modifier = Modifier
@@ -181,22 +180,13 @@ fun WaliTopBar(
                             .testTag("btn_top_avatar"),
                         contentAlignment = Alignment.Center
                     ) {
-                        if (showWaliAvatar) {
-                            StudentAvatar(
-                                name = waliName.ifBlank { "Wali" },
-                                gender = avatarGender,
-                                size = 36.dp,
-                                photoUrl = waliPhotoUrl,
-                                photoFallbackUrl = waliPhotoFallbackUrl
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Default.Person,
-                                contentDescription = if (isEn) "Wali Profile" else "Profil Wali",
-                                tint = WaliPrimary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
+                        StudentAvatar(
+                            name = waliName.ifBlank { "Wali" },
+                            gender = avatarGender,
+                            size = 36.dp,
+                            photoUrl = waliPhotoUrl,
+                            photoFallbackUrl = waliPhotoFallbackUrl
+                        )
                     }
                 }
             }

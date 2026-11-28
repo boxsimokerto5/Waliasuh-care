@@ -685,9 +685,9 @@ fun StudentDetailDialog(
                                                 photoUrl = student.photoUrl,
                                                 photoFallbackUrl = student.photoFallbackUrl,
                                                 emptyHint = if (isEn) {
-                                                    "No student profile photo uploaded yet"
+                                                    "Temporary logo • No student profile photo yet"
                                                 } else {
-                                                    "Belum ada foto profil siswa"
+                                                    "Logo sementara • Belum ada foto profil siswa"
                                                 },
                                                 showZoomBadge = hasDetailPhoto,
                                                 contentScale = ContentScale.Fit,

@@ -43,6 +43,8 @@ credentials = "1.5.0"
 googleid = "1.1.1"
 mlkitBarcodeScanning = "17.3.0"
 zxingCore = "3.5.3"
+playAppUpdate = "2.1.0"
+androidxWork = "2.10.0"
 
 
 [libraries]
@@ -101,6 +103,9 @@ androidx-credentials-play-services = { group = "androidx.credentials", name = "c
 googleid = { group = "com.google.android.libraries.identity.googleid", name = "googleid", version.ref = "googleid" }
 mlkit-barcode-scanning = { group = "com.google.mlkit", name = "barcode-scanning", version.ref = "mlkitBarcodeScanning" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxingCore" }
+play-app-update = { group = "com.google.android.play", name = "app-update", version.ref = "playAppUpdate" }
+play-app-update-ktx = { group = "com.google.android.play", name = "app-update-ktx", version.ref = "playAppUpdate" }
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "androidxWork" }
 
 
 [plugins]

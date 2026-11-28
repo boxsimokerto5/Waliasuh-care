@@ -276,6 +276,21 @@ fun ChangeWaliPasswordDialog(
                             }
                         }
 
+                        if (!isUploadingPhoto && !hasPhoto) {
+                            Text(
+                                text = if (isEn) {
+                                    "Temporary logo • Profile photo not uploaded yet"
+                                } else {
+                                    "Logo sementara • Foto profil belum diunggah"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.testTag("label_wali_temp_photo_hint")
+                            )
+                        }
+
                         if (isUploadingPhoto) {
                             Text(
                                 text = if (isEn) "Compressing & uploading photo..." else "Mengompresi & mengunggah foto...",
@@ -899,9 +914,9 @@ fun ChangeWaliPasswordDialog(
             text = {
                 Text(
                     text = if (isEn) {
-                        "Your profile avatar will revert to initials on both Admin and Parent Portal."
+                        "Your profile avatar will revert to the temporary app logo on both Admin and Parent Portal."
                     } else {
-                        "Foto profil Anda akan dihapus dan dikembalikan ke inisial di Admin maupun Portal Orang Tua."
+                        "Foto profil Anda akan dihapus dan dikembalikan ke logo aplikasi sementara di Admin maupun Portal Orang Tua."
                     }
                 )
             },

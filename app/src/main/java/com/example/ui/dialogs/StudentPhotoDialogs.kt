@@ -200,9 +200,9 @@ fun StudentPhotoPreviewDialog(
                                 )
                                 Text(
                                     text = if (isEn) {
-                                        "No profile photo uploaded yet."
+                                        "No profile photo uploaded yet (showing temporary app logo)."
                                     } else {
-                                        "Belum ada foto profil yang diunggah."
+                                        "Belum ada foto profil yang diunggah (menampilkan logo aplikasi sementara)."
                                     },
                                     color = Color.White.copy(alpha = 0.8f),
                                     fontSize = 13.sp,
@@ -482,9 +482,9 @@ fun StudentPhotoManagerDialog(
             text = {
                 Text(
                     text = if (isEn) {
-                        "The avatar for ${student.name} will revert to initials on both Wali Asuh and Parent Portal."
+                        "The profile photo for ${student.name} will be removed and revert to the temporary app logo on both Wali Asuh and Parent Portal."
                     } else {
-                        "Foto profil ${student.name} akan dihapus dan dikembalikan ke inisial di halaman Wali Asuh maupun Orang Tua."
+                        "Foto profil ${student.name} akan dihapus dan dikembalikan ke logo aplikasi sementara di halaman Wali Asuh maupun Orang Tua."
                     }
                 )
             },

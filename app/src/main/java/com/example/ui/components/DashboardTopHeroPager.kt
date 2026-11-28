@@ -467,22 +467,13 @@ private fun TodayCareHeroCard(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            if (currentWaliAccount?.hasProfilePhoto() == true) {
-                                StudentAvatar(
-                                    name = currentWaliAccount.name.ifBlank { waliName },
-                                    gender = if (currentWaliAccount.dormitory.contains("putri", ignoreCase = true)) "P" else "L",
-                                    size = 18.dp,
-                                    photoUrl = currentWaliAccount.photoUrl,
-                                    photoFallbackUrl = currentWaliAccount.photoFallbackUrl
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = null,
-                                    tint = heroSubtitleColor,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                            }
+                            StudentAvatar(
+                                name = currentWaliAccount?.name?.ifBlank { waliName } ?: waliName,
+                                gender = if (currentWaliAccount?.dormitory?.contains("putri", ignoreCase = true) == true) "P" else "L",
+                                size = 18.dp,
+                                photoUrl = currentWaliAccount?.photoUrl.orEmpty(),
+                                photoFallbackUrl = currentWaliAccount?.photoFallbackUrl.orEmpty()
+                            )
                             Text(
                                 text = "Wali: $waliName",
                                 fontSize = 11.sp,

@@ -295,9 +295,7 @@ fun ProfileScreen(
                                         )
                                         .padding(2.dp)
                                         .clip(CircleShape)
-                                        .let { mod ->
-                                            if (hasPhoto) mod.clickable { showWaliPhotoPreview = true } else mod
-                                        },
+                                        .clickable { showWaliPhotoPreview = true },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     StudentAvatar(
@@ -362,6 +360,20 @@ fun ProfileScreen(
                                             fontSize = 11.sp,
                                             color = if (isDarkTheme) Color(0xFF7DD3FC) else Color(0xFF0F766E),
                                             fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                    if (!hasPhoto) {
+                                        Text(
+                                            text = if (isEn) {
+                                                "Profile photo: temporary app logo"
+                                            } else {
+                                                "Foto profil: logo sementara (belum diunggah)"
+                                            },
+                                            fontSize = 10.5.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            fontWeight = FontWeight.Medium,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )

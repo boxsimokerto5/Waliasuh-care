@@ -80,6 +80,9 @@ import com.example.data.remote.pocketbase.PocketBaseSyncManager
 import com.example.data.repository.HealthRepository
 import com.example.util.DateUtils
 import com.example.util.NotificationHelper
+import com.example.util.ParentNotificationCenter
+import com.example.util.ParentNotificationItem
+import com.example.util.ParentSyncNotificationScheduler
 import com.example.util.PasswordGenerator
 import com.example.util.WaliGalleryMediaHelper
 import com.example.util.i18n.AppLanguage
@@ -91,8 +94,11 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -207,6 +213,31 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _currentParentStudentId = MutableStateFlow(authPrefs.getLong("saved_parent_student_id", 0L))
     val currentParentStudentId: StateFlow<Long> = _currentParentStudentId.asStateFlow()
+
+    @Volatile
+    private var isParentInitialLoginSyncPending = false
+
+    private val _parentNotifications = MutableStateFlow(
+        if (_currentUserRole.value == UserRole.PARENT && _currentParentStudentId.value > 0L) {
+            val savedSchool = application.getSharedPreferences("waliasuh_school_prefs", Context.MODE_PRIVATE)
+                .getString("tenant_code", "SRT1-KDR")
+                .orEmpty()
+                .ifBlank { "SRT1-KDR" }
+            ParentNotificationCenter.loadHistory(application, savedSchool, _currentParentStudentId.value)
+        } else {
+            emptyList()
+        }
+    )
+    val parentNotifications: StateFlow<List<ParentNotificationItem>> = _parentNotifications.asStateFlow()
+
+    val unreadParentNotificationsCount: StateFlow<Int> = _parentNotifications.map { list ->
+        list.count { !it.isRead }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, _parentNotifications.value.count { !it.isRead })
+
+    private val _parentBackgroundAlertsEnabled = MutableStateFlow(
+        ParentNotificationCenter.isBackgroundAlertsEnabled(application)
+    )
+    val parentBackgroundAlertsEnabled: StateFlow<Boolean> = _parentBackgroundAlertsEnabled.asStateFlow()
 
     // Active Wali Name (Loaded from preferences or active login)
     private val _waliName = MutableStateFlow(
@@ -621,11 +652,21 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(application)) {
             when (_currentUserRole.value) {
-                UserRole.ADMIN, UserRole.WALI, UserRole.PARENT -> {
+                UserRole.ADMIN, UserRole.WALI -> {
                     val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
                     viewModelScope.launch {
                         PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
                         runUnifiedSchoolCloudSync(activeCode)
+                    }
+                }
+                UserRole.PARENT -> {
+                    val activeCode = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+                    ParentSyncNotificationScheduler.schedule(application)
+                    viewModelScope.launch {
+                        PocketBaseSyncManager.syncAuthCatalogFromCloud(getApplication(), repository)
+                        runUnifiedSchoolCloudSync(activeCode)
+                        PocketBaseSyncManager.syncWaliGalleryOnlineQuietly(getApplication(), activeCode, repository)
+                        PocketBaseSyncManager.syncChristianWorshipOnlineQuietly(getApplication(), activeCode, repository)
                     }
                 }
                 UserRole.SUPERADMIN -> {
@@ -636,6 +677,114 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 else -> Unit
             }
             startMultiTenantForegroundSyncLoop()
+        }
+        startParentNotificationObserver()
+    }
+
+    private fun startParentNotificationObserver() {
+        viewModelScope.launch {
+            merge(
+                repository.allRecords.map { Unit },
+                repository.allMengajiRecords.map { Unit },
+                repository.allSholatRecords.map { Unit },
+                repository.allChristianWorshipRecords.map { Unit },
+                repository.allFastingRecords.map { Unit },
+                repository.allHaidRecords.map { Unit },
+                repository.allTabunganTransactions.map { Unit },
+                repository.allVisitSessions.map { Unit },
+                repository.allVisitRecords.map { Unit },
+                repository.allWaliGalleryPosts.map { Unit },
+                repository.allParentMessages.map { Unit },
+                _currentUserRole.map { Unit },
+                _currentParentStudentId.map { Unit }
+            ).collectLatest {
+                kotlinx.coroutines.delay(550L)
+                if (_currentUserRole.value == UserRole.PARENT &&
+                    _currentParentStudentId.value > 0L &&
+                    !isParentInitialLoginSyncPending
+                ) {
+                    evaluateParentPortalNotifications(triggerSystemNotification = true)
+                }
+            }
+        }
+    }
+
+    suspend fun evaluateParentPortalNotifications(triggerSystemNotification: Boolean = true) {
+        if (_currentUserRole.value != UserRole.PARENT) return
+        val studentId = _currentParentStudentId.value
+        if (studentId <= 0L) return
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        val shortName = _schoolProfile.value.shortName
+        val username = _currentUsername.value.orEmpty()
+        val snapshot = withContext(Dispatchers.IO) {
+            ParentNotificationCenter.fromRoomSnapshot(
+                repository = repository,
+                schoolId = activeSchool,
+                studentId = studentId,
+                username = username,
+                schoolShortName = shortName
+            )
+        } ?: return
+        val updatedHistory = ParentNotificationCenter.evaluateAndNotify(
+            context = getApplication(),
+            snapshot = snapshot,
+            triggerSystemNotification = triggerSystemNotification
+        )
+        _parentNotifications.value = updatedHistory
+    }
+
+    fun markParentNotificationRead(key: String) {
+        val studentId = _currentParentStudentId.value
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        _parentNotifications.value = ParentNotificationCenter.markAsRead(
+            context = getApplication(),
+            schoolId = activeSchool,
+            studentId = studentId,
+            key = key
+        )
+    }
+
+    fun markAllParentNotificationsRead() {
+        val studentId = _currentParentStudentId.value
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        _parentNotifications.value = ParentNotificationCenter.markAllAsRead(
+            context = getApplication(),
+            schoolId = activeSchool,
+            studentId = studentId
+        )
+    }
+
+    fun clearParentNotifications() {
+        val studentId = _currentParentStudentId.value
+        val activeSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
+        _parentNotifications.value = ParentNotificationCenter.clearHistory(
+            context = getApplication(),
+            schoolId = activeSchool,
+            studentId = studentId
+        )
+    }
+
+    fun setParentBackgroundAlertsEnabled(enabled: Boolean) {
+        ParentNotificationCenter.setBackgroundAlertsEnabled(getApplication(), enabled)
+        _parentBackgroundAlertsEnabled.value = enabled
+        if (enabled && _currentUserRole.value == UserRole.PARENT) {
+            ParentSyncNotificationScheduler.schedule(getApplication())
+        } else {
+            ParentSyncNotificationScheduler.cancel(getApplication())
+        }
+    }
+
+    fun refreshParentPortalQuietly() {
+        if (_currentUserRole.value != UserRole.PARENT || _isSyncing.value) return
+        if (isUnitTestEnvironment() || !PocketBaseConfig.isConfigured(getApplication())) return
+        val activeCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
+        viewModelScope.launch {
+            runCatching {
+                runUnifiedSchoolCloudSync(activeCode)
+                PocketBaseSyncManager.syncWaliGalleryOnlineQuietly(getApplication(), activeCode, repository)
+                PocketBaseSyncManager.syncChristianWorshipOnlineQuietly(getApplication(), activeCode, repository)
+            }
+            evaluateParentPortalNotifications(triggerSystemNotification = true)
         }
     }
 
@@ -650,6 +799,10 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 val activeCode = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
                 runCatching {
                     runUnifiedSchoolCloudSync(activeCode)
+                    if (role == UserRole.PARENT) {
+                        PocketBaseSyncManager.syncWaliGalleryOnlineQuietly(getApplication(), activeCode, repository)
+                        PocketBaseSyncManager.syncChristianWorshipOnlineQuietly(getApplication(), activeCode, repository)
+                    }
                 }
             }
         }
@@ -7085,9 +7238,28 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     .apply()
             }
 
+            _parentNotifications.value = ParentNotificationCenter.loadHistory(
+                getApplication(),
+                activeSchoolCode,
+                parentLink.studentId
+            )
+            ParentSyncNotificationScheduler.schedule(getApplication())
+
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+                isParentInitialLoginSyncPending = true
                 viewModelScope.launch {
-                    runUnifiedSchoolCloudSync(activeSchoolCode)
+                    try {
+                        runUnifiedSchoolCloudSync(activeSchoolCode)
+                        PocketBaseSyncManager.syncWaliGalleryOnlineQuietly(getApplication(), activeSchoolCode, repository)
+                        PocketBaseSyncManager.syncChristianWorshipOnlineQuietly(getApplication(), activeSchoolCode, repository)
+                    } finally {
+                        isParentInitialLoginSyncPending = false
+                        evaluateParentPortalNotifications(triggerSystemNotification = false)
+                    }
+                }
+            } else {
+                viewModelScope.launch {
+                    evaluateParentPortalNotifications(triggerSystemNotification = false)
                 }
             }
             _sessionLoginCredentialHint.value = parentLink.username to cleanPass
@@ -7374,11 +7546,20 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun logout() {
+        val prevRole = _currentUserRole.value
+        val prevStudentId = _currentParentStudentId.value
+        val prevSchool = _schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" }
         _currentUserRole.value = UserRole.NOT_LOGGED_IN
         _currentUsername.value = null
         _currentParentStudentId.value = 0L
         _sessionLoginCredentialHint.value = null
+        _parentNotifications.value = emptyList()
+        isParentInitialLoginSyncPending = false
         authPrefs.edit().clear().apply()
+        if (prevRole == UserRole.PARENT && prevStudentId > 0L) {
+            ParentNotificationCenter.resetBaseline(getApplication(), prevSchool, prevStudentId)
+        }
+        ParentSyncNotificationScheduler.cancel(getApplication())
         NotificationHelper.cancelAllNotifications(getApplication())
     }
 
