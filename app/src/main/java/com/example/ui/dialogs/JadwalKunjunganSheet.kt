@@ -76,18 +76,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.LaunchedEffect
 import com.example.data.model.ChildStudent
 import com.example.data.model.TandemWaliHelper
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.VisitSessionSwap
+import com.example.ui.components.VisitMonthSessionFilterRow
+import com.example.ui.components.VisitSheetGradientHeader
 import com.example.util.DateUtils
 import com.example.util.i18n.LocalAppStrings
 import java.text.SimpleDateFormat
@@ -124,10 +128,31 @@ fun JadwalKunjunganSheet(
         )
     }
 
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+
+    val availableMonths = remember(sortedSessions) {
+        sortedSessions.map { it.monthYear }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedDescending()
+    }
+    var selectedMonth by remember(availableMonths, sortedSessions) {
+        mutableStateOf(sortedSessions.firstOrNull()?.monthYear?.takeIf { it.isNotBlank() } ?: availableMonths.firstOrNull() ?: "ALL")
+    }
+    val sessionsInMonth = remember(sortedSessions, selectedMonth) {
+        if (selectedMonth == "ALL" || availableMonths.isEmpty()) sortedSessions
+        else sortedSessions.filter { it.monthYear.equals(selectedMonth, ignoreCase = true) }.ifEmpty { sortedSessions }
+    }
+
     var selectedSessionId by remember(sortedSessions) {
         mutableStateOf(sortedSessions.firstOrNull()?.id)
     }
-    val selectedSession = sortedSessions.firstOrNull { it.id == selectedSessionId } ?: sortedSessions.firstOrNull()
+    LaunchedEffect(selectedMonth, sessionsInMonth) {
+        if (sessionsInMonth.none { it.id == selectedSessionId }) {
+            selectedSessionId = sessionsInMonth.firstOrNull()?.id
+        }
+    }
+    val selectedSession = sessionsInMonth.firstOrNull { it.id == selectedSessionId } ?: sessionsInMonth.firstOrNull()
 
     var selectedDistrictFilter by remember(selectedSession?.id) { mutableStateOf("Semua") }
     var onlyMyFosterStudents by remember { mutableStateOf(false) }
@@ -137,6 +162,7 @@ fun JadwalKunjunganSheet(
     val dateFormatter = remember(locale) { SimpleDateFormat("EEEE, d MMM yyyy", locale) }
     val primaryBlue = Color(0xFF1D4ED8)
     val softBlue = Color(0xFFDBEAFE)
+    val sheetBg = if (isLight) Color(0xFFF4F8FF) else MaterialTheme.colorScheme.surface
 
     val scheduledStudents = remember(selectedSession, students, visitSessionSwaps, sortedSessions) {
         if (selectedSession == null) emptyList()
@@ -185,79 +211,36 @@ fun JadwalKunjunganSheet(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
         ),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        dragHandle = { CompactVisitSheetHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        dragHandle = null,
+        containerColor = sheetBg
     ) {
-        Box(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.TopCenter
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            VisitSheetGradientHeader(
+                title = if (isEn) "Parent Visit Schedule" else "Jadwal Kunjungan Bulanan",
+                subtitle = if (isEn) "Filter by month, session & districts" else "Filter bulan, sesi kunjungan & kecamatan",
+                icon = Icons.Default.CalendarMonth,
+                iconTint = Color(0xFF1D4ED8),
+                gradientColors = listOf(Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF0EA5E9)),
+                closeContentDescription = s.nav.close,
+                closeTestTag = "btn_close_jadwal_kunjungan",
+                onDismiss = onDismiss,
+                badgeText = if (sortedSessions.isNotEmpty()) {
+                    if (isEn) "${sortedSessions.size} Sess" else "${sortedSessions.size} Sesi"
+                } else null
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Header ringkas
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(softBlue),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.CalendarMonth,
-                                contentDescription = null,
-                                tint = primaryBlue,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isEn) "Parent Visit Schedule" else "Jadwal Kunjungan Bulanan",
-                                fontSize = 14.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "Monthly sessions, dates & districts"
-                                } else {
-                                    "Per sesi bulan, tanggal & kecamatan"
-                                },
-                                fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("btn_close_jadwal_kunjungan")
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(18.dp))
-                    }
-                }
 
                 if (sortedSessions.isEmpty()) {
                     Card(
@@ -307,18 +290,26 @@ fun JadwalKunjunganSheet(
                         }
                     }
                 } else {
-                    // Dropdown Pemilih Sesi Bulanan
-                    VisitSessionDropdownSelector(
-                        sessions = sortedSessions,
-                        selectedSession = selectedSession,
+                    // Dropdown Bulan -> Dropdown Sesi (scrollable ke bawah)
+                    VisitMonthSessionFilterRow(
+                        allSessions = sortedSessions,
+                        selectedMonth = selectedMonth,
+                        onSelectMonth = { monthKey -> selectedMonth = monthKey },
+                        sessionsInMonth = sessionsInMonth,
+                        selectedSessionId = selectedSession?.id,
+                        onSelectSession = { sess -> if (sess != null) selectedSessionId = sess.id },
                         locale = locale,
                         isEn = isEn,
-                        accentColor = primaryBlue,
-                        containerColor = Color(0xFFEFF6FF),
-                        borderColor = Color(0xFF93C5FD),
-                        dropdownTag = "dropdown_jadwal_session",
-                        optionTagPrefix = "option_jadwal_session",
-                        onSelectSession = { sess -> selectedSessionId = sess.id }
+                        monthAccentColor = Color(0xFF0F766E),
+                        monthContainerColor = Color(0xFFE6FFFA),
+                        monthBorderColor = Color(0xFF99F6E4),
+                        sessionAccentColor = Color(0xFF4338CA),
+                        sessionContainerColor = Color(0xFFEEF2FF),
+                        sessionBorderColor = Color(0xFFC7D2FE),
+                        monthDropdownTag = "dropdown_jadwal_month",
+                        monthOptionTagPrefix = "option_jadwal_month",
+                        sessionDropdownTag = "dropdown_jadwal_session",
+                        sessionOptionTagPrefix = "option_jadwal_session"
                     )
 
                     selectedSession?.let { sess ->
@@ -330,15 +321,20 @@ fun JadwalKunjunganSheet(
                                 .fillMaxWidth()
                                 .weight(1f, fill = false)
                                 .testTag("list_jadwal_kunjungan"),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Card Info Sesi + Multi-Tanggal + Kecamatan
+                            // Card Info Sesi + Multi-Tanggal + Kecamatan bernuansa pastel lembut
                             item(key = "session_overview") {
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                                    border = BorderStroke(1.dp, Color(0xFFCBD5E1))
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (isLight) Color(0xFFEEF5FF) else MaterialTheme.colorScheme.surfaceContainerHigh
+                                    ),
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (isLight) Color(0xFFBFDBFE) else MaterialTheme.colorScheme.outlineVariant
+                                    )
                                 ) {
                                     Column(
                                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -633,7 +629,7 @@ fun JadwalKunjunganSheet(
                                 }
                             }
 
-                            // Cari Siswa Terjadwal (1 baris ringkas)
+                            // Cari Siswa Terjadwal bernuansa pastel
                             item(key = "jadwal_search") {
                                 CompactVisitInputField(
                                     value = searchQuery,
@@ -641,6 +637,8 @@ fun JadwalKunjunganSheet(
                                     placeholder = if (isEn) "Search student or district..." else "Cari siswa atau kecamatan...",
                                     leadingIcon = Icons.Default.Search,
                                     clearDescription = s.nav.close,
+                                    containerColor = if (isLight) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.surfaceContainer,
+                                    borderColor = if (isLight) Color(0xFFBAE6FD) else MaterialTheme.colorScheme.outlineVariant,
                                     modifier = Modifier.testTag("input_jadwal_search")
                                 )
                             }
@@ -672,35 +670,54 @@ fun JadwalKunjunganSheet(
                                         currentWaliName = waliName,
                                         isAnakSuperAdmin = isAnakSuperAdmin
                                     )
+                                    val cardBg = when {
+                                        rec != null -> if (isLight) Color(0xFFECFDF5) else Color(0xFF102A22)
+                                        idx % 3 == 0 -> if (isLight) Color(0xFFF0F9FF) else MaterialTheme.colorScheme.surfaceContainerLow
+                                        idx % 3 == 1 -> if (isLight) Color(0xFFF5F3FF) else MaterialTheme.colorScheme.surfaceContainerLow
+                                        else -> if (isLight) Color(0xFFFFFBEB) else MaterialTheme.colorScheme.surfaceContainerLow
+                                    }
+                                    val cardBorder = when {
+                                        rec != null -> if (isLight) Color(0xFF86EFAC) else Color(0xFF16A34A).copy(alpha = 0.5f)
+                                        idx % 3 == 0 -> if (isLight) Color(0xFFBAE6FD) else MaterialTheme.colorScheme.outlineVariant
+                                        idx % 3 == 1 -> if (isLight) Color(0xFFDDD6FE) else MaterialTheme.colorScheme.outlineVariant
+                                        else -> if (isLight) Color(0xFFFDE68A) else MaterialTheme.colorScheme.outlineVariant
+                                    }
+                                    val badgeBg = when {
+                                        rec != null -> Color(0xFFDCFCE7)
+                                        idx % 3 == 0 -> softBlue
+                                        idx % 3 == 1 -> Color(0xFFEDE9FE)
+                                        else -> Color(0xFFFEF3C7)
+                                    }
+                                    val badgeFg = when {
+                                        rec != null -> Color(0xFF15803D)
+                                        idx % 3 == 0 -> primaryBlue
+                                        idx % 3 == 1 -> Color(0xFF6D28D9)
+                                        else -> Color(0xFFB45309)
+                                    }
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(12.dp),
-                                        colors = CardDefaults.cardColors(
-                                            containerColor = if (rec != null) Color(0xFFF0FDF4) else MaterialTheme.colorScheme.surface
-                                        ),
-                                        border = BorderStroke(
-                                            1.dp,
-                                            if (rec != null) Color(0xFF86EFAC) else MaterialTheme.colorScheme.outlineVariant
-                                        )
+                                        shape = RoundedCornerShape(14.dp),
+                                        colors = CardDefaults.cardColors(containerColor = cardBg),
+                                        border = BorderStroke(1.dp, cardBorder)
                                     ) {
                                         Row(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                .padding(horizontal = 12.dp, vertical = 9.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Box(
                                                 modifier = Modifier
-                                                    .size(28.dp)
+                                                    .size(30.dp)
                                                     .clip(CircleShape)
-                                                    .background(if (rec != null) Color(0xFFDCFCE7) else softBlue),
+                                                    .background(badgeBg),
                                                 contentAlignment = Alignment.Center
                                             ) {
                                                 Text(
                                                     text = "${idx + 1}",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = if (rec != null) Color(0xFF15803D) else primaryBlue
+                                                    color = badgeFg
                                                 )
                                             }
                                             Spacer(modifier = Modifier.width(10.dp))
@@ -1080,12 +1097,14 @@ internal fun CompactVisitInputField(
     placeholder: String,
     leadingIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     clearDescription: String = "Clear",
+    containerColor: Color = MaterialTheme.colorScheme.surface,
+    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.65f),
     modifier: Modifier = Modifier
 ) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)),
+        shape = RoundedCornerShape(12.dp),
+        color = containerColor,
+        border = BorderStroke(1.dp, borderColor),
         modifier = modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)

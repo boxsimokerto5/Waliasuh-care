@@ -63,8 +63,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -661,6 +664,80 @@ fun LoginScreen(
                     }
                 }
 
+                // Branding 3 Logo (Kemensos, Wali Asuh Care, Sekolah Rakyat)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.testTag("login_branding_logos"),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, cardBorderColor),
+                            shadowElevation = 1.dp
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_kemensos),
+                                contentDescription = "Logo Kementerian Sosial RI",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(6.dp)
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier.size(56.dp),
+                            shape = CircleShape,
+                            color = Color.White,
+                            border = BorderStroke(1.5.dp, accentPrimary.copy(alpha = 0.35f)),
+                            shadowElevation = 2.dp
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_sr_care),
+                                contentDescription = if (isEn) "Wali Asuh Care Logo" else "Logo Wali Asuh Care",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(3.dp)
+                                    .clip(CircleShape)
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier.size(52.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            color = Color.White,
+                            border = BorderStroke(1.dp, cardBorderColor),
+                            shadowElevation = 1.dp
+                        ) {
+                            Image(
+                                painter = painterResource(id = R.drawable.logo_sekolah_rakyat),
+                                contentDescription = "Logo Sekolah Rakyat",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(5.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Wali Asuh Care v1.0",
+                        fontSize = 12.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+
                 Text(
                     text = if (isEn) {
                         "Integrated School & Asrama Health Application\nPlease use official credentials issued by the Administrator."
@@ -668,9 +745,8 @@ fun LoginScreen(
                         "Aplikasi Kesehatan Sekolah & Asrama Terpadu\nSilakan gunakan kredensial resmi yang diterbitkan oleh Administrator."
                     },
                     fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = 4.dp)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                    textAlign = TextAlign.Center
                 )
 
                 Surface(
@@ -722,9 +798,70 @@ fun LoginScreen(
                         }
                     )
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
             }
+
+            // Ilustrasi Siluet Pegunungan & Orang Tua Mengajari Anak Naik Sepeda di Bawah Halaman Login
+            LoginFooterScenicIllustration(
+                pageBg = pageBg,
+                isLight = isLight,
+                isEn = isEn
+            )
         }
+    }
+}
+
+@Composable
+private fun LoginFooterScenicIllustration(
+    pageBg: Color,
+    isLight: Boolean,
+    isEn: Boolean
+) {
+    val colorFilter = remember(isLight, pageBg) {
+        if (!isLight) {
+            ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -0.38f, 0f, 0f, 0f, 112f,
+                        0f, -0.36f, 0f, 0f, 114f,
+                        0f, 0f, -0.34f, 0f, 118f,
+                        0f, 0f, 0f, 0.85f, 0f
+                    )
+                )
+            )
+        } else {
+            ColorFilter.tint(pageBg, BlendMode.Multiply)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(185.dp)
+            .testTag("login_scenic_footer")
+    ) {
+        Image(
+            painter = painterResource(id = R.drawable.img_login_mountain_bicycle),
+            contentDescription = if (isEn) {
+                "Mountain scenery silhouette with parents teaching children to ride a bicycle"
+            } else {
+                "Ilustrasi siluet pegunungan dengan orang tua mengajari anak-anak naik sepeda"
+            },
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.BottomCenter,
+            colorFilter = colorFilter,
+            alpha = if (!isLight) 0.88f else 0.94f,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .align(Alignment.TopCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(pageBg, pageBg.copy(alpha = 0f))
+                    )
+                )
+        )
     }
 }

@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.HourglassTop
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -58,6 +57,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -79,6 +80,8 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.VisitSessionSwap
+import com.example.ui.components.VisitMonthSessionFilterRow
+import com.example.ui.components.VisitSheetGradientHeader
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.TopOnAdManager
@@ -102,8 +105,10 @@ fun LaporanKunjunganSheet(
     val isEn = s.isEnglish
     val lang = s.language
 
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     val emeraldPrimary = Color(0xFF047857)
-    val emeraldLight = Color(0xFFD1FAE5)
+    val plumPrimary = Color(0xFF7E22CE)
+    val sheetBg = if (isLight) Color(0xFFFAF5FF) else MaterialTheme.colorScheme.surface
 
     val sortedSessions = remember(sessions) {
         sessions.sortedWith(
@@ -113,8 +118,27 @@ fun LaporanKunjunganSheet(
         )
     }
 
+    val availableMonths = remember(sortedSessions) {
+        sortedSessions.map { it.monthYear }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedDescending()
+    }
+    var selectedMonth by remember(availableMonths, sortedSessions) {
+        mutableStateOf(sortedSessions.firstOrNull()?.monthYear?.takeIf { it.isNotBlank() } ?: availableMonths.firstOrNull() ?: "ALL")
+    }
+    val sessionsInMonth = remember(sortedSessions, selectedMonth) {
+        if (selectedMonth == "ALL" || availableMonths.isEmpty()) sortedSessions
+        else sortedSessions.filter { it.monthYear.equals(selectedMonth, ignoreCase = true) }.ifEmpty { sortedSessions }
+    }
+
     var selectedSessionId by remember(sortedSessions) { mutableStateOf(sortedSessions.firstOrNull()?.id) }
-    val selectedSession = sortedSessions.firstOrNull { it.id == selectedSessionId } ?: sortedSessions.firstOrNull()
+    LaunchedEffect(selectedMonth, sessionsInMonth) {
+        if (sessionsInMonth.none { it.id == selectedSessionId }) {
+            selectedSessionId = sessionsInMonth.firstOrNull()?.id
+        }
+    }
+    val selectedSession = sessionsInMonth.firstOrNull { it.id == selectedSessionId } ?: sessionsInMonth.firstOrNull()
 
     // null = Semua Tanggal Sesi, > 0 = Tanggal spesifik ("hari itu")
     var selectedDateFilter by remember(selectedSession?.id) {
@@ -191,64 +215,35 @@ fun LaporanKunjunganSheet(
         modifier = Modifier.windowInsetsPadding(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
         ),
-        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-        dragHandle = { BottomSheetDefaults.DragHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+        dragHandle = null,
+        containerColor = sheetBg
     ) {
-        Box(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.TopCenter
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            VisitSheetGradientHeader(
+                title = if (isEn) "Visit Attendance Report" else "Laporan Kehadiran Kunjungan",
+                subtitle = if (isEn) "Track attended vs not-yet-visited students" else "Rekap siswa hadir vs belum berkunjung",
+                icon = Icons.Default.Assessment,
+                iconTint = plumPrimary,
+                gradientColors = listOf(Color(0xFF6B21A8), Color(0xFF9333EA), Color(0xFFEC4899)),
+                closeContentDescription = s.nav.close,
+                closeTestTag = "btn_close_laporan_kunjungan",
+                onDismiss = onDismiss,
+                badgeText = if (selectedSession != null) "$attendancePct%" else null
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 16.dp),
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Header
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(emeraldLight),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Assessment, contentDescription = null, tint = emeraldPrimary, modifier = Modifier.size(20.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Column {
-                            Text(
-                                text = if (isEn) "Visit Attendance Report" else "Laporan Kehadiran Kunjungan",
-                                fontSize = 15.5.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                text = if (isEn) "Track attended vs not-yet-visited students by date" else "Rekap siswa sudah hadir vs belum berkunjung hari itu",
-                                fontSize = 11.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("btn_close_laporan_kunjungan")
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(20.dp))
-                    }
-                }
-
                 if (sortedSessions.isEmpty()) {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -263,26 +258,27 @@ fun LaporanKunjunganSheet(
                         )
                     }
                 } else {
-                    // Sesi selector
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        sortedSessions.forEach { sess ->
-                            val isSel = selectedSession?.id == sess.id
-                            FilterChip(
-                                selected = isSel,
-                                onClick = { selectedSessionId = sess.id },
-                                label = { Text(sess.title, fontSize = 11.sp, fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = emeraldLight,
-                                    selectedLabelColor = emeraldPrimary
-                                )
-                            )
-                        }
-                    }
+                    // Dropdown Bulan -> Dropdown Sesi (scrollable ke bawah)
+                    VisitMonthSessionFilterRow(
+                        allSessions = sortedSessions,
+                        selectedMonth = selectedMonth,
+                        onSelectMonth = { monthKey -> selectedMonth = monthKey },
+                        sessionsInMonth = sessionsInMonth,
+                        selectedSessionId = selectedSession?.id,
+                        onSelectSession = { sess -> if (sess != null) selectedSessionId = sess.id },
+                        locale = lang.locale,
+                        isEn = isEn,
+                        monthAccentColor = plumPrimary,
+                        monthContainerColor = Color(0xFFF3E8FF),
+                        monthBorderColor = Color(0xFFD8B4FE),
+                        sessionAccentColor = Color(0xFFBE185D),
+                        sessionContainerColor = Color(0xFFFCE7F3),
+                        sessionBorderColor = Color(0xFFF9A8D4),
+                        monthDropdownTag = "dropdown_visit_report_month",
+                        monthOptionTagPrefix = "option_visit_report_month",
+                        sessionDropdownTag = "dropdown_visit_report_session",
+                        sessionOptionTagPrefix = "option_visit_report_session"
+                    )
 
                     // Filter Hari/Tanggal ("Semua Tanggal Sesi" vs Tanggal Tertentu)
                     Row(
@@ -346,12 +342,17 @@ fun LaporanKunjunganSheet(
                         }
                     }
 
-                    // Ringkasan 3 Kartu: Terjadwal, Sudah Hadir, Belum Berkunjung
+                    // Ringkasan 3 Kartu: Terjadwal, Sudah Hadir, Belum Berkunjung bernuansa pastel lembut
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF8FAFC)),
-                        border = BorderStroke(1.dp, Color(0xFFE2E8F0))
+                        shape = RoundedCornerShape(14.dp),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isLight) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.surfaceContainerHigh
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isLight) Color(0xFFE9D5FF) else MaterialTheme.colorScheme.outlineVariant
+                        )
                     ) {
                         Column(
                             modifier = Modifier.padding(10.dp),
@@ -364,22 +365,22 @@ fun LaporanKunjunganSheet(
                                 ReportStatPill(
                                     label = if (isEn) "Scheduled" else "Terjadwal",
                                     value = "${allScheduledStudents.size}",
-                                    bg = Color(0xFFDBEAFE),
-                                    fg = Color(0xFF1D4ED8),
+                                    bg = if (isLight) Color(0xFFE0F2FE) else Color(0xFF0C4A6E),
+                                    fg = if (isLight) Color(0xFF0369A1) else Color(0xFFBAE6FD),
                                     modifier = Modifier.weight(1f)
                                 )
                                 ReportStatPill(
                                     label = if (isEn) "Attended" else "Sudah Hadir",
                                     value = "$totalPresentCount",
-                                    bg = Color(0xFFDCFCE7),
-                                    fg = Color(0xFF15803D),
+                                    bg = if (isLight) Color(0xFFDCFCE7) else Color(0xFF14532D),
+                                    fg = if (isLight) Color(0xFF15803D) else Color(0xFFBBF7D0),
                                     modifier = Modifier.weight(1f)
                                 )
                                 ReportStatPill(
                                     label = if (isEn) "Not Visited" else "Belum Hadir",
                                     value = "${notVisitedStudents.size}",
-                                    bg = Color(0xFFFEE2E2),
-                                    fg = Color(0xFFDC2626),
+                                    bg = if (isLight) Color(0xFFFCE7F3) else Color(0xFF831843),
+                                    fg = if (isLight) Color(0xFFBE185D) else Color(0xFFFBCFE8),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -398,13 +399,13 @@ fun LaporanKunjunganSheet(
                                     text = "$attendancePct%",
                                     fontSize = 11.5.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = emeraldPrimary
+                                    color = if (isLight) plumPrimary else Color(0xFFD8B4FE)
                                 )
                             }
                             LinearProgressIndicator(
                                 progress = { attendancePct / 100f },
-                                color = emeraldPrimary,
-                                trackColor = Color(0xFFE2E8F0),
+                                color = if (isLight) plumPrimary else Color(0xFFC084FC),
+                                trackColor = if (isLight) Color(0xFFF3E8FF) else MaterialTheme.colorScheme.surfaceVariant,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(7.dp)
@@ -550,9 +551,14 @@ fun LaporanKunjunganSheet(
                                     val targetMarkDate = selectedDateFilter ?: dateOptions.firstOrNull() ?: System.currentTimeMillis()
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFEF2F2)),
-                                        border = BorderStroke(1.dp, Color(0xFFFCA5A5))
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isLight) Color(0xFFFFF1F2) else Color(0xFF2E141B)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isLight) Color(0xFFFECDD3) else Color(0xFFFB7185).copy(alpha = 0.45f)
+                                        )
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -562,7 +568,12 @@ fun LaporanKunjunganSheet(
                                             horizontalArrangement = Arrangement.SpaceBetween
                                         ) {
                                             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                                Icon(Icons.Default.HourglassTop, contentDescription = null, tint = Color(0xFFDC2626), modifier = Modifier.size(16.dp))
+                                                Icon(
+                                                    Icons.Default.HourglassTop,
+                                                    contentDescription = null,
+                                                    tint = if (isLight) Color(0xFFBE123C) else Color(0xFFFDA4AF),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
                                                 Spacer(modifier = Modifier.width(8.dp))
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     val incSwap = selectedSession?.let { VisitHelper.findIncomingSwapToSession(it.id, st, visitSessionSwaps) }
@@ -571,7 +582,7 @@ fun LaporanKunjunganSheet(
                                                         text = "$dist • ${st.classGrade.ifBlank { "-" }} • Wali: ${st.motherName.ifBlank { st.emergencyContact.ifBlank { "-" } }}" +
                                                             if (incSwap != null) (if (isEn) " • Moved" else " • Pindahan") else "",
                                                         fontSize = 10.5.sp,
-                                                        color = Color(0xFF991B1B),
+                                                        color = if (isLight) Color(0xFF9F1239) else Color(0xFFFECDD3),
                                                         maxLines = 1,
                                                         overflow = TextOverflow.Ellipsis
                                                     )
@@ -616,9 +627,14 @@ fun LaporanKunjunganSheet(
                                     val visitor = listOf(rec.visitorRelation, rec.visitorName).filter { it.isNotBlank() }.joinToString(": ")
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
-                                        border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isLight) Color(0xFFECFDF5) else Color(0xFF102A22)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isLight) Color(0xFF86EFAC) else Color(0xFF16A34A).copy(alpha = 0.5f)
+                                        )
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -633,7 +649,7 @@ fun LaporanKunjunganSheet(
                                                 Text(
                                                     text = "$dist • ${shortDateFmt.format(Date(rec.visitDate))} ${timeFmt.format(Date(rec.checkedInAt))} WIB • $visitor",
                                                     fontSize = 10.5.sp,
-                                                    color = Color(0xFF166534),
+                                                    color = if (isLight) Color(0xFF166534) else Color(0xFFBBF7D0),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )

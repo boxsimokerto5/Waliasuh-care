@@ -73,12 +73,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.LaunchedEffect
 import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.data.model.VisitConfirmation
@@ -86,6 +88,8 @@ import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
 import com.example.data.model.VisitSessionSwap
+import com.example.ui.components.VisitMonthSessionFilterRow
+import com.example.ui.components.VisitSheetGradientHeader
 import com.example.util.DateUtils
 import com.example.util.PdfReportGenerator
 import com.example.util.StudentClassifier
@@ -133,10 +137,12 @@ fun DaftarHadirKunjunganSheet(
     val isEn = s.isEnglish
     val locale = s.language.locale
 
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
     val tealPrimary = Color(0xFF0F766E)
     val tealLight = Color(0xFFCCFBF1)
     val indigoPrimary = Color(0xFF1D4ED8)
     val indigoLight = Color(0xFFDBEAFE)
+    val sheetBg = if (isLight) Color(0xFFF2FBF7) else MaterialTheme.colorScheme.surface
 
     val sortedSessions = remember(sessions) {
         sessions.sortedWith(
@@ -147,9 +153,28 @@ fun DaftarHadirKunjunganSheet(
         )
     }
 
+    val availableMonths = remember(sortedSessions) {
+        sortedSessions.map { it.monthYear }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .sortedDescending()
+    }
+    var selectedMonth by remember(availableMonths, sortedSessions) {
+        mutableStateOf(sortedSessions.firstOrNull()?.monthYear?.takeIf { it.isNotBlank() } ?: availableMonths.firstOrNull() ?: "ALL")
+    }
+    val sessionsInMonth = remember(sortedSessions, selectedMonth) {
+        if (selectedMonth == "ALL" || availableMonths.isEmpty()) sortedSessions
+        else sortedSessions.filter { it.monthYear.equals(selectedMonth, ignoreCase = true) }.ifEmpty { sortedSessions }
+    }
+
     var selectedTab by remember(initialTab) { mutableIntStateOf(initialTab.coerceIn(0, 1)) }
     var selectedSessionId by remember(sortedSessions) { mutableStateOf(sortedSessions.firstOrNull()?.id) }
-    val selectedSession = sortedSessions.firstOrNull { it.id == selectedSessionId } ?: sortedSessions.firstOrNull()
+    LaunchedEffect(selectedMonth, sessionsInMonth) {
+        if (sessionsInMonth.none { it.id == selectedSessionId }) {
+            selectedSessionId = sessionsInMonth.firstOrNull()?.id
+        }
+    }
+    val selectedSession = sessionsInMonth.firstOrNull { it.id == selectedSessionId } ?: sessionsInMonth.firstOrNull()
 
     val dateSlots = remember(selectedSession) {
         val today = VisitHelper.normalizeDayStart(System.currentTimeMillis())
@@ -291,107 +316,112 @@ fun DaftarHadirKunjunganSheet(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
         ),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        dragHandle = { CompactVisitSheetHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        dragHandle = null,
+        containerColor = sheetBg
     ) {
-        Box(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.TopCenter
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            VisitSheetGradientHeader(
+                title = if (isEn) "Parent Visit Attendance" else "Daftar Hadir Kunjungan",
+                subtitle = if (isEn) "Barcode Scan & Manual PDF Roster" else "Scan Barcode & List PDF Manual",
+                icon = Icons.Default.HowToReg,
+                iconTint = tealPrimary,
+                gradientColors = listOf(Color(0xFF065F46), Color(0xFF0D9488), Color(0xFF14B8A6)),
+                closeContentDescription = s.nav.close,
+                closeTestTag = "btn_close_daftar_hadir_kunjungan",
+                onDismiss = onDismiss,
+                badgeText = if (selectedSession != null) {
+                    "${sessionRecordsForDate.size} ${if (isEn) "Present" else "Hadir"}"
+                } else null
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Header ringkas
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // 2 Kategori Tab bernuansa pastel lembut
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (isLight) Color(0xFFE6F7F1) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    border = BorderStroke(1.dp, if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(tealLight),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.HowToReg, contentDescription = null, tint = tealPrimary, modifier = Modifier.size(18.dp))
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isEn) "Parent Visit Attendance" else "Daftar Hadir Kunjungan",
-                                fontSize = 14.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (isEn) "Barcode Scan & Manual PDF Sheet" else "Scan Barcode & List PDF Manual",
-                                fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = onDismiss,
+                    TabRow(
+                        selectedTabIndex = selectedTab,
                         modifier = Modifier
-                            .size(48.dp)
-                            .testTag("btn_close_daftar_hadir_kunjungan")
+                            .fillMaxWidth()
+                            .padding(4.dp)
+                            .clip(RoundedCornerShape(10.dp)),
+                        containerColor = Color.Transparent,
+                        indicator = {},
+                        divider = {}
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(18.dp))
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (selectedTab == 0) {
+                                        if (isLight) Color.White else tealPrimary.copy(alpha = 0.28f)
+                                    } else Color.Transparent
+                                )
+                                .testTag("tab_visit_scan"),
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Icon(
+                                        Icons.Default.QrCodeScanner,
+                                        contentDescription = null,
+                                        tint = if (selectedTab == 0) tealPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = if (isEn) "Barcode Scan" else "Scan Barcode",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selectedTab == 0) tealPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(
+                                    if (selectedTab == 1) {
+                                        if (isLight) Color.White else indigoPrimary.copy(alpha = 0.28f)
+                                    } else Color.Transparent
+                                )
+                                .testTag("tab_visit_manual_pdf"),
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Icon(
+                                        Icons.Default.ListAlt,
+                                        contentDescription = null,
+                                        tint = if (selectedTab == 1) indigoPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                    Text(
+                                        text = if (isEn) "List & Manual PDF" else "List & PDF Manual",
+                                        fontSize = 12.sp,
+                                        fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
+                                        color = if (selectedTab == 1) indigoPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        )
                     }
-                }
-
-                // 2 Kategori Tab: Scan Barcode vs List & PDF Manual
-                TabRow(
-                    selectedTabIndex = selectedTab,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp)),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                ) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        modifier = Modifier.testTag("tab_visit_scan"),
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Text(
-                                    text = if (isEn) "Barcode Scan" else "Scan Barcode",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Medium,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        modifier = Modifier.testTag("tab_visit_manual_pdf"),
-                        text = {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                                Icon(Icons.Default.ListAlt, contentDescription = null, modifier = Modifier.size(15.dp))
-                                Text(
-                                    text = if (isEn) "List & Manual PDF" else "List & PDF Manual",
-                                    fontSize = 12.sp,
-                                    fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Medium,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    )
                 }
 
                 if (sortedSessions.isEmpty()) {
@@ -412,18 +442,26 @@ fun DaftarHadirKunjunganSheet(
                         )
                     }
                 } else {
-                    // Dropdown Pemilih Sesi & Baris Tanggal Kunjungan Ringkas
-                    VisitSessionDropdownSelector(
-                        sessions = sortedSessions,
-                        selectedSession = selectedSession,
+                    // Dropdown Bulan -> Dropdown Sesi (scrollable ke bawah)
+                    VisitMonthSessionFilterRow(
+                        allSessions = sortedSessions,
+                        selectedMonth = selectedMonth,
+                        onSelectMonth = { monthKey -> selectedMonth = monthKey },
+                        sessionsInMonth = sessionsInMonth,
+                        selectedSessionId = selectedSession?.id,
+                        onSelectSession = { sess -> if (sess != null) selectedSessionId = sess.id },
                         locale = locale,
                         isEn = isEn,
-                        accentColor = indigoPrimary,
-                        containerColor = Color(0xFFEFF6FF),
-                        borderColor = Color(0xFF93C5FD),
-                        dropdownTag = "dropdown_visit_attendance_session",
-                        optionTagPrefix = "option_visit_attendance_session",
-                        onSelectSession = { sess -> selectedSessionId = sess.id }
+                        monthAccentColor = Color(0xFFB45309),
+                        monthContainerColor = Color(0xFFFEF3C7),
+                        monthBorderColor = Color(0xFFFDE68A),
+                        sessionAccentColor = tealPrimary,
+                        sessionContainerColor = Color(0xFFCCFBF1),
+                        sessionBorderColor = Color(0xFF5EEAD4),
+                        monthDropdownTag = "dropdown_visit_attendance_month",
+                        monthOptionTagPrefix = "option_visit_attendance_month",
+                        sessionDropdownTag = "dropdown_visit_attendance_session",
+                        sessionOptionTagPrefix = "option_visit_attendance_session"
                     )
 
                     Row(
@@ -558,7 +596,9 @@ fun DaftarHadirKunjunganSheet(
                                     onValueChange = { searchQuery = it },
                                     placeholder = if (isEn) "Search name / NIK / district..." else "Cari nama / NIK / kecamatan...",
                                     leadingIcon = Icons.Default.Search,
-                                    clearDescription = s.nav.close
+                                    clearDescription = s.nav.close,
+                                    containerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surfaceContainer,
+                                    borderColor = if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant
                                 )
                             }
 
@@ -571,7 +611,7 @@ fun DaftarHadirKunjunganSheet(
                                     },
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color(0xFF15803D)
+                                    color = if (isLight) Color(0xFF15803D) else Color(0xFF86EFAC)
                                 )
                             }
 
@@ -579,9 +619,14 @@ fun DaftarHadirKunjunganSheet(
                                 itemsIndexed(sessionRecordsForDate, key = { _, rec -> "visit_checked_${rec.id}" }) { idx, rec ->
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDF4)),
-                                        border = BorderStroke(1.dp, Color(0xFF86EFAC))
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isLight) Color(0xFFECFDF5) else Color(0xFF102A22)
+                                        ),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isLight) Color(0xFF86EFAC) else Color(0xFF16A34A).copy(alpha = 0.5f)
+                                        )
                                     ) {
                                         Row(
                                             modifier = Modifier
@@ -593,7 +638,7 @@ fun DaftarHadirKunjunganSheet(
                                                 text = "${idx + 1}.",
                                                 fontSize = 11.5.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = Color(0xFF15803D)
+                                                color = if (isLight) Color(0xFF15803D) else Color(0xFF86EFAC)
                                             )
                                             Spacer(modifier = Modifier.width(8.dp))
                                             Column(modifier = Modifier.weight(1f)) {
@@ -603,7 +648,7 @@ fun DaftarHadirKunjunganSheet(
                                                 Text(
                                                     text = "$dist • ${timeFmt.format(Date(rec.checkedInAt))} WIB • $visitorDesc (${rec.checkInMethod})",
                                                     fontSize = 10.5.sp,
-                                                    color = Color(0xFF166534),
+                                                    color = if (isLight) Color(0xFF166534) else Color(0xFFBBF7D0),
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -660,19 +705,27 @@ fun DaftarHadirKunjunganSheet(
                                 )
                             }
 
-                            itemsIndexed(scanSearchResults, key = { _, st -> "visit_quick_${st.id}" }) { _, st ->
+                            itemsIndexed(scanSearchResults, key = { _, st -> "visit_quick_${st.id}" }) { idx, st ->
                                 val existingRec = VisitHelper.findVisitForStudent(sessionRecordsForDate, st, selectedVisitDateMillis)
                                 val confRec = selectedSession?.let { sess ->
                                     VisitHelper.findConfirmationForStudent(visitConfirmations, sess.id, st, selectedVisitDateMillis)
                                 }
                                 val dist = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
+                                val cardBg = when {
+                                    existingRec != null -> if (isLight) Color(0xFFECFDF5) else Color(0xFF102A22)
+                                    idx % 2 == 0 -> if (isLight) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.surfaceContainerLow
+                                    else -> if (isLight) Color(0xFFF0F9FF) else MaterialTheme.colorScheme.surfaceContainerLow
+                                }
+                                val cardBorder = when {
+                                    existingRec != null -> if (isLight) Color(0xFF86EFAC) else Color(0xFF16A34A).copy(alpha = 0.5f)
+                                    idx % 2 == 0 -> if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant
+                                    else -> if (isLight) Color(0xFFBAE6FD) else MaterialTheme.colorScheme.outlineVariant
+                                }
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (existingRec != null) Color(0xFFF8FAFC) else MaterialTheme.colorScheme.surface
-                                    ),
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = cardBg),
+                                    border = BorderStroke(1.dp, cardBorder)
                                 ) {
                                     Row(
                                         modifier = Modifier
@@ -861,7 +914,9 @@ fun DaftarHadirKunjunganSheet(
                                     onValueChange = { searchQuery = it },
                                     placeholder = if (isEn) "Filter roster list..." else "Cari nama / kecamatan di daftar...",
                                     leadingIcon = Icons.Default.Search,
-                                    clearDescription = s.nav.close
+                                    clearDescription = s.nav.close,
+                                    containerColor = if (isLight) Color.White else MaterialTheme.colorScheme.surfaceContainer,
+                                    borderColor = if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant
                                 )
                             }
 
@@ -882,24 +937,25 @@ fun DaftarHadirKunjunganSheet(
                                         isAnakSuperAdmin = isAnakSuperAdmin
                                     )
                                 val distLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(st), isEn)
+                                val rowBg = when {
+                                    matchedRec != null -> if (isLight) Color(0xFFECFDF5) else Color(0xFF102A22)
+                                    matchedConf?.isHadir == true -> if (isLight) Color(0xFFF0FDFA) else Color(0xFF112A2A)
+                                    idx % 3 == 0 -> if (isLight) Color(0xFFFFFFFF) else MaterialTheme.colorScheme.surfaceContainerLow
+                                    idx % 3 == 1 -> if (isLight) Color(0xFFF5F3FF) else MaterialTheme.colorScheme.surfaceContainerLow
+                                    else -> if (isLight) Color(0xFFFFFBEB) else MaterialTheme.colorScheme.surfaceContainerLow
+                                }
+                                val rowBorder = when {
+                                    matchedRec != null -> if (isLight) Color(0xFF86EFAC) else Color(0xFF16A34A).copy(alpha = 0.5f)
+                                    matchedConf?.isHadir == true -> if (isLight) Color(0xFF5EEAD4) else Color(0xFF0D9488).copy(alpha = 0.5f)
+                                    idx % 3 == 0 -> if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant
+                                    idx % 3 == 1 -> if (isLight) Color(0xFFDDD6FE) else MaterialTheme.colorScheme.outlineVariant
+                                    else -> if (isLight) Color(0xFFFDE68A) else MaterialTheme.colorScheme.outlineVariant
+                                }
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(10.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = when {
-                                            matchedRec != null -> Color(0xFFF0FDF4)
-                                            matchedConf?.isHadir == true -> Color(0xFFF0FDFA)
-                                            else -> MaterialTheme.colorScheme.surface
-                                        }
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        when {
-                                            matchedRec != null -> Color(0xFF86EFAC)
-                                            matchedConf?.isHadir == true -> Color(0xFF5EEAD4)
-                                            else -> MaterialTheme.colorScheme.outlineVariant
-                                        }
-                                    )
+                                    shape = RoundedCornerShape(12.dp),
+                                    colors = CardDefaults.cardColors(containerColor = rowBg),
+                                    border = BorderStroke(1.dp, rowBorder)
                                 ) {
                                     Row(
                                         modifier = Modifier

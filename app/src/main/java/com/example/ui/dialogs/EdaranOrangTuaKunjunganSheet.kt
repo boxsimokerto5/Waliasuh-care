@@ -30,15 +30,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Search
@@ -48,11 +44,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
@@ -72,12 +64,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.ui.components.VisitMonthSessionFilterRow
+import com.example.ui.components.VisitSheetGradientHeader
 import com.example.data.model.ChildStudent
 import com.example.data.model.SchoolProfile
 import com.example.data.model.VisitHelper
@@ -113,9 +108,14 @@ fun EdaranOrangTuaKunjunganSheet(
     val isEn = s.isEnglish
     val locale = s.language.locale
 
-    val primaryIndigo = Color(0xFF1D4ED8)
+    val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+
+    val amberPrimary = Color(0xFFB45309)
+    val amberAction = Color(0xFFD97706)
     val tealPrimary = Color(0xFF0F766E)
-    val softIndigo = Color(0xFFEFF6FF)
+    val primaryIndigo = Color(0xFF1D4ED8)
+    val softIndigo = if (isLight) Color(0xFFEFF6FF) else Color(0xFF1E3A8A).copy(alpha = 0.28f)
+    val sheetBg = if (isLight) Color(0xFFFFFBF2) else MaterialTheme.colorScheme.surface
 
     val availableMonths = remember(sessions) {
         sessions.map { it.monthYear }
@@ -239,121 +239,62 @@ fun EdaranOrangTuaKunjunganSheet(
             WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)
         ),
         shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
-        dragHandle = { CompactVisitSheetHandle() },
-        containerColor = MaterialTheme.colorScheme.surface
+        dragHandle = null,
+        containerColor = sheetBg
     ) {
-        Box(
+        Column(
             modifier = Modifier.fillMaxWidth(),
-            contentAlignment = Alignment.TopCenter
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            VisitSheetGradientHeader(
+                title = if (isEn) "Circular to Parents" else "Edaran Kepada Orang Tua",
+                subtitle = if (isEn) {
+                    "Visit schedule, student sessions & visiting rules"
+                } else {
+                    "Jadwal, sesi kunjungan anak asuh & aturan"
+                },
+                icon = Icons.Default.Description,
+                iconTint = amberPrimary,
+                gradientColors = listOf(Color(0xFFB45309), Color(0xFFD97706), Color(0xFFF59E0B)),
+                closeContentDescription = s.nav.close,
+                closeTestTag = "btn_close_edaran_orang_tua",
+                onDismiss = onDismiss,
+                badgeText = if (scheduledCount > 0) {
+                    if (isEn) "$scheduledCount Sched" else "$scheduledCount Jadwal"
+                } else null
+            )
+
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .widthIn(max = 640.dp)
                     .navigationBarsPadding()
                     .imePadding()
-                    .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Header ringkas
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .clip(CircleShape)
-                                .background(softIndigo),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.Description,
-                                contentDescription = null,
-                                tint = primaryIndigo,
-                                modifier = Modifier.size(18.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isEn) "Circular to Parents" else "Edaran Kepada Orang Tua",
-                                fontSize = 14.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "Visit schedule, student sessions & visiting rules"
-                                } else {
-                                    "Jadwal, sesi kunjungan anak asuh & aturan"
-                                },
-                                fontSize = 10.5.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
-                    IconButton(
-                        onClick = onDismiss,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("btn_close_edaran_orang_tua")
-                    ) {
-                        Icon(Icons.Default.Close, contentDescription = s.nav.close, modifier = Modifier.size(18.dp))
-                    }
-                }
-
-                // Filter Dropdown Bulan + Filter Dropdown Sesi
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    if (availableMonths.isNotEmpty()) {
-                        EdaranFilterDropdown(
-                            label = periodLabel,
-                            options = (availableMonths.map { ym ->
-                                ym to VisitHelper.formatMonthYearLabel(ym, locale)
-                            } + ("ALL" to (if (isEn) "All Months" else "Semua Bulan"))),
-                            selectedKey = selectedMonth,
-                            accentColor = tealPrimary,
-                            containerColor = Color(0xFFF0FDFA),
-                            borderColor = Color(0xFF99F6E4),
-                            dropdownTag = "dropdown_edaran_month",
-                            optionTagPrefix = "option_edaran_month",
-                            onSelect = { key -> selectedMonth = key },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    if (sessionsInMonth.isNotEmpty()) {
-                        val activeSessLabel = if (selectedSessionFilterId == null) {
-                            if (isEn) "All Sessions (${sessionsInMonth.size})" else "Semua Sesi (${sessionsInMonth.size})"
-                        } else {
-                            sessionsInMonth.firstOrNull { it.id == selectedSessionFilterId }?.title ?: "-"
-                        }
-                        val sessionOpts = listOf<Pair<String, String>>(
-                            "ALL" to (if (isEn) "All Sessions (${sessionsInMonth.size})" else "Semua Sesi (${sessionsInMonth.size})")
-                        ) + sessionsInMonth.map { it.id.toString() to it.title }
-                        EdaranFilterDropdown(
-                            label = activeSessLabel,
-                            options = sessionOpts,
-                            selectedKey = selectedSessionFilterId?.toString() ?: "ALL",
-                            accentColor = primaryIndigo,
-                            containerColor = softIndigo,
-                            borderColor = Color(0xFF93C5FD),
-                            dropdownTag = "dropdown_edaran_session",
-                            optionTagPrefix = "option_edaran_session",
-                            onSelect = { key ->
-                                selectedSessionFilterId = if (key == "ALL") null else key.toLongOrNull()
-                            },
-                            modifier = Modifier.weight(1.25f)
-                        )
-                    }
+                if (availableMonths.isNotEmpty() || sessionsInMonth.isNotEmpty()) {
+                    VisitMonthSessionFilterRow(
+                        allSessions = sessions,
+                        selectedMonth = selectedMonth,
+                        onSelectMonth = { selectedMonth = it },
+                        sessionsInMonth = sessionsInMonth,
+                        selectedSessionId = selectedSessionFilterId,
+                        onSelectSession = { selectedSessionFilterId = it?.id },
+                        locale = locale,
+                        isEn = isEn,
+                        monthAccentColor = amberPrimary,
+                        monthContainerColor = Color(0xFFFFFBEB),
+                        monthBorderColor = Color(0xFFFDE68A),
+                        sessionAccentColor = tealPrimary,
+                        sessionContainerColor = Color(0xFFF0FDFA),
+                        sessionBorderColor = Color(0xFF99F6E4),
+                        monthDropdownTag = "dropdown_edaran_month",
+                        monthOptionTagPrefix = "option_edaran_month",
+                        sessionDropdownTag = "dropdown_edaran_session",
+                        sessionOptionTagPrefix = "option_edaran_session",
+                        allowAllSessions = true
+                    )
                 }
 
                 // Toggle cepat Anak Binaan Saya vs Semua Siswa (jika wali memiliki anak binaan)
@@ -365,8 +306,12 @@ fun EdaranOrangTuaKunjunganSheet(
                         val allSel = !onlyMyFosterStudents
                         Surface(
                             onClick = { onlyMyFosterStudents = false },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (allSel) primaryIndigo else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (allSel) amberPrimary else {
+                                if (isLight) Color(0xFFFEF3C7).copy(alpha = 0.6f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            },
+                            border = if (!allSel && isLight) BorderStroke(1.dp, Color(0xFFFDE68A)) else null,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
@@ -385,8 +330,12 @@ fun EdaranOrangTuaKunjunganSheet(
                         }
                         Surface(
                             onClick = { onlyMyFosterStudents = true },
-                            shape = RoundedCornerShape(8.dp),
-                            color = if (!allSel) tealPrimary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (!allSel) tealPrimary else {
+                                if (isLight) Color(0xFFCCFBF1).copy(alpha = 0.55f)
+                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            },
+                            border = if (allSel && isLight) BorderStroke(1.dp, Color(0xFF99F6E4)) else null,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 48.dp)
@@ -446,7 +395,7 @@ fun EdaranOrangTuaKunjunganSheet(
                     },
                     enabled = effectiveSessions.isNotEmpty(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = tealPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = amberAction),
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -475,8 +424,13 @@ fun EdaranOrangTuaKunjunganSheet(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF0FDFA)),
-                            border = BorderStroke(1.dp, Color(0xFF99F6E4))
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isLight) Color(0xFFF0FDFA) else MaterialTheme.colorScheme.surfaceContainer
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant
+                            )
                         ) {
                             Column(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -495,27 +449,30 @@ fun EdaranOrangTuaKunjunganSheet(
                                         Icon(
                                             Icons.Default.Gavel,
                                             contentDescription = null,
-                                            tint = tealPrimary,
+                                            tint = if (isLight) tealPrimary else Color(0xFF5EEAD4),
                                             modifier = Modifier.size(15.dp)
                                         )
                                         Text(
                                             text = if (isEn) "Visiting Rules & Circular Text" else "Aturan & Ketentuan Edaran",
                                             fontSize = 11.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = tealPrimary
+                                            color = if (isLight) tealPrimary else Color(0xFF5EEAD4)
                                         )
                                     }
                                     Surface(
                                         onClick = { showCustomizeEditor = !showCustomizeEditor },
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = Color.White,
-                                        border = BorderStroke(1.dp, Color(0xFF99F6E4)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isLight) Color.White else MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        border = BorderStroke(
+                                            1.dp,
+                                            if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant
+                                        ),
                                         modifier = Modifier
                                             .heightIn(min = 48.dp)
                                             .testTag("btn_toggle_edaran_rules_editor")
                                     ) {
                                         Row(
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
@@ -527,12 +484,12 @@ fun EdaranOrangTuaKunjunganSheet(
                                                 },
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold,
-                                                color = tealPrimary
+                                                color = if (isLight) tealPrimary else Color(0xFF5EEAD4)
                                             )
                                             Icon(
                                                 imageVector = if (showCustomizeEditor) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                                                 contentDescription = null,
-                                                tint = tealPrimary,
+                                                tint = if (isLight) tealPrimary else Color(0xFF5EEAD4),
                                                 modifier = Modifier.size(14.dp)
                                             )
                                         }
@@ -544,7 +501,7 @@ fun EdaranOrangTuaKunjunganSheet(
                                         text = guidelinesText,
                                         fontSize = 10.5.sp,
                                         lineHeight = 14.sp,
-                                        color = Color(0xFF1E293B)
+                                        color = if (isLight) Color(0xFF1E293B) else MaterialTheme.colorScheme.onSurface
                                     )
                                 } else {
                                     OutlinedTextField(
@@ -627,6 +584,8 @@ fun EdaranOrangTuaKunjunganSheet(
                             placeholder = if (isEn) "Search student, district, or session..." else "Cari anak asuh, kecamatan, atau sesi...",
                             leadingIcon = Icons.Default.Search,
                             clearDescription = s.nav.close,
+                            containerColor = if (isLight) Color(0xFFFFFDF7) else MaterialTheme.colorScheme.surfaceContainerHigh,
+                            borderColor = if (isLight) Color(0xFFFDE68A) else MaterialTheme.colorScheme.outlineVariant,
                             modifier = Modifier.testTag("input_edaran_search")
                         )
                     }
@@ -647,17 +606,17 @@ fun EdaranOrangTuaKunjunganSheet(
                                 },
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = primaryIndigo
+                                color = if (isLight) amberPrimary else Color(0xFFFCD34D)
                             )
                             Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = Color(0xFFDBEAFE)
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (isLight) Color(0xFFFEF3C7) else Color(0xFF78350F).copy(alpha = 0.45f)
                             ) {
                                 Text(
                                     text = if (isEn) "$scheduledCount Scheduled" else "$scheduledCount Terjadwal",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = primaryIndigo,
+                                    color = if (isLight) amberPrimary else Color(0xFFFDE68A),
                                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                                 )
                             }
@@ -689,18 +648,54 @@ fun EdaranOrangTuaKunjunganSheet(
                                 ?.ifBlank { "-" }
                                 ?: "-"
 
+                            val cardBg = if (!isLight) {
+                                MaterialTheme.colorScheme.surfaceContainer
+                            } else if (sess == null) {
+                                Color(0xFFFFFBEB)
+                            } else {
+                                when (idx % 3) {
+                                    0 -> Color(0xFFF0F9FF)
+                                    1 -> Color(0xFFECFDF5)
+                                    else -> Color(0xFFF5F3FF)
+                                }
+                            }
+                            val cardBorder = if (!isLight) {
+                                MaterialTheme.colorScheme.outlineVariant
+                            } else if (sess == null) {
+                                Color(0xFFFDE68A)
+                            } else {
+                                when (idx % 3) {
+                                    0 -> Color(0xFFBAE6FD)
+                                    1 -> Color(0xFFA7F3D0)
+                                    else -> Color(0xFFDDD6FE)
+                                }
+                            }
+                            val numBadgeBg = if (sess == null) {
+                                if (isLight) Color(0xFFFEF3C7) else Color(0xFF78350F).copy(alpha = 0.45f)
+                            } else {
+                                when (idx % 3) {
+                                    0 -> if (isLight) Color(0xFFDBEAFE) else Color(0xFF1E3A8A).copy(alpha = 0.4f)
+                                    1 -> if (isLight) Color(0xFFD1FAE5) else Color(0xFF064E3B).copy(alpha = 0.4f)
+                                    else -> if (isLight) Color(0xFFEDE9FE) else Color(0xFF4C1D95).copy(alpha = 0.4f)
+                                }
+                            }
+                            val numBadgeText = if (sess == null) {
+                                if (isLight) amberPrimary else Color(0xFFFDE68A)
+                            } else {
+                                when (idx % 3) {
+                                    0 -> if (isLight) primaryIndigo else Color(0xFF93C5FD)
+                                    1 -> if (isLight) tealPrimary else Color(0xFF6EE7B7)
+                                    else -> if (isLight) Color(0xFF6D28D9) else Color(0xFFC4B5FD)
+                                }
+                            }
+
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("card_edaran_student_${st.id}"),
-                                shape = RoundedCornerShape(10.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = if (sess != null) MaterialTheme.colorScheme.surface else Color(0xFFFFFBEB)
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (sess != null) MaterialTheme.colorScheme.outlineVariant else Color(0xFFFDE68A)
-                                )
+                                shape = RoundedCornerShape(12.dp),
+                                colors = CardDefaults.cardColors(containerColor = cardBg),
+                                border = BorderStroke(1.dp, cardBorder)
                             ) {
                                 Row(
                                     modifier = Modifier
@@ -712,14 +707,14 @@ fun EdaranOrangTuaKunjunganSheet(
                                         modifier = Modifier
                                             .size(26.dp)
                                             .clip(CircleShape)
-                                            .background(if (sess != null) softIndigo else Color(0xFFFEF3C7)),
+                                            .background(numBadgeBg),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = "${idx + 1}",
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = if (sess != null) primaryIndigo else Color(0xFFB45309)
+                                            color = numBadgeText
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
@@ -744,20 +739,21 @@ fun EdaranOrangTuaKunjunganSheet(
                                         if (sess != null) {
                                             Surface(
                                                 shape = RoundedCornerShape(6.dp),
-                                                color = Color(0xFFDBEAFE)
+                                                color = if (isLight) Color(0xFFFFFFFF).copy(alpha = 0.85f) else Color(0xFF1E3A8A).copy(alpha = 0.35f),
+                                                border = BorderStroke(0.8.dp, cardBorder)
                                             ) {
                                                 Text(
                                                     text = "${sess.title} • $dateSummary • ${sess.displayTimeRange()}",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = primaryIndigo,
+                                                    color = numBadgeText,
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
                                                 )
                                             }
                                             if (row.incomingSwap != null) {
                                                 Surface(
                                                     shape = RoundedCornerShape(6.dp),
-                                                    color = Color(0xFFEDE9FE)
+                                                    color = if (isLight) Color(0xFFEDE9FE) else Color(0xFF4C1D95).copy(alpha = 0.4f)
                                                 ) {
                                                     Text(
                                                         text = if (isEn) {
@@ -767,7 +763,7 @@ fun EdaranOrangTuaKunjunganSheet(
                                                         },
                                                         fontSize = 9.5.sp,
                                                         fontWeight = FontWeight.Bold,
-                                                        color = Color(0xFF6D28D9),
+                                                        color = if (isLight) Color(0xFF6D28D9) else Color(0xFFC4B5FD),
                                                         modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                     )
                                                 }
@@ -775,13 +771,13 @@ fun EdaranOrangTuaKunjunganSheet(
                                         } else {
                                             Surface(
                                                 shape = RoundedCornerShape(6.dp),
-                                                color = Color(0xFFFEF3C7)
+                                                color = if (isLight) Color(0xFFFEF3C7) else Color(0xFF78350F).copy(alpha = 0.45f)
                                             ) {
                                                 Text(
                                                     text = if (isEn) "Not assigned to selected session" else "Belum masuk jadwal sesi terpilih",
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFB45309),
+                                                    color = if (isLight) amberPrimary else Color(0xFFFDE68A),
                                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                                 )
                                             }
@@ -819,7 +815,7 @@ fun EdaranOrangTuaKunjunganSheet(
             confirmButton = {
                 Button(
                     onClick = { PdfReportGenerator.openPdfFile(context, pdfFile) },
-                    colors = ButtonDefaults.buttonColors(containerColor = tealPrimary),
+                    colors = ButtonDefaults.buttonColors(containerColor = amberAction),
                     modifier = Modifier
                         .heightIn(min = 48.dp)
                         .testTag("btn_open_edaran_pdf")
@@ -864,102 +860,5 @@ fun EdaranOrangTuaKunjunganSheet(
                 }
             }
         )
-    }
-}
-
-@Composable
-private fun EdaranFilterDropdown(
-    label: String,
-    options: List<Pair<String, String>>,
-    selectedKey: String,
-    accentColor: Color,
-    containerColor: Color,
-    borderColor: Color,
-    dropdownTag: String,
-    optionTagPrefix: String,
-    onSelect: (String) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember { mutableStateOf(false) }
-    Box(modifier = modifier) {
-        Surface(
-            onClick = { expanded = true },
-            shape = RoundedCornerShape(10.dp),
-            color = containerColor,
-            border = BorderStroke(1.dp, borderColor),
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 48.dp)
-                .testTag(dropdownTag)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 9.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.CalendarMonth,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(14.dp)
-                )
-                Text(
-                    text = label,
-                    fontSize = 11.5.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = accentColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
-                Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(17.dp)
-                )
-            }
-        }
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.widthIn(min = 210.dp, max = 360.dp)
-        ) {
-            options.forEachIndexed { idx, (key, title) ->
-                val isSel = key == selectedKey
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = title,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSel) accentColor else MaterialTheme.colorScheme.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    },
-                    trailingIcon = if (isSel) {
-                        {
-                            Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(15.dp)
-                            )
-                        }
-                    } else null,
-                    onClick = {
-                        expanded = false
-                        onSelect(key)
-                    },
-                    modifier = Modifier.testTag("${optionTagPrefix}_$key")
-                )
-                if (idx < options.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                }
-            }
-        }
     }
 }
