@@ -92,6 +92,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -188,7 +189,7 @@ fun SharedJournalSheet(
         )
     ) {
         ConfigureEdgeToEdgeDialogWindow(
-            lightStatusBars = isLightDialogBars,
+            lightStatusBars = false,
             lightNavigationBars = isLightDialogBars,
             adjustSoftInput = true
         )
@@ -255,9 +256,13 @@ private fun SharedJournalListScreen(
     onDismiss: () -> Unit
 ) {
     val isLight = MaterialTheme.colorScheme.surface.luminance() > 0.5f
-    val pageBg = if (isLight) Color(0xFFF6F7F9) else MaterialTheme.colorScheme.background
-    val cardBg = if (isLight) Color.White else MaterialTheme.colorScheme.surface
-    val searchBg = if (isLight) Color(0xFFECEEF2) else MaterialTheme.colorScheme.surfaceVariant
+    val pageBg = if (isLight) Color(0xFFFFFCF5) else MaterialTheme.colorScheme.background
+    val searchBg = if (isLight) Color(0xFFFFF7E6) else MaterialTheme.colorScheme.surfaceVariant
+    val headerBrush = if (isLight) {
+        Brush.horizontalGradient(listOf(Color(0xFFB45309), Color(0xFFD97706), Color(0xFFF59E0B)))
+    } else {
+        Brush.horizontalGradient(listOf(Color(0xFF78350F), Color(0xFF92400E), Color(0xFFB45309)))
+    }
 
     val pribadiCount = remember(notes) {
         notes.count { SharedJournalHelper.normalizeCategory(it.category) == SharedJournalHelper.CATEGORY_PRIBADI }
@@ -300,15 +305,16 @@ private fun SharedJournalListScreen(
             .fillMaxSize()
             .testTag("screen_shared_journal_list"),
         containerColor = pageBg,
-        contentWindowInsets = safeDialogInsets,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
                 onClick = onCreateNew,
                 shape = CircleShape,
-                containerColor = Color(0xFFF59E0B),
+                containerColor = Color(0xFFD97706),
                 contentColor = Color.White,
                 elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp),
                 modifier = Modifier
+                    .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
                     .size(58.dp)
                     .testTag("btn_add_shared_journal")
             ) {
@@ -320,25 +326,26 @@ private fun SharedJournalListScreen(
             }
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .consumeWindowInsets(innerPadding),
-            contentAlignment = Alignment.TopCenter
         ) {
-            Column(
+            // Header Gradasi Hangat & Lembut (serasi Tabungan & Agama Kristen)
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .widthIn(max = 640.dp)
+                    .fillMaxWidth()
+                    .background(headerBrush),
+                contentAlignment = Alignment.Center
             ) {
-                // Header bersih gaya MIUI Notes
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(start = 6.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
+                        .widthIn(max = 640.dp)
+                        .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                        .padding(start = 6.dp, end = 16.dp, top = 10.dp, bottom = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     IconButton(
                         onClick = onDismiss,
@@ -349,17 +356,34 @@ private fun SharedJournalListScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (isEn) "Back" else "Kembali",
-                            tint = MaterialTheme.colorScheme.onSurface
+                            tint = Color.White
+                        )
+                    }
+
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White,
+                        border = BorderStroke(1.5.dp, Color(0xFFFDE68A)),
+                        modifier = Modifier.size(42.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.img_menu_jurnal_aturan),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(2.dp)
+                                .clip(CircleShape),
+                            contentScale = ContentScale.Crop
                         )
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (isEn) "Journal & Rules" else "Catatan Jurnal & Aturan",
-                            fontSize = 19.sp,
-                            lineHeight = 23.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 18.sp,
+                            lineHeight = 22.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
                             maxLines = 2,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -369,200 +393,218 @@ private fun SharedJournalListScreen(
                             } else {
                                 "$pribadiCount Pribadi • $jurnalCount Jurnal • $aturanCount Aturan"
                             },
-                            fontSize = 12.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.5.sp,
+                            color = Color(0xFFFEF3C7),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                }
+            }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .widthIn(max = 640.dp)
+                        .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Horizontal))
+                ) {
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    // Pill Search Bar Lembut Bernuansa Hangat
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = Color(0xFFFFEDD5),
-                        modifier = Modifier.size(40.dp)
-                    ) {
-                        Image(
-                            painter = painterResource(id = R.drawable.img_menu_jurnal_aturan),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize(),
-                            contentScale = ContentScale.Crop
-                        )
-                    }
-                }
-
-                // Pill Search Bar gaya MIUI Notes
-                Surface(
-                    shape = RoundedCornerShape(26.dp),
-                    color = searchBg,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp)
-                        .heightIn(min = 48.dp)
-                ) {
-                    Row(
+                        shape = RoundedCornerShape(26.dp),
+                        color = searchBg,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (isLight) Color(0xFFFDE68A) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+                        ),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .padding(horizontal = 16.dp, vertical = 6.dp)
+                            .heightIn(min = 48.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (searchQuery.isEmpty()) {
-                                Text(
-                                    text = if (isEn) "Search notes or rules..." else "Cari catatan jurnal atau aturan",
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = onSearchChange,
-                                singleLine = true,
-                                textStyle = TextStyle(
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                ),
-                                cursorBrush = SolidColor(Color(0xFFF59E0B)),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("input_search_shared_journal")
-                            )
-                        }
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { onSearchChange("") },
-                                modifier = Modifier.size(32.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = if (isEn) "Clear search" else "Hapus pencarian",
-                                    modifier = Modifier.size(18.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Category Filter Pills: Semua -> Pribadi -> Jurnal -> Aturan
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    JournalCategoryFilterPill(
-                        label = if (isEn) "All (${notes.size})" else "Semua (${notes.size})",
-                        selected = filter == JournalCategoryFilter.ALL,
-                        activeColor = Color(0xFF1E293B),
-                        onClick = { onFilterChange(JournalCategoryFilter.ALL) },
-                        testTag = "chip_filter_all",
-                        modifier = Modifier.widthIn(min = 76.dp)
-                    )
-                    JournalCategoryFilterPill(
-                        label = if (isEn) "Private ($pribadiCount)" else "Pribadi ($pribadiCount)",
-                        selected = filter == JournalCategoryFilter.PRIBADI,
-                        activeColor = Color(0xFF7C3AED),
-                        onClick = { onFilterChange(JournalCategoryFilter.PRIBADI) },
-                        testTag = "chip_filter_pribadi",
-                        modifier = Modifier.widthIn(min = 84.dp)
-                    )
-                    JournalCategoryFilterPill(
-                        label = if (isEn) "Journal ($jurnalCount)" else "Jurnal ($jurnalCount)",
-                        selected = filter == JournalCategoryFilter.JURNAL,
-                        activeColor = Color(0xFFD97706),
-                        onClick = { onFilterChange(JournalCategoryFilter.JURNAL) },
-                        testTag = "chip_filter_jurnal",
-                        modifier = Modifier.widthIn(min = 80.dp)
-                    )
-                    JournalCategoryFilterPill(
-                        label = if (isEn) "Rules ($aturanCount)" else "Aturan ($aturanCount)",
-                        selected = filter == JournalCategoryFilter.ATURAN,
-                        activeColor = Color(0xFF0F766E),
-                        onClick = { onFilterChange(JournalCategoryFilter.ATURAN) },
-                        testTag = "chip_filter_aturan",
-                        modifier = Modifier.widthIn(min = 80.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Daftar Kartu Putih Rapat & Bersih
-                if (filteredNotes.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f)
-                            .padding(horizontal = 24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 14.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = Color(0xFFFEF3C7),
-                                modifier = Modifier.size(64.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = if (isLight) Color(0xFFB45309) else Color(0xFFFBBF24),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = if (isEn) "Search notes or rules..." else "Cari catatan jurnal atau aturan",
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = onSearchChange,
+                                    singleLine = true,
+                                    textStyle = TextStyle(
+                                        fontSize = 14.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    ),
+                                    cursorBrush = SolidColor(Color(0xFFD97706)),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("input_search_shared_journal")
+                                )
+                            }
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { onSearchChange("") },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
                                     Icon(
-                                        imageVector = Icons.Default.MenuBook,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD97706),
-                                        modifier = Modifier.size(30.dp)
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = if (isEn) "Clear search" else "Hapus pencarian",
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
-                            Text(
-                                text = if (notes.isEmpty()) {
-                                    if (isEn) "No notes or rules yet" else "Belum ada catatan jurnal & aturan"
-                                } else {
-                                    if (isEn) "No matching entries found" else "Catatan tidak ditemukan"
-                                },
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = if (isEn) {
-                                    "Tap the + button below to create a journal note with checklists or photos."
-                                } else {
-                                    "Ketuk tombol + di kanan bawah untuk menulis catatan, daftar centang, atau unggah foto."
-                                },
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                     }
-                } else {
-                    LazyColumn(
+
+                    // Category Filter Pills: Semua -> Pribadi -> Jurnal -> Aturan
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .weight(1f)
-                            .testTag("list_shared_journal_cards"),
-                        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 92.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                            .horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(
-                            items = filteredNotes,
-                            key = { it.id }
-                        ) { note ->
-                            SharedJournalMiuiCard(
-                                note = note,
-                                cardBg = cardBg,
-                                isEn = isEn,
-                                onClick = { onOpenNote(note) }
-                            )
+                        JournalCategoryFilterPill(
+                            label = if (isEn) "All (${notes.size})" else "Semua (${notes.size})",
+                            selected = filter == JournalCategoryFilter.ALL,
+                            activeColor = Color(0xFFB45309),
+                            inactiveBg = if (isLight) Color(0xFFFFF8E7) else MaterialTheme.colorScheme.surface,
+                            inactiveBorder = if (isLight) Color(0xFFFDE68A) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            onClick = { onFilterChange(JournalCategoryFilter.ALL) },
+                            testTag = "chip_filter_all",
+                            modifier = Modifier.widthIn(min = 76.dp)
+                        )
+                        JournalCategoryFilterPill(
+                            label = if (isEn) "Private ($pribadiCount)" else "Pribadi ($pribadiCount)",
+                            selected = filter == JournalCategoryFilter.PRIBADI,
+                            activeColor = Color(0xFF7C3AED),
+                            inactiveBg = if (isLight) Color(0xFFF5F3FF) else MaterialTheme.colorScheme.surface,
+                            inactiveBorder = if (isLight) Color(0xFFDDD6FE) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            onClick = { onFilterChange(JournalCategoryFilter.PRIBADI) },
+                            testTag = "chip_filter_pribadi",
+                            modifier = Modifier.widthIn(min = 84.dp)
+                        )
+                        JournalCategoryFilterPill(
+                            label = if (isEn) "Journal ($jurnalCount)" else "Jurnal ($jurnalCount)",
+                            selected = filter == JournalCategoryFilter.JURNAL,
+                            activeColor = Color(0xFFD97706),
+                            inactiveBg = if (isLight) Color(0xFFFFFBEB) else MaterialTheme.colorScheme.surface,
+                            inactiveBorder = if (isLight) Color(0xFFFDE68A) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            onClick = { onFilterChange(JournalCategoryFilter.JURNAL) },
+                            testTag = "chip_filter_jurnal",
+                            modifier = Modifier.widthIn(min = 80.dp)
+                        )
+                        JournalCategoryFilterPill(
+                            label = if (isEn) "Rules ($aturanCount)" else "Aturan ($aturanCount)",
+                            selected = filter == JournalCategoryFilter.ATURAN,
+                            activeColor = Color(0xFF0F766E),
+                            inactiveBg = if (isLight) Color(0xFFF0FDFA) else MaterialTheme.colorScheme.surface,
+                            inactiveBorder = if (isLight) Color(0xFF99F6E4) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+                            onClick = { onFilterChange(JournalCategoryFilter.ATURAN) },
+                            testTag = "chip_filter_aturan",
+                            modifier = Modifier.widthIn(min = 80.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    // Daftar Kartu Bernuansa Pastel Lembut Sesuai Kategori
+                    if (filteredNotes.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Bottom))
+                                .padding(horizontal = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = Color(0xFFFEF3C7),
+                                    border = BorderStroke(1.5.dp, Color(0xFFFDE68A)),
+                                    modifier = Modifier.size(68.dp)
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.MenuBook,
+                                            contentDescription = null,
+                                            tint = Color(0xFFB45309),
+                                            modifier = Modifier.size(30.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (notes.isEmpty()) {
+                                        if (isEn) "No notes or rules yet" else "Belum ada catatan jurnal & aturan"
+                                    } else {
+                                        if (isEn) "No matching entries found" else "Catatan tidak ditemukan"
+                                    },
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = if (isEn) {
+                                        "Tap the + button below to create a journal note with checklists or photos."
+                                    } else {
+                                        "Ketuk tombol + di kanan bawah untuk menulis catatan, daftar centang, atau unggah foto."
+                                    },
+                                    fontSize = 13.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f)
+                                .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Bottom))
+                                .testTag("list_shared_journal_cards"),
+                            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 92.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            items(
+                                items = filteredNotes,
+                                key = { it.id }
+                            ) { note ->
+                                SharedJournalMiuiCard(
+                                    note = note,
+                                    isLight = isLight,
+                                    isEn = isEn,
+                                    onClick = { onOpenNote(note) }
+                                )
+                            }
                         }
                     }
                 }
@@ -576,6 +618,8 @@ private fun JournalCategoryFilterPill(
     label: String,
     selected: Boolean,
     activeColor: Color,
+    inactiveBg: Color,
+    inactiveBorder: Color,
     onClick: () -> Unit,
     testTag: String,
     modifier: Modifier = Modifier
@@ -583,10 +627,10 @@ private fun JournalCategoryFilterPill(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(14.dp),
-        color = if (selected) activeColor else MaterialTheme.colorScheme.surface,
+        color = if (selected) activeColor else inactiveBg,
         border = BorderStroke(
             width = 1.dp,
-            color = if (selected) activeColor else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            color = if (selected) activeColor else inactiveBorder
         ),
         modifier = modifier
             .heightIn(min = 48.dp)
@@ -594,12 +638,12 @@ private fun JournalCategoryFilterPill(
     ) {
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp)
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
         ) {
             Text(
                 text = label,
                 fontSize = 12.sp,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 color = if (selected) Color.White else MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -611,7 +655,7 @@ private fun JournalCategoryFilterPill(
 @Composable
 private fun SharedJournalMiuiCard(
     note: SharedJournalNote,
-    cardBg: Color,
+    isLight: Boolean,
     isEn: Boolean,
     onClick: () -> Unit
 ) {
@@ -627,6 +671,29 @@ private fun SharedJournalMiuiCard(
         isPribadi -> Color(0xFF6D28D9)
         isAturan -> Color(0xFF0F766E)
         else -> Color(0xFFB45309)
+    }
+    val cardSurfaceBg = if (isLight) {
+        when {
+            isPribadi -> Color(0xFFF6F4FF)
+            isAturan -> Color(0xFFF1FBF8)
+            else -> Color(0xFFFFFBEF)
+        }
+    } else {
+        when {
+            isPribadi -> Color(0xFF231D38)
+            isAturan -> Color(0xFF142B28)
+            else -> Color(0xFF2B2316)
+        }
+    }
+    val cardBorderColor = if (isLight) {
+        when {
+            note.isPinned -> badgeFg.copy(alpha = 0.55f)
+            isPribadi -> Color(0xFFDDD6FE)
+            isAturan -> Color(0xFF99F6E4)
+            else -> Color(0xFFFDE68A)
+        }
+    } else {
+        badgeFg.copy(alpha = if (note.isPinned) 0.55f else 0.30f)
     }
 
     val checklist = remember(note.checklistJson) {
@@ -645,13 +712,9 @@ private fun SharedJournalMiuiCard(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(16.dp),
-        color = cardBg,
+        color = cardSurfaceBg,
         shadowElevation = 0.5.dp,
-        border = if (note.isPinned) {
-            BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.45f))
-        } else {
-            BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-        },
+        border = BorderStroke(if (note.isPinned) 1.2.dp else 1.dp, cardBorderColor),
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = 48.dp)
@@ -986,6 +1049,30 @@ private fun SharedJournalEditorScreen(
         isAturan -> Color(0xFF0F766E)
         else -> Color(0xFFD97706)
     }
+    val isLightEditor = MaterialTheme.colorScheme.surface.luminance() > 0.5f
+    val editorBg = if (isLightEditor) {
+        when {
+            isPribadi -> Color(0xFFFAF8FF)
+            isAturan -> Color(0xFFF3FBF8)
+            else -> Color(0xFFFFFCF4)
+        }
+    } else {
+        MaterialTheme.colorScheme.background
+    }
+    val editorHeaderBrush = when {
+        isPribadi -> Brush.horizontalGradient(listOf(Color(0xFF5B21B6), Color(0xFF6D28D9), Color(0xFF7C3AED)))
+        isAturan -> Brush.horizontalGradient(listOf(Color(0xFF065F46), Color(0xFF0F766E), Color(0xFF0D9488)))
+        else -> Brush.horizontalGradient(listOf(Color(0xFFB45309), Color(0xFFD97706), Color(0xFFF59E0B)))
+    }
+    val editorBarBg = if (isLightEditor) {
+        when {
+            isPribadi -> Color(0xFFF5F3FF)
+            isAturan -> Color(0xFFF0FDFA)
+            else -> Color(0xFFFFFBEB)
+        }
+    } else {
+        MaterialTheme.colorScheme.surface
+    }
 
     val safeDialogInsets = rememberEdgeToEdgeDialogSafeInsets()
 
@@ -993,12 +1080,12 @@ private fun SharedJournalEditorScreen(
         modifier = Modifier
             .fillMaxSize()
             .testTag("screen_shared_journal_editor"),
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentWindowInsets = safeDialogInsets,
+        containerColor = editorBg,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (canManage) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surface,
+                    color = editorBarBg,
                     tonalElevation = 2.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -1011,7 +1098,7 @@ private fun SharedJournalEditorScreen(
                                     .union(WindowInsets.ime.only(WindowInsetsSides.Bottom))
                             )
                     ) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
+                        HorizontalDivider(color = accentColor.copy(alpha = 0.22f))
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1031,7 +1118,7 @@ private fun SharedJournalEditorScreen(
                                         checklist = checklist + JournalChecklistItem()
                                     },
                                     shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                    color = if (isLightEditor) Color(0xFFFEF3C7) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier
                                         .heightIn(min = 48.dp)
                                         .testTag("btn_toolbar_checklist")
@@ -1044,14 +1131,14 @@ private fun SharedJournalEditorScreen(
                                         Icon(
                                             imageVector = Icons.Outlined.CheckBox,
                                             contentDescription = if (isEn) "Add checklist item" else "Tambah item centang",
-                                            tint = Color(0xFFD97706),
+                                            tint = Color(0xFFB45309),
                                             modifier = Modifier.size(19.dp)
                                         )
                                         Text(
                                             text = if (isEn) "Checklist" else "Centang",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            color = if (isLightEditor) Color(0xFF92400E) else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
@@ -1065,7 +1152,7 @@ private fun SharedJournalEditorScreen(
                                         }
                                     },
                                     shape = RoundedCornerShape(12.dp),
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                                    color = if (isLightEditor) Color(0xFFCCFBF1) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
                                     modifier = Modifier
                                         .heightIn(min = 48.dp)
                                         .testTag("btn_toolbar_image")
@@ -1092,7 +1179,7 @@ private fun SharedJournalEditorScreen(
                                             text = if (isEn) "Photo" else "Gambar",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold,
-                                            color = MaterialTheme.colorScheme.onSurface
+                                            color = if (isLightEditor) Color(0xFF115E59) else MaterialTheme.colorScheme.onSurface
                                         )
                                     }
                                 }
@@ -1159,37 +1246,69 @@ private fun SharedJournalEditorScreen(
             }
         }
     ) { innerPadding ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .consumeWindowInsets(innerPadding),
-            contentAlignment = Alignment.TopCenter
         ) {
-            Column(
+            // Header Gradasi Lembut Editor Selaras Kategori
+            Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .widthIn(max = 640.dp)
+                    .fillMaxWidth()
+                    .background(editorHeaderBrush),
+                contentAlignment = Alignment.Center
             ) {
-                // Top Bar minimalis gaya MIUI Notes
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                        .widthIn(max = 640.dp)
+                        .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                        .padding(horizontal = 6.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    IconButton(
-                        onClick = handleBack,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .testTag("btn_back_shared_journal_editor")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = if (isEn) "Back" else "Kembali",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
+                        IconButton(
+                            onClick = handleBack,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_back_shared_journal_editor")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = if (isEn) "Back" else "Kembali",
+                                tint = Color.White
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = when {
+                                    isPribadi -> if (isEn) "Private Note" else "Catatan Pribadi"
+                                    isAturan -> if (isEn) "Joint Rule" else "Aturan Bersama"
+                                    else -> if (isEn) "Journal Note" else "Catatan Jurnal"
+                                },
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (existingNote == null) {
+                                    if (isEn) "New Entry" else "Catatan Baru"
+                                } else {
+                                    authorLabel
+                                },
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
 
                     Row(
@@ -1231,7 +1350,7 @@ private fun SharedJournalEditorScreen(
                             Icon(
                                 imageVector = Icons.Default.Share,
                                 contentDescription = if (isEn) "Share" else "Bagikan",
-                                tint = MaterialTheme.colorScheme.onSurface
+                                tint = Color.White
                             )
                         }
 
@@ -1256,7 +1375,7 @@ private fun SharedJournalEditorScreen(
                                     } else {
                                         if (isEn) "Pin" else "Sematkan"
                                     },
-                                    tint = if (isPinned) Color(0xFFD97706) else MaterialTheme.colorScheme.onSurface
+                                    tint = if (isPinned) Color(0xFFFDE68A) else Color.White
                                 )
                             }
 
@@ -1270,21 +1389,29 @@ private fun SharedJournalEditorScreen(
                                     Icon(
                                         imageVector = Icons.Default.DeleteOutline,
                                         contentDescription = if (isEn) "Delete" else "Hapus",
-                                        tint = Color(0xFFDC2626)
+                                        tint = Color(0xFFFECACA)
                                     )
                                 }
                             }
                         }
                     }
                 }
+            }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                contentAlignment = Alignment.TopCenter
+            ) {
                 // Isi editor scrollable full-canvas
                 Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
+                        .fillMaxSize()
+                        .widthIn(max = 640.dp)
+                        .windowInsetsPadding(safeDialogInsets.only(WindowInsetsSides.Horizontal))
                         .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 4.dp),
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     // Pill kategori atau badge Mode Baca (Urutan: Pribadi -> Jurnal -> Aturan)
