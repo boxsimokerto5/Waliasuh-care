@@ -44,7 +44,7 @@ import org.robolectric.shadows.ShadowLooper
 import java.util.Calendar
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [34])
+@Config(sdk = [34], shadows = [ShadowPdfDocument::class])
 class VisitCircularPdfRobolectricTest {
 
     @get:Rule

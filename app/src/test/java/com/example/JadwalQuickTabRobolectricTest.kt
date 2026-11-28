@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -467,5 +468,72 @@ class JadwalQuickTabRobolectricTest {
 
         composeTestRule.onNodeWithTag("switch_picker_anak_admin_2").performClick()
         assertEquals(2L to WaliAccount.ROLE_WALI_ANAK_ADMIN_PIN, selectedRoleCall)
+    }
+
+    @Test
+    fun `jadwal quick screen shows Izin and Cuti block above Jaga Pagi when present and hides it when empty`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val vm = HealthViewModel(app)
+        val schoolId = "SCH-IZIN-TOP"
+        val monthKey = "2026-11"
+        val shiftCodes = WaliScheduleHelper.defaultShiftCodes(schoolId)
+        val entries = listOf(
+            WaliScheduleEntry(
+                id = 1L,
+                schoolId = schoolId,
+                monthKey = monthKey,
+                waliUsername = "wali_pagi",
+                waliName = "Ambika Widya",
+                sortOrder = 1,
+                dayCodesJson = WaliScheduleHelper.serializeDayCodes(mapOf(20 to "P1", 21 to "P1"))
+            ),
+            WaliScheduleEntry(
+                id = 2L,
+                schoolId = schoolId,
+                monthKey = monthKey,
+                waliUsername = "wali_cuti",
+                waliName = "Deni Furitrinofi",
+                sortOrder = 2,
+                dayCodesJson = WaliScheduleHelper.serializeDayCodes(mapOf(20 to "C", 21 to "S3A"))
+            )
+        )
+        val profile = SchoolProfile(schoolName = "SR Kediri", shortName = "SRK", tenantCode = schoolId)
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                MyApplicationTheme {
+                    val modalState = rememberDashboardModalState().apply {
+                        jadwalSelectedMonthKey = monthKey
+                        jadwalSelectedDay = 20
+                    }
+                    JadwalQuickScreen(
+                        viewModel = vm,
+                        schoolProfile = profile,
+                        shiftCodes = shiftCodes,
+                        scheduleEntries = entries,
+                        canManageSchedule = false,
+                        waliAccounts = emptyList(),
+                        currentUsername = "wali_pagi",
+                        currentWaliName = "Ambika Widya",
+                        modalState = modalState
+                    )
+                }
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Day 20 has Deni on Cuti ("C"): Izin & Cuti block MUST appear strictly ABOVE Jaga Pagi
+        composeTestRule.onNodeWithTag("card_jadwal_group_IZIN").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("card_jadwal_group_PAGI").assertIsDisplayed()
+        val izinTop = composeTestRule.onNodeWithTag("card_jadwal_group_IZIN").getBoundsInRoot().top
+        val pagiTop = composeTestRule.onNodeWithTag("card_jadwal_group_PAGI").getBoundsInRoot().top
+        org.junit.Assert.assertTrue("Expected Izin & Cuti ($izinTop) above Jaga Pagi ($pagiTop)", izinTop < pagiTop)
+
+        // Day 21 has NO leave/cuti entries: Izin & Cuti block MUST be completely hidden
+        composeTestRule.onNodeWithTag("btn_jadwal_next_day").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("card_jadwal_group_IZIN").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("card_jadwal_group_PAGI").assertIsDisplayed()
     }
 }

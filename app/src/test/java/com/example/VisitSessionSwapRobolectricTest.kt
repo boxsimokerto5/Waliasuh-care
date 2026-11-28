@@ -20,6 +20,7 @@ import com.example.data.database.AppDatabase
 import com.example.data.model.ChildStudent
 import com.example.data.model.ParentAccessLink
 import com.example.data.model.SchoolProfile
+import com.example.data.model.TandemWaliHelper
 import com.example.data.model.TandemWaliMember
 import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
@@ -37,8 +38,6 @@ import com.example.util.i18n.AppLanguageManager
 import com.example.util.i18n.LocalAppStrings
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -81,7 +80,7 @@ class VisitSessionSwapRobolectricTest {
 
     @Test
     fun `VisitHelper authorization and PbVisitSessionSwapDto round-trip work accurately`() {
-        val tandemJson = Json.encodeToString(
+        val tandemJson = TandemWaliHelper.serializeMembers(
             listOf(TandemWaliMember(username = "ustzah_siti", name = "Ustadzah Siti"))
         )
         val student = ChildStudent(
@@ -286,7 +285,7 @@ class VisitSessionSwapRobolectricTest {
         // HADIR confirmation must migrate to Session 2 with updated session QR token
         val migratedConf = vm.visitConfirmations.value.firstOrNull { it.studentId == 5511L && it.sessionId == 5602L }
         assertNotNull("Confirmation should migrate to target Session 2", migratedConf)
-        assertTrue(migratedConf!!.barcodeToken.contains("-S5602-"))
+        assertEquals(VisitHelper.buildBarcodeToken(5602L, 5511L), migratedConf!!.barcodeToken)
         assertTrue(vm.visitConfirmations.value.none { it.studentId == 5511L && it.sessionId == 5601L })
 
         // Effective schedules reflect swap
@@ -442,6 +441,7 @@ class VisitSessionSwapRobolectricTest {
                     schoolProfile = SchoolProfile(schoolName = "SRT 1 Kediri", tenantCode = schoolId),
                     waliName = "Ustadz UI",
                     currentUsername = "ust_ui_swap",
+                    initialTab = 1,
                     onRecordVisitCheckIn = { _, _, _, _, _, _, _ -> },
                     onDeleteVisitRecord = {},
                     onSwapStudentSession = { st, fromSess, toSess, reason, clearPrior ->
@@ -453,8 +453,10 @@ class VisitSessionSwapRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        // Swap button must still be visible and >= 48dp even though Zahra already checked in
-        composeTestRule.onNodeWithTag("btn_swap_visit_session_5701")
+        // Swap button on Manual tab must still be visible and >= 48dp even though Zahra already checked in
+        composeTestRule.onNodeWithTag("list_visit_manual_tab")
+            .performScrollToNode(hasTestTag("btn_manual_swap_5701"))
+        composeTestRule.onNodeWithTag("btn_manual_swap_5701")
             .assertIsDisplayed()
             .assertHeightIsAtLeast(48.dp)
             .performClick()
@@ -588,7 +590,9 @@ class VisitSessionSwapRobolectricTest {
         }
         composeTestRule.waitForIdle()
 
-        composeTestRule.onNodeWithTag("banner_parent_home_visit_schedule").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("banner_parent_home_visit_schedule")
+            .performScrollTo()
+            .assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Jadwal Dipindah", substring = true).onFirst().assertIsDisplayed()
         composeTestRule.onNodeWithTag("card_parent_summary_visit").performScrollTo().performClick()
         composeTestRule.waitForIdle()

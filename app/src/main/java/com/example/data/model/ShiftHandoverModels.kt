@@ -139,6 +139,119 @@ object ShiftHandoverHelper {
         }
     }
 
+    enum class ShiftSlot { PAGI, SIANG_SORE, MALAM, ALL }
+
+    fun resolveShiftSlotFromText(raw: String): ShiftSlot {
+        val lower = raw.trim().lowercase()
+        if (lower.isBlank() || lower.contains("semua") || lower.contains("all")) {
+            return ShiftSlot.ALL
+        }
+        return when {
+            lower.contains("pagi") || lower.contains("morning") || lower.contains("07-14") || lower.contains("07.00") || lower.contains("07:00") ->
+                ShiftSlot.PAGI
+            lower.contains("siang") || lower.contains("sore") || lower.contains("afternoon") || lower.contains("14-21") || lower.contains("15.00") || lower.contains("15:00") ->
+                ShiftSlot.SIANG_SORE
+            lower.contains("malam") || lower.contains("night") || lower.contains("21-07") || lower.contains("23.00") || lower.contains("23:00") ->
+                ShiftSlot.MALAM
+            else -> {
+                val hourMatch = Regex("""\b(\d{1,2})[:.]\d{2}\b""").find(lower)
+                val hour = hourMatch?.groupValues?.getOrNull(1)?.toIntOrNull()
+                when (hour) {
+                    in 7..13 -> ShiftSlot.PAGI
+                    in 14..20 -> ShiftSlot.SIANG_SORE
+                    in 21..23, in 0..6 -> ShiftSlot.MALAM
+                    else -> ShiftSlot.ALL
+                }
+            }
+        }
+    }
+
+    fun resolveHandoverTargetShiftSlot(
+        handoverType: String,
+        toShiftLabel: String = "",
+        handoverTime: String = ""
+    ): ShiftSlot {
+        val normalized = normalizeType(handoverType)
+        if (normalized != TYPE_CUSTOM) {
+            return when (normalized) {
+                TYPE_PAGI_KE_SORE -> ShiftSlot.SIANG_SORE
+                TYPE_SORE_KE_MALAM -> ShiftSlot.MALAM
+                TYPE_MALAM_KE_PAGI -> ShiftSlot.PAGI
+                else -> ShiftSlot.SIANG_SORE
+            }
+        }
+        val fromLabel = resolveShiftSlotFromText(toShiftLabel)
+        if (fromLabel != ShiftSlot.ALL) return fromLabel
+        return resolveShiftSlotFromText(handoverTime)
+    }
+
+    fun filterShiftMessagesForHandover(
+        shiftMessages: List<ShiftMessage>,
+        monthKey: String,
+        day: Int,
+        handoverType: String,
+        toShiftLabel: String = "",
+        handoverTime: String = "",
+        excludeMessageId: Long = 0L,
+        includeAllShiftForDay: Boolean = true
+    ): List<ShiftMessage> {
+        if (shiftMessages.isEmpty()) return emptyList()
+        val maxDay = WaliScheduleHelper.daysInMonth(monthKey)
+        val safeDay = day.coerceIn(1, maxDay)
+        val targetSlot = resolveHandoverTargetShiftSlot(handoverType, toShiftLabel, handoverTime)
+        val priorityWeight: (String) -> Int = { priority ->
+            when (priority.trim().uppercase()) {
+                "URGENT" -> 0
+                "SEDANG" -> 1
+                else -> 2
+            }
+        }
+        return shiftMessages
+            .asSequence()
+            .filter { msg ->
+                !msg.isCompleted &&
+                    (excludeMessageId <= 0L || msg.id != excludeMessageId) &&
+                    msg.followUpDate > 0L &&
+                    isSameMonthDay(msg.followUpDate, monthKey, safeDay)
+            }
+            .filter { msg ->
+                val msgSlot = resolveShiftSlotFromText(msg.shift)
+                when (targetSlot) {
+                    ShiftSlot.ALL -> true
+                    else -> msgSlot == targetSlot || (includeAllShiftForDay && msgSlot == ShiftSlot.ALL)
+                }
+            }
+            .sortedWith(
+                compareBy<ShiftMessage> { priorityWeight(it.priority) }
+                    .thenByDescending { it.createdAt }
+            )
+            .toList()
+    }
+
+    fun formatShiftMessagesAsFollowUpNotes(
+        messages: List<ShiftMessage>,
+        limit: Int = 6,
+        bulletPrefix: String = ""
+    ): String {
+        if (messages.isEmpty()) return ""
+        return messages
+            .take(limit)
+            .mapNotNull { msg ->
+                val body = msg.messageContent.trim().ifBlank { msg.title.trim() }
+                if (body.isBlank()) {
+                    null
+                } else {
+                    val line = if (msg.title.isNotBlank() && !body.equals(msg.title.trim(), ignoreCase = true)) {
+                        "${msg.title.trim()}: $body"
+                    } else {
+                        body
+                    }
+                    if (bulletPrefix.isNotEmpty()) "$bulletPrefix$line" else line
+                }
+            }
+            .joinToString("\n")
+    }
+
     fun resolveTargetShiftMessageLabel(handoverType: String, toShiftLabel: String = ""): String {
         return when (normalizeType(handoverType)) {
             TYPE_PAGI_KE_SORE -> "Shift Sore"
@@ -148,7 +261,7 @@ object ShiftHandoverHelper {
                 val lower = toShiftLabel.lowercase()
                 when {
                     lower.contains("pagi") -> "Shift Pagi"
-                    lower.contains("sore") -> "Shift Sore"
+                    lower.contains("sore") || lower.contains("siang") -> "Shift Sore"
                     lower.contains("malam") -> "Shift Malam"
                     else -> "Semua Shift"
                 }
@@ -597,17 +710,19 @@ object ShiftHandoverHelper {
             if (rec.studentId > 0L) "id:${rec.studentId}" else "name:${rec.studentName.trim().lowercase()}"
         }.distinct().size
 
-        // Tindak lanjut dari pesan shift aktif jika belum diisi manual
+        // Tindak lanjut otomatis hanya dari pesan shift yang cocok dengan tanggal & shift kerja laporan ini;
+        // jika tidak ada pesan yang cocok, dibiarkan kosong.
         val resolvedFollowUp = if (existingFollowUpNotes.isNotBlank()) {
             existingFollowUpNotes
         } else {
-            val activeShiftMsgs = shiftMessages.filter { !it.isCompleted }
-                .take(4)
-                .mapNotNull { msg ->
-                    val body = msg.messageContent.trim().ifBlank { msg.title.trim() }
-                    if (body.isBlank()) null else if (msg.title.isNotBlank() && body != msg.title.trim()) "${msg.title.trim()}: $body" else body
-                }
-            if (activeShiftMsgs.isNotEmpty()) activeShiftMsgs.joinToString("\n") else ""
+            val matchedShiftMsgs = filterShiftMessagesForHandover(
+                shiftMessages = shiftMessages,
+                monthKey = monthKey,
+                day = safeDay,
+                handoverType = normalizedType,
+                toShiftLabel = toShiftLabel
+            )
+            formatShiftMessagesAsFollowUpNotes(matchedShiftMsgs)
         }
 
         val totalStudents = students.size

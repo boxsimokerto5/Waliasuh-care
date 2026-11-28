@@ -3294,21 +3294,25 @@ internal fun LazyListScope.jadwalDailyRosterItems(
     } else {
         val q = searchQuery.trim().lowercase()
         val groupSpecs = listOf(
+            Triple(WaliScheduleHelper.GROUP_IZIN, if (isEn) "Leave & Sick (IZIN/C)" else "Izin & Cuti", if (isEn) "Official Leave" else "Izin / Sakit / Cuti"),
             Triple(WaliScheduleHelper.GROUP_PAGI, if (isEn) "Morning Shift (P1-P5)" else "Jaga Pagi (P1-P5)", "07:00 - 15:00/16:00 (P4 s.d 20:00)"),
             Triple(WaliScheduleHelper.GROUP_SORE, if (isEn) "Afternoon Shift (S)" else "Jaga Sore (S)", "15:00 - 23:00"),
             Triple(WaliScheduleHelper.GROUP_MALAM, if (isEn) "Night Shift (M)" else "Jaga Malam (M)", "15:00 - 07:00 (Pagi)"),
-            Triple(WaliScheduleHelper.GROUP_LEPAS, if (isEn) "Post-Night & Off (LP/L)" else "Lepas & Libur", if (isEn) "Rest / Off" else "Istirahat / Off"),
-            Triple(WaliScheduleHelper.GROUP_IZIN, if (isEn) "Leave & Sick (IZIN/C)" else "Izin & Cuti", if (isEn) "Official Leave" else "Izin / Sakit / Cuti")
+            Triple(WaliScheduleHelper.GROUP_LEPAS, if (isEn) "Post-Night & Off (LP/L)" else "Lepas & Libur", if (isEn) "Rest / Off" else "Istirahat / Off")
         )
 
         groupSpecs.forEach { (grpKey, grpTitle, grpTime) ->
             if (selectedGroup == "ALL" || selectedGroup == grpKey) {
                 val matchedMembers = monthEntries.sortedBy { it.sortOrder }.mapNotNull { entry ->
                     val code = WaliScheduleHelper.parseDayCodes(entry.dayCodesJson)[safeDay]?.let { WaliScheduleHelper.normalizeCode(it) }.orEmpty()
-                    val resolvedGrp = if (code.isBlank()) "" else WaliScheduleHelper.resolveShiftGroup(code, shiftMap)
+                    val leave = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[safeDay]
+                    val resolvedGrp = when {
+                        code.isNotBlank() -> WaliScheduleHelper.resolveShiftGroup(code, shiftMap)
+                        leave != null -> WaliScheduleHelper.GROUP_IZIN
+                        else -> ""
+                    }
                     if (resolvedGrp != grpKey) return@mapNotNull null
                     val pins = WaliScheduleHelper.parseDayPins(entry.dayPinsJson)[safeDay].orEmpty()
-                    val leave = WaliScheduleHelper.parseDayLeaves(entry.dayLeaveJson)[safeDay]
                     val matchesSearch = q.isBlank() ||
                         entry.waliName.lowercase().contains(q) ||
                         code.lowercase().contains(q) ||

@@ -216,6 +216,9 @@ internal fun SerahTerimaShiftEditor(
     var receivingStaff by remember(initialReport.id) { mutableStateOf(initialPayload.receivingStaff) }
     var outsideDutyStaff by remember(initialReport.id) { mutableStateOf(initialPayload.outsideDutyStaff) }
     var followUpNotes by remember(initialReport.id) { mutableStateOf(initialPayload.followUpNotes) }
+    var lastAutoFollowUpNotes by remember(initialReport.id) {
+        mutableStateOf(if (isExistingRecord) "" else initialPayload.followUpNotes)
+    }
     var completedActivities by remember(initialReport.id) { mutableStateOf(initialPayload.completedActivities) }
     var footerText by remember(initialReport.id) { mutableStateOf(initialPayload.footerText) }
     var syncedShiftMessageId by remember(initialReport.id) { mutableStateOf(initialPayload.syncedShiftMessageId) }
@@ -338,6 +341,7 @@ internal fun SerahTerimaShiftEditor(
     )
 
     fun reloadAutoData(targetMonthKey: String, targetDay: Int, targetType: String) {
+        val canRefreshFollowUp = followUpNotes.isBlank() || followUpNotes == lastAutoFollowUpNotes
         val (autoRep, autoPay) = ShiftHandoverHelper.buildAutoPopulatedDraft(
             schoolProfile = schoolProfile,
             monthKey = targetMonthKey,
@@ -351,7 +355,7 @@ internal fun SerahTerimaShiftEditor(
             shiftMessages = shiftMessages,
             authorUsername = currentUsername.orEmpty(),
             authorName = currentWaliName,
-            existingFollowUpNotes = followUpNotes,
+            existingFollowUpNotes = if (canRefreshFollowUp) "" else followUpNotes,
             existingActivities = completedActivities,
             haidRecords = haidRecords
         )
@@ -376,8 +380,9 @@ internal fun SerahTerimaShiftEditor(
         handingOverStaff = autoPay.handingOverStaff
         receivingStaff = autoPay.receivingStaff
         outsideDutyStaff = autoPay.outsideDutyStaff
-        if (followUpNotes.isBlank() && autoPay.followUpNotes.isNotBlank()) {
+        if (canRefreshFollowUp) {
             followUpNotes = autoPay.followUpNotes
+            lastAutoFollowUpNotes = autoPay.followUpNotes
             if (syncedShiftMessageId == 0L) autoSyncShiftMessage = false
         }
         if (footerText.isBlank()) footerText = autoPay.footerText
@@ -1191,7 +1196,28 @@ internal fun SerahTerimaShiftEditor(
                             .testTag("input_handover_followup_notes")
                     )
 
-                    val openShiftMsgs = remember(shiftMessages) { shiftMessages.filter { !it.isCompleted } }
+                    val matchedShiftMsgs = remember(
+                        shiftMessages,
+                        monthKey,
+                        day,
+                        handoverType,
+                        toShiftLabel,
+                        handoverTime,
+                        syncedShiftMessageId
+                    ) {
+                        ShiftHandoverHelper.filterShiftMessagesForHandover(
+                            shiftMessages = shiftMessages,
+                            monthKey = monthKey,
+                            day = day,
+                            handoverType = handoverType,
+                            toShiftLabel = toShiftLabel,
+                            handoverTime = handoverTime,
+                            excludeMessageId = syncedShiftMessageId
+                        )
+                    }
+                    val targetShiftLabel = remember(handoverType, toShiftLabel) {
+                        ShiftHandoverHelper.resolveTargetShiftMessageLabel(handoverType, toShiftLabel)
+                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -1215,15 +1241,24 @@ internal fun SerahTerimaShiftEditor(
                                 maxLines = 1
                             )
                         }
-                        if (openShiftMsgs.isNotEmpty()) {
+                        if (matchedShiftMsgs.isNotEmpty()) {
                             OutlinedButton(
                                 onClick = {
-                                    val imported = openShiftMsgs.take(5).joinToString("\n") { msg ->
-                                        val c = msg.messageContent.trim().ifBlank { msg.title.trim() }
-                                        if (msg.title.isNotBlank() && c != msg.title.trim()) "• ${msg.title.trim()}: $c" else "• $c"
-                                    }
+                                    val imported = ShiftHandoverHelper.formatShiftMessagesAsFollowUpNotes(
+                                        messages = matchedShiftMsgs,
+                                        limit = 6,
+                                        bulletPrefix = "• "
+                                    )
                                     val wasEmpty = followUpNotes.isBlank()
-                                    followUpNotes = if (wasEmpty) imported else "${followUpNotes.trim()}\n$imported"
+                                    val existingNorm = followUpNotes.trim()
+                                    val existingLines = existingNorm.lines().map { it.removePrefix("• ").trim() }.toSet()
+                                    val newLines = imported.lines().filter { line ->
+                                        line.removePrefix("• ").trim() !in existingLines
+                                    }
+                                    if (newLines.isNotEmpty()) {
+                                        val appended = newLines.joinToString("\n")
+                                        followUpNotes = if (wasEmpty) imported else "$existingNorm\n$appended"
+                                    }
                                     if (wasEmpty && syncedShiftMessageId == 0L) {
                                         autoSyncShiftMessage = false
                                     }
@@ -1237,9 +1272,9 @@ internal fun SerahTerimaShiftEditor(
                             ) {
                                 Text(
                                     text = if (isEn) {
-                                        "Pull Shift Notes (${openShiftMsgs.size})"
+                                        "Pull Shift Notes (${matchedShiftMsgs.size})"
                                     } else {
-                                        "Ambil Pesan (${openShiftMsgs.size} Aktif)"
+                                        "Ambil Pesan (${matchedShiftMsgs.size} Sesuai)"
                                     },
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
@@ -1249,9 +1284,17 @@ internal fun SerahTerimaShiftEditor(
                             }
                         }
                     }
-
-                    val targetShiftLabel = remember(handoverType, toShiftLabel) {
-                        ShiftHandoverHelper.resolveTargetShiftMessageLabel(handoverType, toShiftLabel)
+                    if (matchedShiftMsgs.isEmpty()) {
+                        Text(
+                            text = if (isEn) {
+                                "No active shift messages match $dateLabel • $targetShiftLabel (left blank unless typed manually)."
+                            } else {
+                                "Belum ada pesan shift aktif untuk $dateLabel • $targetShiftLabel (dibiarkan kosong jika belum diisi)."
+                            },
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.testTag("text_handover_no_matching_shift_msgs")
+                        )
                     }
                     Surface(
                         shape = RoundedCornerShape(10.dp),

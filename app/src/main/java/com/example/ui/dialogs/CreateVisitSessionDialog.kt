@@ -318,13 +318,14 @@ fun CreateVisitSessionDialog(
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
 
-
-                // Bagian Pinned: Pilihan Bulan, Jumlah Sesi (1-4), & Switcher Sesi
+                // Konten Lengkap yang Bisa Di-scroll Lega di Layar Kecil Maupun Tablet
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     // 1. Bulan Sesi
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -511,19 +512,8 @@ fun CreateVisitSessionDialog(
                             }
                         }
                     }
-                }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
-
-                // Konten Detail Sesi yang Bisa Di-scroll Lega
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f, fill = false)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                     // Info Tahap Rilis Jadwal (Draf vs Preview Wali vs Live Ortu)
                     val dialogBannerBg = when {
                         initialSession?.publishedToParent == true -> Color(0xFFFEF3C7)
