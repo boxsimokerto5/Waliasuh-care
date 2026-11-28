@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -27,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Church
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.DeleteForever
@@ -62,14 +64,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -317,110 +324,126 @@ private data class AdminMenuTileSpec(
 
 @Composable
 fun AdminQuickMenuGridCard(
-    selectedTab: Int,
+    selectedTab: Int? = null,
     studentsCount: Int,
     waliCount: Int,
     jadwalCount: Int,
     activeFastingCount: Int,
     activeVisitCount: Int,
+    christianCount: Int = 0,
     isEn: Boolean,
     onSelectTab: (Int) -> Unit,
+    onOpenClaimChristian: () -> Unit = {},
     onOpenSchoolProfile: () -> Unit,
     onOpenCsvBackupSheet: () -> Unit,
     onOpenSecuritySheet: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val row1 = listOf(
-        AdminMenuTileSpec(
-            title = if (isEn) "Students" else "Data Siswa",
-            icon = Icons.Default.People,
-            tileBg = Color(0xFFE0F2FE),
-            iconTint = Color(0xFF0369A1),
-            badgeText = "$studentsCount",
-            badgeBg = Color(0xFF0369A1),
-            isActive = selectedTab == 0,
-            testTag = "tile_admin_hub_students",
-            onClick = { onSelectTab(0) }
+    val menuRows = listOf(
+        listOf(
+            AdminMenuTileSpec(
+                title = if (isEn) "Students" else "Data Siswa",
+                icon = Icons.Default.People,
+                tileBg = Color(0xFFE0F2FE),
+                iconTint = Color(0xFF0369A1),
+                badgeText = "$studentsCount",
+                badgeBg = Color(0xFF0369A1),
+                isActive = selectedTab == 0,
+                testTag = "tile_admin_hub_students",
+                onClick = { onSelectTab(0) }
+            ),
+            AdminMenuTileSpec(
+                title = if (isEn) "Wali Acct" else "Akun Wali",
+                icon = Icons.Default.Key,
+                tileBg = Color(0xFFE0E7FF),
+                iconTint = Color(0xFF4338CA),
+                badgeText = "$waliCount",
+                badgeBg = Color(0xFF4338CA),
+                isActive = selectedTab == 1,
+                testTag = "tile_admin_hub_wali",
+                onClick = { onSelectTab(1) }
+            ),
+            AdminMenuTileSpec(
+                title = if (isEn) "Roster" else "Jadwal",
+                icon = Icons.Default.TableChart,
+                tileBg = Color(0xFFCCFBF1),
+                iconTint = Color(0xFF0F766E),
+                badgeText = "$jadwalCount",
+                badgeBg = Color(0xFF0F766E),
+                isActive = selectedTab == 4,
+                testTag = "tile_admin_hub_jadwal",
+                onClick = { onSelectTab(4) }
+            )
         ),
-        AdminMenuTileSpec(
-            title = if (isEn) "Wali Acct" else "Akun Wali",
-            icon = Icons.Default.Key,
-            tileBg = Color(0xFFE0E7FF),
-            iconTint = Color(0xFF4338CA),
-            badgeText = "$waliCount",
-            badgeBg = Color(0xFF4338CA),
-            isActive = selectedTab == 1,
-            testTag = "tile_admin_hub_wali",
-            onClick = { onSelectTab(1) }
+        listOf(
+            AdminMenuTileSpec(
+                title = if (isEn) "Puasa" else "Sesi Puasa",
+                icon = Icons.Default.RestaurantMenu,
+                tileBg = Color(0xFFD1FAE5),
+                iconTint = Color(0xFF047857),
+                badgeText = if (activeFastingCount > 0) "$activeFastingCount Aktif" else "Sesi",
+                badgeBg = Color(0xFF047857),
+                isActive = selectedTab == 2,
+                testTag = "tile_admin_hub_fasting",
+                onClick = { onSelectTab(2) }
+            ),
+            AdminMenuTileSpec(
+                title = if (isEn) "Visits" else "Kunjungan",
+                icon = Icons.Default.CalendarMonth,
+                tileBg = Color(0xFFDBEAFE),
+                iconTint = Color(0xFF1D4ED8),
+                badgeText = if (activeVisitCount > 0) "$activeVisitCount Aktif" else "Sesi",
+                badgeBg = Color(0xFF1D4ED8),
+                isActive = selectedTab == 3,
+                testTag = "tile_admin_hub_visit",
+                onClick = { onSelectTab(3) }
+            ),
+            AdminMenuTileSpec(
+                title = if (isEn) "Christian" else "Anak Kristen",
+                icon = Icons.Default.Church,
+                tileBg = Color(0xFFEDE9FE),
+                iconTint = Color(0xFF5B21B6),
+                badgeText = "$christianCount/$studentsCount",
+                badgeBg = Color(0xFF5B21B6),
+                isActive = false,
+                testTag = "tile_admin_hub_christian",
+                onClick = onOpenClaimChristian
+            )
         ),
-        AdminMenuTileSpec(
-            title = if (isEn) "Roster" else "Jadwal",
-            icon = Icons.Default.TableChart,
-            tileBg = Color(0xFFCCFBF1),
-            iconTint = Color(0xFF0F766E),
-            badgeText = "$jadwalCount",
-            badgeBg = Color(0xFF0F766E),
-            isActive = selectedTab == 4,
-            testTag = "tile_admin_hub_jadwal",
-            onClick = { onSelectTab(4) }
-        ),
-        AdminMenuTileSpec(
-            title = if (isEn) "Puasa" else "Sesi Puasa",
-            icon = Icons.Default.RestaurantMenu,
-            tileBg = Color(0xFFD1FAE5),
-            iconTint = Color(0xFF047857),
-            badgeText = if (activeFastingCount > 0) "$activeFastingCount Aktif" else "Sesi",
-            badgeBg = Color(0xFF047857),
-            isActive = selectedTab == 2,
-            testTag = "tile_admin_hub_fasting",
-            onClick = { onSelectTab(2) }
-        )
-    )
-
-    val row2 = listOf(
-        AdminMenuTileSpec(
-            title = if (isEn) "Visits" else "Kunjungan",
-            icon = Icons.Default.CalendarMonth,
-            tileBg = Color(0xFFDBEAFE),
-            iconTint = Color(0xFF1D4ED8),
-            badgeText = if (activeVisitCount > 0) "$activeVisitCount Aktif" else "Sesi",
-            badgeBg = Color(0xFF1D4ED8),
-            isActive = selectedTab == 3,
-            testTag = "tile_admin_hub_visit",
-            onClick = { onSelectTab(3) }
-        ),
-        AdminMenuTileSpec(
-            title = if (isEn) "School Info" else "Profil & Kop",
-            icon = Icons.Default.Business,
-            tileBg = Color(0xFFF3E8FF),
-            iconTint = Color(0xFF7E22CE),
-            badgeText = if (isEn) "Edit" else "Atur",
-            badgeBg = Color(0xFF7E22CE),
-            isActive = false,
-            testTag = "btn_edit_school_profile",
-            onClick = onOpenSchoolProfile
-        ),
-        AdminMenuTileSpec(
-            title = if (isEn) "CSV Backup" else "Impor/Ekspor",
-            icon = Icons.Default.FileUpload,
-            tileBg = Color(0xFFFEF3C7),
-            iconTint = Color(0xFFB45309),
-            badgeText = "CSV",
-            badgeBg = Color(0xFFD97706),
-            isActive = false,
-            testTag = "tile_admin_hub_csv",
-            onClick = onOpenCsvBackupSheet
-        ),
-        AdminMenuTileSpec(
-            title = if (isEn) "Security" else "Keamanan",
-            icon = Icons.Default.Security,
-            tileBg = Color(0xFFFCE7F3),
-            iconTint = Color(0xFFBE185D),
-            badgeText = if (isEn) "Admin" else "Reset",
-            badgeBg = Color(0xFFBE185D),
-            isActive = false,
-            testTag = "tile_admin_hub_security",
-            onClick = onOpenSecuritySheet
+        listOf(
+            AdminMenuTileSpec(
+                title = if (isEn) "School Info" else "Profil & Kop",
+                icon = Icons.Default.Business,
+                tileBg = Color(0xFFF3E8FF),
+                iconTint = Color(0xFF7E22CE),
+                badgeText = if (isEn) "Edit" else "Atur",
+                badgeBg = Color(0xFF7E22CE),
+                isActive = false,
+                testTag = "btn_edit_school_profile",
+                onClick = onOpenSchoolProfile
+            ),
+            AdminMenuTileSpec(
+                title = if (isEn) "CSV Backup" else "Impor/Ekspor",
+                icon = Icons.Default.FileUpload,
+                tileBg = Color(0xFFFEF3C7),
+                iconTint = Color(0xFFB45309),
+                badgeText = "CSV",
+                badgeBg = Color(0xFFD97706),
+                isActive = false,
+                testTag = "tile_admin_hub_csv",
+                onClick = onOpenCsvBackupSheet
+            ),
+            AdminMenuTileSpec(
+                title = if (isEn) "Security" else "Keamanan",
+                icon = Icons.Default.Security,
+                tileBg = Color(0xFFFCE7F3),
+                iconTint = Color(0xFFBE185D),
+                badgeText = if (isEn) "Admin" else "Reset",
+                badgeBg = Color(0xFFBE185D),
+                isActive = false,
+                testTag = "tile_admin_hub_security",
+                onClick = onOpenSecuritySheet
+            )
         )
     )
 
@@ -435,8 +458,8 @@ fun AdminQuickMenuGridCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier
@@ -457,39 +480,29 @@ fun AdminQuickMenuGridCard(
                     )
                     Text(
                         text = if (isEn) "School Admin Menu" else "Menu Pengelola Sekolah",
-                        fontSize = 12.5.sp,
+                        fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                 }
                 Text(
-                    text = if (isEn) "Tap a card" else "Ketuk kartu",
-                    fontSize = 10.5.sp,
+                    text = if (isEn) "Open menu" else "Buka menu",
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                row1.forEach { spec ->
-                    AdminSuperAppTile(
-                        spec = spec,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                row2.forEach { spec ->
-                    AdminSuperAppTile(
-                        spec = spec,
-                        modifier = Modifier.weight(1f)
-                    )
+            menuRows.forEach { rowSpecs ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    rowSpecs.forEach { spec ->
+                        AdminSuperAppTile(
+                            spec = spec,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                 }
             }
         }
@@ -1167,3 +1180,130 @@ fun AdminChristianClaimMenuCard(
         }
     }
 }
+
+@Composable
+fun AdminHomeFooterBrandingAndScenic(
+    isEn: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val bgColor = MaterialTheme.colorScheme.background
+    val isDarkTheme = bgColor.luminance() < 0.5f
+    val colorFilter = remember(isDarkTheme, bgColor) {
+        if (isDarkTheme) {
+            ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -0.38f, 0f, 0f, 0f, 112f,
+                        0f, -0.36f, 0f, 0f, 114f,
+                        0f, 0f, -0.34f, 0f, 118f,
+                        0f, 0f, 0f, 0.85f, 0f
+                    )
+                )
+            )
+        } else {
+            ColorFilter.tint(bgColor, BlendMode.Multiply)
+        }
+    }
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("admin_home_branding_logos"),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shadowElevation = 1.dp
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.logo_kemensos),
+                    contentDescription = "Logo Kementerian Sosial RI",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp)
+                )
+            }
+
+            Image(
+                painter = painterResource(id = R.drawable.logo_sr_care),
+                contentDescription = "Logo Wali Asuh Care",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+            )
+
+            Surface(
+                modifier = Modifier.size(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shadowElevation = 1.dp
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.logo_sekolah_rakyat),
+                    contentDescription = "Logo Sekolah Rakyat",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(5.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .layout { measurable, constraints ->
+                    val sidePad = 12.dp.roundToPx()
+                    val fullWidth = (constraints.maxWidth + sidePad * 2).coerceAtLeast(constraints.maxWidth)
+                    val placeable = measurable.measure(
+                        constraints.copy(minWidth = fullWidth, maxWidth = fullWidth)
+                    )
+                    layout(constraints.maxWidth, placeable.height) {
+                        placeable.place(-sidePad, 0)
+                    }
+                }
+                .height(175.dp)
+                .testTag("admin_home_scenic_footer")
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.img_admin_home_mountain_school),
+                contentDescription = if (isEn) {
+                    "Mountain scenery silhouette with school teachers and students"
+                } else {
+                    "Ilustrasi siluet pegunungan dengan pembina sekolah dan anak-anak asuh"
+                },
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.BottomCenter,
+                colorFilter = colorFilter,
+                alpha = if (isDarkTheme) 0.88f else 0.94f,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(60.dp)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(bgColor, bgColor.copy(alpha = 0f))
+                        )
+                    )
+            )
+        }
+    }
+}
+

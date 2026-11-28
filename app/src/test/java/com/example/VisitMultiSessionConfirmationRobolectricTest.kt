@@ -745,6 +745,13 @@ class VisitMultiSessionConfirmationRobolectricTest {
             .assertIsDisplayed()
             .assertTextContains("Kunjungan Besok Sesi 2", substring = true)
 
+        composeTestRule.onNodeWithTag("parent_home_branding_logos")
+            .performScrollTo()
+            .assertIsDisplayed()
+        composeTestRule.onNodeWithTag("parent_home_scenic_footer")
+            .performScrollTo()
+            .assertIsDisplayed()
+
         vm.logout()
         db.visitSessionDao().deleteById(9201L)
         db.visitSessionDao().deleteById(9202L)

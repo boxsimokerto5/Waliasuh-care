@@ -444,8 +444,8 @@ class VisitCircularPdfRobolectricTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("list_admin_content")
-            .performScrollToNode(hasTestTag("row_admin_tabs"))
-        composeTestRule.onNodeWithTag("tab_admin_visit").performClick()
+            .performScrollToNode(hasTestTag("tile_admin_hub_visit"))
+        composeTestRule.onNodeWithTag("tile_admin_hub_visit").performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("list_admin_content")

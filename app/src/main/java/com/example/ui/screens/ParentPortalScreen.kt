@@ -97,8 +97,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -1689,7 +1693,7 @@ private fun ParentOverviewContent(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(vertical = 14.dp)
+            .padding(top = 14.dp)
             .testTag("scroll_parent_home"),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
@@ -2012,6 +2016,123 @@ private fun ParentOverviewContent(
                         }
                     }
             }
+        }
+
+        ParentHomeFooterBrandingAndScenic(isEn = isEn)
+    }
+}
+
+@Composable
+private fun ParentHomeFooterBrandingAndScenic(
+    isEn: Boolean
+) {
+    val bgColor = MaterialTheme.colorScheme.background
+    val isDarkTheme = bgColor.luminance() < 0.5f
+    val colorFilter = remember(isDarkTheme, bgColor) {
+        if (isDarkTheme) {
+            ColorFilter.colorMatrix(
+                ColorMatrix(
+                    floatArrayOf(
+                        -0.38f, 0f, 0f, 0f, 112f,
+                        0f, -0.36f, 0f, 0f, 114f,
+                        0f, 0f, -0.34f, 0f, 118f,
+                        0f, 0f, 0f, 0.85f, 0f
+                    )
+                )
+            )
+        } else {
+            ColorFilter.tint(bgColor, BlendMode.Multiply)
+        }
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Spacer(modifier = Modifier.height(6.dp))
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .testTag("parent_home_branding_logos"),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                modifier = Modifier.size(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shadowElevation = 1.dp
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.logo_kemensos),
+                    contentDescription = "Logo Kementerian Sosial RI",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(6.dp)
+                )
+            }
+
+            Image(
+                painter = painterResource(id = R.drawable.logo_sr_care),
+                contentDescription = "Logo Wali Asuh Care",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(54.dp)
+                    .clip(CircleShape)
+            )
+
+            Surface(
+                modifier = Modifier.size(50.dp),
+                shape = RoundedCornerShape(14.dp),
+                color = Color.White,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
+                shadowElevation = 1.dp
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.logo_sekolah_rakyat),
+                    contentDescription = "Logo Sekolah Rakyat",
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(5.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(180.dp)
+                .testTag("parent_home_scenic_footer")
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.img_parent_home_mountain_hug),
+                contentDescription = if (isEn) {
+                    "Mountain scenery silhouette with parents welcoming their running child for a hug"
+                } else {
+                    "Ilustrasi siluet pegunungan dengan orang tua menyambut pelukan anak yang berlari"
+                },
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.BottomCenter,
+                colorFilter = colorFilter,
+                alpha = if (isDarkTheme) 0.88f else 0.94f,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(62.dp)
+                    .align(Alignment.TopCenter)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(bgColor, bgColor.copy(alpha = 0f))
+                        )
+                    )
+            )
         }
     }
 }

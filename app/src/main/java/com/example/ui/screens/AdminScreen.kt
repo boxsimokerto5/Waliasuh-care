@@ -33,6 +33,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -141,7 +142,6 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.SupervisorAccount
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.ScrollableTabRow
 import com.example.data.model.ChildStudent
 import com.example.data.model.VisitSessionSwap
 import com.example.data.model.FastingJenjangHelper
@@ -153,9 +153,9 @@ import com.example.data.model.VisitLaunchStage
 import com.example.data.model.VisitSession
 import com.example.data.model.WaliScheduleEntry
 import com.example.data.model.WaliScheduleHelper
-import com.example.ui.components.AdminChristianClaimMenuCard
 import com.example.ui.components.AdminCsvBackupSheet
 import com.example.ui.components.AdminHeroSummaryCard
+import com.example.ui.components.AdminHomeFooterBrandingAndScenic
 import com.example.ui.components.AdminQuickMenuGridCard
 import com.example.ui.components.AdminSecurityMaintenanceSheet
 import com.example.ui.components.StudentAvatar
@@ -245,7 +245,8 @@ fun AdminScreen(
     val isUploadingStudentPhoto by viewModel.isUploadingStudentPhoto.collectAsStateWithLifecycle()
 
     var showInfoPentingSheet by remember { mutableStateOf(false) }
-    var selectedAdminTab by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    // null = Beranda Portal Admin; 0 = Data Siswa, 1 = Akun Wali, 2 = Sesi Puasa, 3 = Kunjungan, 4 = Jadwal
+    var activeAdminPage by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(Unit) {
         viewModel.syncInfoPentingChannelNow()
     }
@@ -318,7 +319,11 @@ fun AdminScreen(
 
     // Tangani tombol Back fisik/gesture pada perangkat Android
     BackHandler {
-        showExitConfirmDialog = true
+        if (activeAdminPage != null) {
+            activeAdminPage = null
+        } else {
+            showExitConfirmDialog = true
+        }
     }
 
     val activeSchoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
@@ -358,14 +363,14 @@ fun AdminScreen(
     }
 
     LaunchedEffect(
-        selectedAdminTab,
+        activeAdminPage,
         activeSchoolCode,
         showJadwalMatriksSheet,
         showManageShiftCodes,
         showImportJadwalMatriks,
         showSerahTerimaShiftSheet
     ) {
-        if (selectedAdminTab == 4 || showJadwalMatriksSheet || showManageShiftCodes || showImportJadwalMatriks || showSerahTerimaShiftSheet) {
+        if (activeAdminPage == 4 || showJadwalMatriksSheet || showManageShiftCodes || showImportJadwalMatriks || showSerahTerimaShiftSheet) {
             viewModel.ensureSchoolShiftCodesSeeded(activeSchoolCode)
             viewModel.syncShiftHandoversOnlineQuietly()
         }
@@ -630,18 +635,48 @@ fun AdminScreen(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    if (activeAdminPage != null) {
+                        IconButton(
+                            onClick = { activeAdminPage = null },
+                            modifier = Modifier.testTag("btn_admin_subpage_back")
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = if (isEn) "Back to Admin Home" else "Kembali ke Beranda Admin",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                },
                 title = {
+                    val schoolShortLabel = schoolProfile.schoolName.ifBlank { schoolProfile.shortName }
+                    val currentTitle = when (activeAdminPage) {
+                        0 -> if (isEn) "Students Data" else "Data Siswa"
+                        1 -> if (isEn) "Wali Asuh Accounts" else "Akun Wali Asuh"
+                        2 -> if (isEn) "Fasting Sessions" else "Sesi Puasa"
+                        3 -> if (isEn) "Parent Visits" else "Kunjungan Orang Tua"
+                        4 -> if (isEn) "Wali Duty Roster" else "Jadwal Wali Asuh"
+                        else -> if (isEn) "Admin Portal" else "Portal Admin"
+                    }
+                    val currentSubtitle = if (activeAdminPage == null) {
+                        "$schoolShortLabel • ${schoolProfile.city}"
+                    } else {
+                        "${if (isEn) "Admin Portal" else "Portal Admin"} • $schoolShortLabel"
+                    }
                     Column {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.AdminPanelSettings,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(19.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            if (activeAdminPage == null) {
+                                Icon(
+                                    imageVector = Icons.Default.AdminPanelSettings,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(19.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                            }
                             Text(
-                                text = if (isEn) "Admin Portal" else "Portal Admin",
+                                text = currentTitle,
                                 fontSize = 15.5.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White,
@@ -650,7 +685,7 @@ fun AdminScreen(
                             )
                         }
                         Text(
-                            text = "${schoolProfile.schoolName.ifBlank { schoolProfile.shortName }} • ${schoolProfile.city}",
+                            text = currentSubtitle,
                             fontSize = 11.sp,
                             color = Color.White.copy(alpha = 0.88f),
                             maxLines = 1,
@@ -737,57 +772,60 @@ fun AdminScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = {
-                    when (selectedAdminTab) {
-                        0 -> showAddStudentDialog = true
-                        1 -> showAddDialog = true
-                        2 -> showCreateFastingSessionDialog = true
-                        3 -> {
-                            visitSessionToEdit = null
-                            showCreateVisitSessionDialog = true
+            val currentPage = activeAdminPage
+            if (currentPage != null) {
+                FloatingActionButton(
+                    onClick = {
+                        when (currentPage) {
+                            0 -> showAddStudentDialog = true
+                            1 -> showAddDialog = true
+                            2 -> showCreateFastingSessionDialog = true
+                            3 -> {
+                                visitSessionToEdit = null
+                                showCreateVisitSessionDialog = true
+                            }
+                            else -> showImportJadwalMatriks = true
                         }
-                        else -> showImportJadwalMatriks = true
-                    }
-                },
-                containerColor = WaliPrimary,
-                contentColor = Color.White,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.testTag("fab_admin_action")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    },
+                    containerColor = WaliPrimary,
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(16.dp),
+                    modifier = Modifier.testTag("fab_admin_action")
                 ) {
-                    Icon(
-                        imageVector = when (selectedAdminTab) {
-                            0 -> Icons.Default.PersonAdd
-                            2 -> Icons.Default.EventNote
-                            3 -> Icons.Default.CalendarMonth
-                            4 -> Icons.Default.TableChart
-                            else -> Icons.Default.Add
-                        },
-                        contentDescription = when (selectedAdminTab) {
-                            0 -> if (isEn) "Add Student" else "Tambah Siswa"
-                            2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
-                            3 -> if (isEn) "Create Visit Session" else "Buat Sesi Kunjungan"
-                            4 -> if (isEn) "Manage Roster" else "Atur Matriks Jadwal"
-                            else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = when (selectedAdminTab) {
-                            0 -> if (isEn) "Add Student" else "Tambah Siswa"
-                            2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
-                            3 -> if (isEn) "Create Visit Session" else "Buat Kunjungan"
-                            4 -> if (isEn) "Manage Roster" else "Atur Jadwal"
-                            else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
-                        },
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = when (currentPage) {
+                                0 -> Icons.Default.PersonAdd
+                                2 -> Icons.Default.EventNote
+                                3 -> Icons.Default.CalendarMonth
+                                4 -> Icons.Default.TableChart
+                                else -> Icons.Default.Add
+                            },
+                            contentDescription = when (currentPage) {
+                                0 -> if (isEn) "Add Student" else "Tambah Siswa"
+                                2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
+                                3 -> if (isEn) "Create Visit Session" else "Buat Sesi Kunjungan"
+                                4 -> if (isEn) "Manage Roster" else "Atur Matriks Jadwal"
+                                else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
+                            },
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = when (currentPage) {
+                                0 -> if (isEn) "Add Student" else "Tambah Siswa"
+                                2 -> if (isEn) "Create Puasa Session" else "Buat Sesi Puasa"
+                                3 -> if (isEn) "Create Visit Session" else "Buat Kunjungan"
+                                4 -> if (isEn) "Manage Roster" else "Atur Jadwal"
+                                else -> if (isEn) "Add Wali Asuh" else "Tambah Wali Asuh"
+                            },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
         }
@@ -798,189 +836,67 @@ fun AdminScreen(
                 .padding(innerPadding),
             contentAlignment = Alignment.TopCenter
         ) {
+            val currentPage = activeAdminPage
             LazyColumn(
                 modifier = Modifier
                     .fillMaxSize()
                     .widthIn(max = 680.dp)
                     .testTag("list_admin_content"),
-                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                contentPadding = if (currentPage == null) {
+                    PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 0.dp)
+                } else {
+                    PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 88.dp)
+                },
+                verticalArrangement = Arrangement.spacedBy(if (currentPage == null) 12.dp else 8.dp)
             ) {
-                // 1. Kartu Hero Ringkas Sekolah (senada gaya Beranda Wali Asuh)
-                item(key = "admin_hero_card") {
-                    AdminHeroSummaryCard(
-                        schoolProfile = schoolProfile,
-                        activeSchoolCode = activeSchoolCode,
-                        studentsCount = schoolStudents.size,
-                        waliCount = schoolAccounts.size,
-                        jadwalCount = jadwalMonthEntries.size,
-                        sessionsCount = schoolFastingSessions.size + schoolVisitSessions.size,
-                        isSyncing = isSyncing,
-                        isEn = isEn,
-                        onSyncCloud = {
-                            viewModel.syncAllWithCloud { _, msg ->
-                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
-                            }
-                        },
-                        onEditSchool = { showEditSchoolDialog = true },
-                        onSelectMetricTab = { tabIdx -> selectedAdminTab = tabIdx }
-                    )
-                }
-
-                // 2. Grid Kartu Menu Pengelola 2x4 (senada kartu QuickMenuTiles Wali Asuh)
-                item(key = "admin_menu_hub_card") {
-                    AdminQuickMenuGridCard(
-                        selectedTab = selectedAdminTab,
-                        studentsCount = schoolStudents.size,
-                        waliCount = schoolAccounts.size,
-                        jadwalCount = jadwalMonthEntries.size,
-                        activeFastingCount = schoolFastingSessions.count { it.isActive },
-                        activeVisitCount = schoolVisitSessions.count { it.isActive },
-                        isEn = isEn,
-                        onSelectTab = { tabIdx -> selectedAdminTab = tabIdx },
-                        onOpenSchoolProfile = { showEditSchoolDialog = true },
-                        onOpenCsvBackupSheet = { showCsvBackupSheet = true },
-                        onOpenSecuritySheet = { showSecurityMaintenanceSheet = true }
-                    )
-                }
-
-                // 2b. Menu Khusus Admin: Klaim & Data Anak Agama Kristen (Terkunci dari Wali Asuh)
-                item(key = "admin_christian_claim_menu") {
-                    AdminChristianClaimMenuCard(
-                        christianStudents = christianSchoolStudents,
-                        totalStudentsCount = schoolStudents.size,
-                        isEn = isEn,
-                        onOpenClaimChristian = { showAdminClaimChristianSheet = true }
-                    )
-                }
-
-                // Tab Navigasi: Kelola Data Siswa vs Akun Wali vs Sesi Puasa vs Kunjungan
-                item {
-                    ScrollableTabRow(
-                        selectedTabIndex = selectedAdminTab,
-                        edgePadding = 4.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .testTag("row_admin_tabs"),
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ) {
-                        Tab(
-                            selected = selectedAdminTab == 0,
-                            onClick = { selectedAdminTab = 0 },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.People,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isEn) "Students (${schoolStudents.size})" else "Siswa (${schoolStudents.size})",
-                                        fontSize = 11.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = if (selectedAdminTab == 0) FontWeight.Bold else FontWeight.Medium
-                                    )
+                if (currentPage == null) {
+                    // ==========================================
+                    // BERANDA PORTAL ADMIN (BERSIH + HUB IKON 3x3 + SILUET)
+                    // ==========================================
+                    item(key = "admin_hero_card") {
+                        AdminHeroSummaryCard(
+                            schoolProfile = schoolProfile,
+                            activeSchoolCode = activeSchoolCode,
+                            studentsCount = schoolStudents.size,
+                            waliCount = schoolAccounts.size,
+                            jadwalCount = jadwalMonthEntries.size,
+                            sessionsCount = schoolFastingSessions.size + schoolVisitSessions.size,
+                            isSyncing = isSyncing,
+                            isEn = isEn,
+                            onSyncCloud = {
+                                viewModel.syncAllWithCloud { _, msg ->
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
                                 }
                             },
-                            modifier = Modifier.testTag("tab_admin_students")
-                        )
-                        Tab(
-                            selected = selectedAdminTab == 1,
-                            onClick = { selectedAdminTab = 1 },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Key,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "Wali (${schoolAccounts.size})",
-                                        fontSize = 11.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = if (selectedAdminTab == 1) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            },
-                            modifier = Modifier.testTag("tab_admin_wali")
-                        )
-                        Tab(
-                            selected = selectedAdminTab == 2,
-                            onClick = { selectedAdminTab = 2 },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.RestaurantMenu,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isEn) "Puasa (${schoolFastingSessions.size})" else "Sesi Puasa (${schoolFastingSessions.size})",
-                                        fontSize = 11.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = if (selectedAdminTab == 2) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            },
-                            modifier = Modifier.testTag("tab_admin_sesi_puasa")
-                        )
-                        Tab(
-                            selected = selectedAdminTab == 3,
-                            onClick = { selectedAdminTab = 3 },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarMonth,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isEn) "Visits (${schoolVisitSessions.size})" else "Kunjungan (${schoolVisitSessions.size})",
-                                        fontSize = 11.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = if (selectedAdminTab == 3) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            },
-                            modifier = Modifier.testTag("tab_admin_visit")
-                        )
-                        Tab(
-                            selected = selectedAdminTab == 4,
-                            onClick = { selectedAdminTab = 4 },
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.TableChart,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(14.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = if (isEn) "Roster (${jadwalMonthEntries.size})" else "Jadwal (${jadwalMonthEntries.size})",
-                                        fontSize = 11.5.sp,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        fontWeight = if (selectedAdminTab == 4) FontWeight.Bold else FontWeight.Medium
-                                    )
-                                }
-                            },
-                            modifier = Modifier.testTag("tab_admin_jadwal")
+                            onEditSchool = { showEditSchoolDialog = true },
+                            onSelectMetricTab = { tabIdx -> activeAdminPage = tabIdx }
                         )
                     }
-                }
 
-                if (selectedAdminTab == 0) {
+                    item(key = "admin_menu_hub_card") {
+                        AdminQuickMenuGridCard(
+                            selectedTab = null,
+                            studentsCount = schoolStudents.size,
+                            waliCount = schoolAccounts.size,
+                            jadwalCount = jadwalMonthEntries.size,
+                            activeFastingCount = schoolFastingSessions.count { it.isActive },
+                            activeVisitCount = schoolVisitSessions.count { it.isActive },
+                            christianCount = christianSchoolStudents.size,
+                            isEn = isEn,
+                            onSelectTab = { tabIdx -> activeAdminPage = tabIdx },
+                            onOpenClaimChristian = { showAdminClaimChristianSheet = true },
+                            onOpenSchoolProfile = { showEditSchoolDialog = true },
+                            onOpenCsvBackupSheet = { showCsvBackupSheet = true },
+                            onOpenSecuritySheet = { showSecurityMaintenanceSheet = true }
+                        )
+                    }
+
+                    item(key = "admin_home_scenic_footer_item") {
+                        AdminHomeFooterBrandingAndScenic(isEn = isEn)
+                    }
+                } else if (currentPage == 0) {
                     // ==========================================
-                    // TAB 0: KELOLA MASTER DATA SISWA
+                    // SUB-HALAMAN 0: KELOLA MASTER DATA SISWA
                     // ==========================================
                     item {
                         ElevatedCard(
@@ -1185,9 +1101,9 @@ fun AdminScreen(
                             )
                         }
                     }
-                } else if (selectedAdminTab == 1) {
+                } else if (currentPage == 1) {
                     // ==========================================
-                    // TAB 1: KELOLA AKUN WALI ASUH
+                    // SUB-HALAMAN 1: KELOLA AKUN WALI ASUH
                     // ==========================================
                     // Summary Card Admin
                 item {
@@ -1561,9 +1477,9 @@ fun AdminScreen(
                         )
                     }
                 }
-                } else if (selectedAdminTab == 2) {
+                } else if (currentPage == 2) {
                     // ==========================================
-                    // TAB 2: KELOLA SESI PUASA (KHUSUS ADMIN)
+                    // SUB-HALAMAN 2: KELOLA SESI PUASA (KHUSUS ADMIN)
                     // ==========================================
                 item {
                     ElevatedCard(
@@ -1763,9 +1679,9 @@ fun AdminScreen(
                         }
                     }
                 }
-                } else if (selectedAdminTab == 3) {
+                } else if (currentPage == 3) {
                     // ==========================================
-                    // TAB 3: KELOLA SESI KUNJUNGAN & PELUNCURAN 2 TAHAP
+                    // SUB-HALAMAN 3: KELOLA SESI KUNJUNGAN & PELUNCURAN 2 TAHAP
                     // ==========================================
                     val draftCount = schoolVisitSessions.count { it.launchStage() == VisitLaunchStage.DRAFT }
                     val waliPreviewCount = schoolVisitSessions.count { it.launchStage() == VisitLaunchStage.WALI_PREVIEW }

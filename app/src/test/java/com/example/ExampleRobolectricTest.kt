@@ -7694,10 +7694,10 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
-    // Buka Tab Jadwal di AdminScreen (gulir LazyColumn ke row_admin_tabs dulu)
+    // Buka Sub-halaman Jadwal dari ikon menu hub di AdminScreen
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
-      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
-    composeTestRule.onNodeWithTag("tab_admin_jadwal").performScrollTo().performClick()
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_jadwal"))
+    composeTestRule.onNodeWithTag("tile_admin_hub_jadwal").performClick()
     composeTestRule.waitForIdle()
 
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
@@ -8095,10 +8095,10 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
-    // Buka Tab Wali Asuh terlebih dahulu (karena tab default AdminScreen adalah Tab Siswa)
+    // Buka sub-halaman Akun Wali dari ikon menu hub
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
-      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
-    composeTestRule.onNodeWithTag("tab_admin_wali").performScrollTo().performClick()
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_wali"))
+    composeTestRule.onNodeWithTag("tile_admin_hub_wali").performClick()
     composeTestRule.waitForIdle()
 
     // Pastikan kartu kuota Anak Admin (1/7 Wali) tampil, tombol toggle tampil untuk Wali Asuh, dan TIDAK tampil untuk Guru Ngaji
@@ -8111,10 +8111,12 @@ class ExampleRobolectricTest {
     composeTestRule.onNodeWithTag("btn_toggle_anak_admin_$waliId").assertExists()
     composeTestRule.onNodeWithTag("btn_toggle_anak_admin_$guruId").assertDoesNotExist()
 
-    // Pindah ke Tab Jadwal -> pintasan Anak Admin Jadwal harus tampil dan membuka dialog picker
+    // Kembali ke Beranda Admin lalu buka sub-halaman Jadwal -> pintasan Anak Admin Jadwal harus tampil dan membuka dialog picker
+    composeTestRule.onNodeWithTag("btn_admin_subpage_back").performClick()
+    composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
-      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
-    composeTestRule.onNodeWithTag("tab_admin_jadwal").performScrollTo().performClick()
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_jadwal"))
+    composeTestRule.onNodeWithTag("tile_admin_hub_jadwal").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("btn_admin_manage_anak_admin_from_jadwal"))
@@ -9050,29 +9052,41 @@ class ExampleRobolectricTest {
     }
     composeTestRule.waitForIdle()
 
-    // 1. Hero card & 2x4 card menu hub are displayed cleanly
+    // 1. Clean Admin Home: Hero card, 3x3 menu hub (including Anak Kristen), no tab row/FAB, and scenic footer
     composeTestRule.onNodeWithTag("card_admin_hero").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_admin_sync_cloud").assertIsDisplayed()
     composeTestRule.onNodeWithTag("card_admin_menu_hub").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("fab_admin_action").assertDoesNotExist()
     composeTestRule.onNodeWithTag("tile_admin_hub_students").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_admin_hub_wali").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_admin_hub_jadwal").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_admin_hub_fasting").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_admin_hub_visit").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("tile_admin_hub_christian").assertIsDisplayed()
     composeTestRule.onNodeWithTag("btn_edit_school_profile").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_admin_hub_csv").assertIsDisplayed()
     composeTestRule.onNodeWithTag("tile_admin_hub_security").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("admin_home_scenic_footer"))
+    composeTestRule.onNodeWithTag("admin_home_branding_logos").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("admin_home_scenic_footer").assertIsDisplayed()
 
-    // 2. Tap Akun Wali hub tile -> switches into Wali tab
+    // 2. Tap Akun Wali hub tile -> opens dedicated Wali sub-page with Back button & contextual FAB
+    composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_wali"))
     composeTestRule.onNodeWithTag("tile_admin_hub_wali").performClick()
     composeTestRule.waitForIdle()
+    composeTestRule.onNodeWithTag("btn_admin_subpage_back").assertIsDisplayed()
+    composeTestRule.onNodeWithTag("fab_admin_action").assertIsDisplayed()
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
       .performScrollToNode(androidx.compose.ui.test.hasTestTag("card_admin_anak_admin_quota"))
     composeTestRule.onNodeWithTag("card_admin_anak_admin_quota").assertExists()
 
-    // 3. Scroll hub clearly above bottom FAB by bringing tabs row into view & open CSV Backup Sheet
+    // 3. Return to clean Admin Home -> open CSV Backup Sheet
+    composeTestRule.onNodeWithTag("btn_admin_subpage_back").performClick()
+    composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
-      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_csv"))
     composeTestRule.onNodeWithTag("tile_admin_hub_csv").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_admin_csv_backup").assertIsDisplayed()
@@ -9086,7 +9100,7 @@ class ExampleRobolectricTest {
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_admin_csv_backup").assertDoesNotExist()
     composeTestRule.onNodeWithTag("list_admin_content", useUnmergedTree = true)
-      .performScrollToNode(androidx.compose.ui.test.hasTestTag("row_admin_tabs"))
+      .performScrollToNode(androidx.compose.ui.test.hasTestTag("tile_admin_hub_security"))
     composeTestRule.onNodeWithTag("tile_admin_hub_security").performClick()
     composeTestRule.waitForIdle()
     composeTestRule.onNodeWithTag("sheet_admin_security").assertExists()

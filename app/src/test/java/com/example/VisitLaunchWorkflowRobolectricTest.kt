@@ -368,8 +368,8 @@ class VisitLaunchWorkflowRobolectricTest {
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("list_admin_content")
-            .performScrollToNode(hasTestTag("row_admin_tabs"))
-        composeTestRule.onNodeWithText("Kunjungan").performClick()
+            .performScrollToNode(hasTestTag("tile_admin_hub_visit"))
+        composeTestRule.onNodeWithTag("tile_admin_hub_visit").performClick()
         composeTestRule.waitForIdle()
 
         composeTestRule.onNodeWithTag("list_admin_content")
