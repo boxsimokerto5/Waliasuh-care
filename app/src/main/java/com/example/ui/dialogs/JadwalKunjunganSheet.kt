@@ -74,6 +74,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
@@ -323,21 +324,39 @@ fun JadwalKunjunganSheet(
                                 .testTag("list_jadwal_kunjungan"),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            // Card Info Sesi + Multi-Tanggal + Kecamatan bernuansa pastel lembut
+                            // Card Info Sesi + Multi-Tanggal + Kecamatan bernuansa hangat lembut
                             item(key = "session_overview") {
+                                val warmTitleAccent = if (isLight) Color(0xFFB45309) else Color(0xFFFCD34D)
+                                val warmLabelColor = if (isLight) Color(0xFF78350F).copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+                                val warmCardBrush = if (isLight) {
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFFFFF8EE),
+                                            Color(0xFFFFF2DF),
+                                            Color(0xFFFFFBF3)
+                                        )
+                                    )
+                                } else {
+                                    Brush.linearGradient(
+                                        colors = listOf(
+                                            Color(0xFF2B2219),
+                                            Color(0xFF231C16)
+                                        )
+                                    )
+                                }
+                                val warmCardBorder = if (isLight) Color(0xFFFED7AA) else Color(0xFFD97706).copy(alpha = 0.42f)
+
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(14.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = if (isLight) Color(0xFFEEF5FF) else MaterialTheme.colorScheme.surfaceContainerHigh
-                                    ),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (isLight) Color(0xFFBFDBFE) else MaterialTheme.colorScheme.outlineVariant
-                                    )
+                                    colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                    border = BorderStroke(1.dp, warmCardBorder)
                                 ) {
                                     Column(
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .background(warmCardBrush)
+                                            .padding(horizontal = 11.dp, vertical = 9.dp),
                                         verticalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
                                         Row(
@@ -350,6 +369,7 @@ fun JadwalKunjunganSheet(
                                                     text = sess.title,
                                                     fontSize = 13.5.sp,
                                                     fontWeight = FontWeight.Bold,
+                                                    color = if (isLight) Color(0xFF1F2937) else MaterialTheme.colorScheme.onSurface,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -357,7 +377,7 @@ fun JadwalKunjunganSheet(
                                                     text = "${VisitHelper.formatMonthYearLabel(sess.monthYear, locale)} • ${scheduledStudents.size} ${if (isEn) "Students Scheduled" else "Siswa Terjadwal"}",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = primaryBlue,
+                                                    color = warmTitleAccent,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis
                                                 )
@@ -399,7 +419,7 @@ fun JadwalKunjunganSheet(
                                                         Icon(
                                                             Icons.Default.Edit,
                                                             contentDescription = if (isEn) "Edit Session" else "Edit Sesi",
-                                                            tint = primaryBlue,
+                                                            tint = warmTitleAccent,
                                                             modifier = Modifier.size(18.dp)
                                                         )
                                                     }
@@ -411,7 +431,7 @@ fun JadwalKunjunganSheet(
                                             Text(
                                                 text = sess.description,
                                                 fontSize = 11.5.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                color = warmLabelColor
                                             )
                                         }
 
@@ -420,7 +440,7 @@ fun JadwalKunjunganSheet(
                                             text = if (isEn) "Visit Dates (${datesList.size}d):" else "Tanggal Kunjungan (${datesList.size} hari):",
                                             fontSize = 10.5.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = warmLabelColor
                                         )
                                         FlowRow(
                                             modifier = Modifier.fillMaxWidth(),
@@ -434,10 +454,19 @@ fun JadwalKunjunganSheet(
                                                 }
                                                 Surface(
                                                     shape = RoundedCornerShape(8.dp),
-                                                    color = if (isTodayDate) Color(0xFFDCFCE7) else softBlue,
+                                                    color = when {
+                                                        isTodayDate && isLight -> Color(0xFFDCFCE7)
+                                                        isTodayDate -> Color(0xFF064E3B).copy(alpha = 0.55f)
+                                                        isLight -> Color(0xFFFFFFFF).copy(alpha = 0.86f)
+                                                        else -> Color(0xFF78350F).copy(alpha = 0.36f)
+                                                    },
                                                     border = BorderStroke(
                                                         1.dp,
-                                                        if (isTodayDate) Color(0xFF16A34A) else Color(0xFF93C5FD)
+                                                        when {
+                                                            isTodayDate -> Color(0xFF16A34A)
+                                                            isLight -> Color(0xFFFDBA74)
+                                                            else -> Color(0xFFD97706).copy(alpha = 0.5f)
+                                                        }
                                                     )
                                                 ) {
                                                     Row(
@@ -448,7 +477,11 @@ fun JadwalKunjunganSheet(
                                                         Icon(
                                                             Icons.Default.EventAvailable,
                                                             contentDescription = null,
-                                                            tint = if (isTodayDate) Color(0xFF15803D) else primaryBlue,
+                                                            tint = when {
+                                                                isTodayDate && isLight -> Color(0xFF15803D)
+                                                                isTodayDate -> Color(0xFF6EE7B7)
+                                                                else -> warmTitleAccent
+                                                            },
                                                             modifier = Modifier.size(13.dp)
                                                         )
                                                         Text(
@@ -459,7 +492,12 @@ fun JadwalKunjunganSheet(
                                                             },
                                                             fontSize = 10.5.sp,
                                                             fontWeight = FontWeight.SemiBold,
-                                                            color = if (isTodayDate) Color(0xFF15803D) else Color(0xFF1E3A8A)
+                                                            color = when {
+                                                                isTodayDate && isLight -> Color(0xFF15803D)
+                                                                isTodayDate -> Color(0xFFA7F3D0)
+                                                                isLight -> Color(0xFF92400E)
+                                                                else -> Color(0xFFFDE68A)
+                                                            }
                                                         )
                                                     }
                                                 }
@@ -471,7 +509,7 @@ fun JadwalKunjunganSheet(
                                             text = if (isEn) "Participating Districts (${districtKeys.size}):" else "Kecamatan Peserta Terjadwal (${districtKeys.size}):",
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = warmLabelColor
                                         )
                                         if (districtKeys.isEmpty()) {
                                             Text(
@@ -486,10 +524,28 @@ fun JadwalKunjunganSheet(
                                                     .horizontalScroll(rememberScrollState()),
                                                 horizontalArrangement = Arrangement.spacedBy(6.dp)
                                             ) {
+                                                val allDistSelected = selectedDistrictFilter == "Semua"
                                                 FilterChip(
-                                                    selected = selectedDistrictFilter == "Semua",
+                                                    selected = allDistSelected,
                                                     onClick = { selectedDistrictFilter = "Semua" },
-                                                    label = { Text(if (isEn) "All (${scheduledStudents.size})" else "Semua (${scheduledStudents.size})", fontSize = 11.sp) }
+                                                    label = {
+                                                        Text(
+                                                            if (isEn) "All (${scheduledStudents.size})" else "Semua (${scheduledStudents.size})",
+                                                            fontSize = 11.sp,
+                                                            fontWeight = if (allDistSelected) FontWeight.Bold else FontWeight.Medium
+                                                        )
+                                                    },
+                                                    colors = FilterChipDefaults.filterChipColors(
+                                                        containerColor = if (isLight) Color.White.copy(alpha = 0.82f) else MaterialTheme.colorScheme.surfaceContainer,
+                                                        selectedContainerColor = if (isLight) Color(0xFFDCFCE7) else Color(0xFF065F46),
+                                                        selectedLabelColor = if (isLight) Color(0xFF15803D) else Color(0xFFA7F3D0)
+                                                    ),
+                                                    border = FilterChipDefaults.filterChipBorder(
+                                                        enabled = true,
+                                                        selected = allDistSelected,
+                                                        borderColor = if (isLight) Color(0xFFFED7AA) else MaterialTheme.colorScheme.outlineVariant,
+                                                        selectedBorderColor = if (isLight) Color(0xFF86EFAC) else Color(0xFF10B981)
+                                                    )
                                                 )
                                                 districtKeys.forEach { dKey ->
                                                     val cnt = scheduledStudents.count {
@@ -510,9 +566,17 @@ fun JadwalKunjunganSheet(
                                                             Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(13.dp))
                                                         },
                                                         colors = FilterChipDefaults.filterChipColors(
-                                                            selectedContainerColor = Color(0xFFCCFBF1),
-                                                            selectedLabelColor = Color(0xFF0F766E),
-                                                            selectedLeadingIconColor = Color(0xFF0F766E)
+                                                            containerColor = if (isLight) Color.White.copy(alpha = 0.82f) else MaterialTheme.colorScheme.surfaceContainer,
+                                                            iconColor = warmTitleAccent,
+                                                            selectedContainerColor = if (isLight) Color(0xFFCCFBF1) else Color(0xFF115E59),
+                                                            selectedLabelColor = if (isLight) Color(0xFF0F766E) else Color(0xFF99F6E4),
+                                                            selectedLeadingIconColor = if (isLight) Color(0xFF0F766E) else Color(0xFF99F6E4)
+                                                        ),
+                                                        border = FilterChipDefaults.filterChipBorder(
+                                                            enabled = true,
+                                                            selected = isSel,
+                                                            borderColor = if (isLight) Color(0xFFFED7AA) else MaterialTheme.colorScheme.outlineVariant,
+                                                            selectedBorderColor = if (isLight) Color(0xFF5EEAD4) else Color(0xFF14B8A6)
                                                         )
                                                     )
                                                 }
