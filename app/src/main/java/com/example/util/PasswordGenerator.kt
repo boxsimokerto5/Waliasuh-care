@@ -29,6 +29,10 @@ object PasswordGenerator {
 
     private val prefixes = listOf("Wali", "Asuh", "SRT", "Sehat", "Siaga", "Peduli", "Ceria", "Bakti")
     private val symbols = listOf("#", "@", "!")
+    private val systemPasswordPattern = Regex(
+        "^(Wali|Asuh|SRT|Sehat|Siaga|Peduli|Ceria|Bakti)[#@!]\\d{4}$"
+    )
+    private const val LEGACY_DEFAULT_ADMIN_PASSWORD = "Woyowoyo12@"
 
     /**
      * Menghasilkan password acak yang unik, aman, namun mudah diketik oleh wali asuh.
@@ -39,6 +43,16 @@ object PasswordGenerator {
         val symbol = symbols[Random.nextInt(symbols.size)]
         val digits = Random.nextInt(1000, 9999)
         return "$prefix$symbol$digits"
+    }
+
+    /**
+     * Mendeteksi apakah password masih menggunakan format password acak sistem
+     * atau password default sistem awal.
+     */
+    fun isSystemGeneratedPassword(password: String): Boolean {
+        val clean = password.trim()
+        if (clean.isEmpty()) return false
+        return systemPasswordPattern.matches(clean) || clean == LEGACY_DEFAULT_ADMIN_PASSWORD
     }
 
     /**

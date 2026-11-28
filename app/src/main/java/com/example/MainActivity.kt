@@ -86,6 +86,7 @@ import com.example.ui.components.WaliTopBar
 import com.example.ui.components.rememberDashboardModalState
 import com.example.ui.screens.AdminScreen
 import com.example.ui.screens.DashboardScreen
+import com.example.ui.screens.ForcePasswordChangeScreen
 import com.example.ui.screens.JadwalQuickScreen
 import com.example.ui.screens.LoginScreen
 import com.example.ui.screens.MedicalRecordScreen
@@ -121,6 +122,7 @@ class MainActivity : ComponentActivity() {
             var isDarkTheme by rememberSaveable { mutableStateOf(false) }
             val viewModel: HealthViewModel = viewModel()
             val userRole by viewModel.currentUserRole.collectAsStateWithLifecycle()
+            val forcedPasswordState by viewModel.forcedPasswordChangeState.collectAsStateWithLifecycle()
             val appLanguage by viewModel.appLanguage.collectAsStateWithLifecycle()
             val baseContext = LocalContext.current
             val localizedContext = remember(baseContext, appLanguage) {
@@ -157,6 +159,13 @@ class MainActivity : ComponentActivity() {
                                     onLoginSuccessAdmin = {},
                                     onLoginSuccessWali = { _ -> },
                                     onLoginSuccessSuperAdmin = {}
+                                )
+                            }
+                            forcedPasswordState.required -> {
+                                ForcePasswordChangeScreen(
+                                    state = forcedPasswordState,
+                                    viewModel = viewModel,
+                                    onLogout = { viewModel.logout() }
                                 )
                             }
                             userRole == UserRole.SUPERADMIN -> {

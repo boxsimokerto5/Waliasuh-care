@@ -123,6 +123,14 @@ sealed class LoginResult {
     data class Error(val message: String) : LoginResult()
 }
 
+data class ForcedPasswordChangeState(
+    val required: Boolean = false,
+    val role: UserRole = UserRole.NOT_LOGGED_IN,
+    val username: String = "",
+    val displayName: String = "",
+    val currentPassword: String = ""
+)
+
 class HealthViewModel(application: Application) : AndroidViewModel(application) {
     private val repository: HealthRepository
     private val authPrefs = application.getSharedPreferences("waliasuh_auth_prefs", Context.MODE_PRIVATE)
@@ -215,6 +223,8 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     // Active Username (Loaded from preferences or active login)
     private val _currentUsername = MutableStateFlow<String?>(authPrefs.getString("saved_username", null))
     val currentUsername: StateFlow<String?> = _currentUsername.asStateFlow()
+
+    private val _sessionLoginCredentialHint = MutableStateFlow<Pair<String, String>?>(null)
 
     val isAnakSuperAdmin: StateFlow<Boolean> = combine(
         _currentUserRole,
@@ -2010,6 +2020,156 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         }
     }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
+    val forcedPasswordChangeState: StateFlow<ForcedPasswordChangeState> = combine(
+        combine(
+            _currentUserRole,
+            _currentUsername,
+            _waliName,
+            _sessionLoginCredentialHint
+        ) { role, username, displayName, hint ->
+            listOf(role, username.orEmpty(), displayName, hint)
+        },
+        combine(schoolRegistrations, _schoolProfile) { regs, profile -> regs to profile },
+        currentWaliAccount,
+        activeParentAccessLink
+    ) { meta, schoolPair, waliAccount, parentLink ->
+        val role = meta[0] as UserRole
+        val cleanUsername = (meta[1] as String).trim()
+        val displayName = (meta[2] as String).trim()
+        @Suppress("UNCHECKED_CAST")
+        val hint = meta[3] as? Pair<String, String>
+        val regs = schoolPair.first
+        val profile = schoolPair.second
+
+        if (role == UserRole.NOT_LOGGED_IN ||
+            role == UserRole.SUPERADMIN ||
+            cleanUsername.equals("superadmin", ignoreCase = true) ||
+            cleanUsername.equals("anaksuperadmin", ignoreCase = true)
+        ) {
+            ForcedPasswordChangeState(required = false)
+        } else {
+            val hintedPass = hint?.let { (u, p) ->
+                if (u.equals(cleanUsername, ignoreCase = true) ||
+                    (waliAccount != null && (u.equals(waliAccount.name.trim(), ignoreCase = true) ||
+                        (waliAccount.phone.isNotBlank() && u.equals(waliAccount.phone.trim(), ignoreCase = true))))
+                ) {
+                    p
+                } else {
+                    null
+                }
+            }
+
+            val resolvedPassword: String
+            val resolvedUsername: String
+            val resolvedDisplayName: String
+
+            when (role) {
+                UserRole.ADMIN -> {
+                    val matchedReg = regs.firstOrNull {
+                        cleanUsername.isNotBlank() && it.generatedAdminUsername.equals(cleanUsername, ignoreCase = true)
+                    } ?: regs.firstOrNull {
+                        profile.tenantCode.isNotBlank() && it.generatedSchoolCode.equals(profile.tenantCode, ignoreCase = true)
+                    }
+                    resolvedUsername = matchedReg?.generatedAdminUsername?.ifBlank { cleanUsername } ?: cleanUsername
+                    resolvedDisplayName = matchedReg?.picName?.takeIf { it.isNotBlank() }
+                        ?: displayName.ifBlank { resolvedUsername }
+                    resolvedPassword = matchedReg?.generatedAdminPassword?.takeIf { it.isNotBlank() }
+                        ?: if (resolvedUsername.equals("ekowahyudiadmin", ignoreCase = true)) {
+                            "Woyowoyo12@"
+                        } else {
+                            hintedPass.orEmpty()
+                        }
+                }
+                UserRole.PARENT -> {
+                    resolvedUsername = parentLink?.username?.ifBlank { cleanUsername } ?: cleanUsername
+                    resolvedDisplayName = parentLink?.parentName?.takeIf { it.isNotBlank() }
+                        ?: displayName.ifBlank { resolvedUsername }
+                    resolvedPassword = parentLink?.password?.takeIf { it.isNotBlank() }
+                        ?: hintedPass.orEmpty()
+                }
+                else -> {
+                    resolvedUsername = waliAccount?.username?.ifBlank { cleanUsername } ?: cleanUsername
+                    resolvedDisplayName = waliAccount?.name?.takeIf { it.isNotBlank() }
+                        ?: displayName.ifBlank { resolvedUsername }
+                    resolvedPassword = waliAccount?.password?.takeIf { it.isNotBlank() }
+                        ?: hintedPass.orEmpty()
+                }
+            }
+
+            val mustChange = PasswordGenerator.isSystemGeneratedPassword(resolvedPassword)
+            ForcedPasswordChangeState(
+                required = mustChange,
+                role = role,
+                username = resolvedUsername,
+                displayName = resolvedDisplayName,
+                currentPassword = resolvedPassword
+            )
+        }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, ForcedPasswordChangeState())
+
+    fun submitForcedPasswordChange(
+        newPassword: String,
+        confirmPassword: String,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val isEn = AppLanguageManager.getStrings(getApplication()).isEnglish
+        val cleanNew = newPassword.trim()
+        val cleanConfirm = confirmPassword.trim()
+        val currentState = forcedPasswordChangeState.value
+
+        if (cleanNew.length < 6) {
+            onResult(
+                false,
+                if (isEn) "New password must be at least 6 characters." else "Password baru minimal 6 karakter."
+            )
+            return
+        }
+        if (cleanNew != cleanConfirm) {
+            onResult(
+                false,
+                if (isEn) "Password confirmation does not match." else "Konfirmasi password baru tidak cocok."
+            )
+            return
+        }
+        if ((currentState.currentPassword.isNotBlank() && cleanNew == currentState.currentPassword.trim()) ||
+            PasswordGenerator.isSystemGeneratedPassword(cleanNew)
+        ) {
+            onResult(
+                false,
+                if (isEn) {
+                    "Please choose a personal password different from the system default."
+                } else {
+                    "Gunakan password pribadi yang berbeda dari password bawaan sistem."
+                }
+            )
+            return
+        }
+
+        when (_currentUserRole.value) {
+            UserRole.ADMIN -> updateAdminSelfPassword(cleanNew) { ok, msg ->
+                if (ok) _sessionLoginCredentialHint.value = null
+                onResult(ok, msg)
+            }
+            UserRole.WALI, UserRole.GURU_NGAJI, UserRole.PETUGAS_KESEHATAN -> {
+                updateWaliSelfPassword(
+                    newName = _waliName.value,
+                    newPassword = cleanNew
+                ) { ok, msg ->
+                    if (ok) _sessionLoginCredentialHint.value = null
+                    onResult(ok, msg)
+                }
+            }
+            UserRole.PARENT -> updateParentSelfPassword(cleanNew) { ok, msg ->
+                if (ok) _sessionLoginCredentialHint.value = null
+                onResult(ok, msg)
+            }
+            else -> onResult(
+                false,
+                if (isEn) "Active account session not found." else "Sesi akun aktif tidak ditemukan."
+            )
+        }
+    }
+
     private fun currentActorIdentity(): Pair<String, String> {
         val display = _waliName.value.trim().ifBlank { "Wali Asuh" }
         val user = _currentUsername.value?.trim().orEmpty().ifBlank {
@@ -2666,6 +2826,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
             repository.updateParentAccessLink(updated)
             _currentUsername.value = updated.username
             _currentParentStudentId.value = updated.studentId
+            _sessionLoginCredentialHint.value = null
             if (!isUnitTestEnvironment()) {
                 PocketBaseSyncManager.uploadSingleParentAccessLink(getApplication(), updated)
             }
@@ -6612,6 +6773,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                         runUnifiedSchoolCloudSync(activeCode)
                     }
                 }
+                _sessionLoginCredentialHint.value = "ekowahyudiadmin" to cleanPass
                 return LoginResult.SuccessAdmin
             }
             return LoginResult.Error(
@@ -6763,6 +6925,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     runUnifiedSchoolCloudSync(matchedSchool.generatedSchoolCode)
                 }
             }
+            _sessionLoginCredentialHint.value = matchedSchool.generatedAdminUsername to cleanPass
             return LoginResult.SuccessAdmin
         }
 
@@ -6847,6 +7010,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     runUnifiedSchoolCloudSync(activeSchoolCode)
                 }
             }
+            _sessionLoginCredentialHint.value = account.username to cleanPass
             return when (resolvedRole) {
                 UserRole.GURU_NGAJI -> LoginResult.SuccessGuruNgaji(account)
                 UserRole.PETUGAS_KESEHATAN -> LoginResult.SuccessPetugasKesehatan(account)
@@ -6926,6 +7090,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                     runUnifiedSchoolCloudSync(activeSchoolCode)
                 }
             }
+            _sessionLoginCredentialHint.value = parentLink.username to cleanPass
             return LoginResult.SuccessParent(parentLink)
         }
 
@@ -7134,6 +7299,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 )
                 repository.updateSchoolRegistration(updated)
                 _currentUsername.value = lockedUsername
+                _sessionLoginCredentialHint.value = null
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), updated)
                 }
@@ -7172,6 +7338,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 val insertedId = repository.insertSchoolRegistration(pilotReg)
                 val saved = pilotReg.copy(id = insertedId)
                 _currentUsername.value = lockedUsername
+                _sessionLoginCredentialHint.value = null
                 if (!isUnitTestEnvironment()) {
                     PocketBaseSyncManager.uploadSingleSchoolRegistration(getApplication(), saved)
                 }
@@ -7210,6 +7377,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         _currentUserRole.value = UserRole.NOT_LOGGED_IN
         _currentUsername.value = null
         _currentParentStudentId.value = 0L
+        _sessionLoginCredentialHint.value = null
         authPrefs.edit().clear().apply()
         NotificationHelper.cancelAllNotifications(getApplication())
     }
@@ -7569,6 +7737,9 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
                 repository.updateWaliAccount(updated)
                 _waliName.value = cleanName
                 _currentUsername.value = updated.username
+                if (!cleanPass.isNullOrEmpty()) {
+                    _sessionLoginCredentialHint.value = null
+                }
                 val savedRole = authPrefs.getString("saved_role", "")
                 if (savedRole == "WALI" || savedRole == "GURU_NGAJI" || savedRole == "PETUGAS_KESEHATAN") {
                     authPrefs.edit()
