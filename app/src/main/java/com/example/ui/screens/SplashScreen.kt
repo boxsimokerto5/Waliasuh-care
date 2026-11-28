@@ -568,8 +568,8 @@ fun SplashScreen(
                         .scale(logoScale.value)
                         .alpha(logoAlpha.value)
                         .clip(CircleShape)
-                        .background(Color(0xFF084C82))
-                        .border(2.5.dp, Color.White.copy(alpha = 0.88f), CircleShape)
+                        .background(Color.White)
+                        .border(2.5.dp, Color(0xFFCCFBF1).copy(alpha = 0.92f), CircleShape)
                         .drawWithContent {
                             drawContent()
                             if (sweep > -0.55f && sweep < 1.75f) {
@@ -578,7 +578,7 @@ fun SplashScreen(
                                     brush = Brush.linearGradient(
                                         colors = listOf(
                                             Color.Transparent,
-                                            Color.White.copy(alpha = 0.32f),
+                                            Color.White.copy(alpha = 0.36f),
                                             Color.Transparent
                                         ),
                                         start = Offset(startX - size.width * 0.38f, 0f),
@@ -591,7 +591,7 @@ fun SplashScreen(
                     Image(
                         painter = painterResource(id = R.drawable.logo_sr_care),
                         contentDescription = if (isEn) "Official Wali Asuh Care Logo" else "Logo Resmi Wali Asuh Care",
-                        contentScale = ContentScale.Crop,
+                        contentScale = ContentScale.Fit,
                         modifier = Modifier
                             .fillMaxSize()
                             .padding(4.dp)

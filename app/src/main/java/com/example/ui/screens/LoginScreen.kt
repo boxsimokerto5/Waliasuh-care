@@ -268,15 +268,15 @@ fun LoginScreen(
                     // Luminous Crest
                     Surface(
                         shape = CircleShape,
-                        color = Color(0xFF084C82),
+                        color = Color.White,
                         shadowElevation = 8.dp,
-                        border = BorderStroke(2.5.dp, Color.White.copy(alpha = 0.9f)),
-                        modifier = Modifier.size(88.dp)
+                        border = BorderStroke(2.5.dp, Color(0xFFCCFBF1).copy(alpha = 0.95f)),
+                        modifier = Modifier.size(90.dp)
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.logo_sr_care),
                             contentDescription = if (isEn) "Wali Asuh Care Logo" else "Logo Wali Asuh Care",
-                            contentScale = ContentScale.Crop,
+                            contentScale = ContentScale.Fit,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(3.dp)
