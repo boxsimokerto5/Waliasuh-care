@@ -649,6 +649,7 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
     init {
         viewModelScope.launch {
             sanitizeExistingIdentityDataInRoom()
+            purgeExpiredShiftHandoversForSchool(_schoolProfile.value.tenantCode.ifBlank { "SRT1-KDR" })
         }
         if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(application)) {
             when (_currentUserRole.value) {
@@ -10334,9 +10335,34 @@ class HealthViewModel(application: Application) : AndroidViewModel(application) 
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private suspend fun purgeExpiredShiftHandoversForSchool(
+        schoolId: String,
+        nowMillis: Long = System.currentTimeMillis()
+    ) {
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val expiredIds = repository.getAllShiftHandoversIncludingDeletedList()
+            .filter {
+                it.schoolId.equals(cleanSchoolId, ignoreCase = true) &&
+                    ShiftHandoverHelper.isExpiredForRetention(it, nowMillis)
+            }
+            .map { it.id }
+        if (expiredIds.isNotEmpty()) {
+            repository.deleteShiftHandoversByIds(expiredIds)
+        }
+        if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
+            PocketBaseSyncManager.purgeExpiredShiftHandovers(
+                context = getApplication(),
+                schoolId = cleanSchoolId,
+                repository = repository,
+                nowMillis = nowMillis
+            )
+        }
+    }
+
     fun syncShiftHandoversOnlineQuietly(onComplete: () -> Unit = {}) {
         val schoolId = _schoolProfile.value.tenantCode.trim().ifBlank { "SRT1-KDR" }
         viewModelScope.launch {
+            purgeExpiredShiftHandoversForSchool(schoolId)
             if (!isUnitTestEnvironment() && PocketBaseConfig.isConfigured(getApplication())) {
                 PocketBaseSyncManager.syncShiftHandoversOnlineQuietly(
                     context = getApplication(),

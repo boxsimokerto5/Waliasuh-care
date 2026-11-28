@@ -2,7 +2,13 @@ package com.example.ui.dialogs
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,6 +41,8 @@ import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Share
@@ -575,31 +583,8 @@ fun SerahTerimaShiftSheet(
                                     }
                                 }
 
-                                // 4 Quick Transition Buttons
+                                // 4 Quick Transition Buttons (urutan siklus harian: Malam -> Pagi, Pagi -> Sore, Sore -> Malam, Custom)
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        HandoverPresetButton(
-                                            label = if (isEn) "Morning → Afternoon" else "Pagi → Sore",
-                                            subLabel = "15:00 WIB",
-                                            highlighted = suggestedType == ShiftHandoverHelper.TYPE_PAGI_KE_SORE,
-                                            accent = Color(0xFF0F766E),
-                                            testTag = "btn_create_handover_pagi_sore",
-                                            onClick = { launchNewDraft(ShiftHandoverHelper.TYPE_PAGI_KE_SORE) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                        HandoverPresetButton(
-                                            label = if (isEn) "Afternoon → Night" else "Sore → Malam",
-                                            subLabel = "23:00 WIB",
-                                            highlighted = suggestedType == ShiftHandoverHelper.TYPE_SORE_KE_MALAM,
-                                            accent = Color(0xFF0369A1),
-                                            testTag = "btn_create_handover_sore_malam",
-                                            onClick = { launchNewDraft(ShiftHandoverHelper.TYPE_SORE_KE_MALAM) },
-                                            modifier = Modifier.weight(1f)
-                                        )
-                                    }
                                     Row(
                                         modifier = Modifier.fillMaxWidth(),
                                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -611,6 +596,29 @@ fun SerahTerimaShiftSheet(
                                             accent = Color(0xFF4338CA),
                                             testTag = "btn_create_handover_malam_pagi",
                                             onClick = { launchNewDraft(ShiftHandoverHelper.TYPE_MALAM_KE_PAGI) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        HandoverPresetButton(
+                                            label = if (isEn) "Morning → Afternoon" else "Pagi → Sore",
+                                            subLabel = "15:00 WIB",
+                                            highlighted = suggestedType == ShiftHandoverHelper.TYPE_PAGI_KE_SORE,
+                                            accent = Color(0xFF0F766E),
+                                            testTag = "btn_create_handover_pagi_sore",
+                                            onClick = { launchNewDraft(ShiftHandoverHelper.TYPE_PAGI_KE_SORE) },
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        HandoverPresetButton(
+                                            label = if (isEn) "Afternoon → Night" else "Sore → Malam",
+                                            subLabel = "23:00 WIB",
+                                            highlighted = suggestedType == ShiftHandoverHelper.TYPE_SORE_KE_MALAM,
+                                            accent = Color(0xFF0369A1),
+                                            testTag = "btn_create_handover_sore_malam",
+                                            onClick = { launchNewDraft(ShiftHandoverHelper.TYPE_SORE_KE_MALAM) },
                                             modifier = Modifier.weight(1f)
                                         )
                                         HandoverPresetButton(
@@ -886,6 +894,7 @@ private fun ShiftHandoverCard(
     onDelete: () -> Unit
 ) {
     val isDraft = report.status.equals(ShiftHandoverHelper.STATUS_DRAFT, ignoreCase = true)
+    var isExpanded by remember(report.id) { mutableStateOf(false) }
     val payload = remember(report.id, report.payloadJson) {
         ShiftHandoverHelper.parsePayload(report.payloadJson)
     }
@@ -901,6 +910,14 @@ private fun ShiftHandoverCard(
             SimpleDateFormat("dd MMM • HH:mm", Locale("id", "ID")).format(Date(report.updatedAt))
         }.getOrDefault("")
     }
+    val compactTitle = remember(report.handoverType, report.title, isEn) {
+        when (ShiftHandoverHelper.normalizeType(report.handoverType)) {
+            ShiftHandoverHelper.TYPE_MALAM_KE_PAGI -> if (isEn) "Night → Morning" else "Malam → Pagi"
+            ShiftHandoverHelper.TYPE_PAGI_KE_SORE -> if (isEn) "Morning → Afternoon" else "Pagi → Sore"
+            ShiftHandoverHelper.TYPE_SORE_KE_MALAM -> if (isEn) "Afternoon → Night" else "Sore → Malam"
+            else -> report.title
+        }
+    }
 
     Surface(
         shape = RoundedCornerShape(14.dp),
@@ -914,177 +931,223 @@ private fun ShiftHandoverCard(
             .fillMaxWidth()
             .testTag("card_handover_report_${report.id}")
     ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Header super ringkas — klik di mana saja pada header untuk buka/tutup detail
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 56.dp)
+                    .clickable { isExpanded = !isExpanded }
+                    .padding(horizontal = 12.dp, vertical = 10.dp)
+                    .testTag("header_handover_report_${report.id}"),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = if (isDraft) Color(0xFFFEF3C7) else Color(0xFFD1FAE5)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = if (isDraft) Color(0xFFFEF3C7) else Color(0xFFD1FAE5)
+                    ) {
+                        Text(
+                            text = if (isDraft) "DRAFT" else if (isEn) "FINAL" else "SELESAI",
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = if (isDraft) Color(0xFFB45309) else Color(0xFF065F46),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
                     Text(
-                        text = if (isDraft) {
-                            if (isEn) "DRAFT • INCOMPLETE" else "DRAFT • LANJUTKAN"
+                        text = compactTitle,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = report.handoverTime,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF0F766E)
+                    )
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (isExpanded) {
+                            if (isEn) "Collapse handover detail" else "Tutup detail serah terima"
                         } else {
-                            if (isEn) "FINAL" else "SELESAI"
+                            if (isEn) "Expand handover detail" else "Buka detail serah terima"
                         },
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = if (isDraft) Color(0xFFB45309) else Color(0xFF065F46),
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
                     )
                 }
+
                 Text(
-                    text = report.handoverTime,
+                    text = "${report.dateLabel} • ${report.authorName.ifBlank { "Wali Asuh" }}",
                     fontSize = 11.5.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF0F766E)
-                )
-            }
-
-            Text(
-                text = report.title,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.ExtraBold,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            Text(
-                text = "${report.dateLabel} • ${report.fromShiftLabel} → ${report.toShiftLabel}",
-                fontSize = 11.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                StatPill("Total ${report.totalStudents}", Color(0xFF334155))
-                StatPill("Hadir ${report.presentStudents}", Color(0xFF0F766E))
-                StatPill("Sakit ${report.sickStudentsCount}", Color(0xFFDC2626))
-                StatPill("Puasa ${report.fastingStudentsCount}", Color(0xFF0369A1))
-                StatPill("Haid $effectiveHaidCount", Color(0xFFBE185D))
-                if (payload.leaveEntries.isNotEmpty()) {
-                    StatPill("Izin Wali ${payload.leaveEntries.size}", Color(0xFFB45309))
-                }
-                if (payload.outsideDutyStaff.isNotEmpty()) {
-                    StatPill("Jaga RS ${payload.outsideDutyStaff.size}", Color(0xFF4338CA))
-                }
-            }
-
-            if (payload.followUpNotes.isNotBlank()) {
-                Text(
-                    text = "📝 ${payload.followUpNotes.trim()}",
-                    fontSize = 11.5.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            Text(
-                text = buildString {
-                    append(if (isEn) "Author: " else "Penyusun: ")
-                    append(report.authorName.ifBlank { "Wali Asuh" })
-                    if (report.lastEditedBy.isNotBlank() && report.lastEditedBy != report.authorName) {
-                        append(" • ")
-                        append(if (isEn) "Edited: " else "Edit: ")
-                        append(report.lastEditedBy)
-                    }
-                    if (updatedLabel.isNotBlank()) {
-                        append(" ($updatedLabel)")
-                    }
-                },
-                fontSize = 10.5.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
             ) {
-                Button(
-                    onClick = onEdit,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isDraft) Color(0xFFD97706) else Color(0xFF0F766E)
-                    ),
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                Column(
                     modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 48.dp)
-                        .testTag("btn_edit_handover_${report.id}")
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                        .testTag("card_handover_detail_${report.id}"),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(Icons.Default.EditNote, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+
                     Text(
-                        text = if (isDraft) {
-                            if (isEn) "Continue Draft" else "Lanjutkan Draft"
-                        } else {
-                            if (isEn) "Edit" else "Edit"
+                        text = report.title,
+                        fontSize = 13.5.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    Text(
+                        text = "${report.dateLabel} • ${report.fromShiftLabel} → ${report.toShiftLabel}",
+                        fontSize = 11.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        StatPill("Total ${report.totalStudents}", Color(0xFF334155))
+                        StatPill("Hadir ${report.presentStudents}", Color(0xFF0F766E))
+                        StatPill("Sakit ${report.sickStudentsCount}", Color(0xFFDC2626))
+                        StatPill("Puasa ${report.fastingStudentsCount}", Color(0xFF0369A1))
+                        StatPill("Haid $effectiveHaidCount", Color(0xFFBE185D))
+                        if (payload.leaveEntries.isNotEmpty()) {
+                            StatPill("Izin Wali ${payload.leaveEntries.size}", Color(0xFFB45309))
+                        }
+                        if (payload.outsideDutyStaff.isNotEmpty()) {
+                            StatPill("Jaga RS ${payload.outsideDutyStaff.size}", Color(0xFF4338CA))
+                        }
+                    }
+
+                    if (payload.followUpNotes.isNotBlank()) {
+                        Text(
+                            text = "📝 ${payload.followUpNotes.trim()}",
+                            fontSize = 11.5.sp,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 3,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Text(
+                        text = buildString {
+                            append(if (isEn) "Author: " else "Penyusun: ")
+                            append(report.authorName.ifBlank { "Wali Asuh" })
+                            if (report.lastEditedBy.isNotBlank() && report.lastEditedBy != report.authorName) {
+                                append(" • ")
+                                append(if (isEn) "Edited: " else "Edit: ")
+                                append(report.lastEditedBy)
+                            }
+                            if (updatedLabel.isNotBlank()) {
+                                append(" ($updatedLabel)")
+                            }
                         },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
+                        fontSize = 10.5.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                }
 
-                OutlinedButton(
-                    onClick = onShareWa,
-                    shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                    modifier = Modifier
-                        .heightIn(min = 48.dp)
-                        .testTag("btn_share_wa_handover_${report.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Share,
-                        contentDescription = null,
-                        tint = Color(0xFF15803D),
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(5.dp))
-                    Text(
-                        text = "WA",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color(0xFF15803D)
-                    )
-                }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
 
-                IconButton(
-                    onClick = onCopy,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("btn_copy_handover_${report.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ContentCopy,
-                        contentDescription = if (isEn) "Copy report" else "Salin teks laporan",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Button(
+                            onClick = onEdit,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isDraft) Color(0xFFD97706) else Color(0xFF0F766E)
+                            ),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_edit_handover_${report.id}")
+                        ) {
+                            Icon(Icons.Default.EditNote, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isDraft) {
+                                    if (isEn) "Continue Draft" else "Lanjutkan Draft"
+                                } else {
+                                    if (isEn) "Edit" else "Edit"
+                                },
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                        }
 
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .testTag("btn_delete_handover_${report.id}")
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = if (isEn) "Delete report" else "Hapus laporan",
-                        tint = MaterialTheme.colorScheme.error
-                    )
+                        OutlinedButton(
+                            onClick = onShareWa,
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                            modifier = Modifier
+                                .heightIn(min = 48.dp)
+                                .testTag("btn_share_wa_handover_${report.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                tint = Color(0xFF15803D),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(5.dp))
+                            Text(
+                                text = "WA",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF15803D)
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onCopy,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_copy_handover_${report.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ContentCopy,
+                                contentDescription = if (isEn) "Copy report" else "Salin teks laporan",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        IconButton(
+                            onClick = onDelete,
+                            modifier = Modifier
+                                .size(48.dp)
+                                .testTag("btn_delete_handover_${report.id}")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DeleteOutline,
+                                contentDescription = if (isEn) "Delete report" else "Hapus laporan",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                 }
             }
         }

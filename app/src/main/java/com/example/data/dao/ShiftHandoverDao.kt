@@ -31,6 +31,12 @@ interface ShiftHandoverDao {
     @Update
     suspend fun update(report: ShiftHandoverReport)
 
+    @Query("DELETE FROM shift_handovers WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
+    @Query("DELETE FROM shift_handovers WHERE id = :id")
+    suspend fun deleteById(id: Long)
+
     @Query("DELETE FROM shift_handovers WHERE schoolId = :schoolId")
     suspend fun deleteBySchool(schoolId: String)
 }

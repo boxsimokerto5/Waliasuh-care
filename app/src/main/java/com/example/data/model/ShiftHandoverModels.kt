@@ -81,6 +81,26 @@ object ShiftHandoverHelper {
     const val STATUS_DRAFT = "DRAFT"
     const val STATUS_FINAL = "FINAL"
 
+    // Retensi otomatis 3 bulan (90 hari) untuk riwayat serah terima shift
+    const val RETENTION_DAYS = 90L
+    const val RETENTION_MILLIS = RETENTION_DAYS * 24L * 60L * 60L * 1000L
+
+    fun retentionCutoffMillis(nowMillis: Long = System.currentTimeMillis()): Long =
+        nowMillis - RETENTION_MILLIS
+
+    fun isExpiredForRetention(
+        report: ShiftHandoverReport,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Boolean {
+        val cutoff = retentionCutoffMillis(nowMillis)
+        val anchorMillis = if (report.reportDateMillis > 0L) {
+            report.reportDateMillis
+        } else {
+            maxOf(report.updatedAt, report.createdAt)
+        }
+        return anchorMillis < cutoff
+    }
+
     val DEFAULT_ACTIVITY_PRESETS = listOf(
         "Mendata siswa sakit",
         "Mengantarkan siswa sakit ke UKS",

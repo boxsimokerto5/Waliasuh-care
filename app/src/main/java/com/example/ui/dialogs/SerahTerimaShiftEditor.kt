@@ -618,9 +618,9 @@ internal fun SerahTerimaShiftEditor(
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         val presets = listOf(
+                            ShiftHandoverHelper.TYPE_MALAM_KE_PAGI to "Malam → Pagi",
                             ShiftHandoverHelper.TYPE_PAGI_KE_SORE to "Pagi → Sore",
                             ShiftHandoverHelper.TYPE_SORE_KE_MALAM to "Sore → Malam",
-                            ShiftHandoverHelper.TYPE_MALAM_KE_PAGI to "Malam → Pagi",
                             ShiftHandoverHelper.TYPE_CUSTOM to "Custom"
                         )
                         presets.forEach { (typeKey, label) ->

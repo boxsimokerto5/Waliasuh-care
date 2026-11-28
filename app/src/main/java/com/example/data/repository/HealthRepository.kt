@@ -1126,6 +1126,17 @@ class HealthRepository(
     suspend fun getShiftHandoversBySchoolList(schoolId: String): List<ShiftHandoverReport> =
         shiftHandoverDao?.getReportsBySchoolList(schoolId) ?: emptyList()
 
+    suspend fun deleteShiftHandoversByIds(ids: List<Long>) {
+        if (ids.isEmpty()) return
+        ids.chunked(200).forEach { chunk ->
+            shiftHandoverDao?.deleteByIds(chunk)
+        }
+    }
+
+    suspend fun deleteShiftHandoverById(id: Long) {
+        shiftHandoverDao?.deleteById(id)
+    }
+
     suspend fun deleteShiftHandoversBySchool(schoolId: String) {
         shiftHandoverDao?.deleteBySchool(schoolId)
     }

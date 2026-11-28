@@ -39,6 +39,7 @@ import com.example.data.model.SchoolProfile
 import com.example.data.model.SchoolRegistration
 import com.example.data.model.SharedJournalHelper
 import com.example.data.model.SharedJournalNote
+import com.example.data.model.ShiftHandoverHelper
 import com.example.data.model.ShiftHandoverReport
 import com.example.data.model.ShiftMessage
 import com.example.data.model.SholatRecord
@@ -5365,24 +5366,93 @@ object PocketBaseSyncManager {
             }
         }
 
+    private fun shiftHandoverSafeId(report: ShiftHandoverReport): Long =
+        if (report.id > 0L) report.id else PocketBaseIdCodec.stablePositiveHash(
+            "shift_handover:${report.schoolId}:${report.monthKey}:${report.day}:${report.handoverType}:${report.createdAt}"
+        )
+
+    suspend fun purgeExpiredShiftHandovers(
+        context: Context,
+        schoolId: String,
+        repository: HealthRepository,
+        nowMillis: Long = System.currentTimeMillis()
+    ): Int = withContext(Dispatchers.IO) {
+        val cleanSchoolId = schoolId.trim().ifBlank { "SRT1-KDR" }
+        val expiredLocal = repository.getAllShiftHandoversIncludingDeletedList()
+            .filter {
+                it.schoolId.equals(cleanSchoolId, ignoreCase = true) &&
+                    ShiftHandoverHelper.isExpiredForRetention(it, nowMillis)
+            }
+        if (expiredLocal.isNotEmpty()) {
+            repository.deleteShiftHandoversByIds(expiredLocal.map { it.id })
+        }
+
+        if (!PocketBaseConfig.isConfigured(context)) {
+            return@withContext expiredLocal.size
+        }
+        val service = PocketBaseClient.getService(context) ?: return@withContext expiredLocal.size
+        val filter = buildSchoolFilter(cleanSchoolId)
+        val probe = runCatching {
+            service.listShiftHandovers(page = 1, perPage = 1, filter = filter)
+        }.getOrNull()
+        val useMirrorFallback = probe?.code() == 404
+        val collection = if (useMirrorFallback) "shared_journal_notes" else "shift_handovers"
+
+        val expiredRemotePbIds = linkedSetOf<String>()
+        expiredLocal.forEach { item ->
+            expiredRemotePbIds.add(PocketBaseIdCodec.toPbId(shiftHandoverSafeId(item)))
+        }
+
+        if (useMirrorFallback) {
+            val notes = fetchAllPages { page ->
+                service.listSharedJournalNotes(page = page, perPage = 500, filter = filter)
+            }.getOrNull().orEmpty()
+            notes.forEach { note ->
+                val domain = PbShiftHandoverDto.fromMirrorJournalDto(note, cleanSchoolId) ?: return@forEach
+                if (ShiftHandoverHelper.isExpiredForRetention(domain, nowMillis)) {
+                    note.id?.takeIf { it.isNotBlank() }?.let { expiredRemotePbIds.add(it) }
+                }
+            }
+        } else {
+            val dtos = fetchAllPages { page ->
+                service.listShiftHandovers(page = page, perPage = 500, filter = filter)
+            }.getOrNull().orEmpty()
+            dtos.forEach { dto ->
+                val domain = dto.toDomainModel(cleanSchoolId)
+                if (ShiftHandoverHelper.isExpiredForRetention(domain, nowMillis)) {
+                    dto.id?.takeIf { it.isNotBlank() }?.let { expiredRemotePbIds.add(it) }
+                }
+            }
+        }
+
+        expiredRemotePbIds.forEach { pbId ->
+            runCatching { service.deleteRecord(collection, pbId) }
+        }
+        expiredLocal.size.coerceAtLeast(expiredRemotePbIds.size)
+    }
+
     private suspend fun syncShiftHandoversMerged(
         service: PocketBaseService,
         schoolId: String,
         filter: String,
         repository: HealthRepository
     ) {
+        val now = System.currentTimeMillis()
         val localAll = repository.getAllShiftHandoversIncludingDeletedList()
             .filter { it.schoolId.equals(schoolId, ignoreCase = true) }
 
         val firstResp = service.listShiftHandovers(page = 1, perPage = 500, filter = filter)
         val useMirrorFallback = firstResp.code() == 404
+        val collection = if (useMirrorFallback) "shared_journal_notes" else "shift_handovers"
 
-        val remoteList: List<ShiftHandoverReport> = if (useMirrorFallback) {
+        val remotePairs: List<Pair<String?, ShiftHandoverReport>> = if (useMirrorFallback) {
             val journalRes = fetchAllPages { page ->
                 service.listSharedJournalNotes(page = page, perPage = 500, filter = filter)
             }
             val notes = journalRes.getOrNull() ?: return
-            notes.mapNotNull { PbShiftHandoverDto.fromMirrorJournalDto(it, schoolId) }
+            notes.mapNotNull { note ->
+                PbShiftHandoverDto.fromMirrorJournalDto(note, schoolId)?.let { note.id to it }
+            }
         } else {
             val allDtos = mutableListOf<PbShiftHandoverDto>()
             if (!firstResp.isSuccessful) return
@@ -5399,13 +5469,38 @@ object PocketBaseSyncManager {
                     page++
                 }
             }
-            allDtos.map { it.toDomainModel(schoolId) }
+            allDtos.map { dto -> dto.id to dto.toDomainModel(schoolId) }
         }
 
-        val localById = localAll.associateBy { it.id }
-        val remoteById = remoteList.associateBy { it.id }
+        // Retensi otomatis 3 bulan (90 hari): bersihkan data kedaluwarsa dari Room & PocketBase
+        val expiredLocal = localAll.filter { ShiftHandoverHelper.isExpiredForRetention(it, now) }
+        val activeLocal = localAll.filterNot { ShiftHandoverHelper.isExpiredForRetention(it, now) }
+        if (expiredLocal.isNotEmpty()) {
+            repository.deleteShiftHandoversByIds(expiredLocal.map { it.id })
+        }
 
-        val toInsertLocal = remoteList.filter { rem ->
+        val expiredRemotePbIds = linkedSetOf<String>()
+        expiredLocal.forEach { item ->
+            expiredRemotePbIds.add(PocketBaseIdCodec.toPbId(shiftHandoverSafeId(item)))
+        }
+        val activeRemoteList = mutableListOf<ShiftHandoverReport>()
+        remotePairs.forEach { (remotePbId, domain) ->
+            if (ShiftHandoverHelper.isExpiredForRetention(domain, now)) {
+                val resolvedPbId = remotePbId?.takeIf { it.isNotBlank() }
+                    ?: PocketBaseIdCodec.toPbId(shiftHandoverSafeId(domain))
+                expiredRemotePbIds.add(resolvedPbId)
+            } else {
+                activeRemoteList.add(domain)
+            }
+        }
+        expiredRemotePbIds.forEach { pbId ->
+            runCatching { service.deleteRecord(collection, pbId) }
+        }
+
+        val localById = activeLocal.associateBy { it.id }
+        val remoteById = activeRemoteList.associateBy { it.id }
+
+        val toInsertLocal = activeRemoteList.filter { rem ->
             val loc = localById[rem.id]
             loc == null || rem.updatedAt >= loc.updatedAt
         }
@@ -5413,7 +5508,7 @@ object PocketBaseSyncManager {
             repository.insertAllShiftHandovers(toInsertLocal)
         }
 
-        val toPushRemote = localAll.filter { loc ->
+        val toPushRemote = activeLocal.filter { loc ->
             val rem = remoteById[loc.id]
             rem == null || loc.updatedAt > rem.updatedAt
         }
