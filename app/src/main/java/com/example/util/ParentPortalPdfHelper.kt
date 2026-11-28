@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.RectF
@@ -35,6 +36,7 @@ import com.example.data.model.VisitConfirmation
 import com.example.data.model.VisitHelper
 import com.example.data.model.VisitRecord
 import com.example.data.model.VisitSession
+import com.example.data.model.VisitSessionSwap
 import com.example.data.model.WaliGalleryHelper
 import com.example.data.model.WaliGalleryLocalSave
 import com.example.data.model.WaliGalleryPost
@@ -2034,6 +2036,529 @@ object ParentPortalPdfHelper {
             currentY = 38f
         }
         PdfReportGenerator.drawFooterSignatures(context, canvas, paint, pageWidth, pageHeight, currentY, waliName, schoolProfile)
+        finishCanvas()
+    }
+
+    /**
+     * PDF E-Tiket Kunjungan Resmi khusus untuk 1 sesi yang sudah dikonfirmasi hadir,
+     * lengkap dengan detail siswa, jadwal sesi, pengunjung, dan Barcode QR besar.
+     */
+    fun generateSingleVisitSessionTicketPdf(
+        context: Context,
+        student: ChildStudent,
+        session: VisitSession,
+        confirmation: VisitConfirmation,
+        checkInRecord: VisitRecord? = null,
+        incomingSwap: VisitSessionSwap? = null,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile()
+    ): File? {
+        if (!confirmation.isHadir) return null
+        val document = PdfDocument()
+        var currentPage: PdfDocument.Page? = null
+        return try {
+            renderSingleVisitSessionTicketPage(
+                context = context,
+                student = student,
+                session = session,
+                confirmation = confirmation,
+                checkInRecord = checkInRecord,
+                incomingSwap = incomingSwap,
+                waliName = waliName,
+                schoolProfile = schoolProfile,
+                startNewCanvas = { num ->
+                    val pageInfo = PdfDocument.PageInfo.Builder(PAGE_WIDTH, PAGE_HEIGHT, num).create()
+                    currentPage = document.startPage(pageInfo)
+                    currentPage!!.canvas
+                },
+                finishCanvas = {
+                    currentPage?.let {
+                        document.finishPage(it)
+                        currentPage = null
+                    }
+                }
+            )
+
+            val outputDir = File(context.cacheDir, "pdfs").apply { mkdirs() }
+            val cleanStudent = student.name.replace(Regex("[^a-zA-Z0-9]"), "_").take(20)
+            val cleanTitle = session.title.replace(Regex("[^a-zA-Z0-9]"), "_").take(20)
+            val file = File(outputDir, "Tiket_${cleanStudent}_${cleanTitle}.pdf")
+            FileOutputStream(file).use { out ->
+                document.writeTo(out)
+                out.flush()
+            }
+            file
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        } finally {
+            runCatching { currentPage?.let { document.finishPage(it) } }
+            runCatching { document.close() }
+        }
+    }
+
+    internal fun renderSingleVisitSessionTicketPage(
+        context: Context,
+        student: ChildStudent,
+        session: VisitSession,
+        confirmation: VisitConfirmation,
+        checkInRecord: VisitRecord? = null,
+        incomingSwap: VisitSessionSwap? = null,
+        waliName: String = "Wali Asuh",
+        schoolProfile: SchoolProfile = SchoolProfile(),
+        startNewCanvas: (pageNumber: Int) -> Canvas,
+        finishCanvas: () -> Unit = {}
+    ) {
+        val lang = AppLanguageManager.getLanguage(context)
+        val isEn = lang == AppLanguage.ENGLISH
+        val pageWidth = PAGE_WIDTH
+        val pageHeight = PAGE_HEIGHT
+        val marginX = 34f
+        val contentRight = pageWidth - marginX
+        val ticketW = contentRight - marginX
+
+        val canvas = startNewCanvas(1)
+        val paint = Paint().apply { isAntiAlias = true }
+        val dateFmt = SimpleDateFormat("EEEE, d MMMM yyyy", lang.locale)
+        val shortDateTimeFmt = SimpleDateFormat("d MMM yyyy, HH:mm", lang.locale)
+        val timeFmt = SimpleDateFormat("HH:mm", lang.locale)
+
+        var currentY = 30f
+        currentY = PdfReportGenerator.drawHeader(
+            context = context,
+            canvas = canvas,
+            paint = paint,
+            width = pageWidth,
+            startY = currentY,
+            schoolProfile = schoolProfile,
+            unitTitle = if (isEn) "OFFICIAL PARENT VISIT E-TICKET" else "E-TIKET RESMI KUNJUNGAN ORANG TUA"
+        )
+
+        val tealPrimary = Color.rgb(15, 118, 110)
+        val tealDark = Color.rgb(17, 94, 89)
+        val tealSoft = Color.rgb(240, 253, 250)
+        val tealBorder = Color.rgb(153, 246, 228)
+        val slate900 = Color.rgb(15, 23, 42)
+        val slate600 = Color.rgb(71, 85, 105)
+        val slateBorder = Color.rgb(203, 213, 225)
+
+        val ticketTop = currentY + 4f
+        val innerLeft = marginX + 18f
+        val innerRight = contentRight - 18f
+        val innerW = innerRight - innerLeft
+
+        // 1. Header Banner Tiket (Solid Teal)
+        val bannerH = 66f
+        val bannerRect = RectF(marginX, ticketTop, contentRight, ticketTop + bannerH)
+        paint.style = Paint.Style.FILL
+        paint.color = tealPrimary
+        canvas.drawRoundRect(bannerRect, 12f, 12f, paint)
+        canvas.drawRect(marginX, ticketTop + 16f, contentRight, ticketTop + bannerH, paint)
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8f
+        paint.color = Color.rgb(204, 251, 241)
+        canvas.drawText(
+            if (isEn) "OFFICIAL ADMISSION PASS • FOSTER CARE VISIT" else "KARTU MASUK RESMI • KUNJUNGAN WALI MURID",
+            innerLeft,
+            ticketTop + 18f,
+            paint
+        )
+
+        val statusLabel = when {
+            checkInRecord != null -> if (isEn) "CHECKED IN" else "SUDAH CHECK-IN"
+            else -> if (isEn) "CONFIRMED ATTENDING" else "TERKONFIRMASI HADIR"
+        }
+        paint.textSize = 8.5f
+        val badgeW = (paint.measureText(statusLabel) + 20f).coerceAtLeast(110f)
+        val badgeRect = RectF(innerRight - badgeW, ticketTop + 12f, innerRight, ticketTop + 32f)
+        paint.color = Color.WHITE
+        canvas.drawRoundRect(badgeRect, 10f, 10f, paint)
+        paint.textAlign = Paint.Align.CENTER
+        paint.color = if (checkInRecord != null) Color.rgb(21, 128, 61) else tealDark
+        canvas.drawText(statusLabel, badgeRect.centerX(), badgeRect.centerY() + 3f, paint)
+        paint.textAlign = Paint.Align.LEFT
+
+        paint.textSize = 14f
+        paint.color = Color.WHITE
+        val titleMaxW = innerW - badgeW - 14f
+        canvas.drawText(
+            TextUtils.ellipsize(session.title, TextPaint(paint), titleMaxW, TextUtils.TruncateAt.END).toString(),
+            innerLeft,
+            ticketTop + 39f,
+            paint
+        )
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.2f
+        paint.color = Color.rgb(204, 251, 241)
+        canvas.drawText(
+            if (isEn) {
+                "Valid exclusively for this visit session • Present QR code at dormitory gate"
+            } else {
+                "Berlaku khusus untuk sesi kunjungan ini • Tunjukkan barcode di gerbang asrama"
+            },
+            innerLeft,
+            ticketTop + 54f,
+            paint
+        )
+
+        var y = ticketTop + bannerH + 14f
+
+        // 2. Highlight Bar Jadwal & Jam Kunjungan
+        val dates = session.getVisitDatesList()
+        val dateText = if (dates.isEmpty()) {
+            "-"
+        } else {
+            dates.joinToString(" / ") { dateFmt.format(Date(it)) }
+        }
+        val etaText = confirmation.estimatedArrivalTime.ifBlank { "-" }
+        val scheduleH = 54f
+        val schedRect = RectF(innerLeft, y, innerRight, y + scheduleH)
+        paint.style = Paint.Style.FILL
+        paint.color = tealSoft
+        canvas.drawRoundRect(schedRect, 8f, 8f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 0.9f
+        paint.color = tealBorder
+        canvas.drawRoundRect(schedRect, 8f, 8f, paint)
+        paint.style = Paint.Style.FILL
+
+        val col1X = innerLeft + 10f
+        val col2X = innerLeft + innerW * 0.48f
+        val col3X = innerLeft + innerW * 0.77f
+
+        fun drawMiniLabelValue(x: Float, topY: Float, label: String, value: String, maxW: Float, valColor: Int = slate900) {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 7.3f
+            paint.color = tealPrimary
+            canvas.drawText(label, x, topY + 14f, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.2f
+            paint.color = valColor
+            val lines = wrapTextLines(value, paint, maxW, maxLines = 2)
+            var ly = topY + 28f
+            lines.forEach { ln ->
+                canvas.drawText(ln, x, ly, paint)
+                ly += 11f
+            }
+        }
+
+        drawMiniLabelValue(
+            x = col1X,
+            topY = y,
+            label = if (isEn) "VISIT DATE" else "TANGGAL KUNJUNGAN",
+            value = dateText,
+            maxW = col2X - col1X - 10f
+        )
+        drawMiniLabelValue(
+            x = col2X,
+            topY = y,
+            label = if (isEn) "VISITING HOURS" else "JAM KUNJUNGAN",
+            value = session.displayTimeRange(),
+            maxW = col3X - col2X - 10f,
+            valColor = Color.rgb(3, 105, 161)
+        )
+        drawMiniLabelValue(
+            x = col3X,
+            topY = y,
+            label = if (isEn) "EST. ARRIVAL" else "PERKIRAAN TIBA",
+            value = etaText,
+            maxW = innerRight - col3X - 8f
+        )
+
+        y += scheduleH + 14f
+
+        // 3. Grid 2 Kolom: Data Anak Asuh & Pembina
+        val districtLabel = VisitHelper.displayDistrict(VisitHelper.resolveStudentDistrictKey(student), isEn)
+        val schoolCode = schoolProfile.tenantCode.ifBlank { "SRT1-KDR" }
+        val midColX = innerLeft + innerW * 0.52f
+        val colMaxW = innerW * 0.46f
+
+        fun drawFieldPair(x: Float, topY: Float, label: String, value: String): Float {
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 7.5f
+            paint.color = slate600
+            canvas.drawText(label.uppercase(lang.locale), x, topY, paint)
+            paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            paint.textSize = 9.5f
+            paint.color = slate900
+            canvas.drawText(
+                TextUtils.ellipsize(value.ifBlank { "-" }, TextPaint(paint), colMaxW, TextUtils.TruncateAt.END).toString(),
+                x,
+                topY + 12f,
+                paint
+            )
+            return topY + 28f
+        }
+
+        var leftY = y + 6f
+        leftY = drawFieldPair(innerLeft, leftY, if (isEn) "Student Name" else "Nama Anak Asuh", student.name)
+        leftY = drawFieldPair(
+            innerLeft,
+            leftY,
+            "NIS / NISN",
+            listOf(student.nis, student.nik).filter { it.isNotBlank() }.joinToString(" • ").ifBlank { "-" }
+        )
+        leftY = drawFieldPair(
+            innerLeft,
+            leftY,
+            if (isEn) "Class & Dormitory" else "Kelas & Asrama",
+            listOf(student.classGrade, student.dormitory).filter { it.isNotBlank() }.joinToString(" — ").ifBlank { "-" }
+        )
+
+        var rightY = y + 6f
+        rightY = drawFieldPair(innerLeft + innerW * 0.52f, rightY, if (isEn) "Home District" else "Kecamatan Domisili", districtLabel)
+        rightY = drawFieldPair(
+            midColX,
+            rightY,
+            if (isEn) "Foster Caregiver" else "Wali Asuh Pembina",
+            waliName.ifBlank { student.assignedWaliName.ifBlank { "Wali Asuh" } }
+        )
+        rightY = drawFieldPair(midColX, rightY, if (isEn) "School Code" else "Kode Sekolah", schoolCode)
+
+        y = maxOf(leftY, rightY) + 2f
+
+        // 4. Detail Pengunjung, Penyesuaian & Keterangan Sesi
+        val visitorInfo = listOfNotNull(
+            confirmation.visitorRelation.takeIf { it.isNotBlank() },
+            confirmation.visitorName.takeIf { it.isNotBlank() }
+        ).joinToString(" — ").ifBlank { "-" }
+        val districtsCovered = session.getDistrictsList().joinToString(", ") { VisitHelper.displayDistrict(it, isEn) }
+
+        val detailPaint = Paint(paint).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            textSize = 8.4f
+        }
+        val detailRows = buildList {
+            add((if (isEn) "Registered Visitor: " else "Pengunjung Terdaftar: ") + visitorInfo)
+            if (checkInRecord != null) {
+                add(
+                    if (isEn) {
+                        "Gate Check-In: Verified at ${timeFmt.format(Date(checkInRecord.checkedInAt))} (${checkInRecord.visitorRelation})"
+                    } else {
+                        "Check-In Gerbang: Terverifikasi pukul ${timeFmt.format(Date(checkInRecord.checkedInAt))} (${checkInRecord.visitorRelation})"
+                    }
+                )
+            }
+            if (incomingSwap != null) {
+                val origin = incomingSwap.fromSessionTitle.ifBlank { if (isEn) "previous session" else "sesi sebelumnya" }
+                val reasonSuffix = if (incomingSwap.reason.isNotBlank()) " (${incomingSwap.reason})" else ""
+                add(
+                    if (isEn) {
+                        "Schedule Adjustment: Moved from \"$origin\"$reasonSuffix"
+                    } else {
+                        "Penyesuaian Jadwal: Dipindahkan dari sesi \"$origin\"$reasonSuffix"
+                    }
+                )
+            }
+            if (session.description.isNotBlank()) {
+                add((if (isEn) "Session Info: " else "Keterangan Sesi: ") + session.description)
+            }
+            if (districtsCovered.isNotBlank()) {
+                add((if (isEn) "Covered Districts: " else "Cakupan Wilayah: ") + districtsCovered)
+            }
+            if (confirmation.notes.isNotBlank()) {
+                add((if (isEn) "Parent Notes: " else "Catatan Orang Tua: ") + confirmation.notes)
+            }
+        }
+
+        val wrappedDetails = detailRows.flatMap { wrapTextLines(it, detailPaint, innerW - 20f, maxLines = 2) }
+        val detailBoxH = 22f + wrappedDetails.size * 12.5f + 8f
+        val detailRect = RectF(innerLeft, y, innerRight, y + detailBoxH)
+        paint.style = Paint.Style.FILL
+        paint.color = Color.rgb(248, 250, 252)
+        canvas.drawRoundRect(detailRect, 8f, 8f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 0.8f
+        paint.color = slateBorder
+        canvas.drawRoundRect(detailRect, 8f, 8f, paint)
+        paint.style = Paint.Style.FILL
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 7.6f
+        paint.color = tealPrimary
+        canvas.drawText(
+            if (isEn) "VISITOR & SESSION DETAILS" else "DETAIL PENGUNJUNG & SESI KUNJUNGAN",
+            innerLeft + 10f,
+            y + 14f,
+            paint
+        )
+
+        var dy = y + 27f
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.4f
+        paint.color = slate900
+        wrappedDetails.forEach { line ->
+            canvas.drawText(line, innerLeft + 10f, dy, paint)
+            dy += 12.5f
+        }
+
+        y += detailBoxH + 18f
+
+        // 5. Garis Perforasi Sobek Tiket + Notch Samping
+        val tearY = y
+        val tearPaint = Paint(paint).apply {
+            style = Paint.Style.STROKE
+            strokeWidth = 1.2f
+            color = slateBorder
+            pathEffect = DashPathEffect(floatArrayOf(7f, 5f), 0f)
+        }
+        canvas.drawLine(marginX + 12f, tearY, contentRight - 12f, tearY, tearPaint)
+
+        y += 16f
+
+        // 6. Stub Tiket Bawah: QR Barcode Besar + Kode Tiket + Panduan Check-In
+        val qrSize = 148f
+        val qrBoxPad = 8f
+        val qrLeft = innerLeft + qrBoxPad
+        val qrTop = y + qrBoxPad
+        val qrOuterRect = RectF(innerLeft, y, innerLeft + qrSize + qrBoxPad * 2f, y + qrSize + qrBoxPad * 2f)
+
+        paint.style = Paint.Style.FILL
+        paint.color = Color.WHITE
+        canvas.drawRoundRect(qrOuterRect, 10f, 10f, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.1f
+        paint.color = tealPrimary
+        canvas.drawRoundRect(qrOuterRect, 10f, 10f, paint)
+        paint.style = Paint.Style.FILL
+
+        val qrBmp = StudentCardRenderer.generateQrBitmap(confirmation.qrPayload(), 512)
+        if (qrBmp != null) {
+            val bmpPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawBitmap(qrBmp, null, RectF(qrLeft, qrTop, qrLeft + qrSize, qrTop + qrSize), bmpPaint)
+            qrBmp.recycle()
+        }
+
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 7.6f
+        paint.color = tealPrimary
+        canvas.drawText(
+            if (isEn) "SCAN AT DORMITORY GATE" else "PINDAI DI GERBANG ASRAMA",
+            qrOuterRect.centerX(),
+            qrOuterRect.bottom + 13f,
+            paint
+        )
+        paint.textAlign = Paint.Align.LEFT
+
+        val stubTextX = qrOuterRect.right + 18f
+        val stubMaxW = innerRight - stubTextX
+        var sy = y + 12f
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8f
+        paint.color = tealPrimary
+        canvas.drawText(
+            if (isEn) "GATE ENTRY PASS CODE" else "KODE VERIFIKASI GERBANG",
+            stubTextX,
+            sy,
+            paint
+        )
+        sy += 19f
+
+        paint.typeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
+        paint.textSize = 13.5f
+        paint.color = slate900
+        canvas.drawText(
+            TextUtils.ellipsize(confirmation.barcodeToken.ifBlank { "-" }, TextPaint(paint), stubMaxW, TextUtils.TruncateAt.END).toString(),
+            stubTextX,
+            sy,
+            paint
+        )
+        sy += 15f
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.2f
+        paint.color = slate600
+        val confirmedAtText = shortDateTimeFmt.format(Date(confirmation.confirmedAt))
+        canvas.drawText(
+            (if (isEn) "Confirmed: " else "Dikonfirmasi: ") + confirmedAtText,
+            stubTextX,
+            sy,
+            paint
+        )
+        sy += 18f
+
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        paint.textSize = 8.2f
+        paint.color = slate900
+        canvas.drawText(
+            if (isEn) "Gate Check-In Guide:" else "Panduan Masuk Asrama:",
+            stubTextX,
+            sy,
+            paint
+        )
+        sy += 13f
+
+        val guideSteps = if (isEn) {
+            listOf(
+                "1. Show this PDF ticket (digital or printed) to Wali Asuh.",
+                "2. Present the QR code on arrival for instant attendance scan.",
+                "3. Arrive within the listed visiting hours."
+            )
+        } else {
+            listOf(
+                "1. Tunjukkan e-tiket PDF ini (atau hasil print) ke Wali Asuh.",
+                "2. Scan QR Code saat tiba untuk pencatatan daftar hadir resmi.",
+                "3. Harap hadir sesuai rentang jam kunjungan yang tertera."
+            )
+        }
+        val guidePaint = Paint(paint).apply {
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+            textSize = 8.1f
+        }
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
+        paint.textSize = 8.1f
+        paint.color = slate600
+        guideSteps.forEach { step ->
+            wrapTextLines(step, guidePaint, stubMaxW, maxLines = 2).forEach { ln ->
+                canvas.drawText(ln, stubTextX, sy, paint)
+                sy += 11.5f
+            }
+            sy += 2f
+        }
+
+        val ticketBottom = maxOf(qrOuterRect.bottom + 24f, sy + 8f)
+
+        // Outer Frame Border Tiket + Cutout Notches
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.5f
+        paint.color = tealPrimary
+        canvas.drawRoundRect(RectF(marginX, ticketTop, contentRight, ticketBottom), 12f, 12f, paint)
+
+        val notchR = 9f
+        paint.style = Paint.Style.FILL
+        paint.color = Color.WHITE
+        canvas.drawCircle(marginX, tearY, notchR, paint)
+        canvas.drawCircle(contentRight, tearY, notchR, paint)
+        paint.style = Paint.Style.STROKE
+        paint.strokeWidth = 1.5f
+        paint.color = tealPrimary
+        canvas.drawArc(RectF(marginX - notchR, tearY - notchR, marginX + notchR, tearY + notchR), -90f, 180f, false, paint)
+        canvas.drawArc(RectF(contentRight - notchR, tearY - notchR, contentRight + notchR, tearY + notchR), 90f, 180f, false, paint)
+        paint.style = Paint.Style.FILL
+
+        // 7. Footer Verifikasi Singkat (tetap muat di 1 halaman A4)
+        val footerY = minOf(ticketBottom + 26f, pageHeight - 28f)
+        paint.textAlign = Paint.Align.CENTER
+        paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+        paint.textSize = 8f
+        paint.color = slate600
+        val schoolDisplay = schoolProfile.schoolName.ifBlank { "Wali Asuh Care" }
+        canvas.drawText(
+            if (isEn) {
+                "Official Digital Visit Ticket issued by $schoolDisplay • Printed ${shortDateTimeFmt.format(Date())}"
+            } else {
+                "E-Tiket Kunjungan Resmi diterbitkan oleh $schoolDisplay • Dicetak ${shortDateTimeFmt.format(Date())}"
+            },
+            pageWidth / 2f,
+            footerY,
+            paint
+        )
+        paint.textAlign = Paint.Align.LEFT
+
         finishCanvas()
     }
 }

@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.EventBusy
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
@@ -98,7 +99,8 @@ internal fun ParentVisitDetailBottomSheet(
         attendanceStatus: String,
         estimatedArrivalTime: String,
         notes: String
-    ) -> Unit
+    ) -> Unit,
+    onPrintSessionTicket: ((VisitConfirmation) -> Unit)? = null
 ) {
     val context = LocalContext.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -554,6 +556,28 @@ internal fun ParentVisitDetailBottomSheet(
                                 color = tealPrimary,
                                 textAlign = TextAlign.Center
                             )
+                            if (onPrintSessionTicket != null) {
+                                Button(
+                                    onClick = { onPrintSessionTicket(existingConf) },
+                                    shape = RoundedCornerShape(10.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = tealPrimary),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp)
+                                        .testTag("btn_parent_visit_print_ticket_${session.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PictureAsPdf,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (isEn) "Print Session Ticket (PDF)" else "Cetak Tiket Sesi (PDF)",
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 } else {
@@ -737,6 +761,19 @@ internal fun ParentVisitDetailBottomSheet(
                         .fillMaxWidth()
                         .testTag("input_parent_visit_notes_${session.id}")
                 )
+
+                if (isHadirSelected) {
+                    Text(
+                        text = if (isEn) {
+                            "QR barcode & printable PDF e-ticket will unlock after confirming attendance."
+                        } else {
+                            "Barcode QR & e-tiket PDF resmi akan otomatis aktif setelah konfirmasi hadir."
+                        },
+                        fontSize = 11.sp,
+                        color = tealPrimary,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

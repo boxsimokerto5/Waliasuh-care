@@ -6,6 +6,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
@@ -749,4 +752,165 @@ class VisitMultiSessionConfirmationRobolectricTest {
         db.parentAccessLinkDao().delete(parentLink)
         db.childStudentDao().delete(student)
     }
+
+    @Test
+    fun `Per-session PDF ticket unlocks only after HADIR confirmation and renders complete 1-page boarding pass`() {
+        val app = ApplicationProvider.getApplicationContext<Application>()
+        val strings = AppLanguageManager.stringsFor(AppLanguage.INDONESIAN)
+        val futureDate = System.currentTimeMillis() + 5L * 24L * 60L * 60L * 1000L
+
+        val student = ChildStudent(
+            id = 5931L,
+            name = "Nadia Putri",
+            nis = "593101",
+            nik = "3506593100010001",
+            gender = "P",
+            age = 14,
+            dormitory = "Asrama Putri",
+            classGrade = "VIII-B",
+            district = "Puncu",
+            assignedWaliName = "Ustadzah Rina",
+            schoolId = "SRT1-KDR"
+        )
+        val session = VisitSession(
+            id = 9301L,
+            title = "Kunjungan Desember Sesi 1",
+            monthYear = "2026-12",
+            sessionDatesCsv = futureDate.toString(),
+            selectedDistrictsCsv = "Puncu|Gurah",
+            description = "Membawa perlengkapan sekolah secukupnya.",
+            visitTimeRange = "08.00 - 11.00 WIB",
+            isActive = true,
+            publishedToParent = true,
+            schoolId = "SRT1-KDR"
+        )
+
+        val absentConf = VisitConfirmation(
+            id = 9391L,
+            sessionId = session.id,
+            sessionTitle = session.title,
+            visitDate = futureDate,
+            studentId = student.id,
+            studentName = student.name,
+            studentNis = student.nis,
+            studentNik = student.nik,
+            studentDistrict = "Puncu",
+            visitorName = "Ibu Dewi",
+            visitorRelation = "Ibu",
+            attendanceStatus = VisitConfirmation.STATUS_BERHALANGAN,
+            notes = "Sedang berada di luar kota",
+            barcodeToken = "",
+            schoolId = "SRT1-KDR"
+        )
+
+        val hadirConf = VisitConfirmation(
+            id = 9392L,
+            sessionId = session.id,
+            sessionTitle = session.title,
+            visitDate = futureDate,
+            studentId = student.id,
+            studentName = student.name,
+            studentNis = student.nis,
+            studentNik = student.nik,
+            studentDistrict = "Puncu",
+            visitorName = "Ibu Dewi",
+            visitorRelation = "Ibu",
+            attendanceStatus = VisitConfirmation.STATUS_HADIR,
+            estimatedArrivalTime = "09:15 WIB",
+            notes = "Mohon izin membawakan alat tulis.",
+            barcodeToken = VisitHelper.buildBarcodeToken(session.id, student.id),
+            schoolId = "SRT1-KDR"
+        )
+
+        // 1. When absent / not attending: ticket buttons & generateSingleVisitSessionTicketPdf stay locked/null
+        assertNull(
+            ParentPortalPdfHelper.generateSingleVisitSessionTicketPdf(
+                context = app,
+                student = student,
+                session = session,
+                confirmation = absentConf
+            )
+        )
+
+        var activeConfirmations by androidx.compose.runtime.mutableStateOf(listOf(absentConf))
+        var printedReadyTitle = ""
+
+        composeTestRule.setContent {
+            CompositionLocalProvider(LocalAppStrings provides strings) {
+                ParentVisitContent(
+                    student = student,
+                    sessions = listOf(session),
+                    confirmations = activeConfirmations,
+                    visitRecords = emptyList(),
+                    waliName = "Ustadzah Rina",
+                    schoolProfile = SchoolProfile(
+                        schoolName = "Sekolah Rakyat Terpadu 1 Kediri",
+                        shortName = "SRT 1",
+                        tenantCode = "SRT1-KDR"
+                    ),
+                    onSaveConfirmation = { _, _, _, _, _, _, _, _ -> },
+                    onPdfReady = { data -> printedReadyTitle = data.title }
+                )
+            }
+        }
+        composeTestRule.waitForIdle()
+
+        // Absent confirmation -> card quick print button does NOT exist; bottom sheet also hides QR & print button
+        composeTestRule.onNodeWithTag("btn_parent_visit_card_print_ticket_9301").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("card_parent_visit_session_9301").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("card_parent_visit_absent_9301").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_parent_visit_print_ticket_9301").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("btn_parent_visit_sheet_close").performClick()
+        composeTestRule.waitForIdle()
+
+        // 2. Switch to HADIR confirmation -> both card print button and sheet print button appear (>= 48dp)
+        composeTestRule.runOnUiThread {
+            activeConfirmations = listOf(hadirConf)
+        }
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag("btn_parent_visit_card_print_ticket_9301")
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+
+        composeTestRule.onNodeWithTag("card_parent_visit_session_9301").performClick()
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("card_parent_visit_barcode_9301").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithTag("btn_parent_visit_print_ticket_9301")
+            .performScrollTo()
+            .assertIsDisplayed()
+            .assertHeightIsAtLeast(48.dp)
+            .performClick()
+        composeTestRule.waitForIdle()
+        assertEquals("E-Tiket Kunjungan Sesi Siap", printedReadyTitle)
+
+        // 3. Render 1-page boarding-pass ticket PDF & verify complete session + barcode text
+        var pageCount = 0
+        val (pages, ticketTexts) = capturePdfTexts { startNew ->
+            ParentPortalPdfHelper.renderSingleVisitSessionTicketPage(
+                context = app,
+                student = student,
+                session = session,
+                confirmation = hadirConf,
+                waliName = "Ustadzah Rina",
+                schoolProfile = SchoolProfile(
+                    schoolName = "Sekolah Rakyat Terpadu 1 Kediri",
+                    shortName = "SRT 1",
+                    tenantCode = "SRT1-KDR"
+                ),
+                startNewCanvas = { startNew(++pageCount) }
+            )
+        }
+        assertEquals(1, pages)
+        assertTrue(ticketTexts.contains("Kunjungan Desember Sesi 1"))
+        assertTrue(ticketTexts.contains("08.00 - 11.00 WIB"))
+        assertTrue(ticketTexts.contains("09:15 WIB"))
+        assertTrue(ticketTexts.contains("Nadia Putri"))
+        assertTrue(ticketTexts.contains("Ibu — Ibu Dewi"))
+        assertTrue(ticketTexts.contains(hadirConf.barcodeToken))
+        assertTrue(ticketTexts.contains("PINDAI DI GERBANG ASRAMA"))
+        assertTrue(ticketTexts.contains("KODE VERIFIKASI GERBANG"))
+    }
 }
+

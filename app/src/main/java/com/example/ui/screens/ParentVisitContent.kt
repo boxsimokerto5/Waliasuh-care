@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,13 +31,16 @@ import androidx.compose.material.icons.filled.EventAvailable
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -157,6 +161,54 @@ fun ParentVisitContent(
     var selectedSessionId by remember { mutableStateOf<Long?>(null) }
     val selectedSession = remember(selectedSessionId, matchedSessions) {
         selectedSessionId?.let { id -> matchedSessions.firstOrNull { it.id == id } }
+    }
+
+    fun triggerSessionTicketPdf(
+        targetStudent: ChildStudent,
+        sess: VisitSession,
+        conf: VisitConfirmation,
+        checkIn: VisitRecord?,
+        swap: VisitSessionSwap?
+    ) {
+        val file = ParentPortalPdfHelper.generateSingleVisitSessionTicketPdf(
+            context = context,
+            student = targetStudent,
+            session = sess,
+            confirmation = conf,
+            checkInRecord = checkIn,
+            incomingSwap = swap,
+            waliName = waliName,
+            schoolProfile = schoolProfile
+        )
+        if (file != null) {
+            onPdfReady?.invoke(
+                ParentReadyPdfDialogData(
+                    file = file,
+                    title = if (isEn) "Session E-Ticket PDF Ready" else "E-Tiket Kunjungan Sesi Siap",
+                    description = if (isEn) {
+                        "Open or print the official QR entry ticket for ${sess.title}."
+                    } else {
+                        "Buka atau bagikan e-tiket barcode resmi untuk sesi ${sess.title}."
+                    },
+                    shareSubject = if (isEn) {
+                        "Visit Ticket: ${sess.title} — ${targetStudent.name}"
+                    } else {
+                        "Tiket Kunjungan: ${sess.title} — ${targetStudent.name}"
+                    },
+                    shareText = if (isEn) {
+                        "Attached official visit e-ticket & QR pass for ${targetStudent.name} (${sess.title})."
+                    } else {
+                        "Terlampir e-tiket & barcode QR resmi kunjungan untuk ${targetStudent.name} (${sess.title})."
+                    }
+                )
+            )
+        } else {
+            Toast.makeText(
+                context,
+                if (isEn) "Unable to create session ticket PDF" else "Gagal membuat PDF tiket sesi",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
     }
 
     LazyColumn(
@@ -359,7 +411,12 @@ fun ParentVisitContent(
                         tealPrimary = tealPrimary,
                         isEn = isEn,
                         compactDateFmt = compactDateFmt,
-                        onClick = { selectedSessionId = sess.id }
+                        onClick = { selectedSessionId = sess.id },
+                        onPrintTicket = if (existingConf?.isHadir == true) {
+                            { triggerSessionTicketPdf(targetStudent, sess, existingConf, checkInRec, incomingSwap) }
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -410,7 +467,12 @@ fun ParentVisitContent(
                         tealPrimary = tealPrimary,
                         isEn = isEn,
                         compactDateFmt = compactDateFmt,
-                        onClick = { selectedSessionId = sess.id }
+                        onClick = { selectedSessionId = sess.id },
+                        onPrintTicket = if (existingConf?.isHadir == true) {
+                            { triggerSessionTicketPdf(targetStudent, sess, existingConf, checkInRec, incomingSwap) }
+                        } else {
+                            null
+                        }
                     )
                 }
             }
@@ -454,7 +516,10 @@ fun ParentVisitContent(
             dateFmt = dateFmt,
             timeFmt = timeFmt,
             onDismiss = { selectedSessionId = null },
-            onSaveConfirmation = onSaveConfirmation
+            onSaveConfirmation = onSaveConfirmation,
+            onPrintSessionTicket = { conf ->
+                triggerSessionTicketPdf(targetStudent, activeSheetSession, conf, checkInRec, incomingSwap)
+            }
         )
     }
 }
@@ -603,7 +668,8 @@ private fun ParentVisitSessionListCard(
     tealPrimary: Color,
     isEn: Boolean,
     compactDateFmt: SimpleDateFormat,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onPrintTicket: (() -> Unit)? = null
 ) {
     val accentColor = when {
         checkInRec != null -> Color(0xFF16A34A)
@@ -797,7 +863,7 @@ private fun ParentVisitSessionListCard(
                         }
                         if (existingConf?.isHadir == true) {
                             MiniBadgeChip(
-                                text = if (isEn) "QR Ready" else "Barcode Siap",
+                                text = if (isEn) "Ticket & QR Ready" else "Tiket & Barcode Siap",
                                 icon = Icons.Default.QrCode2,
                                 bgColor = tealPrimary.copy(alpha = 0.12f),
                                 textColor = tealPrimary
@@ -837,6 +903,35 @@ private fun ParentVisitSessionListCard(
                             contentDescription = if (isEn) "Open visit detail" else "Buka detail kunjungan",
                             tint = accentColor,
                             modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                if (onPrintTicket != null) {
+                    OutlinedButton(
+                        onClick = onPrintTicket,
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, tealPrimary.copy(alpha = 0.55f)),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color(0xFFF0FDFA),
+                            contentColor = tealPrimary
+                        ),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .testTag("btn_parent_visit_card_print_ticket_${session.id}")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.PictureAsPdf,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isEn) "Print Session Ticket (PDF)" else "Cetak Tiket Sesi (PDF)",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
